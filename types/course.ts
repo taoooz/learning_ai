@@ -41,6 +41,26 @@ export interface StoredData {
   courses: CourseTree[];
   currentCourseId: string | null;
   courseProgress: CourseProgress;
+  userProfile: UserProfile | null;
 }
 
 export type GenerationStatus = 'idle' | 'generating' | 'success' | 'error';
+
+export interface WorkExperience {
+  id: string;
+  company: string;
+  position: string;
+  description?: string;
+}
+
+export interface Education {
+  id: string;
+  school: string;
+  major: string;
+}
+
+export interface UserProfile {
+  targetJob: string;
+  workExperience: WorkExperience[];
+  education: Education[];
+}
