@@ -8,6 +8,7 @@ interface UserProfileContextType {
   userProfile: UserProfile | null;
   updateProfile: (profile: UserProfile) => void;
   isLoaded: boolean;
+  error: Error | null;
 }
 
 const UserProfileContext = createContext<UserProfileContextType | null>(null);
@@ -15,20 +16,30 @@ const UserProfileContext = createContext<UserProfileContextType | null>(null);
 export function UserProfileProvider({ children }: { children: React.ReactNode }) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    const profile = getUserProfile();
-    setUserProfile(profile);
-    setIsLoaded(true);
+    try {
+      const profile = getUserProfile();
+      setUserProfile(profile);
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Failed to load profile'));
+    } finally {
+      setIsLoaded(true);
+    }
   }, []);
 
   const updateProfile = useCallback((profile: UserProfile) => {
-    saveUserProfile(profile);
-    setUserProfile(profile);
+    try {
+      saveUserProfile(profile);
+      setUserProfile(profile);
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Failed to save profile'));
+    }
   }, []);
 
   return (
-    <UserProfileContext.Provider value={{ userProfile, updateProfile, isLoaded }}>
+    <UserProfileContext.Provider value={{ userProfile, updateProfile, isLoaded, error }}>
       {children}
     </UserProfileContext.Provider>
   );
