@@ -2,13 +2,18 @@
 
 import { CourseProvider } from './CourseContext';
 import { ProgressProvider } from './ProgressContext';
+import { UserProfileProvider, useUserProfile } from './UserProfileContext';
 
 export function CombinedProvider({ children }: { children: React.ReactNode }) {
   return (
     <CourseProvider>
       <ProgressProvider>
-        {children}
+        <UserProfileProvider>
+          {children}
+        </UserProfileProvider>
       </ProgressProvider>
     </CourseProvider>
   );
 }
+
+export { UserProfileProvider, useUserProfile };
