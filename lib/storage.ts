@@ -86,3 +86,13 @@ export function saveUserProfile(profile: UserProfile): void {
   data.userProfile = profile;
   saveStoredData(data);
 }
+
+export function deleteCourse(courseId: string): void {
+  const data = getStoredData();
+  data.courses = data.courses.filter(c => c.courseId !== courseId);
+  delete data.courseProgress[courseId];
+  if (data.currentCourseId === courseId) {
+    data.currentCourseId = data.courses.length > 0 ? data.courses[0].courseId : null;
+  }
+  saveStoredData(data);
+}

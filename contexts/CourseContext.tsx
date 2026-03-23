@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { CourseTree, CourseNode, GenerationStatus } from '@/types/course';
-import { getStoredData, addCourse as saveCourse, updateNodeContent as saveNodeContent } from '@/lib/storage';
+import { getStoredData, addCourse as saveCourse, updateNodeContent as saveNodeContent, deleteCourse as deleteCourseFromStorage } from '@/lib/storage';
 
 interface CourseContextType {
   courses: CourseTree[];
@@ -10,7 +10,9 @@ interface CourseContextType {
   generationStatus: GenerationStatus;
   generateCourse: (topic: string) => Promise<void>;
   generateNodeContent: (courseId: string, nodeIndex: number) => Promise<void>;
+  preloadNextNode: (courseId: string, currentNodeIndex: number) => void;
   updateNodeContent: (courseId: string, nodeIndex: number, cards: CourseNode['cards'], questions: CourseNode['questions']) => void;
+  deleteCourse: (courseId: string) => void;
 }
 
 const CourseContext = createContext<CourseContextType | null>(null);
@@ -27,6 +29,18 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     if (data.currentCourseId) {
       setCurrentCourse(data.courses.find(c => c.courseId === data.currentCourseId) || null);
     }
+
+    // 监听节点完成事件，刷新课程数据
+    const handleNodeCompleted = () => {
+      const data = getStoredData();
+      setCourses(data.courses);
+      if (data.currentCourseId) {
+        setCurrentCourse(data.courses.find(c => c.courseId === data.currentCourseId) || null);
+      }
+    };
+
+    window.addEventListener('node-completed', handleNodeCompleted);
+    return () => window.removeEventListener('node-completed', handleNodeCompleted);
   }, []);
 
   const generateCourse = useCallback(async (topic: string) => {
@@ -65,7 +79,11 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
       const response = await fetch('/api/generate/node', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ courseId, nodeIndex, topic: course.topic, title: course.nodes[nodeIndex].title }),
+        body: JSON.stringify({
+        topic: course.topic,
+        title: course.nodes[nodeIndex].title,
+        cardCount: course.nodes[nodeIndex].cardCount,
+      }),
       });
 
       if (!response.ok) throw new Error('Node generation failed');
@@ -76,6 +94,21 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
       throw new Error('Failed to generate node content');
     }
   }, [courses]);
+
+  // 预加载下一个节点内容（不阻塞主流程）
+  const preloadNextNode = useCallback((courseId: string, currentNodeIndex: number) => {
+    const course = courses.find(c => c.courseId === courseId);
+    if (!course) return;
+
+    const nextIndex = currentNodeIndex + 1;
+    if (nextIndex >= course.nodes.length) return;
+    if (course.nodes[nextIndex].cards) return;
+
+    // 不等待，直接在后台触发生成
+    generateNodeContent(courseId, nextIndex).catch(() => {
+      // 静默失败，不影响主流程
+    });
+  }, [courses, generateNodeContent]);
 
   const updateNodeContent = useCallback((
     courseId: string,
@@ -98,6 +131,12 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
+  const deleteCourse = useCallback((courseId: string) => {
+    deleteCourseFromStorage(courseId);
+    setCourses(prev => prev.filter(c => c.courseId !== courseId));
+    setCurrentCourse(prev => prev?.courseId === courseId ? null : prev);
+  }, []);
+
   return (
     <CourseContext.Provider value={{
       courses,
@@ -105,7 +144,9 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
       generationStatus,
       generateCourse,
       generateNodeContent,
+      preloadNextNode,
       updateNodeContent,
+      deleteCourse,
     }}>
       {children}
     </CourseContext.Provider>

@@ -10,8 +10,9 @@ export default function HomePage() {
   const [topic, setTopic] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const router = useRouter();
-  const { courses, currentCourse, generateCourse } = useCourse();
+  const { courses, currentCourse, generateCourse, deleteCourse } = useCourse();
   const { isCompleted } = useProgress();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -32,6 +33,17 @@ export default function HomePage() {
 
   const handleCourseClick = (courseId: string) => {
     router.push(`/course/${courseId}`);
+  };
+
+  const handleDelete = (courseId: string) => {
+    setDeleteConfirm(courseId);
+  };
+
+  const confirmDelete = () => {
+    if (deleteConfirm) {
+      deleteCourse(deleteConfirm);
+      setDeleteConfirm(null);
+    }
   };
 
   // 获取课程完成进度
@@ -126,26 +138,38 @@ export default function HomePage() {
                 const progress = getCourseProgress(course.courseId);
                 const isCurrentCourse = currentCourse?.courseId === course.courseId;
                 return (
-                  <button
+                  <div
                     key={course.courseId}
-                    onClick={() => handleCourseClick(course.courseId)}
                     className="w-full p-4 bg-white rounded-xl border border-gray-200 hover:border-blue-400 hover:shadow-md transition-all text-left"
                   >
                     <div className="flex justify-between items-start">
-                      <div className="flex-1">
+                      <div className="flex-1 cursor-pointer" onClick={() => handleCourseClick(course.courseId)}>
                         <h3 className="font-medium text-gray-900">{course.topic}</h3>
                         <p className="text-sm text-gray-500 mt-1">
                           {progress.completed}/{progress.total} 节已完成
                         </p>
                       </div>
-                      {isCurrentCourse && (
-                        <span className="px-2 py-1 bg-blue-100 text-blue-600 text-xs rounded-full">
-                          进行中
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {isCurrentCourse && (
+                          <span className="px-2 py-1 bg-blue-100 text-blue-600 text-xs rounded-full">
+                            进行中
+                          </span>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(course.courseId);
+                          }}
+                          className="p-1 text-gray-400 hover:text-red-500"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                     {/* 进度条 */}
-                    <div className="mt-2 w-full bg-gray-100 rounded-full h-1.5">
+                    <div className="mt-2 w-full bg-gray-100 rounded-full h-1.5 cursor-pointer" onClick={() => handleCourseClick(course.courseId)}>
                       <div
                         className="bg-blue-500 h-1.5 rounded-full transition-all"
                         style={{
@@ -155,13 +179,37 @@ export default function HomePage() {
                         }}
                       />
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>
           </div>
         )}
       </div>
+
+      {/* 删除确认对话框 */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full mx-4 shadow-xl">
+            <h2 className="text-xl font-bold text-gray-900 mb-2">删除课程</h2>
+            <p className="text-gray-600 mb-6">确定要删除这门课程吗？删除后无法恢复。</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="flex-1 px-4 py-2 rounded-full border border-gray-300 hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="flex-1 px-4 py-2 rounded-full bg-red-500 text-white hover:bg-red-600"
+              >
+                删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
