@@ -22,29 +22,16 @@ ${analogyExperiences && analogyExperiences.length > 0
 `;
   }
 
-  return `${insightSection}You are an AI tutor creating a personalized learning path for the topic: "${topic}"
+  return `${insightSection}你是一位专业的 AI 导师，为用户创建个性化的学习路径。
 
-Create a learning course tree with the following structure:
-- Minimum 4 nodes, Maximum 8 nodes (decide based on topic complexity)
-- Each node represents a learning concept in the topic
-- Nodes should be ordered from basic to advanced
-- Each node has: title, one-sentence description, cardCount (1-5 based on complexity)
+主题：${topic}
 
-Output a JSON object with this exact structure:
-{
-  "courseId": "a unique ID",
-  "topic": "${topic}",
-  "totalNodes": number,
-  "nodes": [
-    {
-      "index": 0,
-      "title": "node title",
-      "description": "one sentence description",
-      "cardCount": number (1-5),
-      "status": "locked"
-    }
-  ]
-}
+## 课程结构要求
+
+- 课程包含 4-8 个节点（根据主题复杂度决定）
+- 每个节点代表主题中的一个学习概念
+- 节点按从基础到进阶的顺序排列
+- 每个节点包含：标题、一句话描述、卡片数量（1-5，根据复杂度决定）
 
 ## 质量标准
 
@@ -54,7 +41,25 @@ Output a JSON object with this exact structure:
 - **可实践**：内容能帮助用户解决真实问题
 - **有关联**：与用户已有知识建立联系，便于迁移学习
 
-Return ONLY the JSON object, no additional text.`;
+## 输出格式
+
+输出 JSON 对象，结构如下：
+{
+  "courseId": "唯一ID",
+  "topic": "${topic}",
+  "totalNodes": 节点数量,
+  "nodes": [
+    {
+      "index": 0,
+      "title": "节点标题",
+      "description": "一句话描述",
+      "cardCount": 数字 (1-5),
+      "status": "locked"
+    }
+  ]
+}
+
+只返回 JSON 对象，不要有其他文本。`;
 }
 
 export function buildNodeContentPrompt(
@@ -81,10 +86,12 @@ ${insights.analogyExperiences && insights.analogyExperiences.length > 0
 `;
   }
 
-  return `${insightSection}You are an AI tutor creating learning content for the topic: "${topic}"
-The current learning node is: "${nodeTitle}"
+  return `${insightSection}你是一位专业的 AI 导师，为用户创建学习内容。
 
-Generate exactly ${cardCount} learning cards and quiz questions for this node.
+主题：${topic}
+当前学习节点：${nodeTitle}
+
+请为这个节点生成 ${cardCount} 张学习卡片和配套的 Quiz 题目。
 
 ## 好卡片质量标准
 
@@ -95,38 +102,33 @@ Generate exactly ${cardCount} learning cards and quiz questions for this node.
 3. **避坑提示**：指出学习者常犯的错误或容易混淆的概念
 4. **一句话总结**：结尾用一句话精炼概括本卡片的要点
 
-Each card should have:
-- title: short title for the card
-- content: Markdown formatted explanation (2-3 paragraphs following the quality standards above)
-- imageUrl: (optional) leave as null
+每张卡片包含：
+- title：简短的标题
+- content：Markdown 格式的详细解释（2-3段，按照以上标准）
+- imageUrl：（可选）留空为 null
 
 ## 好 Quiz 质量标准
 
-每道Quiz题目必须满足以下标准：
+每道 Quiz 题目必须满足以下标准：
 
 1. **考察维度**：题目需覆盖不同认知层次（记忆、理解、应用、分析）
 2. **难度等级**：合理分布简单、中等、困难题目，比例为 3:5:2
 3. **对应卡片**：每道题目需明确对应某张卡片的内容，确保考点覆盖完整
 
-Quiz questions should include:
-- Single choice questions (1-2)
-- Multiple choice questions (1-2)
-- Fill in the blank questions (1-2)
+Quiz 题目包含：
+- 单选题（1-2道）
+- 多选题（1-2道）
+- 填空题（1-2道）
 
-Each question has:
-- type: "single" | "multiple" | "fill"
-- question: the question text
-- options: array of 4 choices (for single/multiple)
-- answer: correct answer(s)
-- explanation: explanation shown when wrong
+## 输出格式
 
-Output a JSON object with this exact structure:
+输出 JSON 对象，结构如下：
 {
   "cards": [
     {
       "id": "card-1",
-      "title": "card title",
-      "content": "markdown content",
+      "title": "卡片标题",
+      "content": "Markdown 格式内容",
       "imageUrl": null
     }
   ],
@@ -134,10 +136,10 @@ Output a JSON object with this exact structure:
     {
       "id": "q-1",
       "type": "single",
-      "question": "question text",
+      "question": "题目文本",
       "options": ["A", "B", "C", "D"],
-      "answer": "A",
-      "explanation": "explanation when wrong",
+      "answer": "正确答案",
+      "explanation": "答错时的解析",
       "dimension": "memory | understanding | application | analysis",
       "difficulty": 1 | 2 | 3,
       "cardId": "对应的卡片ID"
@@ -145,7 +147,7 @@ Output a JSON object with this exact structure:
   ]
 }
 
-Return ONLY the JSON object, no additional text.`;
+只返回 JSON 对象，不要有其他文本。`;
 }
 
 export function buildProfileInsightPrompt(profile: UserProfile): string {
