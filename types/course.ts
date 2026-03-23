@@ -73,5 +73,5 @@ export interface UserProfile {
   targetJob: string;
   workExperience: WorkExperience[];
   education: Education[];
-  insights: LearningInsight;
+  insights?: LearningInsight;
 }
