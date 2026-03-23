@@ -46,6 +46,12 @@ export interface StoredData {
 
 export type GenerationStatus = 'idle' | 'generating' | 'success' | 'error';
 
+export interface LearningInsight {
+  knowledgeBackground: string[];
+  analogyExperiences: string[];
+  summary: string;
+}
+
 export interface WorkExperience {
   id: string;
   company: string;
@@ -64,4 +70,5 @@ export interface UserProfile {
   targetJob: string;
   workExperience: WorkExperience[];
   education: Education[];
+  insights: LearningInsight;
 }
