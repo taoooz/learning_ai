@@ -15,7 +15,7 @@ type LearningPhase = 'loading' | 'cards' | 'quiz' | 'complete';
 export default function LearnPage() {
   const params = useParams();
   const router = useRouter();
-  const { courses, generateNodeContent, updateNodeContent } = useCourse();
+  const { courses, generateNodeContent, preloadNextNode, updateNodeContent } = useCourse();
   const { markCompleted } = useProgress();
 
   const courseId = params.courseId as string;
@@ -29,15 +29,22 @@ export default function LearnPage() {
   const node = course?.nodes[nodeIndex];
 
   useEffect(() => {
+    // 如果已完成学习，不做任何操作
+    if (phase === 'complete') return;
+
     if (!course || !node) return;
 
     // 如果节点内容还没生成，触发生成
     if (!node.cards || !node.questions) {
       loadNodeContent();
-    } else {
+    } else if (phase === 'loading') {
+      // 只有在 loading 阶段才自动切换到 cards
       setPhase('cards');
     }
-  }, [course, node]);
+
+    // 预加载下一个节点内容
+    preloadNextNode(courseId, nodeIndex);
+  }, [course, node, courseId, nodeIndex, preloadNextNode, phase]);
 
   const loadNodeContent = async () => {
     if (!course) return;
@@ -84,7 +91,7 @@ export default function LearnPage() {
   if (!course || !node) {
     return (
       <main className="min-h-screen flex items-center justify-center">
-        <LoadingSpinner message="Loading..." />
+        <LoadingSpinner message="加载中..." />
       </main>
     );
   }
@@ -96,7 +103,7 @@ export default function LearnPage() {
         onClick={() => router.push(`/course/${courseId}`)}
         className="mb-4 text-gray-500 hover:text-gray-700"
       >
-        ← Back to Course
+        ← 返回课程
       </button>
 
       {/* 节点标题 */}
@@ -104,7 +111,7 @@ export default function LearnPage() {
 
       {/* 内容 */}
       {phase === 'loading' && (
-        <LoadingSpinner message="Generating content..." />
+        <LoadingSpinner message="正在生成学习内容..." />
       )}
 
       {phase === 'cards' && node.cards && (
@@ -118,13 +125,13 @@ export default function LearnPage() {
       {phase === 'complete' && (
         <div className="flex flex-col items-center justify-center min-h-[50vh]">
           <div className="text-6xl mb-4">🎉</div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Lesson Complete!</h2>
-          <p className="text-gray-600 mb-6">Great job learning {node.title}</p>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">课程完成！</h2>
+          <p className="text-gray-600 mb-6">太棒了，你已完成 {node.title}</p>
           <button
             onClick={() => router.push(`/course/${courseId}`)}
             className="px-6 py-3 rounded-full bg-blue-500 text-white"
           >
-            Continue →
+            下一节 →
           </button>
         </div>
       )}

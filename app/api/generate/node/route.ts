@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { callMiniMax, parseJSONResponse } from '@/lib/minimax';
 import { buildNodeContentPrompt } from '@/lib/prompt';
+import { getUserProfile } from '@/lib/storage';
 
 interface NodeContentResponse {
   cards: Array<{
@@ -21,6 +22,9 @@ interface NodeContentResponse {
 }
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  console.log('[NodeContent] Starting at', new Date().toISOString());
+
   try {
     const { topic, title, cardCount } = await request.json();
 
@@ -28,13 +32,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const prompt = buildNodeContentPrompt(topic, title, cardCount);
+    const promptBuildStart = Date.now();
+    const userProfile = getUserProfile();
+    const insights = userProfile?.insights || null;
+    const prompt = buildNodeContentPrompt(topic, title, cardCount, insights);
+    console.log(`[NodeContent] Prompt built: ${Date.now() - promptBuildStart}ms`);
+
+    const apiStart = Date.now();
+    console.log('[NodeContent] Calling MiniMax API...');
     const content = await callMiniMax(prompt);
+    console.log(`[NodeContent] MiniMax API: ${Date.now() - apiStart}ms`);
+
+    const parseStart = Date.now();
     const data = parseJSONResponse<NodeContentResponse>(content);
+    console.log(`[NodeContent] Parse JSON: ${Date.now() - parseStart}ms`);
+
+    console.log(`[NodeContent] Total: ${Date.now() - startTime}ms`);
 
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Node content generation error:', error);
+    console.error(`[NodeContent] Error after ${Date.now() - startTime}ms:`, error);
     return NextResponse.json(
       { error: 'Failed to generate node content' },
       { status: 500 }

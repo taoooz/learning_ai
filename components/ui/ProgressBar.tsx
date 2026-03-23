@@ -12,7 +12,7 @@ export function ProgressBar({ current, total }: ProgressBarProps) {
   return (
     <div className="w-full">
       <div className="flex justify-between text-sm text-gray-500 mb-1">
-        <span>Progress</span>
+        <span>进度</span>
         <span>{current}/{total}</span>
       </div>
       <div className="w-full bg-gray-200 rounded-full h-2">

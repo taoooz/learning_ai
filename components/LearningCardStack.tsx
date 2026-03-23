@@ -81,13 +81,13 @@ export function LearningCardStack({ cards, onComplete }: LearningCardStackProps)
           disabled={currentIndex === 0}
           className="px-6 py-2 rounded-full border border-gray-300 disabled:opacity-40"
         >
-          ← Previous
+          ← 上一张
         </button>
         <button
           onClick={handleNext}
           className="px-6 py-2 rounded-full bg-blue-500 text-white disabled:opacity-40"
         >
-          {isLastCard ? 'Start Quiz →' : 'Next →'}
+          {isLastCard ? '开始测验 →' : '下一张 →'}
         </button>
       </div>
     </div>

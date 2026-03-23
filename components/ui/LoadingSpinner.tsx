@@ -1,7 +1,7 @@
 // components/ui/LoadingSpinner.tsx
 'use client';
 
-export function LoadingSpinner({ message = 'Loading...' }: { message?: string }) {
+export function LoadingSpinner({ message = '加载中...' }: { message?: string }) {
   return (
     <div className="flex flex-col items-center justify-center min-h-[50vh]">
       <div className="relative w-16 h-16">

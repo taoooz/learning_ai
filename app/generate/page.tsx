@@ -20,7 +20,7 @@ export default function GeneratePage() {
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-gray-50">
-      <LoadingSpinner message="AI is creating your personalized course..." />
+      <LoadingSpinner message="AI 正在为你创建个性化课程..." />
     </main>
   );
 }

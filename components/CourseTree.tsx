@@ -25,7 +25,7 @@ export function CourseTree({ course }: CourseTreeProps) {
       {/* 课程标题 */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">{course.topic}</h1>
-        <p className="text-gray-500 mt-1">{course.totalNodes} lessons</p>
+        <p className="text-gray-500 mt-1">共 {course.totalNodes} 节课</p>
       </div>
 
       {/* 进度条 */}

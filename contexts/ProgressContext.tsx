@@ -7,6 +7,7 @@ interface ProgressContextType {
   completedNodes: Set<string>; // "courseId-nodeIndex" 格式
   markCompleted: (courseId: string, nodeIndex: number) => void;
   isCompleted: (courseId: string, nodeIndex: number) => boolean;
+  refreshProgress: () => void;
 }
 
 const ProgressContext = createContext<ProgressContextType | null>(null);
@@ -14,7 +15,7 @@ const ProgressContext = createContext<ProgressContextType | null>(null);
 export function ProgressProvider({ children }: { children: React.ReactNode }) {
   const [completedNodes, setCompletedNodes] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
+  const refreshProgress = useCallback(() => {
     const data = getStoredData();
     const set = new Set<string>();
     Object.entries(data.courseProgress).forEach(([courseId, progress]) => {
@@ -27,17 +28,23 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
     setCompletedNodes(set);
   }, []);
 
+  useEffect(() => {
+    refreshProgress();
+  }, [refreshProgress]);
+
   const markCompleted = useCallback((courseId: string, nodeIndex: number) => {
     markNodeCompleted(courseId, nodeIndex);
-    setCompletedNodes(prev => new Set(prev).add(`${courseId}-${nodeIndex}`));
-  }, []);
+    // 触发自定义事件通知 CourseContext 刷新
+    window.dispatchEvent(new CustomEvent('node-completed', { detail: { courseId, nodeIndex } }));
+    refreshProgress();
+  }, [refreshProgress]);
 
   const isCompleted = useCallback((courseId: string, nodeIndex: number) => {
     return completedNodes.has(`${courseId}-${nodeIndex}`);
   }, [completedNodes]);
 
   return (
-    <ProgressContext.Provider value={{ completedNodes, markCompleted, isCompleted }}>
+    <ProgressContext.Provider value={{ completedNodes, markCompleted, isCompleted, refreshProgress }}>
       {children}
     </ProgressContext.Provider>
   );

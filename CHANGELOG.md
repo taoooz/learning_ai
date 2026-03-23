@@ -45,6 +45,53 @@
 
 **修改文件：** `app/course/[courseId]/page.tsx`
 
+#### 4. 用户画像洞察机制
+**功能描述：** 从用户背景信息中自动提取学习洞察，用于提升课程内容的个性化程度。
+
+**数据结构：**
+- `LearningInsight`：包含知识背景（knowledgeBackground）、类比经历（analogyExperiences）、总结（summary）
+
+**API 端点：**
+- `POST /api/profile/insights` - 提取用户洞察
+
+**实现方案：**
+1. 用户保存个人信息后自动触发洞察提取
+2. AI 分析用户工作经历和教育背景，生成个性化学习建议
+3. 洞察结果与用户画像关联存储
+
+**修改文件：**
+- `types/course.ts` - 新增 LearningInsight 类型
+- `app/api/profile/insights/route.ts` - 新增洞察提取 API
+- `contexts/UserProfileContext.tsx` - 保存后自动提取洞察
+
+#### 5. Prompt 工程优化
+**功能描述：** 优化课程生成的 Prompt 质量标准，提升卡片和 Quiz 的内容质量。
+
+**课程树生成 Prompt 增强：**
+- 增加质量标准指导
+- 要求结合用户洞察设计课程结构
+
+**节点内容 Prompt 增强：**
+- 新增"好卡片"质量标准：
+  - 场景引入：具体使用场景
+  - 清晰定义：明确概念解释
+  - 避坑提示：常见错误提醒
+  - 一句话总结：核心要点提炼
+
+- 新增"好 Quiz"质量标准：
+  - 考察维度：知识点覆盖
+  - 难度等级：L1-L5 分级
+  - 对应卡片：标注关联的 learningCard id
+
+**Question 类型扩展：**
+- 新增 `dimension` 字段：考察维度
+- 新增 `difficulty` 字段：难度等级（L1-L5）
+- 新增 `cardId` 字段：对应的 learningCard id
+
+**修改文件：**
+- `types/course.ts` - Question 接口新增字段
+- `lib/prompt.ts` - 优化 Prompt 模板
+
 ---
 
 ### 问题修复
