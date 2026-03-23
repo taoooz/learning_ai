@@ -47,7 +47,11 @@ export default function ProfilePage() {
     updateProfile(profile);
     setIsSaving(false);
     setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 2000);
+
+    // 保存成功后返回首页
+    setTimeout(() => {
+      router.push('/');
+    }, 500);  // 短暂延迟让用户看到"已保存"提示
   };
 
   // 工作经历操作
