@@ -137,7 +137,10 @@ Output a JSON object with this exact structure:
       "question": "question text",
       "options": ["A", "B", "C", "D"],
       "answer": "A",
-      "explanation": "explanation when wrong"
+      "explanation": "explanation when wrong",
+      "dimension": "memory | understanding | application | analysis",
+      "difficulty": 1 | 2 | 3,
+      "cardId": "对应的卡片ID"
     }
   ]
 }
