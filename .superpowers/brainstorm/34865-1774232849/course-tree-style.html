@@ -1,0 +1,59 @@
+<h2>课程树展示方式</h2>
+<p class="subtitle">移动端 · 选择课程树的展示和导航风格</p>
+
+<div class="options">
+  <div class="option" data-choice="vertical" onclick="selectOption(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>纵向线性路径</h3>
+      <p>从上到下依次排列，像 Duolingo 一样按顺序解锁前进</p>
+    </div>
+  </div>
+  <div class="option" data-choice="tree" onclick="selectOption(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>树状分支结构</h3>
+      <p>可以展开/收起，分支选择，展示知识之间的递进关系</p>
+    </div>
+  </div>
+  <div class="option" data-choice="map" onclick="selectOption(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>路径地图式</h3>
+      <p>类似游戏地图，每个节点是地图上一个可点击的地标，完成后点亮</p>
+    </div>
+  </div>
+</div>
+
+<div id="doneButton" style="display:none;margin-top:24px;text-align:center;">
+  <button onclick="submitAndContinue()" style="background:#4A90D9;color:white;border:none;padding:14px 32px;border-radius:25px;font-size:16px;cursor:pointer;">
+    选好了，继续 →
+  </button>
+</div>
+
+<script>
+let selectedChoice = null;
+
+function selectOption(el) {
+  document.querySelectorAll('.option').forEach(o => o.style.borderColor = '#eee');
+  el.style.borderColor = '#4A90D9';
+  selectedChoice = el.dataset.choice;
+  document.getElementById('doneButton').style.display = 'block';
+}
+
+function submitAndContinue() {
+  if (selectedChoice) {
+    // Create a form to submit
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/.events';
+    var input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'data';
+    input.value = JSON.stringify({type:'done', choice:selectedChoice, timestamp:Date.now()});
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+  }
+}
+</script>

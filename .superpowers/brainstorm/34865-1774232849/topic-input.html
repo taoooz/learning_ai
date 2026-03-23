@@ -1,0 +1,58 @@
+<h2>主题输入方式</h2>
+<p class="subtitle">用户如何输入兴趣主题？</p>
+
+<div class="options">
+  <div class="option" data-choice="free-text" onclick="selectOption(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>纯自由输入</h3>
+      <p>一个输入框 + 开始按钮，用户随便输入任何感兴趣的主题</p>
+    </div>
+  </div>
+  <div class="option" data-choice="suggestions" onclick="selectOption(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>输入框 + 推荐话题</h3>
+      <p>输入框下方有几个热门话题标签（如"日本江户时代"、"量子力学"），用户可以点选或自己输入</p>
+    </div>
+  </div>
+  <div class="option" data-choice="wizard" onclick="selectOption(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>引导式三步</h3>
+      <p>第一步：选领域（历史/科学/艺术...）→ 第二步：选具体方向 → 第三步：输入细节</p>
+    </div>
+  </div>
+</div>
+
+<div id="doneButton" style="display:none;margin-top:24px;text-align:center;">
+  <button onclick="submitAndContinue()" style="background:#4A90D9;color:white;border:none;padding:14px 32px;border-radius:25px;font-size:16px;cursor:pointer;">
+    选好了，继续 →
+  </button>
+</div>
+
+<script>
+let selectedChoice = null;
+
+function selectOption(el) {
+  document.querySelectorAll('.option').forEach(o => o.style.borderColor = '#eee');
+  el.style.borderColor = '#4A90D9';
+  selectedChoice = el.dataset.choice;
+  document.getElementById('doneButton').style.display = 'block';
+}
+
+function submitAndContinue() {
+  if (selectedChoice) {
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/.events';
+    var input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'data';
+    input.value = JSON.stringify({type:'done', choice:selectedChoice, timestamp:Date.now()});
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+  }
+}
+</script>

@@ -1,0 +1,59 @@
+<h2>视觉风格选择</h2>
+<p class="subtitle">移动端优先 · 选好后点击底部按钮继续</p>
+
+<div class="options" id="styleOptions">
+  <div class="option" data-choice="vibrant" onclick="selectOption(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>活力明快（类 Duolingo）</h3>
+      <p>明亮的黄色/绿色主调，圆润卡片，活泼插图，友好的游戏化感觉</p>
+    </div>
+  </div>
+  <div class="option" data-choice="minimal" onclick="selectOption(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>简约现代</h3>
+      <p>大量留白，柔和配色，少量渐变，偏向 Notion/Pinterest 的干净感</p>
+    </div>
+  </div>
+  <div class="option" data-choice="premium" onclick="selectOption(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>沉稳专业</h3>
+      <p>深色系或莫兰迪色，精致排版，偏向 Spotify/Apple Music 的品质感</p>
+    </div>
+  </div>
+</div>
+
+<div id="doneButton" style="display:none;margin-top:24px;text-align:center;">
+  <button onclick="submitAndContinue()" style="background:#4A90D9;color:white;border:none;padding:14px 32px;border-radius:25px;font-size:16px;cursor:pointer;">
+    选好了，继续 →
+  </button>
+</div>
+
+<script>
+let selectedChoice = null;
+
+function selectOption(el) {
+  document.querySelectorAll('.option').forEach(o => o.style.borderColor = '#eee');
+  el.style.borderColor = '#4A90D9';
+  selectedChoice = el.dataset.choice;
+  document.getElementById('doneButton').style.display = 'block';
+}
+
+function submitAndContinue() {
+  if (selectedChoice) {
+    // Write done event to events file
+    fetch('/.events', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        type: 'done',
+        choice: selectedChoice,
+        timestamp: Date.now()
+      })
+    });
+    document.getElementById('doneButton').innerHTML = '<p style="color:#666;">收到，继续中...</p>';
+  }
+}
+</script>

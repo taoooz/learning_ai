@@ -1,0 +1,58 @@
+<h2>题型组合</h2>
+<p class="subtitle">每个单元希望包含哪些题型？</p>
+
+<div class="options">
+  <div class="option" data-choice="basic" onclick="selectOption(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>单选 + 多选</h3>
+      <p>最基础：1道单选题 + 1道多选题，轻量有趣</p>
+    </div>
+  </div>
+  <div class="option" data-choice="with-text" onclick="selectOption(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>单选 + 多选 + 填空</h3>
+      <p>三种基础题型组合，覆盖理解和记忆</p>
+    </div>
+  </div>
+  <div class="option" data-choice="rich" onclick="selectOption(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>单选 + 多选 + 填空 + 判断</h3>
+      <p>四种题型，接近完整学习体验</p>
+    </div>
+  </div>
+</div>
+
+<div id="doneButton" style="display:none;margin-top:24px;text-align:center;">
+  <button onclick="submitAndContinue()" style="background:#4A90D9;color:white;border:none;padding:14px 32px;border-radius:25px;font-size:16px;cursor:pointer;">
+    选好了，继续 →
+  </button>
+</div>
+
+<script>
+let selectedChoice = null;
+
+function selectOption(el) {
+  document.querySelectorAll('.option').forEach(o => o.style.borderColor = '#eee');
+  el.style.borderColor = '#4A90D9';
+  selectedChoice = el.dataset.choice;
+  document.getElementById('doneButton').style.display = 'block';
+}
+
+function submitAndContinue() {
+  if (selectedChoice) {
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/.events';
+    var input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'data';
+    input.value = JSON.stringify({type:'done', choice:selectedChoice, timestamp:Date.now()});
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+  }
+}
+</script>

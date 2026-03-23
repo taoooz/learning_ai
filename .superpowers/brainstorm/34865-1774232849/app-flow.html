@@ -1,0 +1,87 @@
+<h2>产品核心流程</h2>
+<p class="subtitle">移动端优先 · 4个核心页面</p>
+
+<div class="mockup">
+  <div class="mockup-header">整体交互流程</div>
+  <div class="mockup-body">
+    <div style="display:flex;align-items:center;justify-content:center;gap:16px;padding:24px;font-size:12px;">
+      <!-- Step 1: Topic Input -->
+      <div style="text-align:center;width:70px;">
+        <div style="background:#f5f5f5;border-radius:8px;padding:12px 8px;margin-bottom:6px;">
+          <div style="font-size:20px;">🔍</div>
+          <div style="font-size:9px;margin-top:4px;">输入兴趣主题</div>
+        </div>
+        <div style="font-size:9px;color:#666;">主题输入页</div>
+      </div>
+
+      <div style="font-size:18px;color:#ccc;">→</div>
+
+      <!-- Step 2: AI Generating -->
+      <div style="text-align:center;width:70px;">
+        <div style="background:#f5f5f5;border-radius:8px;padding:12px 8px;margin-bottom:6px;">
+          <div style="font-size:20px;">⚡</div>
+          <div style="font-size:9px;margin-top:4px;">AI 生成中</div>
+        </div>
+        <div style="font-size:9px;color:#666;">加载状态</div>
+      </div>
+
+      <div style="font-size:18px;color:#ccc;">→</div>
+
+      <!-- Step 3: Course Tree -->
+      <div style="text-align:center;width:70px;">
+        <div style="background:#f5f5f5;border-radius:8px;padding:12px 8px;margin-bottom:6px;">
+          <div style="font-size:20px;">🌲</div>
+          <div style="font-size:9px;margin-top:4px;">课程树</div>
+        </div>
+        <div style="font-size:9px;color:#666;">课程详情页</div>
+      </div>
+
+      <div style="font-size:18px;color:#ccc;">→</div>
+
+      <!-- Step 4: Learning -->
+      <div style="text-align:center;width:70px;">
+        <div style="background:#f5f5f5;border-radius:8px;padding:12px 8px;margin-bottom:6px;">
+          <div style="font-size:20px;">📖</div>
+          <div style="font-size:9px;margin-top:4px;">学习+闯关</div>
+        </div>
+        <div style="font-size:9px;color:#666;">单元学习页</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section"></div>
+
+<h3>关键设计问题</h3>
+
+<div class="options">
+  <div class="option" data-choice="A" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>视觉风格</h3>
+      <p>希望整体视觉风格偏向哪种？</p>
+    </div>
+  </div>
+  <div class="option" data-choice="B" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>课程树交互</h3>
+      <p>课程树的展示和导航方式？</p>
+    </div>
+  </div>
+</div>
+
+<style>
+.mockup-header {
+  font-size:11px;
+  color:#888;
+  margin-bottom:8px;
+  text-transform:uppercase;
+  letter-spacing:0.5px;
+}
+.mockup-body {
+  background:#fafafa;
+  border-radius:8px;
+  border:1px solid #eee;
+}
+</style>

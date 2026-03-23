@@ -1,0 +1,28 @@
+{"type":"server-started","port":51063,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:51063","screen_dir":"/Users/admin/Documents/OpenCode/duolingo for anything/.superpowers/brainstorm/34865-1774232849"}
+{"type":"screen-added","file":"/Users/admin/Documents/OpenCode/duolingo for anything/.superpowers/brainstorm/34865-1774232849/app-flow.html"}
+{"source":"user-event","type":"click","text":"A\n    \n      视觉风格\n      希望整体视觉风格偏向哪种？","choice":"A","id":null,"timestamp":1774232903937}
+{"source":"user-event","type":"click","text":"A\n    \n      视觉风格\n      希望整体视觉风格偏向哪种？","choice":"A","id":null,"timestamp":1774232904994}
+{"source":"user-event","type":"click","text":"A\n    \n      视觉风格\n      希望整体视觉风格偏向哪种？","choice":"A","id":null,"timestamp":1774232906114}
+{"source":"user-event","type":"click","text":"A\n    \n      视觉风格\n      希望整体视觉风格偏向哪种？","choice":"A","id":null,"timestamp":1774232907400}
+{"source":"user-event","type":"click","text":"A\n    \n      视觉风格\n      希望整体视觉风格偏向哪种？","choice":"A","id":null,"timestamp":1774232907553}
+{"source":"user-event","type":"click","text":"A\n    \n      视觉风格\n      希望整体视觉风格偏向哪种？","choice":"A","id":null,"timestamp":1774232943159}
+{"source":"user-event","type":"click","text":"A\n    \n      视觉风格\n      希望整体视觉风格偏向哪种？","choice":"A","id":null,"timestamp":1774232943633}
+{"source":"user-event","type":"click","text":"A\n    \n      视觉风格\n      希望整体视觉风格偏向哪种？","choice":"A","id":null,"timestamp":1774232943795}
+{"source":"user-event","type":"click","text":"A\n    \n      视觉风格\n      希望整体视觉风格偏向哪种？","choice":"A","id":null,"timestamp":1774232944538}
+{"source":"user-event","type":"click","text":"A\n    \n      视觉风格\n      希望整体视觉风格偏向哪种？","choice":"A","id":null,"timestamp":1774232944717}
+{"source":"user-event","type":"click","text":"A\n    \n      视觉风格\n      希望整体视觉风格偏向哪种？","choice":"A","id":null,"timestamp":1774232945704}
+{"type":"screen-added","file":"/Users/admin/Documents/OpenCode/duolingo for anything/.superpowers/brainstorm/34865-1774232849/visual-style.html"}
+{"source":"user-event","type":"click","text":"B\n    \n      简约现代\n      大量留白，柔和配色，少量渐变，偏向 Notion/Pinterest 的干净感","choice":"minimal","id":null,"timestamp":1774233000776}
+{"source":"user-event","type":"click","text":"B\n    \n      简约现代\n      大量留白，柔和配色，少量渐变，偏向 Notion/Pinterest 的干净感","choice":"minimal","id":null,"timestamp":1774233001487}
+{"source":"user-event","type":"click","text":"B\n    \n      简约现代\n      大量留白，柔和配色，少量渐变，偏向 Notion/Pinterest 的干净感","choice":"minimal","id":null,"timestamp":1774233005200}
+{"type":"screen-added","file":"/Users/admin/Documents/OpenCode/duolingo for anything/.superpowers/brainstorm/34865-1774232849/visual-style-v2.html"}
+{"source":"user-event","type":"click","text":"B\n    \n      简约现代\n      大量留白，柔和配色，少量渐变，偏向 Notion/Pinterest 的干净感","choice":"minimal","id":null,"timestamp":1774233101361}
+{"source":"user-event","type":"click","text":"B\n    \n      简约现代\n      大量留白，柔和配色，少量渐变，偏向 Notion/Pinterest 的干净感","choice":"minimal","id":null,"timestamp":1774233112840}
+{"type":"screen-added","file":"/Users/admin/Documents/OpenCode/duolingo for anything/.superpowers/brainstorm/34865-1774232849/course-tree-style.html"}
+{"source":"user-event","type":"click","text":"A\n    \n      纵向线性路径\n      从上到下依次排列，像 Duolingo 一样按顺序解锁前进","choice":"vertical","id":null,"timestamp":1774233209007}
+{"type":"screen-added","file":"/Users/admin/Documents/OpenCode/duolingo for anything/.superpowers/brainstorm/34865-1774232849/unit-learning-flow.html"}
+{"type":"screen-added","file":"/Users/admin/Documents/OpenCode/duolingo for anything/.superpowers/brainstorm/34865-1774232849/question-types.html"}
+{"type":"screen-added","file":"/Users/admin/Documents/OpenCode/duolingo for anything/.superpowers/brainstorm/34865-1774232849/learning-cards.html"}
+{"type":"screen-added","file":"/Users/admin/Documents/OpenCode/duolingo for anything/.superpowers/brainstorm/34865-1774232849/gamification.html"}
+{"type":"screen-added","file":"/Users/admin/Documents/OpenCode/duolingo for anything/.superpowers/brainstorm/34865-1774232849/topic-input.html"}
+{"type":"screen-added","file":"/Users/admin/Documents/OpenCode/duolingo for anything/.superpowers/brainstorm/34865-1774232849/design-overview.html"}

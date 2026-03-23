@@ -1,0 +1,58 @@
+<h2>游戏化元素</h2>
+<p class="subtitle">Demo 阶段想做哪些激励/进度系统？</p>
+
+<div class="options">
+  <div class="option" data-choice="minimal" onclick="selectOption(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>极简进度条</h3>
+      <p>只显示当前单元进度（1/3），完成节点后简单提示"继续下一节"</p>
+    </div>
+  </div>
+  <div class="option" data-choice="xp-lv" onclick="selectOption(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>XP + 等级</h3>
+      <p>每题答对 +XP，积累 XP 升等级，显示当前等级和经验条</p>
+    </div>
+  </div>
+  <div class="option" data-choice="streak" onclick="selectOption(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>XP + 等级 + 连续天数</h3>
+      <p>完整游戏化：XP、等级、连续学习天数激励，更接近 Duolingo</p>
+    </div>
+  </div>
+</div>
+
+<div id="doneButton" style="display:none;margin-top:24px;text-align:center;">
+  <button onclick="submitAndContinue()" style="background:#4A90D9;color:white;border:none;padding:14px 32px;border-radius:25px;font-size:16px;cursor:pointer;">
+    选好了，继续 →
+  </button>
+</div>
+
+<script>
+let selectedChoice = null;
+
+function selectOption(el) {
+  document.querySelectorAll('.option').forEach(o => o.style.borderColor = '#eee');
+  el.style.borderColor = '#4A90D9';
+  selectedChoice = el.dataset.choice;
+  document.getElementById('doneButton').style.display = 'block';
+}
+
+function submitAndContinue() {
+  if (selectedChoice) {
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/.events';
+    var input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'data';
+    input.value = JSON.stringify({type:'done', choice:selectedChoice, timestamp:Date.now()});
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+  }
+}
+</script>

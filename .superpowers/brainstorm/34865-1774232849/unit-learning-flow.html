@@ -1,0 +1,58 @@
+<h2>单元学习交互</h2>
+<p class="subtitle">进入节点后，用户看到什么？如何完成闯关？</p>
+
+<div class="options">
+  <div class="option" data-choice="card-first" onclick="selectOption(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>先卡片学习 → 再答题</h3>
+      <p>先看几张递进式学习卡片（讲解），看完后进入答题闯关</p>
+    </div>
+  </div>
+  <div class="option" data-choice="quiz-first" onclick="selectOption(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>边学边练</h3>
+      <p>学习卡片和答题交替出现，学一点练一点，节奏更快</p>
+    </div>
+  </div>
+  <div class="option" data-choice="quiz-only" onclick="selectOption(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>纯答题闯关</h3>
+      <p>简短引入后直接答题，每题有即时反馈，不单独展示学习卡片</p>
+    </div>
+  </div>
+</div>
+
+<div id="doneButton" style="display:none;margin-top:24px;text-align:center;">
+  <button onclick="submitAndContinue()" style="background:#4A90D9;color:white;border:none;padding:14px 32px;border-radius:25px;font-size:16px;cursor:pointer;">
+    选好了，继续 →
+  </button>
+</div>
+
+<script>
+let selectedChoice = null;
+
+function selectOption(el) {
+  document.querySelectorAll('.option').forEach(o => o.style.borderColor = '#eee');
+  el.style.borderColor = '#4A90D9';
+  selectedChoice = el.dataset.choice;
+  document.getElementById('doneButton').style.display = 'block';
+}
+
+function submitAndContinue() {
+  if (selectedChoice) {
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/.events';
+    var input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'data';
+    input.value = JSON.stringify({type:'done', choice:selectedChoice, timestamp:Date.now()});
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+  }
+}
+</script>

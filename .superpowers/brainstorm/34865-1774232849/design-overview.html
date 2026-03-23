@@ -1,0 +1,73 @@
+<h2>整体设计方案</h2>
+<p class="subtitle">组件化架构 · Next.js App Router</p>
+
+<div class="mockup">
+  <div class="mockup-header">页面结构</div>
+  <div class="mockup-body" style="padding:16px;">
+    <div style="border:1px solid #e0e0e0;border-radius:8px;padding:12px;margin-bottom:12px;">
+      <div style="font-size:11px;color:#888;margin-bottom:4px;">Page 1: 主题输入</div>
+      <div style="font-size:13px;">输入框 + 开始按钮 → /generate</div>
+    </div>
+    <div style="border:1px solid #e0e0e0;border-radius:8px;padding:12px;margin-bottom:12px;">
+      <div style="font-size:11px;color:#888;margin-bottom:4px;">Page 2: 加载状态</div>
+      <div style="font-size:13px;">AI 生成中动画 → /course/[id]</div>
+    </div>
+    <div style="border:1px solid #e0e0e0;border-radius:8px;padding:12px;margin-bottom:12px;">
+      <div style="font-size:11px;color:#888;margin-bottom:4px;">Page 3: 课程详情</div>
+      <div style="font-size:13px;">课程树（纵向线性）+ 开始学习 → /course/[id]/learn</div>
+    </div>
+    <div style="border:1px solid #e0e0e0;border-radius:8px;padding:12px;">
+      <div style="font-size:11px;color:#888;margin-bottom:4px;">Page 4: 单元学习</div>
+      <div style="font-size:13px;">学习卡片 → 答题闯关 → 返回课程树</div>
+    </div>
+  </div>
+</div>
+
+<div class="section"></div>
+
+<h3>核心组件</h3>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+  <div style="background:#f5f5f5;border-radius:8px;padding:12px;">
+    <div style="font-size:12px;font-weight:600;">CourseTree</div>
+    <div style="font-size:11px;color:#666;margin-top:4px;">纵向线性课程树，展示节点和进度</div>
+  </div>
+  <div style="background:#f5f5f5;border-radius:8px;padding:12px;">
+    <div style="font-size:12px;font-weight:600;">LearningCard</div>
+    <div style="font-size:11px;color:#666;margin-top:4px;">1-5张自适应学习卡片，支持滑动</div>
+  </div>
+  <div style="background:#f5f5f5;border-radius:8px;padding:12px;">
+    <div style="font-size:12px;font-weight:600;">QuizQuestion</div>
+    <div style="font-size:11px;color:#666;margin-top:4px;">单选/多选/填空题，即时反馈</div>
+  </div>
+  <div style="background:#f5f5f5;border-radius:8px;padding:12px;">
+    <div style="font-size:12px;font-weight:600;">ProgressBar</div>
+    <div style="font-size:11px;color:#666;margin-top:4px;">极简进度指示（X/Y）</div>
+  </div>
+</div>
+
+<div class="section"></div>
+
+<h3>状态管理</h3>
+<p style="font-size:13px;color:#444;line-height:1.6;">
+  React Context 管理全局状态：<br/>
+  <code style="background:#f0f0f0;padding:2px 6px;border-radius:4px;font-size:12px;">CourseContext</code> 课程数据<br/>
+  <code style="background:#f0f0f0;padding:2px 6px;border-radius:4px;font-size:12px;">ProgressContext</code> 节点进度<br/>
+  localStorage 持久化
+</p>
+
+<div class="section"></div>
+
+<h3>AI 集成流程</h3>
+<div style="background:#fafafa;border-radius:8px;padding:16px;font-size:12px;line-height:1.8;">
+  用户输入主题 → <code>POST /api/generate</code><br/>
+  → MiniMax API 生成课程树 JSON<br/>
+  → 解析存储到 CourseContext<br/>
+  → 跳转到课程详情页
+</div>
+
+<style>
+.mockup-header { font-size:11px;color:#888;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px; }
+.mockup-body { background:#fafafa;border-radius:8px;border:1px solid #eee; }
+h3 { font-size:14px;margin:16px 0 8px 0; }
+.section { height:8px; }
+</style>
