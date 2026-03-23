@@ -20,7 +20,6 @@ export default function ProfilePage() {
   const [education, setEducation] = useState<Education[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [insightsError, setInsightsError] = useState(false);
 
   // 加载已有数据
   useEffect(() => {
@@ -45,51 +44,35 @@ export default function ProfilePage() {
     };
 
     setIsSaving(true);
-    setInsightsError(false);
+
+    // 立即保存基本信息（不等洞察生成）
     updateProfile(profile);
-
-    // 调用洞察 API 获取个性化学习建议（带重试机制）
-    let insightsSuccess = false;
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        const response = await fetch('/api/profile/insights', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(profile),
-        });
-
-        if (response.ok) {
-          const updatedProfile = await response.json();
-          // 用返回的完整数据更新上下文（包含 insights）
-          updateProfile(updatedProfile);
-          insightsSuccess = true;
-          break;
-        } else {
-          console.error(`Insights API attempt ${attempt} failed with status:`, response.status);
-          if (attempt < 2) {
-            // 等待一秒后重试
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
-        }
-      } catch (error) {
-        console.error(`Insights API attempt ${attempt} threw error:`, error);
-        if (attempt < 2) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      }
-    }
-
-    if (!insightsSuccess) {
-      setInsightsError(true);
-    }
 
     setIsSaving(false);
     setSaveSuccess(true);
 
-    // 保存成功后返回首页
+    // 保存成功后立即返回首页
     setTimeout(() => {
       router.push('/');
-    }, 500);  // 短暂延迟让用户看到"已保存"提示
+    }, 500);
+
+    // 后台触发洞察生成（不阻塞用户）
+    fetch('/api/profile/insights', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profile),
+    }).then(response => {
+      if (response.ok) {
+        return response.json();
+      }
+      throw new Error('Insights API failed');
+    }).then(updatedProfile => {
+      // 用返回的完整数据更新上下文（包含 insights）
+      updateProfile(updatedProfile);
+    }).catch(error => {
+      console.error('Background insights generation failed:', error);
+      // 静默失败，不影响用户
+    });
   };
 
   // 工作经历操作
@@ -272,13 +255,6 @@ export default function ProfilePage() {
         >
           {isSaving ? '保存中...' : saveSuccess ? '已保存 ✓' : '保存设置'}
         </button>
-
-        {/* 洞察提取失败警告 */}
-        {insightsError && (
-          <p className="mt-3 text-sm text-orange-600 text-center">
-            已保存，但洞察提取失败，请稍后刷新重试
-          </p>
-        )}
       </div>
     </main>
   );
