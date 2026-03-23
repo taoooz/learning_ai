@@ -3,29 +3,26 @@
 import { UserProfile } from '@/types/course';
 
 export function buildCourseTreePrompt(topic: string, userProfile?: UserProfile | null): string {
-  let profileSection = '';
+  let insightSection = '';
 
-  if (userProfile) {
-    profileSection = `
-用户背景信息：
-- 目标岗位：${userProfile.targetJob || '未填写'}
-- 工作经历：
-  ${userProfile.workExperience && userProfile.workExperience.length > 0
-    ? userProfile.workExperience.map(w => `- ${w.company}，${w.position}`).join('\n  ')
-    : '暂无'}
-- 教育背景：
-  ${userProfile.education && userProfile.education.length > 0
-    ? userProfile.education.map(e => `- ${e.school}，${e.major}`).join('\n  ')
-    : '暂无'}
+  if (userProfile?.insights) {
+    const { knowledgeBackground, analogyExperiences } = userProfile.insights;
+    insightSection = `
+## 用户洞察
 
-基于以上背景，为"${topic}"创建学习路径时，请考虑：
-1. 如果工作经历与"${topic}"相关，课程可以更深入，适当跳过基础概念
-2. 如果是转行（工作经历与目标岗位无关），需要从基础开始讲解
-3. 结合"${userProfile.targetJob}"岗位的实际需求设计内容侧重点
+知识背景：
+${knowledgeBackground && knowledgeBackground.length > 0
+  ? knowledgeBackground.map(k => `- ${k}`).join('\n')
+  : '暂无相关背景'}
+
+类比经历：
+${analogyExperiences && analogyExperiences.length > 0
+  ? analogyExperiences.map(a => `- ${a}`).join('\n')
+  : '暂无相关经历'}
 `;
   }
 
-  return `${profileSection}You are an AI tutor creating a personalized learning path for the topic: "${topic}"
+  return `${insightSection}You are an AI tutor creating a personalized learning path for the topic: "${topic}"
 
 Create a learning course tree with the following structure:
 - Minimum 4 nodes, Maximum 8 nodes (decide based on topic complexity)
@@ -48,6 +45,14 @@ Output a JSON object with this exact structure:
     }
   ]
 }
+
+## 质量标准
+
+一个好的学习课程应该：
+- **结构清晰**：知识点由浅入深，环环相扣
+- **目标明确**：每个节点都有清晰的学习目标
+- **可实践**：内容能帮助用户解决真实问题
+- **有关联**：与用户已有知识建立联系，便于迁移学习
 
 Return ONLY the JSON object, no additional text.`;
 }
