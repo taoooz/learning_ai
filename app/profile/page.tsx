@@ -35,7 +35,7 @@ export default function ProfilePage() {
     }
   }, [userProfile]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const profile: UserProfile = {
       name,
       targetJob,
@@ -45,6 +45,24 @@ export default function ProfilePage() {
 
     setIsSaving(true);
     updateProfile(profile);
+
+    try {
+      // 调用洞察 API 获取个性化学习建议
+      const response = await fetch('/api/profile/insights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profile),
+      });
+
+      if (response.ok) {
+        const updatedProfile = await response.json();
+        // 用返回的完整数据更新上下文（包含 insights）
+        updateProfile(updatedProfile);
+      }
+    } catch (error) {
+      console.error('Failed to extract insights:', error);
+    }
+
     setIsSaving(false);
     setSaveSuccess(true);
 
