@@ -57,16 +57,56 @@ Output a JSON object with this exact structure:
 Return ONLY the JSON object, no additional text.`;
 }
 
-export function buildNodeContentPrompt(topic: string, nodeTitle: string, cardCount: number): string {
-  return `You are an AI tutor creating learning content for the topic: "${topic}"
+export function buildNodeContentPrompt(
+  topic: string,
+  nodeTitle: string,
+  cardCount: number,
+  insights?: { knowledgeBackground?: string[]; analogyExperiences?: string[] } | null
+): string {
+  let insightSection = '';
+
+  if (insights) {
+    insightSection = `
+## 用户洞察
+
+知识背景：
+${insights.knowledgeBackground && insights.knowledgeBackground.length > 0
+  ? insights.knowledgeBackground.map(k => `- ${k}`).join('\n')
+  : '暂无相关背景'}
+
+类比经历：
+${insights.analogyExperiences && insights.analogyExperiences.length > 0
+  ? insights.analogyExperiences.map(a => `- ${a}`).join('\n')
+  : '暂无相关经历'}
+`;
+  }
+
+  return `${insightSection}You are an AI tutor creating learning content for the topic: "${topic}"
 The current learning node is: "${nodeTitle}"
 
 Generate exactly ${cardCount} learning cards and quiz questions for this node.
 
+## 好卡片质量标准
+
+每张卡片必须满足以下标准：
+
+1. **场景引入**：开头用具体场景或问题吸引用户注意力，建立学习动机
+2. **清晰定义**：用简洁准确的语言定义核心概念，避免模糊表述
+3. **避坑提示**：指出学习者常犯的错误或容易混淆的概念
+4. **一句话总结**：结尾用一句话精炼概括本卡片的要点
+
 Each card should have:
 - title: short title for the card
-- content: Markdown formatted explanation (2-3 paragraphs)
+- content: Markdown formatted explanation (2-3 paragraphs following the quality standards above)
 - imageUrl: (optional) leave as null
+
+## 好 Quiz 质量标准
+
+每道Quiz题目必须满足以下标准：
+
+1. **考察维度**：题目需覆盖不同认知层次（记忆、理解、应用、分析）
+2. **难度等级**：合理分布简单、中等、困难题目，比例为 3:5:2
+3. **对应卡片**：每道题目需明确对应某张卡片的内容，确保考点覆盖完整
 
 Quiz questions should include:
 - Single choice questions (1-2)
