@@ -14,6 +14,7 @@ export default function ProfilePage() {
   const router = useRouter();
   const { userProfile, updateProfile, isLoaded } = useUserProfile();
 
+  const [name, setName] = useState('');
   const [targetJob, setTargetJob] = useState('');
   const [workExperience, setWorkExperience] = useState<WorkExperience[]>([]);
   const [education, setEducation] = useState<Education[]>([]);
@@ -23,6 +24,7 @@ export default function ProfilePage() {
   // 加载已有数据
   useEffect(() => {
     if (userProfile) {
+      setName(userProfile.name || '');
       setTargetJob(userProfile.targetJob || '');
       setWorkExperience(userProfile.workExperience || []);
       setEducation(userProfile.education || []);
@@ -35,6 +37,7 @@ export default function ProfilePage() {
 
   const handleSave = () => {
     const profile: UserProfile = {
+      name,
       targetJob,
       workExperience: workExperience.filter(w => w.company.trim() || w.position.trim()),
       education: education.filter(e => e.school.trim() || e.major.trim()),
@@ -114,6 +117,18 @@ export default function ProfilePage() {
         {/* 个人简历 */}
         <section className="bg-white rounded-xl p-5 mb-4 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900 mb-3">个人简历</h2>
+
+          {/* 姓名 */}
+          <div className="mb-4">
+            <label className="text-sm font-medium text-gray-700 mb-1 block">姓名</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="请输入姓名"
+              className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+            />
+          </div>
 
           {/* 工作经历 */}
           <div className="mb-4">

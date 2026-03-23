@@ -60,6 +60,7 @@ export interface Education {
 }
 
 export interface UserProfile {
+  name?: string;
   targetJob: string;
   workExperience: WorkExperience[];
   education: Education[];
