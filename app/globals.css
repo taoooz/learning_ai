@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 :root {
   --foreground-rgb: 0, 0, 0;
@@ -24,25 +22,30 @@ html {
 
 /* Prose 样式（用于卡片内容） */
 .prose h3 {
-  @apply text-lg font-semibold mt-4 mb-2;
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
 }
 
 .prose p {
-  @apply mb-3 leading-relaxed;
+  margin-bottom: 0.75rem;
+  line-height: 1.625;
 }
 
 .prose ul, .prose ol {
-  @apply ml-5 mb-3;
+  margin-left: 1.25rem;
+  margin-bottom: 0.75rem;
 }
 
 .prose ul {
-  @apply list-disc;
+  list-style-type: disc;
 }
 
 .prose ol {
-  @apply list-decimal;
+  list-style-type: decimal;
 }
 
 .prose li {
-  @apply mb-1;
+  margin-bottom: 0.25rem;
 }
