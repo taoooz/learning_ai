@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { callMiniMax, parseJSONResponse } from '@/lib/minimax';
 import { buildCourseTreePrompt } from '@/lib/prompt';
 import { CourseTree } from '@/types/course';
+import { getUserProfile } from '@/lib/storage';
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,7 +13,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Topic is required' }, { status: 400 });
     }
 
-    const prompt = buildCourseTreePrompt(topic);
+    // 获取用户画像
+    const userProfile = getUserProfile();
+
+    const prompt = buildCourseTreePrompt(topic, userProfile);
     const content = await callMiniMax(prompt);
     const course = parseJSONResponse<CourseTree>(content);
 
