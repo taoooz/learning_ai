@@ -12,6 +12,9 @@ export interface Question {
   options?: string[];      // 单选/多选
   answer: string | string[];
   explanation: string;
+  dimension?: 'memory' | 'understanding' | 'application' | 'analysis';
+  difficulty?: 1 | 2 | 3;
+  cardId?: string;
 }
 
 export interface CourseNode {
