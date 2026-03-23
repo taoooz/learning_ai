@@ -1,7 +1,31 @@
 // lib/prompt.ts
 
-export function buildCourseTreePrompt(topic: string): string {
-  return `You are an AI tutor creating a personalized learning path for the topic: "${topic}"
+import { UserProfile } from '@/types/course';
+
+export function buildCourseTreePrompt(topic: string, userProfile?: UserProfile | null): string {
+  let profileSection = '';
+
+  if (userProfile) {
+    profileSection = `
+用户背景信息：
+- 目标岗位：${userProfile.targetJob || '未填写'}
+- 工作经历：
+  ${userProfile.workExperience && userProfile.workExperience.length > 0
+    ? userProfile.workExperience.map(w => `- ${w.company}，${w.position}`).join('\n  ')
+    : '暂无'}
+- 教育背景：
+  ${userProfile.education && userProfile.education.length > 0
+    ? userProfile.education.map(e => `- ${e.school}，${e.major}`).join('\n  ')
+    : '暂无'}
+
+基于以上背景，为"${topic}"创建学习路径时，请考虑：
+1. 如果工作经历与"${topic}"相关，课程可以更深入，适当跳过基础概念
+2. 如果是转行（工作经历与目标岗位无关），需要从基础开始讲解
+3. 结合"${userProfile.targetJob}"岗位的实际需求设计内容侧重点
+`;
+  }
+
+  return `${profileSection}You are an AI tutor creating a personalized learning path for the topic: "${topic}"
 
 Create a learning course tree with the following structure:
 - Minimum 4 nodes, Maximum 8 nodes (decide based on topic complexity)
