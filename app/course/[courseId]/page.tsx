@@ -1,0 +1,53 @@
+// app/course/[courseId]/page.tsx
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { useCourse } from '@/contexts/CourseContext';
+import { CourseTree } from '@/components/CourseTree';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+
+export default function CoursePage() {
+  const params = useParams();
+  const router = useRouter();
+  const { courses, currentCourse } = useCourse();
+  const [isLoading, setIsLoading] = useState(true);
+
+  const courseId = params.courseId as string;
+
+  useEffect(() => {
+    if (courses.length > 0 || currentCourse) {
+      setIsLoading(false);
+    }
+  }, [courses, currentCourse]);
+
+  if (isLoading) {
+    return (
+      <main className="min-h-screen flex items-center justify-center">
+        <LoadingSpinner message="Loading course..." />
+      </main>
+    );
+  }
+
+  const course = courses.find(c => c.courseId === courseId) || currentCourse;
+
+  if (!course) {
+    return (
+      <main className="min-h-screen flex flex-col items-center justify-center p-6">
+        <p className="text-gray-600 mb-4">Course not found</p>
+        <button
+          onClick={() => router.push('/')}
+          className="px-6 py-2 rounded-full bg-blue-500 text-white"
+        >
+          Go Home
+        </button>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-gray-50 p-6">
+      <CourseTree course={course} />
+    </main>
+  );
+}
