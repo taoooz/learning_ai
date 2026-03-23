@@ -1,5 +1,5 @@
 // lib/storage.ts
-import { StoredData, CourseTree, CourseProgress } from '@/types/course';
+import { StoredData, CourseTree, CourseProgress, UserProfile } from '@/types/course';
 
 const STORAGE_KEY = 'ai-learning-data';
 
@@ -7,6 +7,7 @@ const defaultData: StoredData = {
   courses: [],
   currentCourseId: null,
   courseProgress: {},
+  userProfile: null,
 };
 
 export function getStoredData(): StoredData {
@@ -73,4 +74,15 @@ export function markNodeCompleted(courseId: string, nodeIndex: number): void {
 export function getNodeProgress(courseId: string, nodeIndex: number): 'completed' | 'in_progress' | null {
   const data = getStoredData();
   return data.courseProgress[courseId]?.[nodeIndex] || null;
+}
+
+export function getUserProfile(): UserProfile | null {
+  const data = getStoredData();
+  return data.userProfile;
+}
+
+export function saveUserProfile(profile: UserProfile): void {
+  const data = getStoredData();
+  data.userProfile = profile;
+  saveStoredData(data);
 }
