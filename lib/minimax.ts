@@ -246,7 +246,7 @@ export async function callMiniMaxWithSearch(
     }
 
     // 递归调用，注入页面内容
-    return callMiniMaxWithSearch(basePrompt, searchResults, combinedPageContents, callCount + 1);
+    return callMiniMaxWithSearch(basePrompt, undefined, combinedPageContents, callCount + 1);
   }
 
   // 不需要继续，返回内容
