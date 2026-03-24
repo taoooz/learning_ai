@@ -1,6 +1,6 @@
 // app/api/generate/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { callMiniMax, parseJSONResponse } from '@/lib/minimax';
+import { callMiniMaxWithSearch, parseJSONResponse } from '@/lib/minimax';
 import { buildCourseTreePrompt } from '@/lib/prompt';
 import { ClarificationQuestion, CourseTreeResponse } from '@/types/course';
 import { getUserProfile } from '@/lib/storage';
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
 
     const apiStart = Date.now();
     console.log('[CourseTree] Calling MiniMax API...');
-    const content = await callMiniMax(prompt);
+    const content = await callMiniMaxWithSearch(prompt);
     console.log(`[CourseTree] MiniMax API: ${Date.now() - apiStart}ms`);
 
     const parseStart = Date.now();
