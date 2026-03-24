@@ -31,11 +31,9 @@
 **Files:**
 - Modify: `types/course.ts`
 
-- [ ] **Step 1: 添加 ClarificationQuestion 和 CourseTreeResponse 类型**
+- [ ] **Step 1: 添加 ClarificationQuestion, ClarificationAnswer 和 CourseTreeResponse 类型**
 
 ```typescript
-// 在 CourseTreeResponse 之后添加
-
 export interface ClarificationQuestion {
   id: string;
   question: string;
@@ -45,6 +43,20 @@ export interface ClarificationAnswer {
   id: string;
   question: string;
   answer: string;
+}
+
+// API 返回的课程响应类型
+export interface CourseTreeResponse {
+  courseId: string;
+  topic: string;
+  difficultySummary: string;
+  totalNodes: number;
+  nodes: Array<{
+    index: number;
+    title: string;
+    cardCount: number;
+    status: 'locked' | 'available';
+  }>;
 }
 
 // 修改 CourseTree 接口，添加 difficultySummary
@@ -522,10 +534,10 @@ const { clarification, submitClarification, generationStatus } = useCourse();
 
 // 在 JSX 中，当 clarification 存在时展示问题表单
 {clarification && (
-  <div classNameName="clarification-form">
+  <div className="clarification-form">
     <h2>为了更好地为您生成课程，请回答以下问题</h2>
     {clarification.questions.map((q) => (
-      <div key={q.id} classNameName="question-item">
+      <div key={q.id} className="question-item">
         <label>{q.question}</label>
         <textarea
           value={q.answer}
