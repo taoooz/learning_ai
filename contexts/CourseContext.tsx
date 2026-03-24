@@ -1,8 +1,17 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { CourseTree, CourseNode, GenerationStatus } from '@/types/course';
 import { getStoredData, addCourse as saveCourse, updateNodeContent as saveNodeContent, deleteCourse as deleteCourseFromStorage } from '@/lib/storage';
+
+interface ClarificationState {
+  topic: string;
+  questions: Array<{
+    id: string;
+    question: string;
+    answer: string;
+  }>;
+}
 
 interface CourseContextType {
   courses: CourseTree[];
@@ -13,6 +22,9 @@ interface CourseContextType {
   preloadNextNode: (courseId: string, currentNodeIndex: number) => void;
   updateNodeContent: (courseId: string, nodeIndex: number, cards: CourseNode['cards'], questions: CourseNode['questions']) => void;
   deleteCourse: (courseId: string) => void;
+  clarification: ClarificationState | null;
+  setClarification: React.Dispatch<React.SetStateAction<ClarificationState | null>>;
+  submitClarification: () => Promise<void>;
 }
 
 const CourseContext = createContext<CourseContextType | null>(null);
@@ -21,6 +33,13 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
   const [courses, setCourses] = useState<CourseTree[]>([]);
   const [currentCourse, setCurrentCourse] = useState<CourseTree | null>(null);
   const [generationStatus, setGenerationStatus] = useState<GenerationStatus>('idle');
+  const [clarification, setClarification] = useState<ClarificationState | null>(null);
+
+  // 使用 ref 来跟踪最新的 courses，避免依赖变化
+  const coursesRef = useRef<CourseTree[]>([]);
+  useEffect(() => {
+    coursesRef.current = courses;
+  }, [courses]);
 
   // 从 localStorage 恢复
   useEffect(() => {
@@ -54,10 +73,26 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
 
       if (!response.ok) throw new Error('Generation failed');
 
-      const course: CourseTree = await response.json();
+      const data = await response.json();
+
+      // 检查是否需要澄清
+      if (data.questions && Array.isArray(data.questions)) {
+        setClarification({
+          topic,
+          questions: data.questions.map((q: { id: string; question: string }) => ({
+            ...q,
+            answer: ''
+          }))
+        });
+        setGenerationStatus('success');
+        return;
+      }
+
+      // 直接返回课程
+      const course: CourseTree = data;
 
       // 第一个节点设为 available
-      if (course.nodes.length > 0) {
+      if (course.nodes && course.nodes.length > 0) {
         course.nodes[0].status = 'available';
       }
 
@@ -71,8 +106,47 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const submitClarification = useCallback(async () => {
+    if (!clarification) return;
+
+    const unanswered = clarification.questions.filter(q => !q.answer.trim());
+    if (unanswered.length > 0) {
+      throw new Error('Please answer all questions');
+    }
+
+    setGenerationStatus('generating');
+    try {
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: clarification.topic,
+          clarificationAnswers: clarification.questions
+        }),
+      });
+
+      if (!response.ok) throw new Error('Generation failed');
+
+      const course: CourseTree = await response.json();
+
+      // 第一个节点设为 available
+      if (course.nodes && course.nodes.length > 0) {
+        course.nodes[0].status = 'available';
+      }
+
+      saveCourse(course);
+      setCourses(prev => [...prev, course]);
+      setCurrentCourse(course);
+      setClarification(null);
+      setGenerationStatus('success');
+    } catch {
+      setGenerationStatus('error');
+      throw new Error('Failed to generate course');
+    }
+  }, [clarification]);
+
   const generateNodeContent = useCallback(async (courseId: string, nodeIndex: number) => {
-    const course = courses.find(c => c.courseId === courseId);
+    const course = coursesRef.current.find(c => c.courseId === courseId);
     if (!course || course.nodes[nodeIndex].cards) return;
 
     try {
@@ -93,11 +167,11 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     } catch {
       throw new Error('Failed to generate node content');
     }
-  }, [courses]);
+  }, []); // 移除 courses 依赖，使用 ref
 
   // 预加载下一个节点内容（不阻塞主流程）
   const preloadNextNode = useCallback((courseId: string, currentNodeIndex: number) => {
-    const course = courses.find(c => c.courseId === courseId);
+    const course = coursesRef.current.find(c => c.courseId === courseId);
     if (!course) return;
 
     const nextIndex = currentNodeIndex + 1;
@@ -108,7 +182,7 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     generateNodeContent(courseId, nextIndex).catch(() => {
       // 静默失败，不影响主流程
     });
-  }, [courses, generateNodeContent]);
+  }, [generateNodeContent]); // 移除 courses 依赖，使用 ref
 
   const updateNodeContent = useCallback((
     courseId: string,
@@ -147,6 +221,9 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
       preloadNextNode,
       updateNodeContent,
       deleteCourse,
+      clarification,
+      setClarification,
+      submitClarification,
     }}>
       {children}
     </CourseContext.Provider>
