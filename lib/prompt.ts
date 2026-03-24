@@ -5,7 +5,9 @@ import { UserProfile, ClarificationAnswer } from '@/types/course';
 export function buildCourseTreePrompt(
   topic: string,
   userProfile?: UserProfile | null,
-  clarificationAnswers?: ClarificationAnswer[]
+  clarificationAnswers?: ClarificationAnswer[],
+  searchResults?: string,
+  pageContents?: string
 ): string {
   let insightSection = '';
   let clarificationSection = '';
@@ -41,6 +43,16 @@ ${clarificationAnswers.map(a => `问题：${a.question}\n回答：${a.answer}`).
 
 直接生成课程，不需要再返回问题。
 `;
+  }
+
+  // 搜索相关 section
+  let searchSection = '';
+  if (pageContents) {
+    searchSection = buildPageFetchSection(pageContents);
+  } else if (searchResults) {
+    searchSection = buildSearchResultsSection(searchResults);
+  } else {
+    searchSection = buildSearchJudgmentSection();
   }
 
   return `${insightSection}${clarificationSection}你是一位专业的 AI 导师，为用户创建个性化的学习路径。
@@ -94,14 +106,17 @@ ${clarificationAnswers.map(a => `问题：${a.question}\n回答：${a.answer}`).
   ]
 }
 
-只返回 JSON 对象，不要有其他文本。`;
+只返回 JSON 对象，不要有其他文本。
+${searchSection}`;
 }
 
 export function buildNodeContentPrompt(
   topic: string,
   nodeTitle: string,
   cardCount: number,
-  insights?: { knowledgeBackground?: string[]; analogyExperiences?: string[] } | null
+  insights?: { knowledgeBackground?: string[]; analogyExperiences?: string[] } | null,
+  searchResults?: string,
+  pageContents?: string
 ): string {
   let insightSection = '';
 
@@ -119,6 +134,16 @@ ${insights.analogyExperiences && insights.analogyExperiences.length > 0
   ? insights.analogyExperiences.map(a => `- ${a}`).join('\n')
   : '暂无相关经历'}
 `;
+  }
+
+  // 搜索相关 section
+  let searchSection = '';
+  if (pageContents) {
+    searchSection = buildPageFetchSection(pageContents);
+  } else if (searchResults) {
+    searchSection = buildSearchResultsSection(searchResults);
+  } else {
+    searchSection = buildSearchJudgmentSection();
   }
 
   return `${insightSection}你是一位专业的 AI 导师，为用户创建学习内容。
@@ -177,7 +202,8 @@ Quiz 题目包含：
   ]
 }
 
-只返回 JSON 对象，不要有其他文本。`;
+只返回 JSON 对象，不要有其他文本。
+${searchSection}`;
 }
 
 export function buildProfileInsightPrompt(profile: UserProfile): string {
@@ -220,4 +246,65 @@ ${profile.education && profile.education.length > 0
   "analogyExperiences": ["经历1", "经历2"],
   "summary": "一句话总结"
 }`;
+}
+
+// 搜索判断 prompt 片段 - 追加到原始 prompt 后面
+export function buildSearchJudgmentSection(): string {
+  return `
+## 搜索判断
+
+请判断是否需要搜索外部信息来生成更好的内容。
+
+如果不需要搜索，请直接返回课程内容。
+如果需要搜索，请返回：
+{
+  "needsSearch": true,
+  "searchQueries": ["关键词1", "关键词2"]
+}
+
+注意：
+- 搜索关键词应该简洁、准确
+- 最多返回3个搜索关键词
+- 优先搜索核心概念和最新信息
+`;
+}
+
+// 搜索结果注入 prompt 片段
+export function buildSearchResultsSection(searchResults: string): string {
+  return `
+## 搜索结果
+
+${searchResults}
+
+请基于以上搜索结果，生成更准确、更丰富的内容。
+如果搜索结果足够，返回最终内容 JSON。
+如果需要查看页面详情来补充内容，请返回：
+{
+  "needsPageFetch": true,
+  "urls": ["url1", "url2", "url3"]
+}
+
+注意：
+- 最多返回3个URL
+- 只请求确实需要详情的页面
+`;
+}
+
+// 页面抓取结果注入 prompt 片段
+export function buildPageFetchSection(pageContents: string): string {
+  return `
+## 页面详情
+
+${pageContents}
+
+请基于以上页面详情，补充或验证之前的内容。
+如果页面详情足够，返回最终内容 JSON。
+如果仍需要更多页面详情（最多额外请求1次），返回：
+{
+  "needsPageFetch": true,
+  "urls": ["url1", "url2", "url3"]
+}
+
+**超过最大调用次数后，不再接受页面请求，直接基于已有内容生成。**
+`;
 }
