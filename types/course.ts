@@ -17,19 +17,44 @@ export interface Question {
   cardId?: string;
 }
 
+export interface ClarificationQuestion {
+  id: string;
+  question: string;
+}
+
+export interface ClarificationAnswer {
+  id: string;
+  question: string;
+  answer: string;
+}
+
 export interface CourseNode {
   index: number;
   title: string;
-  description: string;
   cardCount: number;
   status: 'locked' | 'available' | 'completed';
   cards?: LearningCard[];
   questions?: Question[];
 }
 
+// API 返回的课程响应类型
+export interface CourseTreeResponse {
+  courseId: string;
+  topic: string;
+  difficultySummary: string;
+  totalNodes: number;
+  nodes: Array<{
+    index: number;
+    title: string;
+    cardCount: number;
+    status: 'locked' | 'available';
+  }>;
+}
+
 export interface CourseTree {
   courseId: string;
   topic: string;
+  difficultySummary: string;
   totalNodes: number;
   nodes: CourseNode[];
 }
