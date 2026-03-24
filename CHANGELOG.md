@@ -1,201 +1,170 @@
 # 项目迭代日志
 
+## 2026-03-24
+
+### 课程生成优化 - 基于用户画像的智能难度匹配
+
+**用户洞察改进 (buildProfileInsightPrompt)**
+- 改为事实性总结，不做推测延伸
+- 示例："用过 docker" → "在项目中使用过 Docker"（而非"有容器化基础"）
+- 每份工作总结：做什么产品、有什么技能、什么领域
+
+**两级课程生成机制**
+- 第一级：AI 分析用户洞察与主题关联度
+  - 洞察足够 → 直接生成课程
+  - 洞察不足但关键 → 返回 1-3 个澄清问题
+- 第二级：用户回答澄清问题后 → 重新生成课程
+
+**课程结构决策指南**
+- 节点数量：5-15 个（按主题复杂度）
+- 卡片数量：每节点 8-12 张（按内容深度）
+- 新增 difficultySummary 字段描述课程难度
+
+**相关文件**
+- `types/course.ts` - 新增 ClarificationQuestion、ClarificationAnswer、CourseTreeResponse 类型
+- `lib/prompt.ts` - 更新 buildProfileInsightPrompt 和 buildCourseTreePrompt
+- `app/api/generate/route.ts` - 支持两种响应格式
+- `contexts/CourseContext.tsx` - 新增澄清状态管理
+- `app/generate/page.tsx` - 新增澄清问题 UI
+
+### 首页 UI 优化 - 从"效率工具"到"好奇驱动"
+
+**设计理念转型**
+- 从"学习工具"转为"学习玩具"，降低学习门槛和任务感
+- 文案从"学习"改为"探索"，"开始学习"改为"今天想探索什么？"
+
+**探索主题卡片化**
+- 8个主题卡片采用网格布局（4列），每卡片有专属配色和emoji
+- 卡片点击直接触发生成，无需先填充输入框
+- 主题包括：Python入门、日本历史、UI设计、机器学习、天文奥秘、生态系统、心理学、金融入门
+
+**视觉风格增强**
+- 增加柔和渐变背景装饰（blur-3xl动效）
+- 卡片采用轻拟物风格，带阴影和悬浮动效
+- 移除工具型灰色感，提升趣味性
+
+**交互模式优化**
+- 输入框弱化：圆角search样式，placeholder改为"或者搜索任何主题..."
+- 有课程时输入框降低opacity（但hover恢复）
+- 推荐主题点击即触发生成，简化操作路径
+
+**课程列表转型**
+- "我的课程"改为"已探索内容"
+- 从垂直列表改为横向滚动卡片（类似App Store展示风格）
+- 删除按钮移入三个点菜单，减少管理信息
+- 文案改为"点击继续"而非进度信息
+
+**情绪设计**
+- 加载动画增加"好奇之旅即将开始 ✨"文案
+- 删除确认弹窗改为更轻松的"确定删除吗？"语气
+- 整体氛围从"目标驱动"转为"好奇驱动"
+
+**交互细节优化**
+- 搜索框增加右侧搜索按钮，提升移动端可点击性
+- 课程列表从横向滚动改为纵向排列，充分利用垂直空间
+- 课程卡片信息更完整：显示百分比进度和节数
+
+### 全页面 UI 统一优化
+
+**生成页 (generate)**
+- 增加书籍图标 bounce 动画
+- 文案改为"正在生成你的好奇之旅..."、"AI 正在编织知识网络"
+- 三个点加载动画替代 spinner
+
+**课程详情页 (course/[courseId])**
+- 进度展示改为渐变背景卡片，百分比突出显示
+- 章节标题改为小写"章节"
+- 课程节点卡片优化：圆角 2xl，渐变背景状态图标，完成状态带绿色渐变
+
+**学习页 (learn/[nodeIndex])**
+- 加载状态增加书籍图标和引导文案
+- 完成页增加星星庆祝动画
+- 文案从"课程完成"改为"探索完成"
+- 按钮文案从"下一节"改为"继续下一章"
+
+**学习页组件效率优化**
+- LearningCard：移除多余嵌套卡片，改为单层 surface 卡片，去掉 shadow
+- LearningCardStack：移除固定高度，改为 min-h-[50vh]，内容自适应页面
+- LearningCard：移除 overflow-auto，内容自然展开，不需要滚动查看
+- QuizQuestion：移除外层卡片包装，progress 直接展示，按钮与内容紧凑排列
+
+**学习页头部固定**
+- NavHeader 改为 sticky 定位，滚动时保持固定
+- 内容区域独立滚动，头部不受影响
+- 添加 backdrop-blur 效果增强视觉层次
+
+**个人资料页窄屏优化**
+- 工作经历的公司与岗位输入框改为堆叠布局（窄屏）/并排（宽屏）
+- 添加 min-w-0 防止 flex 子元素溢出
+
+**个人资料页 (profile)**
+- 背景装饰统一
+- 输入框改为 2xl 圆角，border-2
+- 删除按钮改为 SVG 图标
+- 保存按钮统一使用橙色阴影
+
+**组件统一**
+- LoadingSpinner：边框改为 design system 颜色
+- RetryModal：警告图标居中，backdrop-blur，按钮样式统一
+- LearningCardStack：进度条改为渐变，移除 ProgressBar 依赖
+- QuizQuestion：标签改为圆角药丸样式，文案改为"答错啦"
+
+**页面效率优化**
+- 个人资料页：移除所有 section 卡片包裹，输入框直接展示，使用 margin 分隔
+- 课程详情页：移除进度渐变卡片，改为 inline 进度条展示
+- CourseTree 组件：移除内置 ProgressBar，进度由父组件控制
+
+---
+
 ## 2026-03-23
 
-### 新功能
+### 设计焕新
+- **全页面 CapWords 化**：首页、课程详情页、学习页、生成页、个人资料页全部统一设计系统
+- **学习页**：完成页用 SVG 橙色勾选图标替代 emoji，统一按钮和配色
+- **Quiz 组件**：题目卡、配色、按钮全部 CapWords 化
+- **重试弹窗**：图标居中设计，按钮样式统一
+- **资料页**：表单输入、删除按钮全部 SVG 化
+- 配色：#1c3344（主色）、#778089（次色）、#f97316（强调）、#fcfcfa（背景）
+- 移除渐变和模糊效果，采用简洁现代的视觉风格
+- 节点状态使用 SVG 图标替代 emoji
+- **设计系统抽离**：全局 CSS 变量定义完整设计 Token，Tailwind 配置使用 CSS 变量
+- **移动端适配**：按钮/链接最小触摸区域 44px，支持 prefers-reduced-motion
 
-#### 1. 首页显示历史课程列表
-**功能描述：** 用户已生成的课程显示在首页下方，方便快速进入继续学习。
+### 性能优化
+- 简化课程树结构，移除 description 字段，API 响应更快
+- Prompt 工程优化，限制卡片内容在 200 字以内
+- 课程生成耗时从 ~67s 优化至 ~34-41s
 
-**实现方案：**
-1. 首页从 `useCourse()` 获取课程列表
-2. 按时间倒序排列（最新在前）
-3. 显示课程主题、完成进度
-4. 当前课程标记"进行中"
-
-**修改文件：** `app/page.tsx`
-
-#### 2. 用户画像功能
-**功能描述：** 用户可以维护个人简历和求职意向，生成课程时自动使用这些信息提升内容质量。
-
-**数据结构：**
-- `UserProfile`：包含目标岗位、工作经历、教育背景
-- `WorkExperience`：公司、岗位、工作内容
-- `Education`：学校、专业
-
-**页面入口：**
-- 首页右上角用户图标 → `/profile` 页面
-
-**Prompt 增强：**
-- 生成课程时拼接用户背景信息
-- AI 会根据用户工作经历相关性调整课程深度
-- 结合目标岗位需求设计内容侧重点
-
-**修改文件：**
-- `types/course.ts` - 新增 UserProfile 等类型
-- `lib/storage.ts` - 新增 getUserProfile, saveUserProfile
-- `contexts/UserProfileContext.tsx` - 新增用户画像 Context
-- `app/profile/page.tsx` - 新增个人设置页面
-- `app/page.tsx` - 首页添加入口
-- `lib/prompt.ts` - 扩展 Prompt 支持用户背景
-- `app/api/generate/route.ts` - API 集成用户画像
-
-#### 3. 课程详情页添加返回首页按钮
-**功能描述：** 用户在课程详情页可以方便地返回首页。
-
-**修改文件：** `app/course/[courseId]/page.tsx`
-
-#### 4. 用户画像洞察机制
-**功能描述：** 从用户背景信息中自动提取学习洞察，用于提升课程内容的个性化程度。
-
-**数据结构：**
-- `LearningInsight`：包含知识背景（knowledgeBackground）、类比经历（analogyExperiences）、总结（summary）
-
-**API 端点：**
-- `POST /api/profile/insights` - 提取用户洞察
-
-**实现方案：**
-1. 用户保存个人信息后自动触发洞察提取
-2. AI 分析用户工作经历和教育背景，生成个性化学习建议
-3. 洞察结果与用户画像关联存储
-
-**修改文件：**
-- `types/course.ts` - 新增 LearningInsight 类型
-- `app/api/profile/insights/route.ts` - 新增洞察提取 API
-- `contexts/UserProfileContext.tsx` - 保存后自动提取洞察
-
-#### 5. Prompt 工程优化
-**功能描述：** 优化课程生成的 Prompt 质量标准，提升卡片和 Quiz 的内容质量。
-
-**课程树生成 Prompt 增强：**
-- 增加质量标准指导
-- 要求结合用户洞察设计课程结构
-
-**节点内容 Prompt 增强：**
-- 新增"好卡片"质量标准：
-  - 场景引入：具体使用场景
-  - 清晰定义：明确概念解释
-  - 避坑提示：常见错误提醒
-  - 一句话总结：核心要点提炼
-
-- 新增"好 Quiz"质量标准：
-  - 考察维度：知识点覆盖
-  - 难度等级：L1-L5 分级
-  - 对应卡片：标注关联的 learningCard id
-
-**Question 类型扩展：**
-- 新增 `dimension` 字段：考察维度
-- 新增 `difficulty` 字段：难度等级（L1-L5）
-- 新增 `cardId` 字段：对应的 learningCard id
-
-**修改文件：**
-- `types/course.ts` - Question 接口新增字段
-- `lib/prompt.ts` - 优化 Prompt 模板
-
----
+### 功能增强
+- 用户画像功能：支持目标岗位、工作经历、教育背景
+- 学习洞察机制：AI 分析用户背景提升内容个性化
+- 历史课程列表：首页显示已生成课程及进度
+- 课程节点预加载：进入学习页时后台预加载下一节
 
 ### 问题修复
+- JSON 解析：处理 AI 返回的嵌套括号和 Markdown 特殊字符
+- 练习题答案校验：正确提取选项标识符（如 "A. xxx" -> "A"）
+- 节点解锁逻辑：完成后正确解锁下一节点
+- 界面文本全部汉化
 
-#### 3. 练习题答案校验逻辑修复
-**问题描述：** 练习题没有正确校验用户答案，同一给的错误评价。
-
-**根本原因：**
-- AI 返回的答案是 `"A"`，但选项格式是 `"A. 1603年"`（带前缀）
-- 原代码直接比较选项字符串和答案字符串，导致永远不匹配
-
-**修复方案：**
-- 新增 `extractAnswerKey()` 函数，从选项中提取答案标识符（如 `"A. xxx" -> "A"`）
-- 新增 `checkIsCorrect()` 函数，正确处理单选、多选、填空题的答案校验
-
-**修改文件：** `components/QuizQuestion.tsx`
-
-#### 4. 界面文本英文改中文
-**问题描述：** 产品面向中文用户，但界面中存在大量英文提示。
-
-**修复方案：** 更新以下文件的用户可见文本为中文：
-
-| 文件 | 修改内容 |
-|------|---------|
-| `app/page.tsx` | 错误提示、按钮文本、示例主题标签 |
-| `app/course/[courseId]/page.tsx` | 加载提示、未找到课程、返回按钮 |
-| `app/course/[courseId]/learn/[nodeIndex]/page.tsx` | 加载提示、返回按钮、完成页面文本 |
-| `app/generate/page.tsx` | 加载提示文本 |
-| `components/LearningCardStack.tsx` | 导航按钮文本 |
-| `components/RetryModal.tsx` | 弹窗标题、按钮文本 |
-| `components/ui/ProgressBar.tsx` | 进度标签 |
-| `components/ui/LoadingSpinner.tsx` | 默认加载文本 |
-| `components/CourseTree.tsx` | 课程节数文本 |
-| `components/QuizQuestion.tsx` | 题目类型、按钮文本（之前已改） |
-
-#### 5. 课程节点解锁逻辑修复
-**问题描述：** 完成第一节课后，第二节仍然处于锁定状态。
-
-**根本原因：**
-- `markNodeCompleted()` 在 `storage.ts` 中确实会将下一个节点状态设为 `available`
-- 但 `CourseContext` 的 state 没有同步更新，导致 UI 仍显示旧状态
-
-**修复方案：**
-1. 在 `ProgressContext` 中新增 `refreshProgress()` 函数
-2. `markCompleted()` 时触发自定义事件 `node-completed`
-3. `CourseContext` 监听该事件，从 localStorage 重新加载最新课程数据
-
-**修改文件：**
-- `contexts/ProgressContext.tsx` - 添加事件触发逻辑
-- `contexts/CourseContext.tsx` - 监听事件刷新数据
-
-### 其他改进
-
-#### 课程内容预加载优化
-**功能描述：** 用户进入某个节点学习时，后台自动预加载下一个节点的内容。
-
-**实现方案：**
-1. 在 `CourseContext` 中新增 `preloadNextNode()` 函数
-2. 该函数使用 fire-and-forget 模式，不阻塞主流程
-3. 在 `LearnPage` 进入时调用
-
-**修改文件：**
-- `contexts/CourseContext.tsx` - 添加 preloadNextNode 函数
-- `app/course/[courseId]/learn/[nodeIndex]/page.tsx` - 调用预加载
-
-#### JSON 解析优化
-**问题描述：** MiniMax API 返回的内容可能包含 JSON 之外的多余文本，导致 `JSON.parse` 失败。
-
-**修复方案：** 重写 `parseJSONResponse()` 函数，使用大括号深度计数来准确提取 JSON 对象，而非贪婪正则表达式。
-
-**修改文件：** `lib/minimax.ts`
-
-#### Next.js 警告修复
-**问题描述：** 浏览器控制台出现 `scroll-behavior: smooth` 警告。
-
-**修复方案：** 在 `app/layout.tsx` 的 html 元素上添加 `data-scroll-behavior="smooth"` 属性。
-
-**修改文件：** `app/layout.tsx`
-
-#### API 参数修正
-**问题描述：** 课程内容生成 API 调用返回 400 错误。
-
-**根本原因：** 前端传递了 `courseId`, `nodeIndex` 参数，但 API 实际需要 `topic`, `title`, `cardCount`。
-
-**修复方案：** 更新 `CourseContext.tsx` 中的 `generateNodeContent()` 函数，传递正确的参数。
-
-**修改文件：** `contexts/CourseContext.tsx`
-
-### 技术细节
-
-#### MiniMax API 集成
-- **端点：** `https://api.minimaxi.com/v1/chat/completions`
-- **模型：** `MiniMax-M2.7`
-- **修复历史：** 初始使用错误端点 `/v1/text/chatcompletion_v2`，后根据官方文档修正
-
-#### Tailwind CSS v4 兼容性
-- **问题：** v4 版本使用 `@import "tailwindcss"` 而非 `@tailwind` 指令
-- **修复：** 更新 `app/globals.css` 使用正确的导入语法
+### 技术改进
+- react-markdown 支持卡片内容和 Quiz 题目渲染
+- useRef 稳定 CourseContext 回调，避免不必要的重渲染
+- Next.js 4.x 兼容性修复
 
 ---
 
-## 待优化项
+## 历史版本（压缩归档）
 
-1. [ ] 学习卡片翻转动画体验优化
-2. [ ] 错误处理的用户提示优化
-3. [ ] 离线支持（无网络时显示已缓存内容）
-4. [ ] 移动端适配优化
+### v0.x 功能清单
+- 核心学习流程：首页 → 课程详情 → 节点学习 → Quiz
+- MiniMax API 集成（模型：MiniMax-M2.7）
+- localStorage 持久化存储
+- 课程树生成（4-8 节点）和节点内容（1-5 卡片）
+- 单选/多选/填空题支持
+
+### 细节优化
+- **骨架屏**：学习页加载时显示卡片骨架动画，而非静态 spinner
+- **Toast 提示**：资料页保存时显示动画提示
+- **学习流程重构**：内容全屏展示，学测交替，打破两阶段割裂
+- 错误处理改进：静默处理后台洞察生成失败，不干扰主流程
