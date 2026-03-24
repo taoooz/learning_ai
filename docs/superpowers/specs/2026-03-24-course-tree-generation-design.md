@@ -79,7 +79,7 @@
 第二次 API 调用（仅情况 B）→ 生成课程 ✅
 ```
 
-#### 2.2 Prompt 设计
+#### 2.2 第一次调用 Prompt 设计
 
 **buildCourseTreePrompt(topic, userProfile)**
 
@@ -124,6 +124,40 @@
       "question": "问题文本"
     }
   ]
+}
+```
+
+#### 2.2.1 第二次调用 Prompt 设计
+
+**buildCourseTreePrompt(topic, userProfile, clarificationAnswers)**
+
+第二次调用时，将用户的回答作为额外 context 注入 prompt，让 AI 结合原始洞察和新回答综合判断课程设计。
+
+**Prompt 在原始结构基础上，增加：**
+
+```
+## 用户澄清回答
+
+{clarificationAnswers.map(a => `问题：${a.question}\n回答：${a.answer}`).join('\n\n')}
+
+请结合以上回答和原始用户洞察，重新评估：
+1. 用户对主题的实际经验水平
+2. 课程应有的难度和结构
+
+直接生成课程，不需要再返回问题。
+```
+
+**API 调用方式：**
+- 第二次调用与第一次调用使用相同的 API endpoint（`/api/generate`）
+- 请求体增加 `clarificationAnswers` 字段：
+```typescript
+{
+  topic: string;
+  clarificationAnswers: Array<{
+    id: string;
+    question: string;
+    answer: string;
+  }>;
 }
 ```
 
@@ -206,14 +240,19 @@ interface CourseTreeResponse {
 
 ```typescript
 interface ClarificationState {
-  courseId: string | null;       // 临时保存 courseId
+  topic: string;                  // 保存用户当前的 topic
   questions: Array<{
     id: string;
     question: string;
-    answer: string;
+    answer: string;               // 用户回答
   }>;
 }
 ```
+
+**说明：**
+- 情况 B 时，不返回 courseId（课程尚未生成）
+- 前端保存 topic 和 questions，供第二次调用使用
+- 第二次调用时，携带 topic + clarificationAnswers
 
 ### 5. 流程变更
 
@@ -223,7 +262,7 @@ interface ClarificationState {
 用户输入 topic
       │
       ▼
-fetch /api/generate
+fetch /api/generate({ topic })
       │
       ▼
 ┌─────────────────────────────────────┐
@@ -231,7 +270,10 @@ fetch /api/generate
 │                                     │
 │  if (questions) {                   │
 │    // 情况 B：展示问题表单            │
-│    setClarificationState(questions) │
+│    setClarificationState({          │
+│      topic,                         │
+│      questions                      │
+│    })                               │
 │  } else {                           │
 │    // 情况 A：保存课程               │
 │    saveCourse(course)               │
@@ -242,7 +284,10 @@ fetch /api/generate
 用户回答问题（如果是情况 B）
       │
       ▼
-fetch /api/generate（第二次，携带回答）
+fetch /api/generate({
+  topic,
+  clarificationAnswers: [...]   // 用户的回答
+})
       │
       ▼
 saveCourse(course)
