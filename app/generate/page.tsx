@@ -9,6 +9,11 @@ export default function GeneratePage() {
   const router = useRouter();
   const { currentCourse, generationStatus, clarification, submitClarification, setClarification } = useCourse();
 
+  // 检查是否所有问题都已回答
+  const allQuestionsAnswered = clarification
+    ? clarification.questions.every(q => q.answer.trim() !== '')
+    : false;
+
   useEffect(() => {
     if (generationStatus === 'success' && currentCourse) {
       router.replace(`/course/${currentCourse.courseId}`);
@@ -51,10 +56,10 @@ export default function GeneratePage() {
             </div>
             <button
               onClick={submitClarification}
-              disabled={generationStatus === 'generating'}
+              disabled={generationStatus === 'generating' || !allQuestionsAnswered}
               className="w-full mt-6 px-6 py-3 bg-accent text-white font-medium rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {generationStatus === 'generating' ? '生成中...' : '提交并生成课程'}
+              {!allQuestionsAnswered ? '请回答所有问题' : generationStatus === 'generating' ? '生成中...' : '提交并生成课程'}
             </button>
           </div>
         </div>
