@@ -1,6 +1,6 @@
 // app/api/generate/node/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { callMiniMax, parseJSONResponse } from '@/lib/minimax';
+import { callMiniMaxWithSearch, parseJSONResponse } from '@/lib/minimax';
 import { buildNodeContentPrompt } from '@/lib/prompt';
 import { getUserProfile } from '@/lib/storage';
 
@@ -40,8 +40,10 @@ export async function POST(request: NextRequest) {
 
     const apiStart = Date.now();
     console.log('[NodeContent] Calling MiniMax API...');
-    const content = await callMiniMax(prompt);
+    const content = await callMiniMaxWithSearch(prompt);
     console.log(`[NodeContent] MiniMax API: ${Date.now() - apiStart}ms`);
+    console.log('[NodeContent] Raw response length:', content.length);
+    console.log('[NodeContent] Raw response preview:', content.substring(0, 500));
 
     const parseStart = Date.now();
     const data = parseJSONResponse<NodeContentResponse>(content);
