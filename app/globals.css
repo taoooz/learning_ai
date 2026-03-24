@@ -1,26 +1,145 @@
 @import "tailwindcss";
 
+/* ========================================
+   AI Learning App - Design System v2
+   Based on CapWords "Warm Minimalism" Style
+   Corrected after screenshot analysis
+   ======================================== */
+
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-rgb: 249, 250, 251;
+  /* === Color System === */
+
+  /* Background Colors - 极浅灰白 */
+  --color-background: #F7F7F5;
+  --color-surface: #FFFFFF;
+  --color-subtle: #F5F5F5;
+
+  /* Text Colors - 清晰灰阶 */
+  --color-text-primary: #1F1F1F;    /* 标题/一级文字 - 近黑色 */
+  --color-text-secondary: #8A8A8A;   /* 正文/二级文字 */
+  --color-text-tertiary: #666666;   /* 辅助文字 */
+  --color-text-disabled: #999999;    /* 禁用/次要 */
+  --color-text-placeholder: #BDBDBD; /* placeholder */
+
+  /* CTA Colors - 高对比黑色系 */
+  --color-cta: #1A1A1A;            /* 主 CTA 背景 - 近黑色 */
+  --color-cta-text: #FFFFFF;       /* 主 CTA 文字 */
+
+  /* Accent Colors - 点缀色 */
+  --color-accent: #FF8A00;         /* 橙色点缀 */
+  --color-accent-light: #FFB380;
+
+  /* State Colors - 状态色 */
+  --color-success: #34C759;          /* iOS 绿 - 已完成 */
+  --color-warning: #FF9500;          /* iOS 橙 - 警告 */
+  --color-error: #EF476F;           /* 错误 */
+  --color-info: #007AFF;            /* iOS 蓝 - 可用状态 */
+
+  /* Status Colors - 节点状态色 */
+  --color-available: #FF9500;        /* 可学 - 橙色 */
+  --color-available-light: rgba(255, 149, 0, 0.15);
+  --color-completed: #34C759;        /* 已完成 - 绿色 */
+  --color-completed-light: rgba(52, 199, 89, 0.15);
+  --color-locked: #BDBDBD;          /* 锁定 - 灰色 */
+  --color-locked-light: rgba(189, 189, 189, 0.15);
+
+  /* Legacy support */
+  --color-primary: #FF8C42;
+  --color-secondary: #FFD166;
+
+  /* === Border Radius === */
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-xl: 32px;
+  --radius-pill: 9999px;
+
+  /* === Shadows - 极其克制 === */
+  --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.06);
+  --shadow-nav: 0 4px 20px rgba(0, 0, 0, 0.08);
+  --shadow-sheet: 0 8px 40px rgba(0, 0, 0, 0.1);
+  --shadow-float: 0 12px 36px rgba(17, 24, 39, 0.12);
+  --shadow-none: none;
+
+  /* === Animation === */
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* === Layout === */
+  --touch-target-min: 44px;
 }
 
+/* Base Styles */
 body {
-  color: rgb(var(--foreground-rgb));
-  background: rgb(var(--background-rgb));
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* 移动端优化 */
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+/* === Utility Classes === */
+
+/* Colors */
+.bg-background { background-color: var(--color-background); }
+.bg-surface { background-color: var(--color-surface); }
+.bg-subtle { background-color: var(--color-subtle); }
+.bg-cta { background-color: var(--color-cta); }
+.bg-accent { background-color: var(--color-accent); }
+.bg-available { background-color: var(--color-available); }
+.bg-completed { background-color: var(--color-completed); }
+.bg-locked { background-color: var(--color-locked); }
+
+.text-primary { color: var(--color-text-primary); }
+.text-secondary { color: var(--color-text-secondary); }
+.text-tertiary { color: var(--color-text-tertiary); }
+.text-disabled { color: var(--color-text-disabled); }
+.text-placeholder { color: var(--color-text-placeholder); }
+.text-cta { color: var(--color-cta-text); }
+.text-available { color: var(--color-available); }
+.text-completed { color: var(--color-completed); }
+.text-locked { color: var(--color-locked); }
+
+/* Border Radius */
+.rounded-sm { border-radius: var(--radius-sm); }
+.rounded-md { border-radius: var(--radius-md); }
+.rounded-lg { border-radius: var(--radius-lg); }
+.rounded-xl { border-radius: var(--radius-xl); }
+.rounded-pill { border-radius: var(--radius-pill); }
+
+/* Shadows */
+.shadow-card { box-shadow: var(--shadow-card); }
+.shadow-nav { box-shadow: var(--shadow-nav); }
+.shadow-sheet { box-shadow: var(--shadow-sheet); }
+.shadow-float { box-shadow: var(--shadow-float); }
+.shadow-none { box-shadow: none; }
+
+/* Touch Target */
+.touch-target {
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
+}
+
+/* === Mobile Optimization === */
 * {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* 平滑滚动 */
 html {
   scroll-behavior: smooth;
 }
 
-/* Prose 样式（用于卡片内容） */
+/* === Prose Styles (for card content) === */
 .prose h3 {
   font-size: 1.125rem;
   font-weight: 600;
@@ -48,4 +167,13 @@ html {
 
 .prose li {
   margin-bottom: 0.25rem;
+}
+
+/* === Reduced Motion === */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

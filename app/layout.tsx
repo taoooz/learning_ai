@@ -1,14 +1,11 @@
 // app/layout.tsx
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
 import './globals.css';
 import { CombinedProvider } from '@/contexts';
 
-const inter = Inter({ subsets: ['latin'] });
-
 export const metadata: Metadata = {
-  title: 'AI Learning - Personalized Learning Path',
-  description: '输入任何感兴趣的主题，AI 为你生成专属学习路径',
+  title: 'AI Learning',
+  description: '输入任何感兴趣的主题，AI 为你生成专属学习路径。',
 };
 
 export default function RootLayout({
@@ -18,7 +15,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-CN" data-scroll-behavior="smooth">
-      <body className={inter.className}>
+      <body>
         <CombinedProvider>
           {children}
         </CombinedProvider>
