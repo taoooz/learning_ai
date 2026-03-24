@@ -138,7 +138,7 @@ ${insights.analogyExperiences && insights.analogyExperiences.length > 0
 
 每张卡片包含：
 - title：简短的标题
-- content：简洁的 Markdown 内容（每张卡片 2-3 段，总字数控制在 200 字以内）
+- content：简洁的 Markdown 内容（每张卡片 2-3 段，字数控制在 150-400 字）
 - imageUrl：null
 
 ## 好 Quiz 质量标准
