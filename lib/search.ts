@@ -8,15 +8,12 @@ export interface SearchResult {
 
 export async function searchWeb(query: string, timeout = 15000): Promise<SearchResult[]> {
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
-
     const results = await Promise.race([
       searchEngine.google(query, 5),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('Search timeout')), timeout)
       )
-    ]).finally(() => clearTimeout(timeoutId));
+    ]);
 
     return results.map(r => ({
       title: r.title,
