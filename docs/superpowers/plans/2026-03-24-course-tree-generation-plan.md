@@ -473,6 +473,7 @@ return (
     updateNodeContent,
     deleteCourse,
     clarification,           // 新增
+    setClarification,         // 新增（用于更新问题回答）
     submitClarification,      // 新增
   }}>
     {children}
@@ -480,15 +481,7 @@ return (
 );
 ```
 
-- [ ] **Step 5: 更新 useCourse 返回类型（添加 clarification 和 submitClarification）**
-
-```typescript
-export function useCourse() {
-  const context = useContext(CourseContext);
-  if (!context) throw new Error('useCourse must be used within CourseProvider');
-  return context;
-}
-```
+- [ ] **Step 5: 更新 CourseContextType 接口**
 
 确保 `CourseContextType` 包含新字段：
 
@@ -496,6 +489,7 @@ export function useCourse() {
 interface CourseContextType {
   // ... existing fields
   clarification: ClarificationState | null;
+  setClarification: React.Dispatch<React.SetStateAction<ClarificationState | null>>;
   submitClarification: () => Promise<void>;
 }
 ```
