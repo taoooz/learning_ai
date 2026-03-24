@@ -1,10 +1,16 @@
 // lib/prompt.ts
 
-import { UserProfile } from '@/types/course';
+import { UserProfile, ClarificationAnswer } from '@/types/course';
 
-export function buildCourseTreePrompt(topic: string, userProfile?: UserProfile | null): string {
+export function buildCourseTreePrompt(
+  topic: string,
+  userProfile?: UserProfile | null,
+  clarificationAnswers?: ClarificationAnswer[]
+): string {
   let insightSection = '';
+  let clarificationSection = '';
 
+  // 用户洞察 section
   if (userProfile?.insights) {
     const { knowledgeBackground, analogyExperiences } = userProfile.insights;
     insightSection = `
@@ -22,16 +28,36 @@ ${analogyExperiences && analogyExperiences.length > 0
 `;
   }
 
-  return `${insightSection}你是一位专业的 AI 导师，为用户创建个性化的学习路径。
+  // 用户澄清回答 section（第二次调用时）
+  if (clarificationAnswers && clarificationAnswers.length > 0) {
+    clarificationSection = `
+## 用户澄清回答
+
+${clarificationAnswers.map(a => `问题：${a.question}\n回答：${a.answer}`).join('\n\n')}
+
+请结合以上回答和原始用户洞察，重新评估：
+1. 用户对主题的实际经验水平
+2. 课程应有的难度和结构
+
+直接生成课程，不需要再返回问题。
+`;
+  }
+
+  return `${insightSection}${clarificationSection}你是一位专业的 AI 导师，为用户创建个性化的学习路径。
 
 主题：${topic}
 
-## 课程结构要求
+## 课程结构决策指南
 
-- 课程包含 4-8 个节点（根据主题复杂度决定）
-- 每个节点代表主题中的一个学习概念
-- 节点按从基础到进阶的顺序排列
-- 每个节点包含：标题、卡片数量（1-5，根据复杂度决定）
+**节点数量：**
+- 参考范围：5-15 个
+- 决策因素：主题本身的复杂度
+- 原则：节点之间有清晰的逻辑顺序
+
+**卡片数量：**
+- 参考范围：每节点 8-12 张
+- 决策因素：内容深度（核心原理需要更多展开）
+- 原则：避免单张卡片内容过多
 
 ## 质量标准
 
@@ -42,17 +68,28 @@ ${analogyExperiences && analogyExperiences.length > 0
 
 ## 输出格式
 
-输出 JSON 对象，结构如下：
+如果可以直接生成课程（洞察足够或已有澄清回答），请输出：
 {
   "courseId": "唯一ID",
   "topic": "${topic}",
+  "difficultySummary": "简要的难度描述（基于用户背景与主题的关联度分析，用中文描述）",
   "totalNodes": 节点数量,
   "nodes": [
     {
       "index": 0,
       "title": "节点标题",
-      "cardCount": 数字 (1-5),
+      "cardCount": 数字 (8-12),
       "status": "locked"
+    }
+  ]
+}
+
+如果需要更多信息才能生成课程，请输出：
+{
+  "questions": [
+    {
+      "id": "q1",
+      "question": "问题文本（必须是与课程设计直接相关的具体问题，最多3个）"
     }
   ]
 }
