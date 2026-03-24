@@ -5,8 +5,8 @@ import { buildCourseTreePrompt } from '@/lib/prompt';
 import { ClarificationQuestion, CourseTreeResponse } from '@/types/course';
 import { getUserProfile } from '@/lib/storage';
 
-// ClarificationResponse 是内部使用的类型，不需要导出
-interface ClarificationResponse {
+// ClarificationAPIResponse 是内部使用的类型，用于解析 API 返回的澄清问题响应
+interface ClarificationAPIResponse {
   questions: ClarificationQuestion[];
 }
 
@@ -19,6 +19,11 @@ export async function POST(request: NextRequest) {
 
     if (!topic || typeof topic !== 'string') {
       return NextResponse.json({ error: 'Topic is required' }, { status: 400 });
+    }
+
+    // validation: clarificationAnswers should be an array if provided
+    if (clarificationAnswers !== undefined && !Array.isArray(clarificationAnswers)) {
+      return NextResponse.json({ error: 'clarificationAnswers must be an array' }, { status: 400 });
     }
 
     const promptBuildStart = Date.now();
@@ -49,7 +54,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(course);
     } catch {
       // 解析失败，尝试作为澄清响应
-      const clarificationResponse = parseJSONResponse<ClarificationResponse>(content);
+      const clarificationResponse = parseJSONResponse<ClarificationAPIResponse>(content);
       if ('questions' in clarificationResponse) {
         console.log('[CourseTree] Clarification needed, returning questions');
         return NextResponse.json({ questions: clarificationResponse.questions });
