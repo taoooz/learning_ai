@@ -19,6 +19,7 @@ const defaultMemory: UserMemory = {
   },
   lastUpdated: Date.now(),
   version: 1,
+  conversationSummaries: [],
 };
 
 function getMemory(): UserMemory {
