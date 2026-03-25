@@ -1,6 +1,6 @@
 // lib/chat-context.ts
 
-import { CourseTree, UserMemory } from '@/types/course';
+import { CourseTree, UserMemory, ConversationSummary } from '@/types/course';
 import { ChatMessage } from '@/types/chat';
 
 interface ContextInfo {
@@ -13,7 +13,8 @@ export function buildChatContext(
   course: CourseTree,
   userMemory: UserMemory,
   chatHistory: ChatMessage[],
-  contextInfo?: ContextInfo
+  contextInfo?: ContextInfo,
+  conversationSummary?: ConversationSummary
 ): string {
   // 1. 提取当前课程相关的兴趣和薄弱点
   const relevantGaps = userMemory.extractedInsights.knowledgeGaps
@@ -40,6 +41,20 @@ export function buildChatContext(
     ? `\n## 当前学习节点\n主题：${contextInfo.currentNodeTitle}${contextInfo.currentNodeCards?.length ? `\n学习内容：\n${contextInfo.currentNodeCards.join('\n')}` : ''}${contextInfo.currentQuestion ? `\n当前问题：${contextInfo.currentQuestion}` : ''}`
     : '';
 
+  // 5. 过滤未过期的消息
+  const activeMessages = chatHistory.filter(m => !m.isExpired);
+  const expiredSummary = conversationSummary?.summary;
+
+  // 6. 构建对话历史
+  const historySection = activeMessages.length > 0
+    ? activeMessages.map(m => `${m.role === 'user' ? '用户' : '助理'}：${m.content}`).join('\n')
+    : '暂无';
+
+  // 如果有过期摘要，添加到历史中
+  const summarySection = expiredSummary
+    ? `【之前对话摘要】${expiredSummary}\n\n${historySection}`
+    : historySection;
+
   return `你是课程学习助理，基于以下信息帮助用户解答问题。
 回答要求：简洁有力（50字以内）、亲切自然。
 
@@ -56,7 +71,8 @@ ${courseStructure || '暂无'}
 薄弱点：${relevantGaps.map(g => g.concept).join('、') || '暂无记录'}
 
 ## 对话历史
-${chatHistory.map(m => `${m.role === 'user' ? '用户' : '助理'}：${m.content}`).join('\n') || '暂无'}
+${summarySection}
 
-请基于以上信息，简洁回答用户当前问题。`.trim();
+请基于以上信息，简洁回答用户当前问题。
+回答完毕后，用一句简短的引导性问题结束，启发用户继续探索。`.trim();
 }
