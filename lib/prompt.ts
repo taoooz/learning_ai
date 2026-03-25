@@ -101,10 +101,18 @@ ${clarificationAnswers.map(a => `问题：${a.question}\n回答：${a.answer}`).
   "questions": [
     {
       "id": "q1",
-      "question": "问题文本（必须是与课程设计直接相关的具体问题，最多3个）"
+      "question": "问题文本（必须是与课程设计直接相关的具体问题，最多3个）",
+      "type": "single|multiple|fill",
+      "options": ["选项A", "选项B", "选项C", "选项D"]
     }
   ]
 }
+
+**澄清问题格式规则：**
+- **优先使用选择题**：\`type\` 为 \`single\`（单选）或 \`multiple\`（多选）
+- \`options\` 字段用于选择题，填入各选项内容
+- **仅在无法设计选项时使用填空题**：当问题需要开放式回答或选项无意义时，\`type\` 为 \`fill\`，\`options\` 可省略
+- 每个问题必须有明确的 \`type\`
 
 只返回 JSON 对象，不要有其他文本。
 ${searchSection}`;

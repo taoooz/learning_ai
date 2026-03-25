@@ -48,6 +48,8 @@ export interface Question {
 export interface ClarificationQuestion {
   id: string;
   question: string;
+  type: 'single' | 'multiple' | 'fill';
+  options?: string[];
 }
 
 export interface ClarificationAnswer {
