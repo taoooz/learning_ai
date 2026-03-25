@@ -48,6 +48,42 @@ export function extractPageUrls(content: string): string[] {
   }
 }
 
+export async function callMiniMaxChatStream(
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+): Promise<Response> {
+  const apiKey = process.env.MINIMAX_API_KEY;
+
+  if (!apiKey) {
+    throw new Error('MINIMAX_API_KEY is not set');
+  }
+
+  const response = await fetch('https://api.minimaxi.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'MiniMax-M2.7',
+      messages,
+      stream: true,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`MiniMax API error: ${response.status}`);
+  }
+
+  // 返回 SSE 流
+  return new Response(response.body, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  });
+}
+
 export async function callMiniMax(prompt: string): Promise<string> {
   const apiKey = process.env.MINIMAX_API_KEY;
 
