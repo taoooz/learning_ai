@@ -38,6 +38,7 @@ function getMemory(): UserMemory {
 function saveMemory(memory: UserMemory): void {
   if (typeof window === 'undefined') return;
   memory.lastUpdated = Date.now();
+  memory.version += 1;
   localStorage.setItem(USER_MEMORY_KEY, JSON.stringify(memory));
 }
 
