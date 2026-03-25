@@ -10,6 +10,7 @@ import { useCourse } from '@/contexts/CourseContext';
 import { useProgress } from '@/contexts/ProgressContext';
 import { RetryModal } from '@/components/RetryModal';
 import { LearningCard, Question } from '@/types/course';
+import { ChatWidget } from '@/components/ui/ChatWidget';
 
 type LearningPhase = 'loading' | 'learning' | 'complete';
 type LearnStep =
@@ -173,6 +174,7 @@ export default function LearnPage() {
   const [sortOptions, setSortOptions] = useState<string[]>([]);
   const [isAnswered, setIsAnswered] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   const course = courses.find(c => c.courseId === courseId);
   const node = course?.nodes[nodeIndex];
@@ -637,6 +639,25 @@ export default function LearnPage() {
         onSkip={handleSkip}
         message="这一节内容还没准备好，我们可以再试一次，或者先去下一节。"
       />
+
+      {/* Chat Assistant Button */}
+      <button
+        onClick={() => setIsChatOpen(true)}
+        className="fixed bottom-24 right-6 w-14 h-14 rounded-full bg-accent text-white shadow-lg hover:scale-105 transition-shadow z-40"
+      >
+        <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        </svg>
+      </button>
+
+      {node && (
+        <ChatWidget
+          courseId={courseId}
+          courseTitle={node.title}
+          isOpen={isChatOpen}
+          onClose={() => setIsChatOpen(false)}
+        />
+      )}
     </main>
   );
 }
