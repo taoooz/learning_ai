@@ -603,7 +603,14 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 import { useState, useRef, useEffect } from 'react';
 import { ChatMessage } from './ChatMessage';
 import { useChatHistory } from '@/hooks/useChatHistory';
+import { useUserMemory } from '@/hooks/useUserMemory';
 import { ChatMessage as ChatMessageType } from '@/types/chat';
+
+// 简化概念提取：取 "X是什么" 中的 X 或前 10 个字符
+function extractSimpleConcept(text: string): string {
+  const match = text.match(/([^，,？?\s]{2,10})(是什么|为什么|如何|怎么)/);
+  return match ? match[1] : text.slice(0, 10);
+}
 
 interface ChatWidgetProps {
   courseId: string;
@@ -617,6 +624,7 @@ export function ChatWidget({ courseId, courseTitle, isOpen, onClose }: ChatWidge
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const { messages, addMessage } = useChatHistory(courseId);
+  const userMemory = useUserMemory();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -689,6 +697,24 @@ export function ChatWidget({ courseId, courseTitle, isOpen, onClose }: ChatWidge
       // 添加完整的 assistant 消息
       addMessage({ role: 'assistant', content: fullContent });
       setStreamingContent('');
+
+      // 对话完成后更新记忆
+      const allMessages = [...messages, { role: 'user' as const, content: userMessage }];
+      const lastUserMessage = allMessages.filter(m => m.role === 'user').pop();
+      if (lastUserMessage) {
+        const currentTopic = courseTitle;
+        userMemory.addQuestionPattern(lastUserMessage.content, currentTopic);
+
+        // 简单薄弱点检测
+        const simplePatterns = ['是什么', '为什么', '如何', '怎么', '区别', '关系'];
+        const hasConfusion = simplePatterns.some(p => lastUserMessage.content.includes(p));
+        if (hasConfusion) {
+          const concept = extractSimpleConcept(lastUserMessage.content);
+          userMemory.addKnowledgeGap(concept, currentTopic, lastUserMessage.content);
+        }
+
+        userMemory.updateInterests(currentTopic, 'chat', courseId);
+      }
     } catch (error) {
       console.error('Chat error:', error);
       addMessage({ role: 'assistant', content: '抱歉，发生了错误。请稍后再试。' });
@@ -906,76 +932,11 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ---
 
-## Task 14: 用户记忆更新 - 对话后更新
+## Task 14: 用户记忆更新 - 节点完成时更新
 
-**Files:**
-- Modify: `components/ui/ChatWidget.tsx`
+**注意:** Task 9 的 ChatWidget 组件已包含对话后的记忆更新逻辑（useUserMemory hook 在 Task 9 中已导入）。
 
-- [ ] **Step 1: 修改 ChatWidget 添加对话完成后的记忆更新**
-
-在 ChatWidget 中导入 useUserMemory:
-```tsx
-import { useUserMemory } from '@/hooks/useUserMemory';
-```
-
-在组件内获取 userMemory hook:
-```tsx
-const userMemory = useUserMemory();
-```
-
-由于 ChatWidget 需要获取 course 主题，需要扩展 Props 传入 courseTitle:
-```tsx
-interface ChatWidgetProps {
-  courseId: string;
-  courseTitle: string;  // 新增
-  isOpen: boolean;
-  onClose: () => void;
-}
-```
-
-在流式输出完成（addMessage 后）添加记忆更新逻辑:
-```tsx
-// 简化概念提取：取 "X是什么" 中的 X 或前 10 个字符
-function extractSimpleConcept(text: string): string {
-  const match = text.match(/([^，,？?\s]{2,10})(是什么|为什么|如何|怎么)/);
-  return match ? match[1] : text.slice(0, 10);
-}
-
-// 获取最后一条用户消息
-const allMessages = [...messages, { role: 'user' as const, content: userMessage }];
-const lastUserMessage = allMessages.filter(m => m.role === 'user').pop();
-
-// 对话完成后更新记忆
-if (lastUserMessage) {
-  const currentTopic = courseTitle; // 从 props 传入
-  userMemory.addQuestionPattern(lastUserMessage.content, currentTopic);
-
-  // 简单薄弱点检测
-  const simplePatterns = ['是什么', '为什么', '如何', '怎么', '区别', '关系'];
-  const hasConfusion = simplePatterns.some(p => lastUserMessage.content.includes(p));
-  if (hasConfusion) {
-    const concept = extractSimpleConcept(lastUserMessage.content);
-    userMemory.addKnowledgeGap(concept, currentTopic, lastUserMessage.content);
-  }
-
-  userMemory.updateInterests(currentTopic, 'chat', courseId);
-}
-```
-
-同时需要更新调用处传入 courseTitle。
-
-- [ ] **Step 2: 提交**
-
-```bash
-git add components/ui/ChatWidget.tsx
-git commit -m "feat(memory): update userMemory after chat
-
-Co-Authored-By: Claude <noreply@anthropic.com>"
-```
-
----
-
-## Task 15: 用户记忆更新 - 节点完成时更新
+此 Task 仅处理 LearnFlow 中的节点完成记忆更新。
 
 **Files:**
 - Modify: `components/LearnFlow.tsx`
@@ -985,18 +946,27 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ```bash
 head -100 components/LearnFlow.tsx
 ```
+重点关注：节点完成的处理函数、course 和 node 变量的可访问性
 
-- [ ] **Step 2: 找到节点完成的处理位置**
+- [ ] **Step 2: 添加 useUserMemory 导入**
 
-查找 markNodeCompleted 或节点完成相关的代码
+在文件顶部添加:
+```tsx
+import { useUserMemory } from '@/hooks/useUserMemory';
+```
 
-- [ ] **Step 3: 添加 useUserMemory 导入和调用**
+- [ ] **Step 3: 在组件内获取 userMemory hook**
 
-在节点完成时添加:
+在组件函数内部添加:
 ```tsx
 const userMemory = useUserMemory();
+```
 
-// 在节点完成逻辑处添加
+- [ ] **Step 4: 在节点完成时调用记忆更新**
+
+找到 `markNodeCompleted` 调用处，在其下方添加:
+```tsx
+// 更新用户记忆
 userMemory.addLearningRecord({
   courseId,
   topic: node.title,
@@ -1006,7 +976,7 @@ userMemory.addLearningRecord({
 userMemory.updateInterests(node.title, 'course', courseId);
 ```
 
-- [ ] **Step 4: 提交**
+- [ ] **Step 5: 提交**
 
 ```bash
 git add components/LearnFlow.tsx
@@ -1017,7 +987,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ---
 
-## Task 16: 本地验证
+## Task 15: 本地验证
 
 - [ ] **Step 1: 启动开发服务器**
 
