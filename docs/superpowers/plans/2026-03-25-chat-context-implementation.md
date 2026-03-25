@@ -98,16 +98,7 @@ const MAX_MESSAGE_PAIRS = 5;  // 最多保留5对问答
 const MAX_TOTAL_CHARS = 2000;  // 总字符数限制
 ```
 
-- [ ] **Step 2: 添加 isFollowUp 追问识别函数**
-
-```typescript
-function isFollowUp(message: string): boolean {
-  const trimmed = message.trim();
-  return trimmed.length <= 15 && /[？?]$/.test(trimmed);
-}
-```
-
-- [ ] **Step 3: 添加 groupMessagesIntoPairs 函数（按问答对分组）**
+- [ ] **Step 2: 添加 groupMessagesIntoPairs 函数（按问答对分组）**
 
 ```typescript
 function groupMessagesIntoPairs(messages: ChatMessage[]): Array<{ q: ChatMessage; a: ChatMessage }> {
@@ -128,7 +119,7 @@ function groupMessagesIntoPairs(messages: ChatMessage[]): Array<{ q: ChatMessage
 }
 ```
 
-- [ ] **Step 4: 添加 truncateByPairs 函数（按问答对截断）**
+- [ ] **Step 3: 添加 truncateByPairs 函数（按问答对截断）**
 
 ```typescript
 function truncateByPairs(messages: ChatMessage[], maxPairs: number, maxChars: number): ChatMessage[] {
@@ -150,28 +141,35 @@ function calculateTotalChars(pairs: Array<{ q: ChatMessage; a: ChatMessage }>): 
 }
 ```
 
-- [ ] **Step 5: 添加 checkAndHandleExpiration 函数**
+- [ ] **Step 4: 添加 checkExpiration 函数（同步检查，返回是否过期）**
 
 ```typescript
-async function checkAndHandleExpiration(
-  courseId: string,
-  messages: ChatMessage[],
-  onGenerateSummary: (courseId: string, messages: ChatMessage[]) => Promise<void>
-): Promise<ChatMessage[]> {
-  if (messages.length === 0) return messages;
+function checkExpiration(messages: ChatMessage[]): boolean {
+  if (messages.length === 0) return false;
 
   const lastMessage = messages[messages.length - 1];
   const daysSinceLastMessage = (Date.now() - lastMessage.timestamp) / (1000 * 60 * 60 * 24);
 
-  if (daysSinceLastMessage > EXPIRATION_DAYS) {
-    // 异步生成摘要，不阻塞
-    onGenerateSummary(courseId, messages).catch(console.error);
+  return daysSinceLastMessage > EXPIRATION_DAYS;
+}
+```
 
-    // 标记所有消息为已过期
-    return messages.map(m => ({ ...m, isExpired: true }));
-  }
+- [ ] **Step 5: 添加 generateSimpleSummary 函数（简单摘要生成）**
 
-  return messages;
+```typescript
+function generateSimpleSummary(messages: ChatMessage[]): string {
+  // 提取所有用户问题，生成简单摘要
+  const userQuestions = messages
+    .filter(m => m.role === 'user')
+    .map(m => m.content)
+    .slice(-3);  // 取最近3个问题
+
+  if (userQuestions.length === 0) return '用户询问了课程相关问题';
+
+  // 取第一个问题的主题词作为摘要
+  const firstQuestion = userQuestions[0];
+  // 提取前10个字作为摘要
+  return `用户问了：${firstQuestion.slice(0, 15)}${firstQuestion.length > 15 ? '...' : ''}`;
 }
 ```
 
@@ -179,27 +177,33 @@ async function checkAndHandleExpiration(
 
 ```typescript
 const addMessage = useCallback((
-  message: Omit<ChatMessage, 'id' | 'timestamp' | 'isExpired'>,
-  onExpire?: (courseId: string, messages: ChatMessage[]) => Promise<void>
+  message: Omit<ChatMessage, 'id' | 'timestamp'>,
+  options?: {
+    onExpire?: (courseId: string, summary: string) => void;
+  }
 ): void => {
   // ... 现有逻辑 ...
 
-  // 添加后检查是否需要截断
   let updatedMessages = [...messages, newMessage];
 
-  // 按问答对截断
-  const pairs = groupMessagesIntoPairs(updatedMessages);
-  if (pairs.length > MAX_MESSAGE_PAIRS || calculateTotalChars(pairs) > MAX_TOTAL_CHARS) {
-    updatedMessages = truncateByPairs(updatedMessages, MAX_MESSAGE_PAIRS, MAX_TOTAL_CHARS);
+  // 先检查是否过期
+  const isExpired = checkExpiration(updatedMessages);
+
+  if (isExpired) {
+    // 生成简单摘要
+    const summary = generateSimpleSummary(updatedMessages);
+    // 标记所有消息为已过期
+    updatedMessages = updatedMessages.map(m => ({ ...m, isExpired: true }));
+    // 通知外部保存摘要（异步，不阻塞）
+    options?.onExpire?.(courseId, summary);
   }
 
-  // 检查过期（异步）
-  if (onExpire) {
-    checkAndHandleExpiration(courseId, updatedMessages, onExpire).then(expiredMsgs => {
-      if (expiredMsgs.some(m => m.isExpired)) {
-        localStorage.setItem(`${CHAT_HISTORY_PREFIX}${courseId}`, JSON.stringify(expiredMsgs));
-      }
-    });
+  // 按问答对截断（只对未过期的消息）
+  if (!isExpired) {
+    const pairs = groupMessagesIntoPairs(updatedMessages);
+    if (pairs.length > MAX_MESSAGE_PAIRS || calculateTotalChars(pairs) > MAX_TOTAL_CHARS) {
+      updatedMessages = truncateByPairs(updatedMessages, MAX_MESSAGE_PAIRS, MAX_TOTAL_CHARS);
+    }
   }
 
   localStorage.setItem(`${CHAT_HISTORY_PREFIX}${courseId}`, JSON.stringify(updatedMessages));
@@ -212,11 +216,12 @@ const addMessage = useCallback((
 git add hooks/useChatHistory.ts
 git commit -m "feat(chat): add Q&A pair truncation and expiration check
 
-- Add isFollowUp() for follow-up detection
 - Add groupMessagesIntoPairs() to group messages into Q&A pairs
 - Add truncateByPairs() for intelligent truncation
-- Add checkAndHandleExpiration() for 7-day expiration
-- Update addMessage() to use new truncation logic
+- Add checkExpiration() for 7-day expiration check
+- Add generateSimpleSummary() for heuristic-based summary
+- Update addMessage() to use new truncation and expiration logic
+- Fix race condition: single localStorage write
 
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
@@ -259,7 +264,7 @@ const addQuestionPattern = useCallback((question: string, topic: string): void =
     timestamp: Date.now(),
   });
 
-  // 限制数量，超出则删除最旧的
+  // 限制数量，超出则删除最旧的（保留最新的50条）
   if (memory.extractedInsights.questionPatterns.length > MAX_QUESTION_PATTERNS) {
     memory.extractedInsights.questionPatterns.sort((a, b) => b.timestamp - a.timestamp);
     memory.extractedInsights.questionPatterns = memory.extractedInsights.questionPatterns.slice(0, MAX_QUESTION_PATTERNS);
@@ -451,67 +456,37 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 **Files:**
 - Modify: `components/ui/ChatWidget.tsx:100-178`
 
-- [ ] **Step 1: 修改 handleSubmit 中的 addMessage 调用**
+- [ ] **Step 1: 添加 onExpire 回调到 addMessage**
+
+摘要生成已在 useChatHistory 中完成（通过 `generateSimpleSummary`），ChatWidget 只需要传入回调即可。
 
 ```typescript
-// 生成摘要的异步函数
-const generateSummary = async (courseId: string, messages: ChatMessage[]) => {
-  // 构建摘要 prompt
-  const summaryPrompt = `请用一句话概括以下对话的主要内容，不超过50字：\n\n${
-    messages.map(m => `${m.role === 'user' ? '用户' : '助理'}：${m.content}`).join('\n')
-  }`;
+// 在 handleSubmit 中调用 addMessage 时传入过期回调
+const handleSubmit = async (e: React.FormEvent) => {
+  // ... 现有代码 ...
 
-  try {
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        course: { courseId, topic: courseTitle, nodes: [], difficultySummary: '' },
-        messages: [{ role: 'user', content: summaryPrompt }],
-        userMemory: { extractedInsights: { interests: [], knowledgeGaps: [], questionPatterns: [] } },
-      }),
-    });
-
-    if (!response.ok) return;
-
-    // 简单处理：取响应文本作为摘要
-    const text = await response.text();
-    // 从 SSE 响应中提取内容
-    const contentMatch = text.match(/data:\s*(\{.*?\})/);
-    if (contentMatch) {
-      try {
-        const data = JSON.parse(contentMatch[1]);
-        const summary = data.choices?.[0]?.delta?.content || '对话摘要';
-        userMemory.addConversationSummary(courseId, summary.slice(0, 100));
-      } catch {
-        // 解析失败，使用默认摘要
-        userMemory.addConversationSummary(courseId, '用户询问了课程相关问题');
+  addMessage(
+    { role: 'user', content: userMessage },
+    {
+      onExpire: (courseId: string, summary: string) => {
+        // 过期时保存摘要到 userMemory
+        userMemory.addConversationSummary(courseId, summary);
       }
     }
-  } catch (error) {
-    console.error('Failed to generate summary:', error);
-  }
+  );
+
+  // ... 其余代码 ...
 };
 ```
 
-- [ ] **Step 2: 修改 addMessage 调用**
-
-```typescript
-addMessage(
-  { role: 'user', content: userMessage },
-  generateSummary  // 传入过期处理回调
-);
-```
-
-- [ ] **Step 3: Commit**
+- [ ] **Step 2: Commit**
 
 ```bash
 git add components/ui/ChatWidget.tsx
-git commit -m "feat(chat): integrate expiration and summary generation
+git commit -m "feat(chat): integrate expiration callback
 
-- Add generateSummary function for expired conversations
-- Pass expiration handler to addMessage
-- Update API call to use new context building
+- Pass onExpire callback to addMessage for summary generation
+- Summary is generated by useChatHistory, saved here
 
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
