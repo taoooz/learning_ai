@@ -35,10 +35,10 @@ export interface LearningCard {
 
 export interface Question {
   id: string;
-  type: 'single' | 'multiple' | 'fill';
+  type: 'single' | 'multiple' | 'sorting';
   question: string;
-  options?: string[];      // 单选/多选
-  answer: string | string[];
+  options?: string[];      // 单选/多选/排序题
+  answer: string | string[];  // sorting 时为排列后的数组
   explanation: string;
   dimension?: 'memory' | 'understanding' | 'application' | 'analysis';
   difficulty?: 1 | 2 | 3;

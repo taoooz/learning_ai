@@ -27,12 +27,8 @@ function getOptionBadgeLabel(option: string, index: number): string {
   return String.fromCharCode(65 + index);
 }
 
-function checkIsCorrect(question: Question, selectedAnswer: string[], fillAnswer: string): boolean {
+function checkIsCorrect(question: Question, selectedAnswer: string[], sortOptions: string[]): boolean {
   const answer = question.answer;
-
-  if (question.type === 'fill') {
-    return fillAnswer.trim().toLowerCase() === String(answer).trim().toLowerCase();
-  }
 
   if (question.type === 'single') {
     const selected = selectedAnswer[0];
@@ -44,6 +40,11 @@ function checkIsCorrect(question: Question, selectedAnswer: string[], fillAnswer
   if (question.type === 'multiple' && Array.isArray(answer)) {
     const selectedKeys = selectedAnswer.map(extractAnswerKey);
     return selectedKeys.length === answer.length && selectedKeys.every((key) => answer.includes(key));
+  }
+
+  if (question.type === 'sorting' && Array.isArray(answer)) {
+    return sortOptions.length === answer.length &&
+      sortOptions.every((item, index) => extractAnswerKey(item) === answer[index]);
   }
 
   return false;
@@ -189,7 +190,7 @@ export default function LearnPage() {
   const [retryCount, setRetryCount] = useState(0);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string[]>([]);
-  const [fillAnswer, setFillAnswer] = useState('');
+  const [sortOptions, setSortOptions] = useState<string[]>([]);
   const [isAnswered, setIsAnswered] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
 
@@ -225,7 +226,7 @@ export default function LearnPage() {
   useEffect(() => {
     setCurrentStepIndex(0);
     setSelectedAnswer([]);
-    setFillAnswer('');
+    setSortOptions([]);
     setIsAnswered(false);
     setIsCorrect(false);
   }, [courseId, nodeIndex, steps.length]);
@@ -255,7 +256,7 @@ export default function LearnPage() {
 
   const resetQuestionState = () => {
     setSelectedAnswer([]);
-    setFillAnswer('');
+    setSortOptions([]);
     setIsAnswered(false);
     setIsCorrect(false);
   };
@@ -284,7 +285,7 @@ export default function LearnPage() {
 
   const handleCheckAnswer = () => {
     if (!currentStep || currentStep.type !== 'question') return;
-    const correct = checkIsCorrect(currentStep.question, selectedAnswer, fillAnswer);
+    const correct = checkIsCorrect(currentStep.question, selectedAnswer, sortOptions);
     setIsCorrect(correct);
     setIsAnswered(true);
   };
@@ -443,7 +444,65 @@ export default function LearnPage() {
                         </LastLineMarker>
                       </div>
 
-                      {currentStep.question.type !== 'fill' && currentStep.question.options && (
+                      {currentStep.question.type === 'sorting' ? (
+                        <div className="space-y-2">
+                          <p className="text-xs text-secondary mb-2">点击上下箭头调整顺序</p>
+                          {sortOptions.map((option, optionIndex) => {
+                            const answer = currentStep.question.answer;
+                            const isCorrectPosition = isAnswered && Array.isArray(answer)
+                              ? extractAnswerKey(option) === answer[optionIndex]
+                              : false;
+
+                            return (
+                              <div key={option} className="flex items-center gap-2">
+                                <span className="w-6 h-6 rounded-full bg-subtle text-xs flex items-center justify-center text-secondary">
+                                  {optionIndex + 1}
+                                </span>
+                                <div
+                                  className={`
+                                    flex-1 rounded-[22px] border px-4 py-4 text-[15px] text-primary
+                                    ${isAnswered && isCorrectPosition ? 'border-success/40 bg-success/10' : ''}
+                                    ${isAnswered && !isCorrectPosition ? 'border-error/30' : ''}
+                                    ${!isAnswered ? 'border-black/6 bg-white' : ''}
+                                  `}
+                                >
+                                  <ReactMarkdown>{option}</ReactMarkdown>
+                                </div>
+                                {!isAnswered && (
+                                  <div className="flex flex-col gap-1">
+                                    <button
+                                      onClick={() => {
+                                        const newOptions = [...sortOptions];
+                                        const temp = newOptions[optionIndex];
+                                        newOptions[optionIndex] = newOptions[optionIndex - 1];
+                                        newOptions[optionIndex - 1] = temp;
+                                        setSortOptions(newOptions);
+                                      }}
+                                      disabled={optionIndex === 0}
+                                      className="w-6 h-6 rounded bg-subtle text-xs disabled:opacity-30"
+                                    >
+                                      ↑
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        const newOptions = [...sortOptions];
+                                        const temp = newOptions[optionIndex];
+                                        newOptions[optionIndex] = newOptions[optionIndex + 1];
+                                        newOptions[optionIndex + 1] = temp;
+                                        setSortOptions(newOptions);
+                                      }}
+                                      disabled={optionIndex === sortOptions.length - 1}
+                                      className="w-6 h-6 rounded bg-subtle text-xs disabled:opacity-30"
+                                    >
+                                      ↓
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : currentStep.question.options && (
                         <div className="space-y-3">
                           {currentStep.question.options.map((option, optionIndex) => {
                             const isSelected = selectedAnswer.includes(option);
@@ -485,22 +544,6 @@ export default function LearnPage() {
                             );
                           })}
                         </div>
-                      )}
-
-                      {currentStep.question.type === 'fill' && (
-                        <input
-                          type="text"
-                          value={fillAnswer}
-                          onChange={(e) => setFillAnswer(e.target.value)}
-                          disabled={isAnswered}
-                          className={`
-                            w-full rounded-[22px] border px-4 py-4 text-[15px] text-primary outline-none transition-all duration-150
-                            ${isAnswered && isCorrect ? 'border-success/30 bg-success/8' : ''}
-                            ${isAnswered && !isCorrect ? 'border-error/25 bg-error/6' : ''}
-                            ${!isAnswered ? 'border-black/6 bg-white focus:border-accent/30 focus:bg-accent/[0.03]' : ''}
-                          `}
-                          placeholder="输入你的答案"
-                        />
                       )}
                     </>
                   )}
@@ -545,8 +588,8 @@ export default function LearnPage() {
                 }}
                 disabled={
                   currentStep.type === 'question' && !isAnswered && (
-                    currentStep.question.type === 'fill'
-                      ? !fillAnswer.trim()
+                    currentStep.question.type === 'sorting'
+                      ? sortOptions.length < (currentStep.question.options?.length || 0)
                       : selectedAnswer.length === 0
                   )
                 }

@@ -20,7 +20,7 @@ export function LearnFlow({ cards, questions, onComplete }: LearnFlowProps) {
   const [phase, setPhase] = useState<Phase>('learn');
   const [quizIndex, setQuizIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string[]>([]);
-  const [fillAnswer, setFillAnswer] = useState('');
+  const [sortOptions, setSortOptions] = useState<string[]>([]);
   const [isAnswered, setIsAnswered] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
   const [learnProgress, setLearnProgress] = useState(0); // 0-2 表示学了几张卡
@@ -36,12 +36,16 @@ export function LearnFlow({ cards, questions, onComplete }: LearnFlowProps) {
     return match ? match[1] : option;
   };
 
+  // 初始化排序选项
+  const initSortOptions = useCallback(() => {
+    if (currentQuestion.type === 'sorting' && currentQuestion.options && sortOptions.length === 0) {
+      setSortOptions([...currentQuestion.options]);
+    }
+  }, [currentQuestion.type, currentQuestion.options, sortOptions.length]);
+
   // 检查答案是否正确
   const checkAnswer = useCallback(() => {
     const answer = currentQuestion.answer;
-    if (currentQuestion.type === 'fill') {
-      return fillAnswer.trim().toLowerCase() === String(answer).toLowerCase();
-    }
     if (currentQuestion.type === 'single') {
       const selectedKey = extractAnswerKey(selectedAnswer[0]);
       return selectedKey === answer || selectedAnswer[0] === answer;
@@ -50,8 +54,12 @@ export function LearnFlow({ cards, questions, onComplete }: LearnFlowProps) {
       const selectedKeys = selectedAnswer.map(extractAnswerKey);
       return selectedKeys.length === answer.length && selectedKeys.every(k => answer.includes(k));
     }
+    if (currentQuestion.type === 'sorting' && Array.isArray(answer)) {
+      return sortOptions.length === answer.length &&
+        sortOptions.every((item, index) => extractAnswerKey(item) === answer[index]);
+    }
     return false;
-  }, [currentQuestion, selectedAnswer, fillAnswer]);
+  }, [currentQuestion, selectedAnswer, sortOptions]);
 
   const handleNextLearn = () => {
     if (learnProgress < 1) {
@@ -64,7 +72,7 @@ export function LearnFlow({ cards, questions, onComplete }: LearnFlowProps) {
         setPhase('quiz');
         setQuizIndex(0);
         setSelectedAnswer([]);
-        setFillAnswer('');
+        setSortOptions([]);
         setIsAnswered(false);
       } else {
         // 没有测验，直接下一张
@@ -89,6 +97,16 @@ export function LearnFlow({ cards, questions, onComplete }: LearnFlowProps) {
     }
   };
 
+  const moveSortOption = (index: number, direction: 'up' | 'down') => {
+    if (isAnswered) return;
+    const newOptions = [...sortOptions];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= newOptions.length) return;
+    [newOptions[index], newOptions[targetIndex]] = [newOptions[targetIndex], newOptions[index]];
+    setSortOptions(newOptions);
+    setSelectedAnswer(newOptions);
+  };
+
   const handleCheckAnswer = () => {
     const correct = checkAnswer();
     setIsCorrect(correct);
@@ -102,7 +120,7 @@ export function LearnFlow({ cards, questions, onComplete }: LearnFlowProps) {
     } else {
       setQuizIndex(prev => prev + 1);
       setSelectedAnswer([]);
-      setFillAnswer('');
+      setSortOptions([]);
       setIsAnswered(false);
       setIsCorrect(false);
     }
@@ -217,6 +235,91 @@ export function LearnFlow({ cards, questions, onComplete }: LearnFlowProps) {
   }
 
   // 测验阶段
+  const renderQuizOptions = () => {
+    if (currentQuestion.type === 'sorting') {
+      initSortOptions();
+      return (
+        <div className="space-y-2">
+          <p className="text-xs text-secondary mb-2">点击上下箭头调整顺序</p>
+          {sortOptions.map((option, i) => {
+            const isCorrectPosition = isAnswered &&
+              Array.isArray(currentQuestion.answer) &&
+              extractAnswerKey(option) === currentQuestion.answer[i];
+
+            return (
+              <div key={i} className="flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-subtle text-xs flex items-center justify-center text-secondary">
+                  {i + 1}
+                </span>
+                <div
+                  className={`
+                    flex-1 p-4 rounded-lg border-2 text-sm
+                    ${isAnswered && isCorrectPosition ? 'border-success bg-success/10' : ''}
+                    ${isAnswered && !isCorrectPosition ? 'border-error/50' : ''}
+                    ${!isAnswered ? 'border-subtle' : ''}
+                  `}
+                >
+                  <ReactMarkdown>{option}</ReactMarkdown>
+                </div>
+                {!isAnswered && (
+                  <div className="flex flex-col gap-1">
+                    <button
+                      onClick={() => moveSortOption(i, 'up')}
+                      disabled={i === 0}
+                      className="w-6 h-6 rounded bg-subtle text-xs disabled:opacity-30"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      onClick={() => moveSortOption(i, 'down')}
+                      disabled={i === sortOptions.length - 1}
+                      className="w-6 h-6 rounded bg-subtle text-xs disabled:opacity-30"
+                    >
+                      ↓
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {currentQuestion.options?.map((option, i) => {
+          const isSelected = selectedAnswer.includes(option);
+          const correctAnswer = currentQuestion.type === 'single'
+            ? currentQuestion.answer
+            : Array.isArray(currentQuestion.answer) ? currentQuestion.answer : [];
+          const isCorrectOption = Array.isArray(correctAnswer)
+            ? correctAnswer.includes(extractAnswerKey(option))
+            : extractAnswerKey(option) === correctAnswer;
+          const showCorrect = isAnswered && isCorrectOption;
+          const showIncorrect = isAnswered && isSelected && !isCorrectOption;
+
+          return (
+            <button
+              key={i}
+              onClick={() => handleAnswerSelect(option)}
+              disabled={isAnswered}
+              className={`
+                w-full p-4 rounded-lg border-2 text-left transition-all
+                ${isSelected && !isAnswered ? 'border-primary bg-primary/5' : ''}
+                ${showCorrect ? 'border-success bg-success/10' : ''}
+                ${showIncorrect ? 'border-error bg-error/10' : ''}
+                ${!isAnswered && !isSelected ? 'border-subtle hover:border-primary/50' : ''}
+              `}
+            >
+              <ReactMarkdown>{option}</ReactMarkdown>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="w-full max-w-md mx-auto">
       {/* 进度 */}
@@ -233,64 +336,14 @@ export function LearnFlow({ cards, questions, onComplete }: LearnFlowProps) {
         <div className="text-sm text-secondary mb-2">
           {currentQuestion.type === 'single' && '单选题'}
           {currentQuestion.type === 'multiple' && '多选题'}
-          {currentQuestion.type === 'fill' && '填空题'}
+          {currentQuestion.type === 'sorting' && '排序题'}
         </div>
         <h2 className="text-xl font-semibold text-primary mb-6">
           <ReactMarkdown>{currentQuestion.question}</ReactMarkdown>
         </h2>
 
         {/* 选项 */}
-        {currentQuestion.type !== 'fill' && currentQuestion.options && (
-          <div className="space-y-3">
-            {currentQuestion.options.map((option, i) => {
-              const isSelected = selectedAnswer.includes(option);
-              const correctAnswer = currentQuestion.type === 'single'
-                ? currentQuestion.answer
-                : Array.isArray(currentQuestion.answer) ? currentQuestion.answer : [];
-              const isCorrectOption = Array.isArray(correctAnswer)
-                ? correctAnswer.includes(extractAnswerKey(option))
-                : extractAnswerKey(option) === correctAnswer;
-              const showCorrect = isAnswered && isCorrectOption;
-              const showIncorrect = isAnswered && isSelected && !isCorrectOption;
-
-              return (
-                <button
-                  key={i}
-                  onClick={() => handleAnswerSelect(option)}
-                  disabled={isAnswered}
-                  className={`
-                    w-full p-4 rounded-lg border-2 text-left transition-all
-                    ${isSelected && !isAnswered ? 'border-primary bg-primary/5' : ''}
-                    ${showCorrect ? 'border-success bg-success/10' : ''}
-                    ${showIncorrect ? 'border-error bg-error/10' : ''}
-                    ${!isAnswered && !isSelected ? 'border-subtle hover:border-primary/50' : ''}
-                  `}
-                >
-                  <ReactMarkdown>{option}</ReactMarkdown>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* 填空 */}
-        {currentQuestion.type === 'fill' && (
-          <div>
-            <input
-              type="text"
-              value={fillAnswer}
-              onChange={(e) => setFillAnswer(e.target.value)}
-              disabled={isAnswered}
-              className={`
-                w-full p-4 rounded-lg border-2
-                ${isAnswered && isCorrect ? 'border-success bg-success/10' : ''}
-                ${isAnswered && !isCorrect ? 'border-error bg-error/10' : ''}
-                ${!isAnswered ? 'border-subtle focus:border-primary' : ''}
-              `}
-              placeholder="输入你的答案..."
-            />
-          </div>
-        )}
+        {renderQuizOptions()}
 
         {/* 解释 */}
         {isAnswered && !isCorrect && (
@@ -309,8 +362,8 @@ export function LearnFlow({ cards, questions, onComplete }: LearnFlowProps) {
           <button
             onClick={handleCheckAnswer}
             disabled={
-              currentQuestion.type === 'fill'
-                ? !fillAnswer.trim()
+              currentQuestion.type === 'sorting'
+                ? sortOptions.length < (currentQuestion.options?.length || 0)
                 : selectedAnswer.length === 0
             }
             className="px-6 py-2.5 rounded-pill bg-cta text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-cta/90 transition-colors"

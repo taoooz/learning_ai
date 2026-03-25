@@ -174,17 +174,20 @@ ${insights.analogyExperiences && insights.analogyExperiences.length > 0
 - content：简洁的 Markdown 内容（每张卡片 2-3 段，字数控制在 150-400 字）
 - imageUrl：null
 
-## 好 Quiz 质量标准
+## 练习题目设计指南
 
-每道 Quiz 题目必须满足以下标准：
-1. 考察维度：覆盖记忆、理解、应用
-2. 难度等级：简单、中等、困难比例为 3:5:2
-3. 对应卡片：每道题对应特定卡片内容
+**设计原则：**
+- 题目基于本节课程内容，考查对核心概念的理解和应用
+- 关注知识的实际应用价值，避免考查人名、时间等琐碎信息
+- 考察维度重点在**理解**和**应用**，记忆其次
+- 题目应能筛选出真正掌握要点的学生
 
-Quiz 题目包含：
-- 单选题（1-2道）
-- 多选题（1-2道）
-- 填空题（1-2道）
+**题目类型：**
+- \`single\`：单选题
+- \`multiple\`：多选题
+- \`sorting\`：排序题（将选项按正确顺序排列）
+
+**题目数量参考：** 3-5 道，覆盖本节核心知识点
 
 ## 输出格式
 
@@ -201,10 +204,10 @@ Quiz 题目包含：
   "questions": [
     {
       "id": "q-1",
-      "type": "single",
+      "type": "single|multiple|sorting",
       "question": "题目文本",
-      "options": ["A", "B", "C", "D"],
-      "answer": "正确答案",
+      "options": ["选项A", "选项B", "选项C", "选项D"],
+      "answer": "正确答案（single: 字符串，multiple: 字符串数组，sorting: 排列后的数组）",
       "explanation": "答错时的解析"
     }
   ]
