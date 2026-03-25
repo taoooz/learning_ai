@@ -41,7 +41,8 @@
       "Bash(npm test)",
       "Bash(npm run)",
       "Bash(git branch:*)",
-      "WebFetch(domain:michaellivs.com)"
+      "WebFetch(domain:michaellivs.com)",
+      "Bash(xxd:*)"
     ]
   }
 }

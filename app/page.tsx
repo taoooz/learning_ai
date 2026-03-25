@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCourse } from '@/contexts/CourseContext';
+import { useUserProfile } from '@/contexts/UserProfileContext';
 
 export default function HomePage() {
   const [topic, setTopic] = useState('');
@@ -12,6 +13,41 @@ export default function HomePage() {
   const [showDeleteMenu, setShowDeleteMenu] = useState<string | null>(null);
   const router = useRouter();
   const { courses, generateCourse, deleteCourse } = useCourse();
+  const { userProfile } = useUserProfile();
+  const deleteMenuRef = useRef<HTMLDivElement | null>(null);
+  const hasProfileContent = Boolean(
+    userProfile?.targetJob?.trim() ||
+    userProfile?.name?.trim() ||
+    userProfile?.workExperience?.some((item) =>
+      item.company.trim() || item.position.trim() || item.description?.trim()
+    ) ||
+    userProfile?.education?.some((item) => item.school.trim() || item.major.trim())
+  );
+
+  useEffect(() => {
+    if (!showDeleteMenu) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!deleteMenuRef.current) return;
+      if (!deleteMenuRef.current.contains(event.target as Node)) {
+        setShowDeleteMenu(null);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowDeleteMenu(null);
+      }
+    };
+
+    window.addEventListener('mousedown', handlePointerDown);
+    window.addEventListener('keydown', handleEscape);
+
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [showDeleteMenu]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,12 +55,12 @@ export default function HomePage() {
 
     setIsGenerating(true);
     setError('');
+    router.push('/generate');
 
     try {
       await generateCourse(topic.trim());
-      router.push('/generate');
     } catch {
-      setError('抱歉，生成失败了，请稍后再试。');
+      router.push('/');
       setIsGenerating(false);
     }
   };
@@ -77,19 +113,17 @@ export default function HomePage() {
     setTopic(selectedTopic);
     setIsGenerating(true);
     setError('');
+    router.push('/generate');
 
     generateCourse(selectedTopic)
-      .then(() => {
-        router.push('/generate');
-      })
       .catch(() => {
-        setError('抱歉，生成失败了，请稍后再试。');
+        router.push('/');
         setIsGenerating(false);
       });
   };
 
   return (
-    <main className="min-h-screen overflow-hidden bg-background">
+    <main className="min-h-screen overflow-x-hidden bg-background">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-32 right-[-8rem] h-72 w-72 rounded-full bg-gradient-to-br from-accent/16 via-accent/8 to-transparent blur-3xl" />
         <div className="absolute left-[-4rem] top-12 h-56 w-56 rounded-full bg-gradient-to-br from-sky-400/16 via-transparent to-transparent blur-3xl" />
@@ -108,22 +142,29 @@ export default function HomePage() {
         />
       </div>
 
-      <div className="relative mx-auto flex w-full max-w-2xl flex-col gap-8 px-5 pb-10 pt-8 sm:px-6">
-        <div className="flex items-center justify-between">
-          <div className="rounded-full bg-surface/90 px-3 py-1.5 text-xs font-medium text-secondary shadow-sm backdrop-blur-sm">
-            Learning AI
+      <div className="fixed inset-x-0 top-0 z-20 pt-4">
+        <div className="mx-auto max-w-2xl px-5 pb-2 sm:px-6">
+          <div className="rounded-[24px] border border-white/72 bg-surface/80 px-3 py-2.5 shadow-[0_6px_18px_rgba(15,23,42,0.04)] backdrop-blur-md">
+            <div className="flex items-center justify-between gap-3">
+              <div className="rounded-full bg-background/92 px-3 py-1.5 text-xs font-medium text-secondary">
+                Learning AI
+              </div>
+              <button
+                onClick={() => router.push('/profile')}
+                className="inline-flex h-8.5 items-center gap-1.5 rounded-full bg-black/[0.04] px-3 text-[13px] font-medium text-secondary transition-all duration-150 hover:bg-black/[0.06] hover:text-primary active:scale-95"
+                aria-label="个人设置"
+              >
+                <svg className="h-4 w-4 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span>{hasProfileContent ? '个人信息' : '完善个人信息'}</span>
+              </button>
+            </div>
           </div>
-          <button
-            onClick={() => router.push('/profile')}
-            className="inline-flex h-10 items-center gap-2 rounded-full bg-surface/78 px-3 text-sm font-medium text-secondary shadow-sm backdrop-blur-sm transition-all duration-150 hover:bg-surface hover:shadow-sm active:scale-95"
-            aria-label="个人设置"
-          >
-            <svg className="h-4.5 w-4.5 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-            <span>个人信息</span>
-          </button>
         </div>
+      </div>
+
+      <div className="relative mx-auto flex w-full max-w-2xl flex-col gap-8 px-5 pb-10 pt-[92px] sm:px-6">
 
         <section className="pt-2">
           <div className="relative max-w-xl">
@@ -141,7 +182,7 @@ export default function HomePage() {
               </span>
             </h1>
             <p className="mt-3 text-sm leading-6 text-secondary sm:text-base">
-              告诉我 你想学什么，以及为什么要学它
+              告诉我你想学什么，以及为什么要学它
             </p>
           </div>
 
@@ -238,7 +279,10 @@ export default function HomePage() {
                         </button>
 
                         {showDeleteMenu === course.courseId && (
-                          <div className="absolute bottom-[3.75rem] right-0 z-10 min-w-[132px] rounded-2xl border border-white/80 bg-surface/96 p-1 shadow-sheet backdrop-blur-sm">
+                          <div
+                            ref={deleteMenuRef}
+                            className="absolute bottom-[3.75rem] right-0 z-10 min-w-[132px] rounded-2xl border border-white/80 bg-surface/96 p-1 shadow-sheet backdrop-blur-sm"
+                          >
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -261,20 +305,53 @@ export default function HomePage() {
             </div>
           </section>
         )}
-      </div>
 
-      {isGenerating && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/82 backdrop-blur-sm">
-          <div className="mb-5 flex h-[72px] w-[72px] items-center justify-center rounded-full bg-gradient-to-br from-accent/18 to-accent/5">
-            <svg className="h-9 w-9 animate-spin text-accent" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-            </svg>
-          </div>
-          <p className="text-base font-semibold text-primary">正在为你拆解学习路径</p>
-          <p className="mt-2 text-sm text-secondary">马上就能看到适合开始的第一步</p>
-        </div>
-      )}
+        {!hasCourses && (
+          <section className="pt-1">
+            <div className="relative overflow-hidden rounded-[30px] border border-white/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(255,248,241,0.98)_58%,rgba(255,255,255,0.95))] px-5 py-5 shadow-[0_12px_28px_rgba(15,23,42,0.06)] sm:px-6">
+              <div
+                className="pointer-events-none absolute left-0 top-0 h-28 w-36 opacity-30"
+                style={{
+                  backgroundImage:
+                    'linear-gradient(to right, rgba(56,189,248,0.12) 1px, transparent 1px), linear-gradient(to bottom, rgba(56,189,248,0.10) 1px, transparent 1px)',
+                  backgroundSize: '18px 18px',
+                  maskImage: 'radial-gradient(circle at 24% 18%, black 0%, rgba(0,0,0,0.82) 28%, transparent 78%)',
+                  WebkitMaskImage: 'radial-gradient(circle at 24% 18%, black 0%, rgba(0,0,0,0.82) 28%, transparent 78%)',
+                }}
+              />
+
+              <div className="relative z-[1]">
+                <div className="rounded-full bg-[#ECEEEC] px-3 py-1 text-xs font-medium text-secondary w-fit">
+                  第一次开始
+                </div>
+                <h2 className="mt-3 text-xl font-semibold tracking-tight text-primary">
+                  先生成一门真正想学的课
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-secondary">
+                  不用只写一个主题。把你想学什么、现在基础如何、最想解决什么问题写进去，生成出来的内容会更贴近你。
+                </p>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {[
+                    '转型 AI 产品经理，要补 Agent 原理',
+                    '想系统学提示词，不只会写几句',
+                    '零基础入门 Python，能做自动化小工具',
+                  ].map((idea) => (
+                    <button
+                      key={idea}
+                      type="button"
+                      onClick={() => handleTopicClick(idea)}
+                      className="rounded-full border border-black/6 bg-white/84 px-3.5 py-2 text-sm text-secondary transition-all duration-150 hover:border-accent/18 hover:bg-white hover:text-primary active:scale-[0.985]"
+                    >
+                      {idea}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+      </div>
 
       {deleteConfirm && (
         <div

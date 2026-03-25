@@ -29,6 +29,7 @@ export interface LearningCard {
   id: string;
   title: string;
   content: string;              // Markdown 内容
+  imageUrl?: string;
   visualization?: Visualization; // 可视化配置
 }
 
