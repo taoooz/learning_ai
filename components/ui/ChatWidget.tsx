@@ -63,12 +63,30 @@ export function ChatWidget({ courseId, courseTitle, isOpen, onClose, contextInfo
         throw new Error('Course not found');
       }
 
+      // 限制历史消息：最多10条，且总长度不超过2000字符
+      const MAX_MESSAGES = 10;
+      const MAX_CONTENT_LENGTH = 2000;
+
+      // 添加新消息
+      const allMessages = [...messages, { role: 'user' as const, content: userMessage }];
+
+      // 从最新开始保留，限制数量
+      let limitedMessages = allMessages.slice(-MAX_MESSAGES);
+
+      // 如果总长度超限，从最旧的开始删，直到总长度合适
+      while (limitedMessages.length > 0) {
+        const totalLength = limitedMessages.reduce((sum, m) => sum + m.content.length, 0);
+        if (totalLength <= MAX_CONTENT_LENGTH) break;
+        // 删除最旧的消息
+        limitedMessages = limitedMessages.slice(1);
+      }
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           course,
-          messages: [...messages, { role: 'user', content: userMessage }],
+          messages: limitedMessages,
           userMemory: userMemory.userMemory,
           contextInfo,
         }),
@@ -108,9 +126,9 @@ export function ChatWidget({ courseId, courseTitle, isOpen, onClose, contextInfo
       setStreamingContent('');
       setIsThinking(false);
 
-      // 对话完成后更新记忆
-      const allMessages = [...messages, { role: 'user' as const, content: userMessage }];
-      const lastUserMessage = allMessages.filter((m) => m.role === 'user').pop();
+      // 对话完成后更新记忆（使用未限制的全部消息）
+      const recentMessagesForMemory = [...messages, { role: 'user' as const, content: userMessage }];
+      const lastUserMessage = recentMessagesForMemory.filter((m) => m.role === 'user').pop();
       if (lastUserMessage) {
         userMemory.addQuestionPattern(lastUserMessage.content, courseTitle);
 
