@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useCourse } from '@/contexts/CourseContext';
+import { CourseHeaderBar } from '@/components/CourseHeaderBar';
 import { CourseTree } from '@/components/CourseTree';
 
 export default function CoursePage() {
@@ -65,47 +66,46 @@ export default function CoursePage() {
   const progressPercent = course.totalNodes > 0
     ? Math.round((completedCount / course.totalNodes) * 100)
     : 0;
-  const nextNode = course.nodes.find((node) => node.status === 'available');
-  const nextNodeIndex = nextNode?.index ?? 0;
 
   return (
-    <main className="min-h-screen bg-background">
+    <main className="min-h-[100svh] overflow-x-hidden bg-background">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-24 right-[-7rem] h-64 w-64 rounded-full bg-gradient-to-br from-accent/12 to-transparent blur-3xl" />
         <div className="absolute left-[-4rem] top-36 h-52 w-52 rounded-full bg-gradient-to-br from-sky-400/10 to-transparent blur-3xl" />
       </div>
 
-      <div className="relative mx-auto max-w-2xl px-5 pb-10 pt-4 sm:px-6">
-        <div className="sticky top-0 z-20 mb-6 pt-4">
-          <div className="rounded-[24px] border border-white/72 bg-surface/80 px-3 py-2.5 shadow-[0_6px_18px_rgba(15,23,42,0.04)] backdrop-blur-md">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => router.push('/')}
-                className="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-full bg-background/92 text-secondary transition-colors hover:bg-subtle"
-                aria-label="返回首页"
-              >
-                <svg className="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[15px] font-semibold leading-5 text-primary">{course.topic}</p>
-              </div>
-
-              <div className="rounded-full bg-black/[0.04] px-2.5 py-1 text-[11px] font-semibold text-secondary">
-                {progressPercent}%
-              </div>
+      <div
+        className="relative mx-auto max-w-2xl px-5 pt-4 sm:px-6"
+        style={{
+          minHeight: '100svh',
+          paddingBottom: 'max(32px, env(safe-area-inset-bottom))',
+        }}
+      >
+        <CourseHeaderBar
+          title={course.topic}
+          backLabel="返回首页"
+          onBack={() => router.push('/')}
+          trailing={(
+            <div className="rounded-full bg-black/[0.04] px-2.5 py-1 text-[11px] font-semibold text-secondary">
+              {progressPercent}%
             </div>
-          </div>
-        </div>
+          )}
+          maxWidthClassName="max-w-2xl"
+        />
 
-        <section>
+        <section className="pb-2 pt-[78px]">
           <div className="mb-5 px-1">
-            <h2 className="text-lg font-semibold text-primary">学习路线</h2>
-            <p className="mt-1 text-sm text-secondary">
-              {course.difficultySummary || '先完成当前这一节，后面的内容会顺着解锁。'}
+            <p className="text-[12px] font-medium uppercase tracking-[0.18em] text-secondary/78">
+              Learning Route
             </p>
+            <h1 className="mt-2 text-[28px] font-semibold tracking-tight text-primary">
+              继续这门课
+            </h1>
+            {course.difficultySummary && (
+              <p className="mt-2 text-sm leading-6 text-secondary/85">
+                {course.difficultySummary}
+              </p>
+            )}
           </div>
 
           <CourseTree course={course} />

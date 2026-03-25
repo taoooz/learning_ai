@@ -17,12 +17,12 @@ export function CourseNode({ node, isCurrent, isFirst, isLast, onClick }: Course
   const isCompleted = node.status === 'completed';
   const isUpcoming = !isCompleted && !isCurrent && !isLocked;
   const helperText = isCompleted
-    ? '已完成，可随时回顾'
+    ? '这一节已经完成了'
     : isLocked
       ? '完成前一节后解锁'
       : isCurrent
-        ? '继续这一节，完成后解锁下一节'
-        : '完成当前这一节后继续';
+        ? '从这里继续，学完后解锁下一节'
+        : '这一节已经可以开始了';
 
   const handlePressStart = () => {
     if (!isLocked) setIsPressed(true);
@@ -35,28 +35,28 @@ export function CourseNode({ node, isCurrent, isFirst, isLast, onClick }: Course
   return (
     <div className="relative">
       {!isLast && (
-        <div className="absolute bottom-[-20px] left-[-24px] top-10 w-px bg-gradient-to-b from-accent/18 via-black/8 to-transparent" />
+        <div className="absolute bottom-[-22px] left-[-24px] top-10 w-px bg-gradient-to-b from-sky-300/22 via-black/8 to-transparent" />
       )}
 
       {!isLocked && (
         <div className={`
-          absolute left-[-38px] top-6 flex h-7 w-7 items-center justify-center rounded-full border-2 border-background
-          ${isCompleted ? 'bg-surface text-success shadow-[0_3px_8px_rgba(15,23,42,0.04)]' : ''}
-          ${isCurrent ? 'bg-accent text-white shadow-[0_0_0_8px_rgba(255,138,0,0.16),0_10px_24px_rgba(255,138,0,0.20)]' : ''}
-          ${isUpcoming ? 'bg-surface shadow-[0_4px_12px_rgba(15,23,42,0.08)]' : ''}
+          absolute left-[-38px] top-6 flex h-7 w-7 items-center justify-center rounded-full border border-background/90
+          ${isCompleted ? 'bg-white text-success shadow-[0_3px_8px_rgba(15,23,42,0.04)]' : ''}
+          ${isCurrent ? 'bg-accent text-white shadow-[0_0_0_5px_rgba(255,138,0,0.10),0_7px_18px_rgba(255,138,0,0.12)]' : ''}
+          ${isUpcoming ? 'bg-white shadow-[0_4px_12px_rgba(15,23,42,0.06)]' : ''}
         `}>
           {isCompleted && (
             <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.4} d="M5 13l4 4L19 7" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.1} d="M5 13l4 4L19 7" />
             </svg>
           )}
           {isCurrent && <div className="h-2.5 w-2.5 rounded-full bg-white" />}
-          {isUpcoming && <div className="h-2.5 w-2.5 rounded-full bg-accent/45" />}
+          {isUpcoming && <div className="h-2.5 w-2.5 rounded-full bg-accent/55" />}
         </div>
       )}
 
       {isLocked && (
-        <div className="absolute left-[-38px] top-6 flex h-7 w-7 items-center justify-center rounded-full bg-surface text-tertiary shadow-[0_3px_8px_rgba(15,23,42,0.04)]">
+        <div className="absolute left-[-38px] top-6 flex h-7 w-7 items-center justify-center rounded-full bg-white text-tertiary shadow-[0_3px_8px_rgba(15,23,42,0.04)]">
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
@@ -72,40 +72,55 @@ export function CourseNode({ node, isCurrent, isFirst, isLast, onClick }: Course
         onTouchEnd={handlePressEnd}
         disabled={isLocked}
         className={`
-          w-full rounded-[26px] border text-left transition-all duration-200 ease-out
+          relative w-full overflow-hidden rounded-[28px] border text-left transition-all duration-200 ease-out
           ${isPressed && !isLocked ? 'scale-[0.99]' : ''}
-          ${isCompleted ? 'border-black/5 bg-[linear-gradient(135deg,rgba(255,255,255,1),rgba(248,250,248,0.98)_100%)] shadow-[0_4px_14px_rgba(15,23,42,0.04)]' : ''}
-          ${isCurrent ? 'border-[1.5px] border-accent/22 bg-[linear-gradient(135deg,rgba(255,138,0,0.20),rgba(255,250,242,1)_52%)] shadow-[0_10px_24px_rgba(255,138,0,0.12)] sm:scale-[1.01]' : ''}
-          ${isUpcoming ? 'border-black/6 bg-surface shadow-card hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(15,23,42,0.08)]' : ''}
-          ${isLocked ? 'border-black/5 bg-[#F2F1ED] shadow-none' : 'cursor-pointer active:scale-[0.99]'}
+          ${isCompleted ? 'border-black/5 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(249,249,247,0.96)_100%)] shadow-[0_4px_14px_rgba(15,23,42,0.04)]' : ''}
+          ${isCurrent ? 'border-[1.5px] border-accent/18 bg-[linear-gradient(135deg,rgba(255,247,238,1),rgba(255,251,245,0.98)_58%,rgba(255,255,255,0.98))] shadow-[0_8px_20px_rgba(255,138,0,0.08)] sm:scale-[1.005]' : ''}
+          ${isUpcoming ? 'border-black/6 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(255,250,246,0.94)_100%)] shadow-[0_6px_18px_rgba(15,23,42,0.05)] hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(15,23,42,0.08)]' : ''}
+          ${isLocked ? 'border-black/5 bg-[#F4F3EF] shadow-none' : 'cursor-pointer active:scale-[0.99]'}
           ${isFirst ? 'mt-1' : ''}
         `}
       >
+        {(isCurrent || isUpcoming) && (
+          <div
+            className={`pointer-events-none absolute left-0 top-0 h-28 w-36 opacity-32 ${isCurrent ? 'opacity-38' : 'opacity-24'}`}
+            style={{
+              backgroundImage:
+                'linear-gradient(to right, rgba(56,189,248,0.12) 1px, transparent 1px), linear-gradient(to bottom, rgba(56,189,248,0.10) 1px, transparent 1px)',
+              backgroundSize: '18px 18px',
+              maskImage: 'radial-gradient(circle at 24% 18%, black 0%, rgba(0,0,0,0.82) 28%, transparent 78%)',
+              WebkitMaskImage: 'radial-gradient(circle at 24% 18%, black 0%, rgba(0,0,0,0.82) 28%, transparent 78%)',
+            }}
+          />
+        )}
+
         <div className="flex items-center gap-4 px-4 py-[18px] sm:px-5 sm:py-5">
           <div className={`
-            flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-sm font-semibold
+            relative z-[1] flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-sm font-semibold
             ${isCompleted ? 'bg-[#F3F7F3] text-success' : ''}
-            ${isCurrent ? 'bg-accent/16 text-accent' : ''}
-            ${isLocked ? 'bg-white/72 text-tertiary' : ''}
-            ${isUpcoming ? 'bg-accent/8 text-accent' : ''}
+            ${isCurrent ? 'bg-accent/14 text-accent' : ''}
+            ${isLocked ? 'bg-white/76 text-tertiary' : ''}
+            ${isUpcoming ? 'bg-black/[0.04] text-secondary' : ''}
           `}>
             {node.index + 1}
           </div>
 
-          <div className="min-w-0 flex-1">
+          <div className="relative z-[1] min-w-0 flex-1">
             <h3 className={`font-semibold leading-6 ${isLocked ? 'text-secondary' : 'text-primary'} ${isCurrent ? 'text-[18px]' : 'text-base'}`}>
               {node.title}
             </h3>
 
-            <p className={`mt-2 text-sm leading-6 ${isCurrent ? 'text-primary/75' : isLocked ? 'text-tertiary' : 'text-secondary'}`}>
+            <p className={`mt-2 text-sm leading-6 ${isCurrent ? 'text-primary/78' : isLocked ? 'text-tertiary' : 'text-secondary'}`}>
               {helperText}
             </p>
           </div>
 
           {!isLocked && (
-            <svg className={`h-5 w-5 shrink-0 ${isCurrent ? 'text-accent' : 'text-secondary'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
+            <div className={`relative z-[1] flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${isCurrent ? 'bg-accent/12 text-accent' : 'bg-black/[0.04] text-secondary'}`}>
+              <svg className="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
           )}
         </div>
       </button>

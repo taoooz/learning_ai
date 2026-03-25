@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useParams, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
+import { CourseHeaderBar } from '@/components/CourseHeaderBar';
 import { useCourse } from '@/contexts/CourseContext';
 import { useProgress } from '@/contexts/ProgressContext';
 import { RetryModal } from '@/components/RetryModal';
@@ -326,49 +327,30 @@ export default function LearnPage() {
         <div className="absolute left-[-5rem] top-28 h-48 w-48 rounded-full bg-gradient-to-br from-sky-400/8 to-transparent blur-3xl" />
       </div>
 
-      <div className="sticky top-0 z-10 pt-4">
-        <div className="mx-auto max-w-md px-5 pb-2 sm:px-6">
-          <div className="rounded-[24px] border border-white/72 bg-surface/80 px-3 py-2.5 shadow-[0_6px_18px_rgba(15,23,42,0.04)] backdrop-blur-md">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => router.push(`/course/${courseId}`)}
-                className="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-full bg-background/92 text-secondary transition-colors hover:bg-subtle"
-                aria-label="返回课程"
-              >
-                <svg className="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-
-              <div className="min-w-0 flex-1">
-                <LastLineMarker
-                  className="min-w-0"
-                  contentClassName="text-[15px] font-semibold leading-5 text-primary [text-shadow:0_8px_18px_rgba(56,189,248,0.06)]"
-                  markerClassName="bg-gradient-to-r from-sky-300/18 via-sky-200/12 to-accent/10 blur-[0.55px]"
-                >
-                  {node.title}
-                </LastLineMarker>
-              </div>
-
-              <div className="rounded-full bg-black/[0.04] px-2.5 py-1 text-[11px] font-semibold text-secondary">
-                {Math.min(currentStepIndex + 1, Math.max(steps.length, 1))}/{Math.max(steps.length, 1)}
-              </div>
-            </div>
-
-            <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-black/[0.05]">
-              <div
-                className="h-full rounded-full bg-[linear-gradient(90deg,rgba(255,138,0,1),rgba(255,188,92,0.96))] transition-all duration-300"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
+      <CourseHeaderBar
+        title={(
+          <LastLineMarker
+            className="min-w-0"
+            contentClassName="text-[15px] font-semibold leading-5 text-primary [text-shadow:0_8px_18px_rgba(56,189,248,0.06)]"
+            markerClassName="bg-gradient-to-r from-sky-300/18 via-sky-200/12 to-accent/10 blur-[0.55px]"
+          >
+            {node.title}
+          </LastLineMarker>
+        )}
+        backLabel="返回课程"
+        onBack={() => router.push(`/course/${courseId}`)}
+        trailing={(
+          <div className="rounded-full bg-black/[0.04] px-2.5 py-1 text-[11px] font-semibold text-secondary">
+            {Math.min(currentStepIndex + 1, Math.max(steps.length, 1))}/{Math.max(steps.length, 1)}
           </div>
-        </div>
-      </div>
+        )}
+      />
 
       <div
-        className="relative mx-auto flex max-w-md flex-col px-5 pt-2 sm:px-6"
+        className="relative mx-auto flex max-w-md flex-col box-border px-5 sm:px-6"
         style={{
-          minHeight: 'calc(100svh - 96px)',
+          minHeight: '100svh',
+          paddingTop: '88px',
           paddingBottom: 'max(20px, env(safe-area-inset-bottom))',
         }}
       >
@@ -386,7 +368,7 @@ export default function LearnPage() {
 
         {phase === 'learning' && currentStep && (
           <div className="flex flex-1 flex-col">
-            <div className="flex flex-1 flex-col">
+            <div className="flex flex-1 flex-col pt-1.5">
               <AnimatePresence mode="wait" initial={false}>
                 <motion.div
                   key={currentStep.id}
@@ -581,7 +563,7 @@ export default function LearnPage() {
         )}
 
         {phase === 'complete' && (
-          <div className="flex flex-1 flex-col">
+          <div className="flex flex-1 flex-col pt-1.5">
             <motion.div
               initial={{ opacity: 0, y: 16, scale: 0.985 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}

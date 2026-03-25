@@ -30,10 +30,10 @@ export function CourseTree({ course }: CourseTreeProps) {
 
   return (
     <div className="relative pl-12">
-      <div className="absolute bottom-7 left-[24px] top-7 w-px bg-gradient-to-b from-accent/24 via-black/8 to-transparent" />
-      <div className="space-y-[14px]">
+      <div className="absolute bottom-8 left-[24px] top-8 w-px bg-gradient-to-b from-sky-300/28 via-black/7 to-transparent" />
+      <div className="space-y-4">
         {course.nodes.map((node, index) => (
-          <div key={node.index} data-course-node={node.index}>
+          <div key={node.index} data-course-node={node.index} className="scroll-mt-28">
             <CourseNode
               node={node}
               isCurrent={node.index === nextNodeIndex}
