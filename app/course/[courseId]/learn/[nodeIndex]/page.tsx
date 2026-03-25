@@ -11,6 +11,7 @@ import { useProgress } from '@/contexts/ProgressContext';
 import { RetryModal } from '@/components/RetryModal';
 import { LearningCard, Question } from '@/types/course';
 import { ChatWidget } from '@/components/ui/ChatWidget';
+import { useUserMemory } from '@/hooks/useUserMemory';
 
 type LearningPhase = 'loading' | 'learning' | 'complete';
 type LearnStep =
@@ -162,6 +163,7 @@ export default function LearnPage() {
   const router = useRouter();
   const { courses, generateNodeContent, preloadNextNode } = useCourse();
   const { markCompleted } = useProgress();
+  const userMemory = useUserMemory();
 
   const courseId = params.courseId as string;
   const nodeIndex = parseInt(params.nodeIndex as string);
@@ -233,6 +235,18 @@ export default function LearnPage() {
 
   const handleNodeComplete = () => {
     markCompleted(courseId, nodeIndex);
+
+    // 更新用户记忆
+    if (course && node) {
+      userMemory.addLearningRecord({
+        courseId,
+        topic: node.title,
+        nodesCompleted: nodeIndex + 1,
+        totalNodes: course.totalNodes,
+      });
+      userMemory.updateInterests(node.title, 'course', courseId);
+    }
+
     setPhase('complete');
   };
 
