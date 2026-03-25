@@ -21,7 +21,24 @@
       "Bash(curl:*)",
       "Bash(lsof:*)",
       "WebFetch(domain:platform.minimaxi.com)",
-      "Bash(export:*)"
+      "Bash(export:*)",
+      "Skill(ui-ux-pro-max)",
+      "mcp__MiniMax__web_search",
+      "WebFetch(domain:www.163.com)",
+      "WebFetch(domain:capwords.app)",
+      "Bash(find:*)",
+      "Bash(python3:*)",
+      "WebFetch(domain:sspai.com)",
+      "WebFetch(domain:so.html5.qq.com)",
+      "Bash(npm run lint)",
+      "Skill(superpowers:systematic-debugging)",
+      "WebFetch(domain:github.com)",
+      "Bash(PUPPETEER_SKIP_DOWNLOAD=true npm install:*)",
+      "Bash(git -C \"/Users/admin/Documents/OpenCode/duolingo for anything\" diff lib/prompt.ts)",
+      "Bash(git -C \"/Users/admin/Documents/OpenCode/duolingo for anything\" add lib/prompt.ts)",
+      "Bash(git -C \"/Users/admin/Documents/OpenCode/duolingo for anything\" commit -m \"$\\(cat <<''EOF''\nfeat\\(prompt\\): add search judgment sections to course and node prompts\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Skill(superpowers:finishing-a-development-branch)",
+      "Bash(npm test)"
     ]
   }
 }

@@ -4,20 +4,23 @@
 interface ProgressBarProps {
   current: number;
   total: number;
+  showLabel?: boolean;
 }
 
-export function ProgressBar({ current, total }: ProgressBarProps) {
+export function ProgressBar({ current, total, showLabel = true }: ProgressBarProps) {
   const percentage = total > 0 ? (current / total) * 100 : 0;
 
   return (
     <div className="w-full">
-      <div className="flex justify-between text-sm text-gray-500 mb-1">
-        <span>进度</span>
-        <span>{current}/{total}</span>
-      </div>
-      <div className="w-full bg-gray-200 rounded-full h-2">
+      {showLabel && (
+        <div className="flex justify-between text-sm text-secondary mb-2">
+          <span>进度</span>
+          <span className="font-medium text-primary">{current}/{total}</span>
+        </div>
+      )}
+      <div className="w-full bg-subtle rounded-full h-1.5 overflow-hidden">
         <div
-          className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+          className="h-full bg-accent rounded-full transition-all duration-300 ease-out"
           style={{ width: `${percentage}%` }}
         />
       </div>

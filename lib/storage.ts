@@ -62,10 +62,14 @@ export function markNodeCompleted(courseId: string, nodeIndex: number): void {
   }
   data.courseProgress[courseId][nodeIndex] = 'completed';
 
-  // 解锁下一个节点
   const course = data.courses.find(c => c.courseId === courseId);
-  if (course && nodeIndex + 1 < course.nodes.length) {
-    course.nodes[nodeIndex + 1].status = 'available';
+  if (course && course.nodes[nodeIndex]) {
+    course.nodes[nodeIndex].status = 'completed';
+
+    // 解锁下一个节点
+    if (nodeIndex + 1 < course.nodes.length && course.nodes[nodeIndex + 1].status === 'locked') {
+      course.nodes[nodeIndex + 1].status = 'available';
+    }
   }
 
   saveStoredData(data);

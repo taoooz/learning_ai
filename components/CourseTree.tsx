@@ -1,9 +1,9 @@
 'use client';
 
+import { useLayoutEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { CourseTree as CourseTreeType } from '@/types/course';
 import { CourseNode } from './CourseNode';
-import { ProgressBar } from './ui/ProgressBar';
 
 interface CourseTreeProps {
   course: CourseTreeType;
@@ -11,8 +11,16 @@ interface CourseTreeProps {
 
 export function CourseTree({ course }: CourseTreeProps) {
   const router = useRouter();
+  const nextNodeIndex = course.nodes.find((node) => node.status === 'available')?.index ?? 0;
 
-  const completedCount = course.nodes.filter(n => n.status === 'completed').length;
+  useLayoutEffect(() => {
+    const target = document.querySelector<HTMLElement>(`[data-course-node="${nextNodeIndex}"]`);
+    if (!target) return;
+
+    const targetTop = window.scrollY + target.getBoundingClientRect().top;
+    const desiredTop = Math.max(0, targetTop - window.innerHeight * 0.3);
+    window.scrollTo(0, desiredTop);
+  }, [course.courseId, nextNodeIndex]);
 
   const handleNodeClick = (nodeIndex: number) => {
     const node = course.nodes[nodeIndex];
@@ -21,27 +29,19 @@ export function CourseTree({ course }: CourseTreeProps) {
   };
 
   return (
-    <div className="w-full max-w-md mx-auto">
-      {/* 课程标题 */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">{course.topic}</h1>
-        <p className="text-gray-500 mt-1">共 {course.totalNodes} 节课</p>
-      </div>
-
-      {/* 进度条 */}
-      <div className="mb-6">
-        <ProgressBar current={completedCount} total={course.totalNodes} />
-      </div>
-
-      {/* 节点列表 */}
-      <div className="space-y-3">
-        {course.nodes.map((node) => (
-          <CourseNode
-            key={node.index}
-            node={node}
-            isActive={false}
-            onClick={() => handleNodeClick(node.index)}
-          />
+    <div className="relative pl-12">
+      <div className="absolute bottom-7 left-[24px] top-7 w-px bg-gradient-to-b from-accent/24 via-black/8 to-transparent" />
+      <div className="space-y-[14px]">
+        {course.nodes.map((node, index) => (
+          <div key={node.index} data-course-node={node.index}>
+            <CourseNode
+              node={node}
+              isCurrent={node.index === nextNodeIndex}
+              isFirst={index === 0}
+              isLast={index === course.nodes.length - 1}
+              onClick={() => handleNodeClick(node.index)}
+            />
+          </div>
         ))}
       </div>
     </div>

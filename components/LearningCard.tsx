@@ -1,5 +1,6 @@
 'use client';
 
+import ReactMarkdown from 'react-markdown';
 import { LearningCard as LearningCardType } from '@/types/course';
 
 interface LearningCardProps {
@@ -8,12 +9,10 @@ interface LearningCardProps {
 
 export function LearningCard({ card }: LearningCardProps) {
   return (
-    <div className="w-full h-full flex flex-col p-6 bg-white rounded-2xl shadow-lg">
-      <h2 className="text-xl font-bold text-gray-900 mb-4">{card.title}</h2>
-      <div className="flex-1 overflow-auto">
-        <div className="prose prose-sm max-w-none text-gray-700">
-          {card.content}
-        </div>
+    <div className="w-full h-full flex flex-col p-6 bg-surface rounded-2xl border border-subtle">
+      <h2 className="text-xl font-bold text-primary mb-4">{card.title}</h2>
+      <div className="flex-1 text-secondary text-sm leading-relaxed">
+        <ReactMarkdown>{card.content}</ReactMarkdown>
       </div>
       {card.imageUrl && (
         <div className="mt-4">
