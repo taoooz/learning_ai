@@ -17,11 +17,19 @@ interface ChatWidgetProps {
   courseTitle: string;
   isOpen: boolean;
   onClose: () => void;
+  // 额外上下文信息
+  contextInfo?: {
+    // 当前节点信息（学习页使用）
+    currentNodeTitle?: string;
+    currentNodeCards?: string[];
+    currentQuestion?: string;
+  };
 }
 
-export function ChatWidget({ courseId, courseTitle, isOpen, onClose }: ChatWidgetProps) {
+export function ChatWidget({ courseId, courseTitle, isOpen, onClose, contextInfo }: ChatWidgetProps) {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isThinking, setIsThinking] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const { messages, addMessage } = useChatHistory(courseId);
   const userMemory = useUserMemory();
@@ -30,7 +38,7 @@ export function ChatWidget({ courseId, courseTitle, isOpen, onClose }: ChatWidge
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamingContent]);
+  }, [messages, streamingContent, isThinking]);
 
   if (!isOpen) return null;
 
@@ -41,6 +49,7 @@ export function ChatWidget({ courseId, courseTitle, isOpen, onClose }: ChatWidge
     const userMessage = input.trim();
     setInput('');
     setIsLoading(true);
+    setIsThinking(true);
     setStreamingContent('');
 
     addMessage({ role: 'user', content: userMessage });
@@ -61,6 +70,7 @@ export function ChatWidget({ courseId, courseTitle, isOpen, onClose }: ChatWidge
           course,
           messages: [...messages, { role: 'user', content: userMessage }],
           userMemory: userMemory.userMemory,
+          contextInfo,
         }),
       });
 
@@ -96,6 +106,7 @@ export function ChatWidget({ courseId, courseTitle, isOpen, onClose }: ChatWidge
 
       addMessage({ role: 'assistant', content: fullContent });
       setStreamingContent('');
+      setIsThinking(false);
 
       // 对话完成后更新记忆
       const allMessages = [...messages, { role: 'user' as const, content: userMessage }];
@@ -115,6 +126,7 @@ export function ChatWidget({ courseId, courseTitle, isOpen, onClose }: ChatWidge
     } catch (error) {
       console.error('Chat error:', error);
       addMessage({ role: 'assistant', content: '抱歉，发生了错误。请稍后再试。' });
+      setIsThinking(false);
     } finally {
       setIsLoading(false);
     }
@@ -141,6 +153,20 @@ export function ChatWidget({ courseId, courseTitle, isOpen, onClose }: ChatWidge
           {messages.map((msg) => (
             <ChatMessage key={msg.id} message={msg} />
           ))}
+          {isThinking && !streamingContent && (
+            <div className="flex justify-start">
+              <div className="max-w-[80%] px-4 py-3 rounded-2xl bg-surface border border-subtle rounded-bl-md">
+                <div className="flex items-center gap-2 text-sm text-secondary">
+                  <div className="flex gap-1">
+                    <span className="w-2 h-2 rounded-full bg-secondary/50 animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-2 h-2 rounded-full bg-secondary/50 animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-2 h-2 rounded-full bg-secondary/50 animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                  <span>思考中...</span>
+                </div>
+              </div>
+            </div>
+          )}
           {streamingContent && (
             <ChatMessage
               message={{

@@ -2,17 +2,22 @@
 import { NextRequest } from 'next/server';
 import { callMiniMaxChatStream } from '@/lib/minimax';
 import { buildChatContext } from '@/lib/chat-context';
-import { CourseNode, UserMemory } from '@/types/course';
+import { CourseTree, UserMemory } from '@/types/course';
 import { ChatMessage } from '@/types/chat';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
-    const { course, messages, userMemory } = await request.json() as {
-      course: CourseNode;
+    const { course, messages, userMemory, contextInfo } = await request.json() as {
+      course: CourseTree;
       messages: ChatMessage[];
       userMemory: UserMemory;
+      contextInfo?: {
+        currentNodeTitle?: string;
+        currentNodeCards?: string[];
+        currentQuestion?: string;
+      };
     };
 
     if (!course || !messages || !userMemory) {
@@ -20,7 +25,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 构建上下文
-    const context = buildChatContext(course, userMemory, messages);
+    const context = buildChatContext(course, userMemory, messages, contextInfo);
 
     // 构建 AI 消息
     const aiMessages = [

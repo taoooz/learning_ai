@@ -670,6 +670,11 @@ export default function LearnPage() {
           courseTitle={node.title}
           isOpen={isChatOpen}
           onClose={() => setIsChatOpen(false)}
+          contextInfo={{
+            currentNodeTitle: node.title,
+            currentNodeCards: node.cards?.map(c => `${c.title}: ${c.content.slice(0, 100)}`),
+            currentQuestion: currentStep?.type === 'question' ? currentStep.question.question : undefined,
+          }}
         />
       )}
     </main>
