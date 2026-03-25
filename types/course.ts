@@ -167,10 +167,18 @@ export interface ExtractedInsights {
   questionPatterns: QuestionPattern[];
 }
 
+// 对话摘要（过期对话生成）
+export interface ConversationSummary {
+  courseId: string;
+  summary: string;
+  timestamp: number;
+}
+
 export interface UserMemory {
   profile: UserProfile;
   learningHistory: LearningRecord[];
   extractedInsights: ExtractedInsights;
   lastUpdated: number;
   version: number;
+  conversationSummaries: ConversationSummary[];
 }
