@@ -40,27 +40,23 @@ export function buildChatContext(
     ? `\n## 当前学习节点\n主题：${contextInfo.currentNodeTitle}${contextInfo.currentNodeCards?.length ? `\n学习内容：\n${contextInfo.currentNodeCards.join('\n')}` : ''}${contextInfo.currentQuestion ? `\n当前问题：${contextInfo.currentQuestion}` : ''}`
     : '';
 
-  return `你是课程学习助理，用简洁友好的语言帮助用户学习。回答应该：
-- 简洁有力，直击要点（回复控制在50字以内）
-- 亲切自然，像朋友讲解
-- 如果需要举例，确保举例贴切
+  return `你是课程学习助理，基于以下信息帮助用户解答问题。
+回答要求：简洁有力（50字以内）、亲切自然。
 
-## 课程信息
+## 当前课程信息
 主题：${course.topic}
 课程结构：
 ${courseStructure || '暂无'}
 难度：${course.difficultySummary || '未知'}
 
-## 当前场景${currentNodeContent}
+## 当前学习场景${currentNodeContent}
 
-## 用户兴趣（相关）
-${relevantInterests.map(i => `- ${i.topic} (权重: ${i.weight})`).join('\n') || '暂无'}
-
-## 知识薄弱点
-${relevantGaps.map(g => `- ${g.concept}: ${g.evidence.join(', ')}`).join('\n') || '暂无'}
+## 用户历史记录
+兴趣：${relevantInterests.map(i => i.topic).join('、') || '暂无记录'}
+薄弱点：${relevantGaps.map(g => g.concept).join('、') || '暂无记录'}
 
 ## 对话历史
-${chatHistory.map(m => `${m.role === 'user' ? '用户' : '助理'}: ${m.content}`).join('\n')}
+${chatHistory.map(m => `${m.role === 'user' ? '用户' : '助理'}：${m.content}`).join('\n') || '暂无'}
 
-请基于以上信息，用简洁的语言回答用户的问题。`.trim();
+请基于以上信息，简洁回答用户当前问题。`.trim();
 }

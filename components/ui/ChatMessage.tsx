@@ -2,6 +2,7 @@
 'use client';
 
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { ChatMessage as ChatMessageType } from '@/types/chat';
 import { motion } from 'framer-motion';
 
@@ -30,7 +31,30 @@ export function ChatMessage({ message }: ChatMessageProps) {
           <p className="text-sm">{message.content}</p>
         ) : (
           <div className="text-sm leading-relaxed">
-            <ReactMarkdown>{message.content}</ReactMarkdown>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                table: ({ children }) => (
+                  <table className="w-full border-collapse my-2 text-xs">
+                    {children}
+                  </table>
+                ),
+                thead: ({ children }) => (
+                  <thead className="bg-subtle/50">{children}</thead>
+                ),
+                th: ({ children }) => (
+                  <th className="border border-subtle px-2 py-1 text-left font-medium">{children}</th>
+                ),
+                td: ({ children }) => (
+                  <td className="border border-subtle px-2 py-1">{children}</td>
+                ),
+                tr: ({ children }) => (
+                  <tr className="even:bg-subtle/20">{children}</tr>
+                ),
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
           </div>
         )}
         <p
