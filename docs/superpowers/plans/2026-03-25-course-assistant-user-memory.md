@@ -321,12 +321,22 @@ export function useUserMemory() {
     saveMemory(memory);
   };
 
+  // 标记节点完成（更新对应 learningRecord 的完成时间）
+  const markNodeCompleted = (courseId: string): void => {
+    const record = memory.learningHistory.find(h => h.courseId === courseId);
+    if (record) {
+      record.completedAt = Date.now();
+      saveMemory(memory);
+    }
+  };
+
   return {
     userMemory: memory,
     updateInterests,
     addKnowledgeGap,
     addQuestionPattern,
     addLearningRecord,
+    markNodeCompleted,
   };
 }
 ```
@@ -520,7 +530,7 @@ export async function POST(request: NextRequest) {
 }
 ```
 
-**注意:** 由于 Edge Runtime 限制，userMemory 从请求体传入而非 server-side 读取。后续可优化为通过 cookie 传递。
+**注意:** 由于 Edge Runtime 限制，userMemory 从请求体传入而非 server-side 读取。这种方式信任客户端提交的数据，生产环境应添加验证或改用 cookie/session 传递。
 
 - [ ] **Step 2: 提交**
 
@@ -605,11 +615,12 @@ import { ChatMessage as ChatMessageType } from '@/types/chat';
 
 interface ChatWidgetProps {
   courseId: string;
+  courseTitle: string;
   isOpen: boolean;
   onClose: () => void;
 }
 
-export function ChatWidget({ courseId, isOpen, onClose }: ChatWidgetProps) {
+export function ChatWidget({ courseId, courseTitle, isOpen, onClose }: ChatWidgetProps) {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
@@ -930,6 +941,10 @@ function extractSimpleConcept(text: string): string {
   const match = text.match(/([^，,？?\s]{2,10})(是什么|为什么|如何|怎么)/);
   return match ? match[1] : text.slice(0, 10);
 }
+
+// 获取最后一条用户消息
+const allMessages = [...messages, { role: 'user' as const, content: userMessage }];
+const lastUserMessage = allMessages.filter(m => m.role === 'user').pop();
 
 // 对话完成后更新记忆
 if (lastUserMessage) {
