@@ -1,7 +1,7 @@
 // app/course/[courseId]/learn/[nodeIndex]/page.tsx
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useParams, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
@@ -91,6 +91,87 @@ function buildLearningSteps(cards: LearningCard[], questions: Question[]): Learn
   }
 
   return steps;
+}
+
+function LastLineMarker({
+  children,
+  className = '',
+  contentClassName = '',
+  markerClassName = '',
+}: {
+  children: React.ReactNode;
+  className?: string;
+  contentClassName?: string;
+  markerClassName?: string;
+}) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [marker, setMarker] = useState({ left: 0, top: 0, width: 0, height: 0, visible: false });
+
+  useLayoutEffect(() => {
+    const element = contentRef.current;
+    if (!element) return;
+
+    let frame = 0;
+    const updateMarker = () => {
+      if (!contentRef.current) return;
+
+      const range = document.createRange();
+      range.selectNodeContents(contentRef.current);
+      const rects = Array.from(range.getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0);
+      const containerRect = contentRef.current.getBoundingClientRect();
+
+      if (rects.length === 0) {
+        setMarker((prev) => prev.visible ? { ...prev, visible: false } : prev);
+        return;
+      }
+
+      const lastRect = rects[rects.length - 1];
+      setMarker({
+        left: Math.max(0, lastRect.left - containerRect.left - 3),
+        top: lastRect.bottom - containerRect.top - lastRect.height * 0.44,
+        width: lastRect.width + 6,
+        height: Math.max(10, lastRect.height * 0.42),
+        visible: true,
+      });
+    };
+
+    const scheduleUpdate = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(updateMarker);
+    };
+
+    scheduleUpdate();
+
+    const resizeObserver = new ResizeObserver(scheduleUpdate);
+    resizeObserver.observe(element);
+    window.addEventListener('resize', scheduleUpdate);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', scheduleUpdate);
+    };
+  }, [children]);
+
+  return (
+    <div className={`relative max-w-full ${className}`}>
+      {marker.visible && (
+        <span
+          className={`pointer-events-none absolute rounded-[999px] ${markerClassName}`}
+          style={{
+            left: marker.left,
+            top: marker.top,
+            width: marker.width,
+            height: marker.height,
+          }}
+          aria-hidden="true"
+        />
+      )}
+      <div ref={contentRef} className={`relative z-[1] ${contentClassName}`}>
+        {children}
+      </div>
+    </div>
+  );
 }
 
 export default function LearnPage() {
@@ -239,15 +320,15 @@ export default function LearnPage() {
   }
 
   return (
-    <main className="min-h-screen bg-background">
+    <main className="min-h-[100svh] overflow-x-hidden bg-background">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-24 right-[-7rem] h-64 w-64 rounded-full bg-gradient-to-br from-accent/12 to-transparent blur-3xl" />
         <div className="absolute left-[-5rem] top-28 h-48 w-48 rounded-full bg-gradient-to-br from-sky-400/8 to-transparent blur-3xl" />
       </div>
 
-      <div className="sticky top-0 z-10 bg-background/56 pt-2 backdrop-blur-md">
+      <div className="sticky top-0 z-10 pt-4">
         <div className="mx-auto max-w-md px-5 pb-2 sm:px-6">
-          <div className="rounded-[24px] border border-white/72 bg-surface/80 px-3 py-2.5 shadow-[0_6px_18px_rgba(15,23,42,0.04)]">
+          <div className="rounded-[24px] border border-white/72 bg-surface/80 px-3 py-2.5 shadow-[0_6px_18px_rgba(15,23,42,0.04)] backdrop-blur-md">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => router.push(`/course/${courseId}`)}
@@ -260,15 +341,13 @@ export default function LearnPage() {
               </button>
 
               <div className="min-w-0 flex-1">
-                <h1 className="min-w-0 text-[15px] font-semibold leading-5 text-primary">
-                  <span className="relative inline-block max-w-full align-top [text-shadow:0_8px_18px_rgba(56,189,248,0.06)]">
-                    <span
-                      className="pointer-events-none absolute -left-1 right-0 bottom-[0.02em] h-[0.46em] -rotate-[1.6deg] rounded-[999px] bg-gradient-to-r from-sky-300/18 via-sky-200/12 to-accent/10 blur-[0.55px]"
-                      aria-hidden="true"
-                    />
-                    <span className="relative">{node.title}</span>
-                  </span>
-                </h1>
+                <LastLineMarker
+                  className="min-w-0"
+                  contentClassName="text-[15px] font-semibold leading-5 text-primary [text-shadow:0_8px_18px_rgba(56,189,248,0.06)]"
+                  markerClassName="bg-gradient-to-r from-sky-300/18 via-sky-200/12 to-accent/10 blur-[0.55px]"
+                >
+                  {node.title}
+                </LastLineMarker>
               </div>
 
               <div className="rounded-full bg-black/[0.04] px-2.5 py-1 text-[11px] font-semibold text-secondary">
@@ -286,7 +365,13 @@ export default function LearnPage() {
         </div>
       </div>
 
-      <div className="relative mx-auto flex min-h-[calc(100vh-72px)] max-w-md flex-col px-5 pb-5 pt-4 sm:px-6">
+      <div
+        className="relative mx-auto flex max-w-md flex-col px-5 pt-2 sm:px-6"
+        style={{
+          minHeight: 'calc(100svh - 96px)',
+          paddingBottom: 'max(20px, env(safe-area-inset-bottom))',
+        }}
+      >
         {phase === 'loading' && (
           <div className="flex min-h-[60vh] flex-1 flex-col items-center justify-center text-center">
             <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-accent/20 to-accent/5 animate-bounce">
@@ -330,15 +415,12 @@ export default function LearnPage() {
                         </div>
                       </div>
                       <div className="mb-5">
-                        <h2 className="relative inline-block text-[28px] font-semibold leading-[1.2] tracking-tight text-primary">
-                          <span
-                            className="pointer-events-none absolute -left-1 -right-2 bottom-0 h-[0.66em] -rotate-[2deg] rounded-[999px] bg-gradient-to-r from-sky-300/18 via-sky-200/14 to-accent/12 blur-[0.7px]"
-                            aria-hidden="true"
-                          />
-                          <span className="relative">
-                            {currentStep.card.title}
-                          </span>
-                        </h2>
+                        <LastLineMarker
+                          contentClassName="text-[28px] font-semibold leading-[1.2] tracking-tight text-primary"
+                          markerClassName="bg-gradient-to-r from-sky-300/18 via-sky-200/14 to-accent/12 blur-[0.7px]"
+                        >
+                          {currentStep.card.title}
+                        </LastLineMarker>
                       </div>
 
                       <div className="prose prose-p:mb-4 prose-strong:text-primary max-w-none text-[15px] leading-7 text-[rgba(31,31,31,0.82)]">
@@ -371,9 +453,12 @@ export default function LearnPage() {
                         )}
                       </div>
                       <div className="mb-5">
-                        <div className="text-[26px] font-semibold leading-[1.24] tracking-tight text-primary">
+                        <LastLineMarker
+                          contentClassName="text-[26px] font-semibold leading-[1.24] tracking-tight text-primary [&_p]:m-0"
+                          markerClassName="bg-gradient-to-r from-sky-300/18 via-sky-200/14 to-accent/12 blur-[0.7px]"
+                        >
                           <ReactMarkdown>{currentStep.question.question}</ReactMarkdown>
-                        </div>
+                        </LastLineMarker>
                       </div>
 
                       {currentStep.question.type !== 'fill' && currentStep.question.options && (
@@ -461,7 +546,7 @@ export default function LearnPage() {
               )}
             </div>
 
-            <div className="mt-auto pt-4">
+            <div className="mt-auto pt-3">
               <button
                 onClick={() => {
                   if (currentStep.type === 'card') {
@@ -522,7 +607,7 @@ export default function LearnPage() {
               </p>
             </motion.div>
 
-            <div className="mt-auto pt-4">
+            <div className="mt-auto pt-3">
               <button
                 onClick={() => {
                   if (course && nodeIndex + 1 < course.nodes.length) {

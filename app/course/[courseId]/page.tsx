@@ -75,25 +75,25 @@ export default function CoursePage() {
         <div className="absolute left-[-4rem] top-36 h-52 w-52 rounded-full bg-gradient-to-br from-sky-400/10 to-transparent blur-3xl" />
       </div>
 
-      <div className="relative mx-auto max-w-2xl px-5 pb-10 pt-3 sm:px-6">
-        <div className="sticky top-3 z-20 mb-6">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => router.push('/')}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/6 bg-surface/94 text-secondary shadow-[0_8px_18px_rgba(15,23,42,0.08)] backdrop-blur-xl transition-all duration-150 hover:-translate-y-0.5 hover:text-primary"
-              aria-label="返回首页"
-            >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
+      <div className="relative mx-auto max-w-2xl px-5 pb-10 pt-4 sm:px-6">
+        <div className="sticky top-0 z-20 mb-6 pt-4">
+          <div className="rounded-[24px] border border-white/72 bg-surface/80 px-3 py-2.5 shadow-[0_6px_18px_rgba(15,23,42,0.04)] backdrop-blur-md">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => router.push('/')}
+                className="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-full bg-background/92 text-secondary transition-colors hover:bg-subtle"
+                aria-label="返回首页"
+              >
+                <svg className="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
 
-            <div className="flex h-10 min-w-0 flex-1 items-center gap-3 rounded-full border border-white/75 bg-background/88 px-4 shadow-[0_8px_18px_rgba(15,23,42,0.08)] backdrop-blur-xl">
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[15px] font-semibold text-primary">{course.topic}</p>
+                <p className="truncate text-[15px] font-semibold leading-5 text-primary">{course.topic}</p>
               </div>
 
-              <div className="rounded-full bg-accent/10 px-3 py-1 text-sm font-semibold text-accent">
+              <div className="rounded-full bg-black/[0.04] px-2.5 py-1 text-[11px] font-semibold text-secondary">
                 {progressPercent}%
               </div>
             </div>
