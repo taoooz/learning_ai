@@ -49,24 +49,46 @@
 
 当内容适合可视化时，AI 应选择合适的呈现方式：
 
-**适合用图表时：**
-- 流程/步骤类内容 → 流程图
-- 时间/顺序类内容 → 时序图 / 时间线
-- 两种方案对比 → 对比表
-- 概念关系 → 思维导图 / 类图
-- 项目规划 → 甘特图
+**图表类型（Mermaid）：**
+- 流程/步骤类 → `flowchart`
+- 时间/顺序类 → `sequence` 或 `timeline`
+- 两种方案对比 → `comparison`
+- 概念关系/分类 → `mindmap` 或 `class`
+- 状态变化 → `state`
+- 项目规划/甘特 → `gantt`
 
-**适合用辅助元素时：**
-- 需要快速参考 → 数据表格
-- 需要强化记忆 → 要点列表
-- 需要解释符号 → 图例
+**辅助元素（原生组件）：**
+- 需要快速参考的参数/特性 → `table`
+- 强化记忆的核心要点 → `keyPoints`
+- 解释符号/颜色/形状含义 → `legend`
+
+**示例判断：**
+| 内容场景 | 选择类型 |
+|----------|----------|
+| "HTTP 请求流程：请求→处理→响应" | `flowchart` |
+| "React vs Vue 对比：优缺点" | `comparison` |
+| "HTTP 状态码分类（2xx/4xx/5xx）" | `table` |
+| "闭包的 3 个核心用途" | `keyPoints` |
+| "Redis 发展历程：2019-2024" | `timeline` |
+| "图中颜色说明：蓝色=同步，绿色=异步" | `legend` |
+
+**避免过度可视化：**
+- 少于 3 个节点的简单关系
+- 内容已经很简单直观时（如单一定义）
+- 强行拆分会破坏理解时
 
 **输出格式：**
 {
   "content": "Markdown 内容",
   "visualization": {
-    "type": "chart | table | timeline | legend | list | comparison",
-    "code": "Mermaid 语法或省略"
+    "type": "flowchart|sequence|comparison|table|timeline|legend|keyPoints|...",
+    "title": "可选标题",
+    "mermaidCode": "Mermaid 语法（图表类型时）",
+    "complex": true|false,
+    "items": ["项1", "项2"],
+    "rows": [["A", "B"], ["C", "D"]],
+    "columns": ["列1", "列2"],
+    "events": [{"time": "2020", "title": "事件"}]
   }
 }
 ```
@@ -77,13 +99,29 @@
 // types/course.ts
 
 // 可视化类型
-type VisualizationType = 'chart' | 'table' | 'timeline' | 'legend' | 'list' | 'comparison';
+type VisualizationType =
+  // 图表类型（Mermaid）
+  | 'flowchart' | 'sequence' | 'class' | 'state' | 'er' | 'gantt' | 'mindmap'
+  // 辅助元素类型
+  | 'comparison' | 'table' | 'timeline' | 'legend' | 'keyPoints';
 
 // 可视化配置
 interface Visualization {
   type: VisualizationType;
-  code?: string;           // Mermaid 语法（chart 类型）
-  complex?: boolean;       // 是否复杂（需放大按钮）
+  title?: string;                    // 标题，如"React vs Vue 对比"
+  mermaidCode?: string;              // Mermaid 语法（图表类型）
+  complex?: boolean;                 // 是否复杂（需放大按钮）
+  // 辅助元素专用字段
+  items?: string[];                  // 用于 legend、keyPoints
+  rows?: string[][];                 // 用于 table、comparison
+  columns?: string[];                // 用于 table、comparison
+  events?: TimelineEvent[];          // 用于 timeline
+}
+
+interface TimelineEvent {
+  time: string;      // 时间点
+  title: string;     // 事件标题
+  description?: string;
 }
 
 interface LearningCard {
@@ -94,19 +132,56 @@ interface LearningCard {
 }
 ```
 
+**类型选择指南：**
+| 类型 | 使用场景 |
+|------|----------|
+| `comparison` | 两种方案/技术的优劣对比（优点/缺点列） |
+| `table` | 数据参数对比、特性矩阵（通用表格） |
+| `timeline` | 时间顺序、演进过程 |
+| `legend` | 符号/颜色/形状含义说明 |
+| `keyPoints` | 核心要点小结 |
+
 ### 4. 组件结构
 
 ```
 components/ui/MermaidChart.tsx   # Mermaid 渲染 + 交互封装
+components/ui/ComparisonTable.tsx  # 对比表组件
+components/ui/Timeline.tsx         # 时间线组件
+components/ui/Legend.tsx           # 图例组件
+components/ui/KeyPointsList.tsx    # 要点列表组件
 ```
 
-**MermaidChart 组件接口：**
+**组件接口：**
 
 ```typescript
+// MermaidChart 组件
 interface MermaidChartProps {
-  code: string;           // Mermaid 语法
-  complex?: boolean;       // 是否复杂图表（显示放大按钮）
+  mermaidCode: string;           // Mermaid 语法
+  complex?: boolean;             // 是否复杂图表（显示放大按钮）
   className?: string;
+}
+
+// ComparisonTable 组件
+interface ComparisonTableProps {
+  title?: string;
+  columns: string[];      // ['特性', '方案A', '方案B']
+  rows: string[][];      // [['性能', '快', '慢'], ['体积', '小', '大']]
+}
+
+// Timeline 组件
+interface TimelineProps {
+  title?: string;
+  events: TimelineEvent[];
+}
+
+// Legend 组件
+interface LegendProps {
+  items: string[];        // ['🔵 蓝色=同步', '🟢 绿色=异步']
+}
+
+// KeyPointsList 组件
+interface KeyPointsListProps {
+  items: string[];        // ['要点1', '要点2', '要点3']
 }
 ```
 
@@ -117,15 +192,15 @@ LearningCard
     │
     ├─ visualization 存在
     │       │
-    │       ├─ type === 'chart'
+    │       ├─ 是图表类型（flowchart|sequence|...）
     │       │       ├─ complex === true → 显示图表 + 🔍 放大按钮
     │       │       └─ complex === false → 显示图表
     │       │
-    │       ├─ type === 'comparison' → 对比表组件
-    │       ├─ type === 'table' → 数据表格组件
-    │       ├─ type === 'timeline' → 时间线组件
-    │       ├─ type === 'legend' → 图例组件
-    │       └─ type === 'list' → 要点列表组件
+    │       ├─ type === 'comparison' → 对比表组件（columns + rows）
+    │       ├─ type === 'table' → 数据表格组件（columns + rows）
+    │       ├─ type === 'timeline' → 时间线组件（events）
+    │       ├─ type === 'legend' → 图例组件（items）
+    │       └─ type === 'keyPoints' → 要点列表组件（items）
     │
     └─ visualization 不存在
             └─ 仅显示文本内容
