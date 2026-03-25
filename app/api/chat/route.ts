@@ -9,7 +9,7 @@ export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
-    const { course, messages, userMemory, contextInfo } = await request.json() as {
+    const { course, messages, userMemory, contextInfo, conversationSummary } = await request.json() as {
       course: CourseTree;
       messages: ChatMessage[];
       userMemory: UserMemory;
@@ -18,14 +18,15 @@ export async function POST(request: NextRequest) {
         currentNodeCards?: string[];
         currentQuestion?: string;
       };
+      conversationSummary?: string;
     };
 
     if (!course || !messages || !userMemory) {
       return new Response('Missing required fields', { status: 400 });
     }
 
-    // 构建上下文
-    const context = buildChatContext(course, userMemory, messages, contextInfo);
+    // 构建上下文时传入摘要
+    const context = buildChatContext(course, userMemory, messages, contextInfo, conversationSummary);
 
     // 构建 AI 消息
     const aiMessages = [
