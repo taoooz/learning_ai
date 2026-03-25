@@ -71,7 +71,7 @@ interface ChatMessage {
 
 ```typescript
 interface UserMemory {
-  // 用户画像（已有）
+  // 用户画像（已有，来源：ai-learning-data StoredData.userProfile）
   profile: UserProfile;
 
   // 学习历史
@@ -122,7 +122,7 @@ interface UserMemory {
 |-----|------|------|
 | `ai-learning-data` | 现有 StoredData | 课程、进度、用户画像 |
 | `userMemory` | UserMemory JSON | 全局用户记忆 |
-| `chatHistory_{courseId}` | ChatMessage[] | 按课程隔离的对话历史 |
+| `chatHistory_{courseId}` | ChatMessage[] | 按课程隔离的对话历史（格式：chatHistory_ + courseId） |
 
 ---
 
@@ -151,7 +151,7 @@ interface UseChatHistoryReturn {
 // - 添加消息时自动生成 id 和 timestamp
 // - SSR 保护
 
-// localStorage key: `chatHistory_${courseId}`
+// localStorage key: `chatHistory_${courseId}` (统一格式，带下划线)
 ```
 
 #### Task 4: `hooks/useUserMemory.ts`
@@ -215,9 +215,9 @@ export async function callMiniMaxChatStream(
 
 #### Task 6: `lib/chat-context.ts`
 ```typescript
-function buildChatContext(
+export function buildChatContext(
   course: CourseNode,        // 当前课程节点
-  userMemory: UserMemory,     // 用户记忆
+  userMemory: UserMemory,     // 用户记忆（来自 userMemory localStorage key）
   chatHistory: ChatMessage[]  // 当前对话历史
 ): string {
   // 1. 提取当前课程相关的兴趣和薄弱点
@@ -258,18 +258,20 @@ ${chatHistory.map(m => `${m.role}: ${m.content}`).join('\n')}
 #### Task 7: `app/api/chat/route.ts`
 ```typescript
 // POST /api/chat
-// Request: { courseId: string, messages: ChatMessage[] }
+// Request: { courseId: string, messages: ChatMessage[], currentNodeIndex?: number }
 // Response: SSE stream
 
 export async function POST(request: NextRequest) {
-  const { courseId, messages } = await request.json();
+  const { courseId, messages, currentNodeIndex } = await request.json();
 
   // 1. 获取用户记忆
   const userMemory = getUserMemory();
 
-  // 2. 获取当前课程内容（从 storage 或 context）
+  // 2. 获取当前课程内容
   const course = getCourse(courseId);
-  const currentNode = getCurrentNode(course);  // 获取当前学习节点
+  // 如果没有传入 currentNodeIndex，使用最后一个可用节点
+  const nodeIndex = currentNodeIndex ?? course.nodes.findIndex(n => n.status !== 'completed') ?? 0;
+  const currentNode = course.nodes[nodeIndex];
 
   // 3. 构建上下文
   const context = buildChatContext(currentNode, userMemory, messages);
@@ -288,6 +290,11 @@ export async function POST(request: NextRequest) {
 ---
 
 ### Phase 3: 前端 UI
+
+**依赖安装：**
+```bash
+npm install assistant-ui @assistant-ui/react-markdown
+```
 
 #### Task 8: `components/ui/ChatMessage.tsx`
 ```tsx
