@@ -2,7 +2,7 @@
 import { NextRequest } from 'next/server';
 import { callMiniMaxChatStream } from '@/lib/minimax';
 import { buildChatContext } from '@/lib/chat-context';
-import { CourseTree, UserMemory } from '@/types/course';
+import { CourseTree, UserMemory, ConversationSummary } from '@/types/course';
 import { ChatMessage } from '@/types/chat';
 
 export const runtime = 'nodejs';
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
         currentNodeCards?: string[];
         currentQuestion?: string;
       };
-      conversationSummary?: string;
+      conversationSummary?: ConversationSummary;
     };
 
     if (!course || !messages || !userMemory) {
