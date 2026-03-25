@@ -24,8 +24,12 @@ function getMemory(): UserMemory {
     const raw = localStorage.getItem(USER_MEMORY_KEY);
     if (!raw) {
       // 首次初始化，合并 userProfile
-      const profile = getUserProfile();
-      const memory = { ...defaultMemory, profile };
+      const profile = getUserProfile() || {
+        targetJob: '',
+        workExperience: [],
+        education: [],
+      };
+      const memory: UserMemory = { ...defaultMemory, profile };
       localStorage.setItem(USER_MEMORY_KEY, JSON.stringify(memory));
       return memory;
     }

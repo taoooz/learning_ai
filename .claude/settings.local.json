@@ -42,7 +42,12 @@
       "Bash(npm run)",
       "Bash(git branch:*)",
       "WebFetch(domain:michaellivs.com)",
-      "Bash(xxd:*)"
+      "Bash(xxd:*)",
+      "Bash(git worktree:*)",
+      "Bash(git restore --staged .claude/settings.local.json .gitignore)",
+      "Bash(printf:*)",
+      "Bash(git -C \"/Users/admin/Documents/OpenCode/duolingo for anything\" add hooks/useChatHistory.ts)",
+      "Bash(git -C \"/Users/admin/Documents/OpenCode/duolingo for anything\" commit -m \"$\\(cat <<''EOF''\nfix\\(chat\\): add useCallback to useChatHistory\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }

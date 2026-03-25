@@ -1,6 +1,7 @@
 // lib/chat-context.ts
 
-import { CourseNode, UserMemory, ChatMessage } from '@/types/course';
+import { CourseNode, UserMemory } from '@/types/course';
+import { ChatMessage } from '@/types/chat';
 
 export function buildChatContext(
   course: CourseNode,
@@ -9,11 +10,11 @@ export function buildChatContext(
 ): string {
   // 1. 提取当前课程相关的兴趣和薄弱点
   const relevantGaps = userMemory.extractedInsights.knowledgeGaps
-    .filter(g => g.topic === course.topic || g.severity === 'high')
+    .filter(g => g.topic === course.title || g.severity === 'high')
     .slice(0, 3);
 
   const relevantInterests = userMemory.extractedInsights.interests
-    .filter(i => i.topic === course.topic)
+    .filter(i => i.topic === course.title)
     .sort((a, b) => b.weight - a.weight)
     .slice(0, 3);
 

@@ -49,7 +49,7 @@ export function extractPageUrls(content: string): string[] {
 }
 
 export async function callMiniMaxChatStream(
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
 ): Promise<Response> {
   const apiKey = process.env.MINIMAX_API_KEY;
 

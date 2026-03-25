@@ -2,7 +2,8 @@
 import { NextRequest } from 'next/server';
 import { callMiniMaxChatStream } from '@/lib/minimax';
 import { buildChatContext } from '@/lib/chat-context';
-import { ChatMessage, CourseNode, UserMemory } from '@/types/course';
+import { CourseNode, UserMemory } from '@/types/course';
+import { ChatMessage } from '@/types/chat';
 
 export const runtime = 'nodejs';
 
