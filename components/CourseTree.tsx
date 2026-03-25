@@ -1,6 +1,6 @@
 'use client';
 
-import { useLayoutEffect, useState } from 'react';
+import { useLayoutEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CourseTree as CourseTreeType } from '@/types/course';
 import { CourseNode } from './CourseNode';
@@ -10,17 +10,35 @@ interface CourseTreeProps {
   course: CourseTreeType;
 }
 
+const PATH_OFFSETS = [0, 14, -8, 12, -14, 8, -6, 10];
+const NODE_STEP = 108;
+const START_TOP = 18;
+
+function getOffset(index: number) {
+  return PATH_OFFSETS[index % PATH_OFFSETS.length];
+}
+
 export function CourseTree({ course }: CourseTreeProps) {
   const router = useRouter();
   const [isChatOpen, setIsChatOpen] = useState(false);
   const nextNodeIndex = course.nodes.find((node) => node.status === 'available')?.index ?? 0;
+
+  const layout = useMemo(() => {
+    return course.nodes.map((node, index) => ({
+      node,
+      offset: getOffset(index),
+      top: START_TOP + index * NODE_STEP,
+    }));
+  }, [course.nodes]);
+
+  const height = START_TOP + course.nodes.length * NODE_STEP + 36;
 
   useLayoutEffect(() => {
     const target = document.querySelector<HTMLElement>(`[data-course-node="${nextNodeIndex}"]`);
     if (!target) return;
 
     const targetTop = window.scrollY + target.getBoundingClientRect().top;
-    const desiredTop = Math.max(0, targetTop - window.innerHeight * 0.3);
+    const desiredTop = Math.max(0, targetTop - window.innerHeight * 0.26);
     window.scrollTo(0, desiredTop);
   }, [course.courseId, nextNodeIndex]);
 
@@ -31,26 +49,24 @@ export function CourseTree({ course }: CourseTreeProps) {
   };
 
   return (
-    <div className="relative pl-12">
-      <div className="absolute bottom-8 left-[24px] top-8 w-px bg-gradient-to-b from-sky-300/28 via-black/7 to-transparent" />
-      <div className="space-y-4">
-        {course.nodes.map((node, index) => (
-          <div key={node.index} data-course-node={node.index} className="scroll-mt-28">
+    <div className="relative overflow-hidden rounded-[34px] px-1 py-1.5">
+      <div className="relative mx-auto w-full max-w-[360px]" style={{ height: `${height}px` }}>
+        {layout.map((item) => (
+          <div key={item.node.index} data-course-node={item.node.index} className="scroll-mt-32">
             <CourseNode
-              node={node}
-              isCurrent={node.index === nextNodeIndex}
-              isFirst={index === 0}
-              isLast={index === course.nodes.length - 1}
-              onClick={() => handleNodeClick(node.index)}
+              node={item.node}
+              isCurrent={item.node.index === nextNodeIndex}
+              top={item.top}
+              offset={item.offset}
+              onClick={() => handleNodeClick(item.node.index)}
             />
           </div>
         ))}
       </div>
 
-      {/* Chat button for this course */}
       <button
         onClick={() => setIsChatOpen(true)}
-        className="mt-4 w-full rounded-2xl border border-dashed border-black/10 bg-white/50 py-3 text-sm text-secondary hover:bg-white/80 transition-colors"
+        className="mt-6 w-full rounded-2xl border border-dashed border-black/10 bg-white/50 py-3 text-sm text-secondary transition-colors hover:bg-white/80"
       >
         <span className="inline-flex items-center gap-2">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

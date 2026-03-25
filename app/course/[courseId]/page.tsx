@@ -96,18 +96,13 @@ export default function CoursePage() {
         />
 
         <section className="pb-2 pt-[78px]">
-          <div className="mb-5 px-1">
+          <div className="mb-0.5 px-1">
             <p className="text-[12px] font-medium uppercase tracking-[0.18em] text-secondary/78">
-              Learning Route
+              课程目录
             </p>
             <h1 className="mt-2 text-[28px] font-semibold tracking-tight text-primary">
-              继续这门课
+              学习路径
             </h1>
-            {course.difficultySummary && (
-              <p className="mt-2 text-sm leading-6 text-secondary/85">
-                {course.difficultySummary}
-              </p>
-            )}
           </div>
 
           <CourseTree course={course} />
