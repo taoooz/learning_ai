@@ -32,16 +32,28 @@
 
 | 数据类型 | 过期策略 | 说明 |
 |----------|----------|------|
-| ChatHistory（对话历史） | **7天过期** | 未访问则不传给 AI，但保留在存储中 |
+| ChatHistory（对话历史） | **7天过期** | 最后一次发送新消息后7天未续聊，则生成摘要后过期 |
 | KnowledgeGap（知识薄弱点） | **长期留存** | 无过期，但可标记"已掌握"降级 |
 | QuestionPattern（问题模式） | **保留最近50条** | 超出则删除最旧的 |
 | Interests（兴趣） | **权重衰减** | 30天无交互则降低权重 |
 
+**"访问"的定义**：
+- **只有发送新消息才重置访问时间**
+- 翻看历史消息不算访问
+- 理由：让长期未互动的对话自然过期，节省上下文
+
 **对话历史过期流程**：
-1. 对话历史超过7天未访问
-2. 调用 AI 生成一句摘要
-3. 存入 `userMemory.conversationSummaries`
-4. 原对话历史标记为"已过期"或不传给 AI
+1. 用户发送新消息时，检查该课程的最新对话时间
+2. 如果距离最后一条消息超过7天：
+   - 调用 AI 生成一句摘要（异步，不阻塞响应）
+   - 摘要存入 `userMemory.conversationSummaries`
+   - 原对话历史标记为"已过期"
+3. 构建上下文时，已过期的对话不传给 AI，但摘要可见
+
+**questionPatterns 与 chatHistory 同步**：
+- questionPatterns 的数据来源于 chatHistory 解析
+- 当 chatHistory 按问答对截断时，同步清理对应的 questionPatterns
+- 两者共享相同的生命周期管理
 
 ---
 
@@ -99,16 +111,21 @@ while (pairsExceedLimit(messagePairs)) {
 
 **决策：AI 自动生成摘要**
 
-**摘要生成时机**：
-- 对话结束时检测是否需要生成摘要
-- 如果是连续追问（< 10字 且 以问号结尾），不单独生成，合并到原始问题摘要
+**摘要生成触发时机**：
+- 用户**发送新消息**时，检查该课程最后一条消息的时间戳
+- 如果超过7天未续聊，在发送消息前**异步**生成摘要
+- 摘要生成不阻塞用户发送消息
 
 **追问识别逻辑**：
 ```typescript
 function isFollowUp(message: string): boolean {
-  return message.length < 10 && message.trim().endsWith('?');
+  const trimmed = message.trim();
+  // 支持中英文问号，长度限制15字
+  return trimmed.length <= 15 && /[？?]$/.test(trimmed);
 }
 ```
+
+**追问不单独生成摘要**：如果是连续追问（被识别为追问），其内容合并到同一会话中最早的用户问题摘要里。
 
 **摘要格式**：
 ```json
@@ -118,6 +135,11 @@ function isFollowUp(message: string): boolean {
   "timestamp": 1711392000000
 }
 ```
+
+**跨课程摘要使用规则**：
+- 构建上下文时，AI 可参考**当前课程**的摘要
+- 可选择参考**其他课程**的摘要（用于跨课程知识迁移，如数据结构课程可参考Python课程的基础概念摘要）
+- 是否参考其他课程摘要，由 AI 根据上下文自行判断
 
 ---
 
@@ -173,6 +195,8 @@ interface UserMemory {
 │  ┌─────────────────────────────────────────────┐   │
 │  │ /api/chat                                  │   │
 │  │  - buildChatContext() 构建上下文            │   │
+│  │    · 过滤已过期的 chatHistory              │   │
+│  │    · 注入 conversationSummaries            │   │
 │  │  - callMiniMaxChatStream() 流式返回         │   │
 │  └─────────────────────────────────────────────┘   │
 └───────────────────────┬─────────────────────────────┘
@@ -182,12 +206,18 @@ interface UserMemory {
 │  ┌─────────────────┐  ┌─────────────────────────┐  │
 │  │ chatHistory     │  │ userMemory              │  │
 │  │ (per courseId)  │  │ - knowledgeGaps [长期]  │  │
-│  │ - 7天过期       │  │ - interests [衰减]     │  │
+│  │ - 最后消息时间戳│  │ - interests [衰减]     │  │
 │  │ - 按问答对截断  │  │ - questionPatterns [50] │  │
 │  │                 │  │ - conversationSummaries │  │
 │  └─────────────────┘  └─────────────────────────┘  │
 └─────────────────────────────────────────────────────┘
 ```
+
+**数据流说明**：
+1. 用户发送消息 → 检查该课程最后消息时间戳
+2. 如超过7天 → 异步生成摘要存入 userMemory.conversationSummaries
+3. 构建上下文时 → 已过期 chatHistory 不传入，但摘要可见
+4. questionPatterns 与 chatHistory 同步生命周期
 
 ---
 
