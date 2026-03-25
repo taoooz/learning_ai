@@ -483,23 +483,15 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 import { NextRequest } from 'next/server';
 import { buildChatContext } from '@/lib/chat-context';
 import { callMiniMaxChatStream } from '@/lib/minimax';
-import { getStoredData } from '@/lib/storage';
 
-export const runtime = 'edge';
-
-// Server-side 获取 userMemory（直接从 localStorage 读取）
-// 注意：由于是 edge runtime，需要通过 headers cookie 传递，或者降级为 client-side 调用
-// 这里简化处理：假设课程数据已在 client 端传递，userMemory 通过请求体传入
-// 如果需要 server-side 读取 userMemory，需要添加 cookie 传递机制
+// 注意：由于 Edge Runtime 无法访问 localStorage，课程数据从请求体传入
+// 备选方案：如遇问题，可移除 `export const runtime = 'edge'` 改用默认 nodejs runtime
 
 export async function POST(request: NextRequest) {
   try {
-    const { courseId, messages, currentNodeIndex, userMemory } = await request.json();
+    const { course, messages, currentNodeIndex, userMemory } = await request.json();
 
-    // 获取当前课程内容
-    const storedData = getStoredData();
-    const course = storedData.courses.find(c => c.courseId === courseId);
-
+    // course 对象从客户端传入
     if (!course) {
       return new Response('Course not found', { status: 404 });
     }
@@ -530,7 +522,7 @@ export async function POST(request: NextRequest) {
 }
 ```
 
-**注意:** 由于 Edge Runtime 限制，userMemory 从请求体传入而非 server-side 读取。这种方式信任客户端提交的数据，生产环境应添加验证或改用 cookie/session 传递。
+**注意:** 由于 Edge Runtime 限制，课程数据和 userMemory 从请求体传入。这种方式信任客户端提交的数据，生产环境应添加验证。
 
 - [ ] **Step 2: 提交**
 
@@ -647,12 +639,18 @@ export function ChatWidget({ courseId, courseTitle, isOpen, onClose }: ChatWidge
     addMessage({ role: 'user', content: userMessage });
 
     try {
+      // 从 localStorage 获取完整课程对象（客户端组件可直接访问）
+      const { getStoredData } = await import('@/lib/storage');
+      const storedData = getStoredData();
+      const course = storedData.courses.find(c => c.courseId === courseId);
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          courseId,
+          course,
           messages: [...messages, { role: 'user', content: userMessage }],
+          userMemory: userMemory.userMemory,
         }),
       });
 
@@ -771,24 +769,24 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ---
 
-## Task 10: 安装 assistant-ui 依赖
+## Task 10: 安装 react-markdown 依赖
 
 **Files:**
 - (None - 依赖安装)
 
-- [ ] **Step 1: 安装依赖**
+- [ ] **Step 1: 安装 react-markdown**
 
 ```bash
-npm install assistant-ui @assistant-ui/react-markdown react-markdown
+npm install react-markdown
 ```
 
-**注意:** 如果 assistant-ui 安装后定制工作量大，可降级为自定义实现。暂时先尝试安装。
+**说明:** ChatWidget 使用自定义实现（原生 fetch + SSE + react-markdown），暂不使用 assistant-ui。如后续需要更复杂的聊天功能，可再评估。
 
 - [ ] **Step 2: 提交**
 
 ```bash
 git add package.json package-lock.json
-git commit -m "deps: add assistant-ui for chat components
+git commit -m "deps: add react-markdown for chat components
 
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
@@ -803,24 +801,25 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - [ ] **Step 1: 读取现有文件结构**
 
 ```bash
-head -50 app/course/[courseId]/page.tsx
+head -100 app/course/[courseId]/page.tsx
 ```
+重点关注：已有的 useState 位置、return JSX 的结构、按钮放置的合适位置
 
 - [ ] **Step 2: 添加 ChatWidget 导入和状态**
 
-在文件顶部添加导入:
+在文件顶部（其他 import 附近）添加:
 ```tsx
 import { ChatWidget } from '@/components/ui/ChatWidget';
 ```
 
-添加状态:
+在已有的 useState 下方或附近添加:
 ```tsx
 const [chatOpen, setChatOpen] = useState(false);
 ```
 
 - [ ] **Step 3: 添加唤起按钮**
 
-在页面中添加按钮（位置根据现有布局调整）:
+在 return 的 JSX 中找一个合适位置放置按钮（如页面右下角，在主内容之后）:
 ```tsx
 <button
   onClick={() => setChatOpen(true)}
@@ -834,7 +833,7 @@ const [chatOpen, setChatOpen] = useState(false);
 
 - [ ] **Step 4: 添加 ChatWidget**
 
-在 return 的 JSX 末尾添加:
+在 return 的 JSX 末尾（`</div>` 之前）添加:
 ```tsx
 <ChatWidget
   courseId={course?.courseId || ''}
