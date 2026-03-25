@@ -150,6 +150,8 @@ interface UseChatHistoryReturn {
 // - 从 localStorage 读取指定 courseId 的对话历史
 // - 添加消息时自动生成 id 和 timestamp
 // - SSR 保护
+
+// localStorage key: `chatHistory_${courseId}`
 ```
 
 #### Task 4: `hooks/useUserMemory.ts`
@@ -164,9 +166,16 @@ interface UseUserMemoryReturn {
 }
 
 // 功能：
-// - 从 localStorage 读取/初始化 userMemory
+// - 从 localStorage 读取/初始化 userMemory (key: 'userMemory')
 // - 提供结构化的更新方法
 // - 自动更新 lastUpdated 和 version
+// - 首次初始化时合并已有 userProfile
+
+// Storage 函数定义（Task 4 的一部分）
+function getUserMemory(): UserMemory { ... }
+function saveUserMemory(memory: UserMemory): void { ... }
+function getCourse(courseId: string): CourseTree { ... }  // 复用现有 storage.ts
+function getCourseNode(courseId: string, nodeIndex?: number): CourseNode { ... }
 ```
 
 ---
@@ -176,11 +185,31 @@ interface UseUserMemoryReturn {
 #### Task 5: `lib/minimax.ts` 扩展
 添加流式对话方法：
 ```typescript
-export async function* callMiniMaxChat(
+export async function callMiniMaxChatStream(
   messages: Array<{ role: 'user' | 'assistant'; content: string }>
-): AsyncGenerator<string> {
+): Promise<Response> {
   // 实现 SSE 流式调用
-  // yield 每个 chunk 的 content
+  const response = await fetch('https://api.minimaxi.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.MINIMAX_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: 'MiniMax-M2.7',
+      messages,
+      stream: true,  // 启用流式输出
+    }),
+  });
+
+  // 返回 SSE 流
+  return new Response(response.body, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  });
 }
 ```
 
@@ -230,7 +259,7 @@ ${chatHistory.map(m => `${m.role}: ${m.content}`).join('\n')}
 ```typescript
 // POST /api/chat
 // Request: { courseId: string, messages: ChatMessage[] }
-// Response: SSE stream of { content: string, done: boolean }
+// Response: SSE stream
 
 export async function POST(request: NextRequest) {
   const { courseId, messages } = await request.json();
@@ -238,11 +267,12 @@ export async function POST(request: NextRequest) {
   // 1. 获取用户记忆
   const userMemory = getUserMemory();
 
-  // 2. 获取当前课程内容
-  const course = getCourseNode(courseId);
+  // 2. 获取当前课程内容（从 storage 或 context）
+  const course = getCourse(courseId);
+  const currentNode = getCurrentNode(course);  // 获取当前学习节点
 
   // 3. 构建上下文
-  const context = buildChatContext(course, userMemory, messages);
+  const context = buildChatContext(currentNode, userMemory, messages);
 
   // 4. 构建 AI 消息
   const aiMessages = [
@@ -250,11 +280,8 @@ export async function POST(request: NextRequest) {
     ...messages.map(m => ({ role: m.role, content: m.content }))
   ];
 
-  // 5. 流式返回
-  return new Response(
-    stream AI response,
-    { headers: { 'Content-Type': 'text/event-stream' } }
-  );
+  // 5. 流式返回（透传 MiniMax 的 SSE 流）
+  return callMiniMaxChatStream(aiMessages);
 }
 ```
 
@@ -318,34 +345,53 @@ interface ChatWidgetProps {
 
 #### Task 11: 对话后更新记忆
 
-对话结束后（在流式输出完成时）：
+对话结束后（在流式输出完成时），由 ChatWidget 组件调用 useUserMemory hook：
 
 ```typescript
-async function handleChatComplete(messages: ChatMessage[]) {
+// 在 ChatWidget 中，当流式输出完成时
+function handleChatComplete(messages: ChatMessage[]) {
+  const userMemory = useUserMemory();
   const lastUserMessage = messages.filter(m => m.role === 'user').pop();
 
   if (lastUserMessage) {
-    // 1. 记录问题模式
-    addQuestionPattern(lastUserMessage.content, currentTopic);
+    // 1. 记录问题模式（topic 从当前课程获取）
+    const currentTopic = course.title;  // course 是 ChatWidget 的 prop
+    userMemory.addQuestionPattern(lastUserMessage.content, currentTopic);
 
-    // 2. 分析是否涉及薄弱概念（简单关键词匹配）
-    const gaps = extractPotentialGaps(lastUserMessage.content, currentTopic);
-    gaps.forEach(gap => addKnowledgeGap(gap, currentTopic, lastUserMessage.content));
+    // 2. 简单薄弱点检测：问"是什么"、"为什么"、"如何"的可能是薄弱点
+    const simplePatterns = ['是什么', '为什么', '如何', '怎么', '区别', '关系'];
+    const hasConfusion = simplePatterns.some(p => lastUserMessage.content.includes(p));
+    if (hasConfusion) {
+      // 提取可能的概念（简化：取第一个问句的主语或关键词）
+      const concept = extractSimpleConcept(lastUserMessage.content);
+      userMemory.addKnowledgeGap(concept, currentTopic, lastUserMessage.content);
+    }
+
+    // 3. 增加相关兴趣权重
+    userMemory.updateInterests(currentTopic, 'chat', courseId);
   }
+}
+
+// 简化概念提取：取 "X是什么" 中的 X 或前 10 个字符
+function extractSimpleConcept(text: string): string {
+  const match = text.match(/([^，,？?\s]{2,10})(是什么|为什么|如何|怎么)/);
+  return match ? match[1] : text.slice(0, 10);
 }
 ```
 
 #### Task 12: 节点完成时更新记忆
 
-课程节点完成时：
+课程节点完成时，由学习流程组件调用：
 
 ```typescript
+// 在 LearnFlow 或相关组件中，节点完成时调用
 function handleNodeComplete(courseId: string, nodeIndex: number) {
+  const userMemory = useUserMemory();
   const course = getCourse(courseId);
   const node = course.nodes[nodeIndex];
 
   // 1. 更新学习历史
-  addLearningRecord({
+  userMemory.addLearningRecord({
     courseId,
     topic: node.title,
     nodesCompleted: nodeIndex + 1,
@@ -353,9 +399,13 @@ function handleNodeComplete(courseId: string, nodeIndex: number) {
   });
 
   // 2. 增加相关兴趣权重
-  updateInterests(node.title, 'course', courseId);
+  userMemory.updateInterests(node.title, 'course', courseId);
 }
 ```
+
+**集成点说明：**
+- Task 11 的 `handleChatComplete` 在 ChatWidget 组件内调用，courseId 从 props 传入
+- Task 12 的 `handleNodeComplete` 在 LearnFlow.tsx 组件中，当 `node.status === 'completed'` 时调用
 
 ---
 
@@ -369,6 +419,11 @@ function handleNodeComplete(courseId: string, nodeIndex: number) {
 | Markdown 渲染 | 内置 react-markdown + 代码高亮 |
 | 可定制 | Composable primitives 可精确控制 UI |
 | 风格匹配 | 基于 Radix UI / shadcn/ui，与 Tailwind 配合好 |
+
+**评估结论：**
+- MIT 许可证，商用免费
+- 依赖：radix-ui primitives + react-markdown（已有类似依赖）
+- 如果安装后定制工作量大，可降级为自定义实现（复用 RetryModal 模式）
 
 ### 2. 对话上下文范围
 
