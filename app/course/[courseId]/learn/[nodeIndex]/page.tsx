@@ -51,46 +51,26 @@ function checkIsCorrect(question: Question, selectedAnswer: string[], sortOption
 }
 
 function buildLearningSteps(cards: LearningCard[], questions: Question[]): LearnStep[] {
-  if (cards.length === 0) {
-    return questions.map((question) => ({
-      id: `question-${question.id}`,
-      type: 'question',
-      question,
-    }));
-  }
-
+  // 先学完所有卡片，再做所有练习
   const steps: LearnStep[] = [];
-  const questionsCount = questions.length;
-  let questionCursor = 0;
 
-  cards.forEach((card, index) => {
+  // 先添加所有卡片
+  cards.forEach((card) => {
     steps.push({
       id: `card-${card.id}`,
       type: 'card',
       card,
     });
-
-    if (questionsCount === 0) return;
-
-    const shouldInsertQuestion = ((index + 1) * questionsCount) / cards.length >= questionCursor + 1;
-    if (shouldInsertQuestion && questions[questionCursor]) {
-      steps.push({
-        id: `question-${questions[questionCursor].id}`,
-        type: 'question',
-        question: questions[questionCursor],
-      });
-      questionCursor += 1;
-    }
   });
 
-  while (questionCursor < questions.length) {
+  // 再添加所有题目
+  questions.forEach((question) => {
     steps.push({
-      id: `question-${questions[questionCursor].id}`,
+      id: `question-${question.id}`,
       type: 'question',
-      question: questions[questionCursor],
+      question,
     });
-    questionCursor += 1;
-  }
+  });
 
   return steps;
 }

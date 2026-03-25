@@ -23,7 +23,6 @@ export function LearnFlow({ cards, questions, onComplete }: LearnFlowProps) {
   const [sortOptions, setSortOptions] = useState<string[]>([]);
   const [isAnswered, setIsAnswered] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
-  const [learnProgress, setLearnProgress] = useState(0); // 0-2 表示学了几张卡
 
   const currentCard = cards[currentCardIndex];
   const currentQuestion = questions[quizIndex];
@@ -62,27 +61,20 @@ export function LearnFlow({ cards, questions, onComplete }: LearnFlowProps) {
   }, [currentQuestion, selectedAnswer, sortOptions]);
 
   const handleNextLearn = () => {
-    if (learnProgress < 1) {
-      // 还没学够2张，继续学
-      setLearnProgress(prev => prev + 1);
-    } else if (learnProgress === 1 && !isLastCard) {
-      // 学完2张了，如果有测验就进入测验
+    if (!isLastCard) {
+      // 还没到最后一张，继续学下一张
+      setCurrentCardIndex(prev => prev + 1);
+    } else {
+      // 已学完所有卡片，进入测验（如有）
       if (questions.length > 0) {
-        setLearnProgress(2);
         setPhase('quiz');
         setQuizIndex(0);
         setSelectedAnswer([]);
         setSortOptions([]);
         setIsAnswered(false);
       } else {
-        // 没有测验，直接下一张
-        setCurrentCardIndex(prev => prev + 1);
-        setLearnProgress(0);
+        setPhase('complete');
       }
-    } else {
-      // 学够了2张或已经是最后一张，进入下一张
-      setCurrentCardIndex(prev => prev + 1);
-      setLearnProgress(0);
     }
   };
 
@@ -126,13 +118,6 @@ export function LearnFlow({ cards, questions, onComplete }: LearnFlowProps) {
     }
   };
 
-  const handleSkipQuiz = () => {
-    // 跳过测验，继续学下一张
-    setCurrentCardIndex(prev => prev + 1);
-    setLearnProgress(0);
-    setPhase('learn');
-  };
-
   // 完成页面
   if (phase === 'complete') {
     return (
@@ -154,7 +139,6 @@ export function LearnFlow({ cards, questions, onComplete }: LearnFlowProps) {
 
   // 学习阶段
   if (phase === 'learn') {
-    const showQuizPrompt = learnProgress >= 1 && questions.length > 0 && !isLastCard;
     const progressText = `第 ${currentCardIndex + 1}/${cards.length} 张`;
 
     return (
@@ -185,50 +169,13 @@ export function LearnFlow({ cards, questions, onComplete }: LearnFlowProps) {
         </AnimatePresence>
 
         {/* 底部操作 */}
-        <div className="flex justify-between items-center">
-          <span className="text-sm text-secondary">
-            {showQuizPrompt && '小测验即将开始'}
-          </span>
-          <div className="flex gap-3">
-            {showQuizPrompt ? (
-              <>
-                <button
-                  onClick={handleSkipQuiz}
-                  className="px-5 py-2.5 rounded-pill border border-subtle text-secondary hover:border-primary hover:text-primary transition-colors"
-                >
-                  跳过测验
-                </button>
-                <button
-                  onClick={handleNextLearn}
-                  className="px-5 py-2.5 rounded-pill bg-cta text-white hover:bg-cta/90 transition-colors"
-                >
-                  开始测验 →
-                </button>
-              </>
-            ) : isLastCard ? (
-              <button
-                onClick={() => {
-                  if (questions.length > 0) {
-                    setPhase('quiz');
-                    setQuizIndex(0);
-                  } else {
-                    setPhase('complete');
-                    onComplete();
-                  }
-                }}
-                className="px-5 py-2.5 rounded-pill bg-cta text-white hover:bg-cta/90 transition-colors"
-              >
-                {questions.length > 0 ? '开始测验 →' : '完成学习'}
-              </button>
-            ) : (
-              <button
-                onClick={handleNextLearn}
-                className="px-5 py-2.5 rounded-pill bg-cta text-white hover:bg-cta/90 transition-colors"
-              >
-                {learnProgress === 0 ? '继续' : '下一张 →'}
-              </button>
-            )}
-          </div>
+        <div className="flex justify-end">
+          <button
+            onClick={handleNextLearn}
+            className="px-5 py-2.5 rounded-pill bg-cta text-white hover:bg-cta/90 transition-colors"
+          >
+            {isLastCard ? (questions.length > 0 ? '开始测验 →' : '完成学习') : '下一张 →'}
+          </button>
         </div>
       </div>
     );
