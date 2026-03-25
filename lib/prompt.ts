@@ -202,6 +202,55 @@ Quiz 题目包含：
   ]
 }
 
+## 可视化决策指南
+
+当内容适合可视化时，选择合适的呈现方式：
+
+**图表类型（Mermaid）：
+- 流程/步骤类 → `flowchart`
+- 时间/顺序类 → `sequence` 或 `timeline`
+- 两种方案对比 → `comparison`
+- 概念关系/分类 → `mindmap` 或 `class`
+- 状态变化 → `state`
+- 项目规划/甘特 → `gantt`
+
+**辅助元素（原生组件）：
+- 需要快速参考的参数/特性 → `table`
+- 强化记忆的核心要点 → `keyPoints`
+- 解释符号/颜色/形状含义 → `legend`
+
+**示例判断：**
+| 内容场景 | 选择类型 |
+|----------|----------|
+| "HTTP 请求流程：请求→处理→响应" | `flowchart` |
+| "React vs Vue 对比：优缺点" | `comparison` |
+| "HTTP 状态码分类（2xx/4xx/5xx）" | `table` |
+| "闭包的 3 个核心用途" | `keyPoints` |
+| "Redis 发展历程：2019-2024" | `timeline` |
+| "图中颜色说明：蓝色=同步，绿色=异步" | `legend` |
+
+**避免过度可视化：**
+- 少于 3 个节点的简单关系
+- 内容已经很简单直观时
+- 强行拆分会破坏理解时
+
+**输出格式：**
+{
+  "cards": [...],
+  "visualization": {
+    "type": "flowchart|sequence|comparison|table|timeline|legend|keyPoints|...",
+    "title": "可选标题",
+    "mermaidCode": "Mermaid 语法（图表类型时）",
+    "complex": true|false,
+    "items": ["项1", "项2"],
+    "rows": [["A", "B"], ["C", "D"]],
+    "columns": ["列1", "列2"],
+    "events": [{"time": "2020", "title": "事件"}]
+  }
+}
+
+Note: visualization field is optional, only add when content truly benefits from visualization.
+
 只返回 JSON 对象，不要有其他文本。
 ${searchSection}`;
 }
