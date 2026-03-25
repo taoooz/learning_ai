@@ -55,12 +55,12 @@ export function useUserMemory() {
 
   const updateInterests = useCallback((topic: string, source: 'course' | 'chat', courseId?: string): void => {
     const now = Date.now();
-    memory.extractedInsights.interests.forEach(interest => {
+    for (const interest of memory.extractedInsights.interests) {
       const daysSinceInteraction = (now - interest.lastInteraction) / (1000 * 60 * 60 * 24);
       if (daysSinceInteraction > INTEREST_DECAY_DAYS) {
         interest.weight = Math.max(1, interest.weight * INTEREST_DECAY_FACTOR);
       }
-    });
+    }
 
     const interests = memory.extractedInsights.interests;
     const existing = interests.find(i => i.topic === topic);
