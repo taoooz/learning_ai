@@ -130,3 +130,47 @@ export interface UserProfile {
   education: Education[];
   insights?: LearningInsight;
 }
+
+// UserMemory 子类型
+export interface Interest {
+  topic: string;
+  weight: number;           // 1-5
+  source: 'course' | 'chat';
+  courseId?: string;
+  lastInteraction: number;
+}
+
+export interface KnowledgeGap {
+  concept: string;
+  topic: string;
+  evidence: string[];
+  severity: 'high' | 'medium' | 'low';
+}
+
+export interface QuestionPattern {
+  question: string;
+  topic: string;
+  timestamp: number;
+}
+
+export interface LearningRecord {
+  courseId: string;
+  topic: string;
+  nodesCompleted: number;
+  totalNodes: number;
+  completedAt?: number;
+}
+
+export interface ExtractedInsights {
+  interests: Interest[];
+  knowledgeGaps: KnowledgeGap[];
+  questionPatterns: QuestionPattern[];
+}
+
+export interface UserMemory {
+  profile: UserProfile;
+  learningHistory: LearningRecord[];
+  extractedInsights: ExtractedInsights;
+  lastUpdated: number;
+  version: number;
+}
