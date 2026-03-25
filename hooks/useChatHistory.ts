@@ -1,4 +1,5 @@
 // hooks/useChatHistory.ts
+import { useCallback } from 'react';
 import { ChatMessage } from '@/types/chat';
 
 const CHAT_HISTORY_PREFIX = 'chatHistory_';
@@ -8,7 +9,7 @@ function generateId(): string {
 }
 
 export function useChatHistory(courseId: string) {
-  const getMessages = (): ChatMessage[] => {
+  const getMessages = useCallback((): ChatMessage[] => {
     if (typeof window === 'undefined') return [];
 
     try {
@@ -18,9 +19,9 @@ export function useChatHistory(courseId: string) {
     } catch {
       return [];
     }
-  };
+  }, [courseId]);
 
-  const addMessage = (message: Omit<ChatMessage, 'id' | 'timestamp'>): void => {
+  const addMessage = useCallback((message: Omit<ChatMessage, 'id' | 'timestamp'>): void => {
     if (typeof window === 'undefined') return;
 
     const messages = getMessages();
@@ -36,12 +37,12 @@ export function useChatHistory(courseId: string) {
     } catch {
       // localStorage 可能已满，忽略
     }
-  };
+  }, [courseId, getMessages]);
 
-  const clearHistory = (): void => {
+  const clearHistory = useCallback((): void => {
     if (typeof window === 'undefined') return;
     localStorage.removeItem(`${CHAT_HISTORY_PREFIX}${courseId}`);
-  };
+  }, [courseId]);
 
   return {
     messages: getMessages(),
