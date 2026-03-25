@@ -1,9 +1,13 @@
 // hooks/useUserMemory.ts
 import { useCallback } from 'react';
-import { UserMemory, Interest, KnowledgeGap, QuestionPattern, LearningRecord } from '@/types/course';
+import { UserMemory, Interest, KnowledgeGap, QuestionPattern, LearningRecord, ConversationSummary } from '@/types/course';
 import { getUserProfile } from '@/lib/storage';
 
 const USER_MEMORY_KEY = 'userMemory';
+
+const MAX_QUESTION_PATTERNS = 50;
+const INTEREST_DECAY_DAYS = 30;
+const INTEREST_DECAY_FACTOR = 0.5;
 
 const defaultMemory: UserMemory = {
   profile: null as any,
@@ -50,19 +54,27 @@ export function useUserMemory() {
   const memory = getMemory();
 
   const updateInterests = useCallback((topic: string, source: 'course' | 'chat', courseId?: string): void => {
+    const now = Date.now();
+    memory.extractedInsights.interests.forEach(interest => {
+      const daysSinceInteraction = (now - interest.lastInteraction) / (1000 * 60 * 60 * 24);
+      if (daysSinceInteraction > INTEREST_DECAY_DAYS) {
+        interest.weight = Math.max(1, interest.weight * INTEREST_DECAY_FACTOR);
+      }
+    });
+
     const interests = memory.extractedInsights.interests;
     const existing = interests.find(i => i.topic === topic);
 
     if (existing) {
       existing.weight = Math.min(5, existing.weight + (source === 'course' ? 2 : 1));
-      existing.lastInteraction = Date.now();
+      existing.lastInteraction = now;
     } else {
       interests.push({
         topic,
         weight: 1,
         source,
         courseId,
-        lastInteraction: Date.now(),
+        lastInteraction: now,
       });
     }
 
@@ -97,6 +109,12 @@ export function useUserMemory() {
       topic,
       timestamp: Date.now(),
     });
+
+    if (memory.extractedInsights.questionPatterns.length > MAX_QUESTION_PATTERNS) {
+      memory.extractedInsights.questionPatterns.sort((a, b) => b.timestamp - a.timestamp);
+      memory.extractedInsights.questionPatterns = memory.extractedInsights.questionPatterns.slice(0, MAX_QUESTION_PATTERNS);
+    }
+
     saveMemory(memory);
   }, [memory]);
 
@@ -123,6 +141,28 @@ export function useUserMemory() {
     }
   }, [memory]);
 
+  const addConversationSummary = useCallback((courseId: string, summary: string): void => {
+    const existing = memory.conversationSummaries?.find(s => s.courseId === courseId);
+    if (existing) {
+      existing.summary = summary;
+      existing.timestamp = Date.now();
+    } else {
+      if (!memory.conversationSummaries) {
+        memory.conversationSummaries = [];
+      }
+      memory.conversationSummaries.push({
+        courseId,
+        summary,
+        timestamp: Date.now(),
+      });
+    }
+    saveMemory(memory);
+  }, [memory]);
+
+  const getConversationSummary = useCallback((courseId: string): ConversationSummary | undefined => {
+    return memory.conversationSummaries?.find(s => s.courseId === courseId);
+  }, [memory]);
+
   return {
     userMemory: memory,
     updateInterests,
@@ -130,5 +170,7 @@ export function useUserMemory() {
     addQuestionPattern,
     addLearningRecord,
     markNodeCompleted,
+    addConversationSummary,
+    getConversationSummary,
   };
 }
