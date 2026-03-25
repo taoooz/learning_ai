@@ -30,15 +30,22 @@ export function MermaidChart({ mermaidCode, complex, className = '' }: MermaidCh
       const { svg } = await mermaid.render(id, code);
       container.innerHTML = svg;
       setError(null);
-    } catch (err) {
-      console.error('Mermaid render error:', err);
-      setError('图表渲染失败');
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        console.error('Mermaid render error:', err);
+        setError('图表渲染失败');
+      }
     }
   };
 
   // 主图表渲染
   useEffect(() => {
     renderToContainer(containerRef.current, mermaidCode);
+    return () => {
+      if (containerRef.current) {
+        containerRef.current.innerHTML = '';
+      }
+    };
   }, [mermaidCode]);
 
   // 全屏图表渲染
