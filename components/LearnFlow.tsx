@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { LearningCard as LearningCardType, Question } from '@/types/course';
 import { ProgressBar } from './ui/ProgressBar';
+import { extractAnswerKey, checkIsCorrect } from '@/lib/quiz-utils';
 
 interface LearnFlowProps {
   cards: LearningCardType[];
@@ -29,12 +30,6 @@ export function LearnFlow({ cards, questions, onComplete }: LearnFlowProps) {
   const isLastCard = currentCardIndex === cards.length - 1;
   const isLastQuestion = quizIndex === questions.length - 1;
 
-  // 提取答案标识符
-  const extractAnswerKey = (option: string): string => {
-    const match = option.match(/^([A-D])[.、：:]\s*/);
-    return match ? match[1] : option;
-  };
-
   // 初始化排序选项
   const initSortOptions = useCallback(() => {
     if (currentQuestion.type === 'sorting' && currentQuestion.options && sortOptions.length === 0) {
@@ -44,21 +39,8 @@ export function LearnFlow({ cards, questions, onComplete }: LearnFlowProps) {
 
   // 检查答案是否正确
   const checkAnswer = useCallback(() => {
-    const answer = currentQuestion.answer;
-    if (currentQuestion.type === 'single') {
-      const selectedKey = extractAnswerKey(selectedAnswer[0]);
-      return selectedKey === answer || selectedAnswer[0] === answer;
-    }
-    if (currentQuestion.type === 'multiple' && Array.isArray(answer)) {
-      const selectedKeys = selectedAnswer.map(extractAnswerKey);
-      return selectedKeys.length === answer.length && selectedKeys.every(k => answer.includes(k));
-    }
-    if (currentQuestion.type === 'sorting' && Array.isArray(answer)) {
-      return sortOptions.length === answer.length &&
-        sortOptions.every((item, index) => extractAnswerKey(item) === answer[index]);
-    }
-    return false;
-  }, [currentQuestion, selectedAnswer, sortOptions]);
+    return checkIsCorrect(currentQuestion, selectedAnswer);
+  }, [currentQuestion, selectedAnswer]);
 
   const handleNextLearn = () => {
     if (!isLastCard) {

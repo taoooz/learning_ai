@@ -1,9 +1,9 @@
 // app/api/generate/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { callMiniMaxWithSearch, parseJSONResponse } from '@/lib/minimax';
+import { createMemoryRepository } from '@/lib/memory/repository';
 import { buildCourseTreePrompt } from '@/lib/prompt';
-import { ClarificationQuestion, CourseTreeResponse } from '@/types/course';
-import { getUserProfile } from '@/lib/storage';
+import { ClarificationAnswer, ClarificationQuestion, CourseTreeResponse, MemoryStoreV2, UserMemory, UserProfile } from '@/types/course';
 
 // ClarificationAPIResponse 是内部使用的类型，用于解析 API 返回的澄清问题响应
 interface ClarificationAPIResponse {
@@ -15,7 +15,17 @@ export async function POST(request: NextRequest) {
   console.log('[CourseTree] Starting at', new Date().toISOString());
 
   try {
-    const { topic, clarificationAnswers } = await request.json();
+    const {
+      topic,
+      clarificationAnswers,
+      userProfile,
+      userMemory,
+    } = await request.json() as {
+      topic: string;
+      clarificationAnswers?: ClarificationAnswer[];
+      userProfile?: UserProfile | null;
+      userMemory?: UserMemory | MemoryStoreV2 | null;
+    };
 
     if (!topic || typeof topic !== 'string') {
       return NextResponse.json({ error: 'Topic is required' }, { status: 400 });
@@ -27,8 +37,20 @@ export async function POST(request: NextRequest) {
     }
 
     const promptBuildStart = Date.now();
-    const userProfile = getUserProfile();
-    const prompt = buildCourseTreePrompt(topic, userProfile, clarificationAnswers);
+    const memoryRepository = createMemoryRepository({
+      initialMemory: userMemory,
+      getProfile: () => userProfile || null,
+    });
+    const planningPayload = memoryRepository.getPlanningPayload(topic);
+    const prompt = buildCourseTreePrompt(
+      topic,
+      userProfile,
+      clarificationAnswers,
+      userMemory && !('signals' in userMemory) ? userMemory : null,
+      undefined,
+      undefined,
+      planningPayload,
+    );
     console.log(`[CourseTree] Prompt built: ${Date.now() - promptBuildStart}ms`);
 
     const apiStart = Date.now();

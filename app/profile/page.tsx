@@ -8,7 +8,11 @@ import { useUserProfile } from '@/contexts/UserProfileContext';
 import { UserProfile, WorkExperience, Education } from '@/types/course';
 
 function generateId(): string {
-  return Math.random().toString(36).substring(2, 9);
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  // Fallback for older browsers
+  return Math.random().toString(36).substring(2, 11);
 }
 
 function createEmptyWorkExperience(): WorkExperience {
@@ -273,7 +277,7 @@ export default function ProfilePage() {
 
                   <div className="relative z-[1]">
                     <div className="mb-4 flex items-center justify-between gap-3">
-                      <div className="rounded-full bg-[#ECEEEC] px-3 py-1 text-xs font-medium text-secondary">
+                      <div className="rounded-full bg-tag px-3 py-1 text-xs font-medium text-secondary">
                         工作经历 {index + 1}
                       </div>
                       {workExperience.length > 1 && (
@@ -345,7 +349,7 @@ export default function ProfilePage() {
                   className="rounded-[28px] border border-black/6 bg-white/84 px-5 py-5 shadow-[0_8px_20px_rgba(15,23,42,0.04)]"
                 >
                   <div className="mb-4 flex items-center justify-between gap-3">
-                    <div className="rounded-full bg-[#ECEEEC] px-3 py-1 text-xs font-medium text-secondary">
+                    <div className="rounded-full bg-tag px-3 py-1 text-xs font-medium text-secondary">
                       教育经历 {index + 1}
                     </div>
                     {education.length > 1 && (

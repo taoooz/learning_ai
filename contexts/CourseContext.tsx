@@ -2,7 +2,8 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { CourseTree, CourseNode, GenerationStatus } from '@/types/course';
-import { getStoredData, addCourse as saveCourse, updateNodeContent as saveNodeContent, deleteCourse as deleteCourseFromStorage } from '@/lib/storage';
+import { getStoredData, addCourse as saveCourse, updateNodeContent as saveNodeContent, deleteCourse as deleteCourseFromStorage, getUserProfile } from '@/lib/storage';
+import { getUserMemoryStoreSnapshot } from '@/hooks/useUserMemory';
 
 interface ClarificationState {
   topic: string;
@@ -68,7 +69,11 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic }),
+        body: JSON.stringify({
+          topic,
+          userProfile: getUserProfile(),
+          userMemory: getUserMemoryStoreSnapshot(),
+        }),
       });
 
       if (!response.ok) throw new Error('Generation failed');
@@ -121,7 +126,9 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           topic: clarification.topic,
-          clarificationAnswers: clarification.questions
+          clarificationAnswers: clarification.questions,
+          userProfile: getUserProfile(),
+          userMemory: getUserMemoryStoreSnapshot(),
         }),
       });
 
@@ -154,10 +161,14 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-        topic: course.topic,
-        title: course.nodes[nodeIndex].title,
-        cardCount: course.nodes[nodeIndex].cardCount,
-      }),
+          topic: course.topic,
+          title: course.nodes[nodeIndex].title,
+          cardCount: course.nodes[nodeIndex].cardCount,
+          course,
+          nodeIndex,
+          userProfile: getUserProfile(),
+          userMemory: getUserMemoryStoreSnapshot(),
+        }),
       });
 
       if (!response.ok) throw new Error('Node generation failed');

@@ -33,6 +33,7 @@
   --color-success: #34C759;          /* iOS 绿 - 已完成 */
   --color-warning: #FF9500;          /* iOS 橙 - 警告 */
   --color-error: #EF476F;           /* 错误 */
+  --color-error-dark: #D93F64;      /* 错误 hover */
   --color-info: #007AFF;            /* iOS 蓝 - 可用状态 */
 
   /* Status Colors - 节点状态色 */
@@ -40,8 +41,12 @@
   --color-available-light: rgba(255, 149, 0, 0.15);
   --color-completed: #34C759;        /* 已完成 - 绿色 */
   --color-completed-light: rgba(52, 199, 89, 0.15);
+  --color-completed-border: #DCEFE4; /* 已完成边框 */
   --color-locked: #BDBDBD;          /* 锁定 - 灰色 */
   --color-locked-light: rgba(189, 189, 189, 0.15);
+
+  /* Badge/Tag Colors */
+  --color-tag-bg: #ECEEEC;          /* 标签背景色 */
 
   /* Legacy support */
   --color-primary: #FF8C42;
@@ -73,7 +78,7 @@
 
 /* Base Styles */
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-family: 'Baloo 2', -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   background-color: var(--color-background);
   color: var(--color-text-primary);
   line-height: 1.5;
@@ -99,6 +104,8 @@ select {
 .bg-available { background-color: var(--color-available); }
 .bg-completed { background-color: var(--color-completed); }
 .bg-locked { background-color: var(--color-locked); }
+.bg-error { background-color: var(--color-error); }
+.bg-tag { background-color: var(--color-tag-bg); }
 
 .text-primary { color: var(--color-text-primary); }
 .text-secondary { color: var(--color-text-secondary); }
@@ -109,6 +116,10 @@ select {
 .text-available { color: var(--color-available); }
 .text-completed { color: var(--color-completed); }
 .text-locked { color: var(--color-locked); }
+.text-error { color: var(--color-error); }
+
+/* Border Colors */
+.border-completed { border-color: var(--color-completed-border); }
 
 /* Border Radius */
 .rounded-sm { border-radius: var(--radius-sm); }
@@ -169,11 +180,29 @@ html {
   margin-bottom: 0.25rem;
 }
 
+/* === Focus States === */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-background), 0 0 0 4px var(--color-accent);
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-background), 0 0 0 4px var(--color-accent);
+}
+
 /* === Reduced Motion === */
 @media (prefers-reduced-motion: reduce) {
-  * {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

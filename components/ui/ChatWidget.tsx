@@ -5,16 +5,17 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useState, useRef, useEffect } from 'react';
 import { ChatMessage } from './ChatMessage';
 import { useChatHistory } from '@/hooks/useChatHistory';
-import { useUserMemory } from '@/hooks/useUserMemory';
-
-function extractSimpleConcept(text: string): string {
-  const match = text.match(/([^，,？?\s]{2,10})(是什么|为什么|如何|怎么)/);
-  return match ? match[1] : text.slice(0, 10);
-}
+import {
+  analyzeChatMessageForMemory,
+  detectChatLearningPreferences,
+  detectExplicitMasteredConcept,
+  useUserMemory,
+} from '@/hooks/useUserMemory';
 
 interface ChatWidgetProps {
   courseId: string;
   courseTitle: string;
+  memoryTopic?: string;
   isOpen: boolean;
   onClose: () => void;
   // 额外上下文信息
@@ -31,6 +32,26 @@ interface ChatLauncherProps {
   label?: string;
 }
 
+function AssistantGlyph({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="assistant-glyph-gradient" x1="10" y1="52" x2="54" y2="12" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#22D3EE" />
+          <stop offset="0.52" stopColor="#6F8BFF" />
+          <stop offset="1" stopColor="#F3B3D1" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M32 6c4.5 0 6.9 8.2 9.7 14.1 1.6 3.5 4.3 6.2 7.8 7.8C55.4 30.7 64 33 64 37.6c0 4.7-8.6 7-14.5 9.7-3.5 1.6-6.2 4.3-7.8 7.8C38.9 61 36.5 64 32 64c-4.5 0-6.9-3-9.7-8.9-1.6-3.5-4.3-6.2-7.8-7.8C8.6 44.6 0 42.3 0 37.6c0-4.6 8.6-6.9 14.5-9.7 3.5-1.6 6.2-4.3 7.8-7.8C25.1 14.2 27.5 6 32 6Z"
+        fill="url(#assistant-glyph-gradient)"
+      />
+      <rect x="21.5" y="27" width="7" height="13" rx="3.5" fill="white" fillOpacity="0.98" />
+      <rect x="35.5" y="27" width="7" height="13" rx="3.5" fill="white" fillOpacity="0.98" />
+    </svg>
+  );
+}
+
 export function ChatLauncher({ onClick, label = '问助理' }: ChatLauncherProps) {
   return (
     <motion.button
@@ -38,23 +59,22 @@ export function ChatLauncher({ onClick, label = '问助理' }: ChatLauncherProps
       onClick={onClick}
       whileHover={{ y: -2, scale: 1.02 }}
       whileTap={{ y: 1, scale: 0.975 }}
-      className="group fixed bottom-24 right-5 z-40 inline-flex h-13 items-center gap-2 rounded-full border border-black/6 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(255,248,242,0.98))] px-3.5 pr-4 text-primary shadow-[0_10px_30px_rgba(15,23,42,0.10)] backdrop-blur-md transition-[width,box-shadow] duration-200 hover:shadow-[0_16px_34px_rgba(15,23,42,0.12)]"
+      className="group fixed bottom-24 right-5 z-40 flex h-[52px] w-[52px] items-center justify-center rounded-[18px] bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(245,250,251,0.96))] text-primary shadow-[0_14px_34px_rgba(15,23,42,0.12)] backdrop-blur-md transition-shadow duration-200 hover:shadow-[0_18px_38px_rgba(15,23,42,0.16)]"
       aria-label={label}
     >
-      <span className="relative flex h-8.5 w-8.5 items-center justify-center rounded-full bg-[linear-gradient(135deg,#F4B476,#E59B58)] text-primary shadow-[0_8px_18px_rgba(229,155,88,0.18)]">
-        <span className="absolute inset-0 rounded-full bg-white/20" />
-        <svg className="relative h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-        </svg>
-      </span>
-      <span className="hidden pr-0.5 text-[13px] font-medium text-primary/86 sm:inline">
-        {label}
-      </span>
+      <span className="pointer-events-none absolute inset-0 rounded-[18px] bg-[radial-gradient(circle_at_32%_24%,rgba(152,184,232,0.22),rgba(152,184,232,0)_46%),radial-gradient(circle_at_74%_72%,rgba(127,191,195,0.18),rgba(127,191,195,0)_48%)]" />
+      <motion.span
+        className="relative flex h-9 w-9 items-center justify-center rounded-[14px] bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.06))] shadow-[0_10px_20px_rgba(127,191,195,0.16)]"
+        animate={{ y: [0, -1.4, 0], scale: [1, 1.028, 1] }}
+        transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
+      >
+        <AssistantGlyph className="h-7 w-7" />
+      </motion.span>
     </motion.button>
   );
 }
 
-export function ChatWidget({ courseId, courseTitle, isOpen, onClose, contextInfo }: ChatWidgetProps) {
+export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose, contextInfo }: ChatWidgetProps) {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
@@ -68,7 +88,6 @@ export function ChatWidget({ courseId, courseTitle, isOpen, onClose, contextInfo
     if (isOpen) {
       // 打开窗口时立即滚动到底部（instant 而非 smooth）
       messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
-      inputRef.current?.focus();
     }
   }, [isOpen]);
 
@@ -110,7 +129,7 @@ export function ChatWidget({ courseId, courseTitle, isOpen, onClose, contextInfo
     addMessage(
       { role: 'user', content: userMessage },
       {
-        onExpire: (courseId: string, summary: string) => {
+        onExpire: (courseId, summary) => {
           userMemory.addConversationSummary(courseId, summary);
         },
       }
@@ -149,8 +168,9 @@ export function ChatWidget({ courseId, courseTitle, isOpen, onClose, contextInfo
         body: JSON.stringify({
           course,
           messages: limitedMessages,
-          userMemory: userMemory.userMemory,
+          userMemory: userMemory.memoryStore,
           contextInfo,
+          conversationSummary: userMemory.getConversationSummary(courseId),
         }),
       });
 
@@ -209,17 +229,37 @@ export function ChatWidget({ courseId, courseTitle, isOpen, onClose, contextInfo
       // 对话完成后更新记忆（使用未限制的全部消息）
       const recentMessagesForMemory = [...messages, { role: 'user' as const, content: userMessage }];
       const lastUserMessage = recentMessagesForMemory.filter((m) => m.role === 'user').pop();
+      const topicForMemory = memoryTopic || courseTitle;
       if (lastUserMessage) {
-        userMemory.addQuestionPattern(lastUserMessage.content, courseTitle);
+        userMemory.addQuestionPattern(lastUserMessage.content, topicForMemory);
 
-        const simplePatterns = ['是什么', '为什么', '如何', '怎么', '区别', '关系'];
-        const hasConfusion = simplePatterns.some((p) => lastUserMessage.content.includes(p));
-        if (hasConfusion) {
-          const concept = extractSimpleConcept(lastUserMessage.content);
-          userMemory.addKnowledgeGap(concept, courseTitle, lastUserMessage.content);
+        for (const preference of detectChatLearningPreferences(lastUserMessage.content)) {
+          userMemory.addLearningPreference(preference);
         }
 
-        userMemory.updateInterests(courseTitle, 'chat', courseId);
+        const masteredConcept = detectExplicitMasteredConcept(lastUserMessage.content);
+        if (masteredConcept) {
+          userMemory.addMasteredConcept({
+            ...masteredConcept,
+            topic: topicForMemory,
+          });
+        }
+
+        const memorySignal = analyzeChatMessageForMemory(lastUserMessage.content);
+        if (memorySignal.shouldAddKnowledgeGap && memorySignal.extractedConcept) {
+          userMemory.addKnowledgeGap(memorySignal.extractedConcept, topicForMemory, lastUserMessage.content, memorySignal.confidence);
+        }
+
+        userMemory.recordChatSignals({
+          topic: topicForMemory,
+          question: lastUserMessage.content,
+          confusionConcept: memorySignal.extractedConcept,
+          confusionEvidence: memorySignal.shouldAddKnowledgeGap ? lastUserMessage.content : undefined,
+          confidence: memorySignal.confidence,
+          courseId,
+        });
+
+        userMemory.updateInterests(topicForMemory, 'chat', courseId);
       }
     } catch (error) {
       console.error('Chat error:', error);
@@ -250,14 +290,19 @@ export function ChatWidget({ courseId, courseTitle, isOpen, onClose, contextInfo
             className="relative flex h-[min(680px,80vh)] w-full max-w-[440px] flex-col overflow-hidden rounded-[30px] border border-white/55 bg-[linear-gradient(180deg,rgba(255,252,248,0.98),rgba(255,248,242,0.96))] shadow-[0_28px_80px_rgba(15,23,42,0.20)]"
           >
             <div className="pointer-events-none absolute left-0 top-0 h-28 w-36 opacity-35" style={{ backgroundImage: 'linear-gradient(to right, rgba(56,189,248,0.12) 1px, transparent 1px), linear-gradient(to bottom, rgba(56,189,248,0.10) 1px, transparent 1px)', backgroundSize: '18px 18px', maskImage: 'radial-gradient(circle at 24% 18%, black 0%, rgba(0,0,0,0.82) 28%, transparent 78%)', WebkitMaskImage: 'radial-gradient(circle at 24% 18%, black 0%, rgba(0,0,0,0.82) 28%, transparent 78%)' }} />
-            <div className="pointer-events-none absolute right-[-32px] top-[-18px] h-28 w-28 rounded-full bg-[radial-gradient(circle,rgba(255,174,92,0.26),rgba(255,174,92,0)_72%)]" />
+            <div className="pointer-events-none absolute right-[-32px] top-[-18px] h-28 w-28 rounded-full bg-[radial-gradient(circle,rgba(127,191,195,0.20),rgba(127,191,195,0)_72%)]" />
 
             <div className="border-b border-black/6 px-4 pb-3 pt-4 sm:px-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-secondary/72">
-                    学习助理
-                  </p>
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+                      <AssistantGlyph className="h-4.5 w-4.5 shrink-0" />
+                    </span>
+                    <p className="flex min-h-5 items-center text-[11px] leading-none font-medium uppercase tracking-[0.16em] text-secondary/72">
+                      学习助理
+                    </p>
+                  </div>
                   <h2 className="mt-1 text-[20px] font-semibold tracking-tight text-primary">
                     一起拆开这节内容
                   </h2>
@@ -284,12 +329,15 @@ export function ChatWidget({ courseId, courseTitle, isOpen, onClose, contextInfo
               onTouchMove={(e) => e.stopPropagation()}
             >
               {messages.length === 0 && !isThinking && !streamingContent && (
-                <div className="mb-4 rounded-[24px] border border-black/5 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(250,246,241,0.92))] px-4 py-4">
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
+                  className="mb-4 rounded-[24px] border border-black/5 bg-[linear-gradient(180deg,rgba(255,255,255,0.90),rgba(246,250,249,0.92))] px-4 py-4"
+                >
                   <div className="flex items-start gap-3">
-                    <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,#F1DCC6,#E8C59E)] text-primary">
-                      <svg className="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                      </svg>
+                    <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(180deg,rgba(255,255,255,0.72),rgba(221,232,246,0.72))]">
+                      <AssistantGlyph className="h-6 w-6" />
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-primary">我会结合这节内容，帮你一起拆开难点。</p>
@@ -298,7 +346,7 @@ export function ChatWidget({ courseId, courseTitle, isOpen, onClose, contextInfo
                       </p>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               )}
 
               <div className="space-y-3">
@@ -309,9 +357,9 @@ export function ChatWidget({ courseId, courseTitle, isOpen, onClose, contextInfo
                   <div className="flex justify-start">
                     <div className="rounded-[20px] rounded-bl-md border border-black/5 bg-white/78 px-4 py-3">
                       <div className="flex items-center gap-1.5">
-                        <motion.span className="h-2 w-2 rounded-full bg-[#D89B61]" animate={{ y: [0, -3, 0], opacity: [0.45, 1, 0.45] }} transition={{ duration: 1.1, repeat: Infinity, delay: 0 }} />
-                        <motion.span className="h-2 w-2 rounded-full bg-[#D89B61]" animate={{ y: [0, -3, 0], opacity: [0.45, 1, 0.45] }} transition={{ duration: 1.1, repeat: Infinity, delay: 0.16 }} />
-                        <motion.span className="h-2 w-2 rounded-full bg-[#D89B61]" animate={{ y: [0, -3, 0], opacity: [0.45, 1, 0.45] }} transition={{ duration: 1.1, repeat: Infinity, delay: 0.32 }} />
+                        <motion.span className="h-2 w-2 rounded-full bg-[#7FBFC3]" animate={{ y: [0, -3, 0], opacity: [0.45, 1, 0.45] }} transition={{ duration: 1.1, repeat: Infinity, delay: 0 }} />
+                        <motion.span className="h-2 w-2 rounded-full bg-[#7FBFC3]" animate={{ y: [0, -3, 0], opacity: [0.45, 1, 0.45] }} transition={{ duration: 1.1, repeat: Infinity, delay: 0.16 }} />
+                        <motion.span className="h-2 w-2 rounded-full bg-[#7FBFC3]" animate={{ y: [0, -3, 0], opacity: [0.45, 1, 0.45] }} transition={{ duration: 1.1, repeat: Infinity, delay: 0.32 }} />
                       </div>
                     </div>
                   </div>
@@ -346,7 +394,7 @@ export function ChatWidget({ courseId, courseTitle, isOpen, onClose, contextInfo
                   whileHover={isLoading || !input.trim() ? undefined : { y: -1 }}
                   whileTap={isLoading || !input.trim() ? undefined : { y: 1, scale: 0.98 }}
                   disabled={isLoading || !input.trim()}
-                  className="inline-flex min-w-[76px] items-center justify-center rounded-[16px] bg-[linear-gradient(135deg,#F4B476,#E59B58)] px-4 py-2 text-sm font-semibold text-primary shadow-[0_10px_20px_rgba(229,155,88,0.18)] disabled:cursor-not-allowed disabled:opacity-45"
+                  className="inline-flex min-w-[76px] items-center justify-center rounded-[16px] bg-[linear-gradient(135deg,#98B8E8,#7FBFC3)] px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(127,191,195,0.20)] disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   {isLoading ? '思考中' : '发送'}
                 </motion.button>

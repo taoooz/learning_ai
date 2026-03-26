@@ -26,7 +26,10 @@ export function MermaidChart({ mermaidCode, complex, className = '' }: MermaidCh
   const renderToContainer = async (container: HTMLDivElement | null, code: string) => {
     if (!container) return;
     try {
-      const id = `mermaid-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const uniqueId = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const id = `mermaid-${uniqueId}`;
       const { svg } = await mermaid.render(id, code);
       container.innerHTML = svg;
       setError(null);

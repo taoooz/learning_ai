@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useCourse } from '@/contexts/CourseContext';
 import { CourseHeaderBar } from '@/components/CourseHeaderBar';
 import { CourseTree } from '@/components/CourseTree';
-import { ChatWidget } from '@/components/ui/ChatWidget';
+import { ChatLauncher, ChatWidget } from '@/components/ui/ChatWidget';
 
 export default function CoursePage() {
   const params = useParams();
@@ -109,19 +109,12 @@ export default function CoursePage() {
         </section>
       </div>
 
-      {/* Chat Assistant Button */}
-      <button
-        onClick={() => setIsChatOpen(true)}
-        className="fixed bottom-24 right-6 w-14 h-14 rounded-full bg-accent text-white shadow-lg hover:scale-105 transition-shadow z-40"
-      >
-        <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-        </svg>
-      </button>
+      <ChatLauncher onClick={() => setIsChatOpen(true)} />
 
       <ChatWidget
         courseId={course.courseId}
         courseTitle={course.topic}
+        memoryTopic={course.topic}
         isOpen={isChatOpen}
         onClose={() => setIsChatOpen(false)}
       />

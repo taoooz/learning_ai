@@ -4,40 +4,11 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Question } from '@/types/course';
+import { extractAnswerKey, checkIsCorrect } from '@/lib/quiz-utils';
 
 interface QuizQuestionProps {
   questions: Question[];
   onComplete: () => void;
-}
-
-function extractAnswerKey(option: string): string {
-  const match = option.match(/^([A-D])[.、：:]\s*/);
-  return match ? match[1] : option;
-}
-
-function checkIsCorrect(question: Question, selectedAnswer: string[]): boolean {
-  const answer = question.answer;
-
-  if (question.type === 'single') {
-    const selected = selectedAnswer[0];
-    const selectedKey = extractAnswerKey(selected);
-    return selectedKey === answer || selected === answer;
-  }
-
-  if (question.type === 'multiple' && Array.isArray(answer)) {
-    const selectedKeys = selectedAnswer.map(extractAnswerKey);
-    const correctKeys = answer;
-    return selectedKeys.length === correctKeys.length &&
-      selectedKeys.every(k => correctKeys.includes(k));
-  }
-
-  if (question.type === 'sorting' && Array.isArray(answer)) {
-    // 检查排序是否正确
-    return selectedAnswer.length === answer.length &&
-      selectedAnswer.every((item, index) => extractAnswerKey(item) === answer[index]);
-  }
-
-  return false;
 }
 
 export function QuizQuestion({ questions, onComplete }: QuizQuestionProps) {

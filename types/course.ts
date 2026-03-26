@@ -40,6 +40,7 @@ export interface Question {
   options?: string[];      // 单选/多选/排序题
   answer: string | string[];  // sorting 时为排列后的数组
   explanation: string;
+  concept?: string;
   dimension?: 'memory' | 'understanding' | 'application' | 'analysis';
   difficulty?: 1 | 2 | 3;
   cardId?: string;
@@ -48,7 +49,7 @@ export interface Question {
 export interface ClarificationQuestion {
   id: string;
   question: string;
-  type: 'single' | 'multiple' | 'fill';
+  type: 'single' | 'multiple';
   options?: string[];
 }
 
@@ -131,6 +132,161 @@ export interface UserProfile {
   insights?: LearningInsight;
 }
 
+export interface MemoryStableFact {
+  id: string;
+  kind: 'identity' | 'goal' | 'knowledge_background' | 'analogy_experience';
+  text: string;
+  confidence: number;
+  source: 'profile';
+  updatedAt: number;
+}
+
+export interface MemoryGoal {
+  id: string;
+  topic: string;
+  goalText: string;
+  priority: 'high' | 'medium' | 'low';
+  source: 'user_input' | 'profile';
+  confidence: number;
+  updatedAt: number;
+}
+
+export interface LearningPreference {
+  id: string;
+  kind: 'pace' | 'explanation_style' | 'analogy_style' | 'difficulty_preference';
+  value: string;
+  confidence: number;
+  source: 'profile' | 'chat' | 'behavior';
+  updatedAt: number;
+}
+
+export interface LearningSignal {
+  id: string;
+  type: 'question_attempt' | 'chat_question' | 'chat_confusion' | 'chat_mastery' | 'node_complete' | 'course_progress';
+  topic: string;
+  concept?: string;
+  nodeTitle?: string;
+  courseId?: string;
+  source: 'assessment' | 'chat' | 'progress';
+  confidence: number;
+  occurredAt: number;
+  payload: Record<string, unknown>;
+}
+
+export interface TopicState {
+  topic: string;
+  familiarityScore: number;
+  estimatedLevel: 'novice' | 'beginner' | 'intermediate' | 'advanced';
+  transferableBackground: string[];
+  mustCoverConcepts: string[];
+  skippableBasics: string[];
+  riskConcepts: string[];
+  confidence: number;
+  updatedAt: number;
+}
+
+export interface ConceptState {
+  topic: string;
+  concept: string;
+  masteryScore: number;
+  status: 'unknown' | 'learning' | 'fragile' | 'mastered';
+  evidenceCount: number;
+  recentErrors: number;
+  recentSuccesses: number;
+  lastSeenAt?: number;
+  nextReviewAt?: number;
+  misconceptionHints: string[];
+  confidence: number;
+  updatedAt: number;
+}
+
+export interface TopicSummary {
+  topic: string;
+  summary: string;
+  keyGaps: string[];
+  keyStrengths: string[];
+  updatedAt: number;
+}
+
+export interface CourseSummary {
+  courseId: string;
+  topic: string;
+  summary: string;
+  completedNodes: number;
+  totalNodes: number;
+  updatedAt: number;
+}
+
+export interface MemoryStoreV2 {
+  version: 2;
+  learnerId: string;
+  profile: {
+    stableFacts: MemoryStableFact[];
+    goals: MemoryGoal[];
+    preferences: LearningPreference[];
+  };
+  signals: LearningSignal[];
+  states: {
+    topicStates: TopicState[];
+    conceptStates: ConceptState[];
+  };
+  summaries: {
+    topicSummaries: TopicSummary[];
+    courseSummaries: CourseSummary[];
+  };
+  updatedAt: number;
+}
+
+export interface PlanningMemoryPayload {
+  learnerSnapshot: {
+    targetGoal?: string;
+    estimatedLevel: 'novice' | 'beginner' | 'intermediate' | 'advanced';
+    confidence: number;
+  };
+  transferableBackground: string[];
+  mustCoverConcepts: string[];
+  skippableBasics: string[];
+  riskConcepts: string[];
+  recentRelevantCourses: Array<{
+    topic: string;
+    summary: string;
+  }>;
+}
+
+export interface TeachingMemoryPayload {
+  nodeTopic: string;
+  nodeTitle: string;
+  prerequisiteConceptStates: Array<{
+    concept: string;
+    status: ConceptState['status'];
+    masteryScore: number;
+  }>;
+  targetConceptStates: Array<{
+    concept: string;
+    status: ConceptState['status'];
+    masteryScore: number;
+    misconceptionHints: string[];
+  }>;
+  recentQuestionSummaries: string[];
+  analogyHints: string[];
+  preferredExplanationStyles: string[];
+}
+
+export interface ChatMemoryPayload {
+  topic: string;
+  focusConceptStates: Array<{
+    concept: string;
+    status: ConceptState['status'];
+    masteryScore: number;
+    misconceptionHints: string[];
+  }>;
+  riskConcepts: string[];
+  recentQuestionSummaries: string[];
+  analogyHints: string[];
+  preferredExplanationStyles: string[];
+  topicSummary?: string;
+}
+
 // UserMemory 子类型
 export interface Interest {
   topic: string;
@@ -138,6 +294,7 @@ export interface Interest {
   source: 'course' | 'chat';
   courseId?: string;
   lastInteraction: number;
+  confidence?: number;
 }
 
 export interface KnowledgeGap {
@@ -145,12 +302,48 @@ export interface KnowledgeGap {
   topic: string;
   evidence: string[];
   severity: 'high' | 'medium' | 'low';
+  confidence?: number;
+  source?: 'chat' | 'assessment';
+  lastUpdated?: number;
 }
 
 export interface QuestionPattern {
   question: string;
   topic: string;
   timestamp: number;
+  confidence?: number;
+  source?: 'chat' | 'assessment';
+}
+
+export interface LearningPreferenceNote {
+  kind: 'explanation_style' | 'pace' | 'analogy_style';
+  value: string;
+  confidence: number;
+  evidence: string;
+  updatedAt: number;
+}
+
+export interface MasteredConceptNote {
+  topic: string;
+  concept: string;
+  evidence: string;
+  confidence: number;
+  updatedAt: number;
+}
+
+export interface ConceptMastery {
+  concept: string;
+  topic: string;
+  totalAttempts: number;
+  correctAttempts: number;
+  accuracy: number;
+  lastReviewedAt: number;
+  lastOutcome: 'correct' | 'incorrect';
+  difficulty?: 1 | 2 | 3;
+  dimension?: 'memory' | 'understanding' | 'application' | 'analysis';
+  needsReview: boolean;
+  confidence?: number;
+  source?: 'chat' | 'assessment';
 }
 
 export interface LearningRecord {
@@ -165,6 +358,9 @@ export interface ExtractedInsights {
   interests: Interest[];
   knowledgeGaps: KnowledgeGap[];
   questionPatterns: QuestionPattern[];
+  conceptMastery: ConceptMastery[];
+  learningPreferences: LearningPreferenceNote[];
+  masteredConcepts: MasteredConceptNote[];
 }
 
 // 对话摘要（过期对话生成）
@@ -172,6 +368,12 @@ export interface ConversationSummary {
   courseId: string;
   summary: string;
   timestamp: number;
+  mainQuestions?: string[];
+  unresolvedConcepts?: string[];
+  preferredExplanationStyles?: string[];
+  explanationPath?: string;
+  resolutionStatus?: 'resolved' | 'partial' | 'open';
+  followUp?: string;
 }
 
 export interface UserMemory {

@@ -47,7 +47,12 @@
       "Bash(git restore --staged .claude/settings.local.json .gitignore)",
       "Bash(printf:*)",
       "Bash(git -C \"/Users/admin/Documents/OpenCode/duolingo for anything\" add hooks/useChatHistory.ts)",
-      "Bash(git -C \"/Users/admin/Documents/OpenCode/duolingo for anything\" commit -m \"$\\(cat <<''EOF''\nfix\\(chat\\): add useCallback to useChatHistory\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git -C \"/Users/admin/Documents/OpenCode/duolingo for anything\" commit -m \"$\\(cat <<''EOF''\nfix\\(chat\\): add useCallback to useChatHistory\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n\\)\")",
+      "WebFetch(domain:api.minimax.chat)",
+      "WebFetch(domain:www.minimaxi.com)",
+      "WebFetch(domain:platform.minimax.io)",
+      "Bash(cd:*)",
+      "Bash(npm run dev)"
     ]
   }
 }

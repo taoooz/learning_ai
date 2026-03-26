@@ -49,7 +49,8 @@ export function extractPageUrls(content: string): string[] {
 }
 
 export async function callMiniMaxChatStream(
-  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
+  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
+  maxTokens: number = 1500
 ): Promise<Response> {
   const apiKey = process.env.MINIMAX_API_KEY;
 
@@ -67,6 +68,8 @@ export async function callMiniMaxChatStream(
       model: 'MiniMax-M2.7',
       messages,
       stream: true,
+      max_tokens: maxTokens,
+      reasoning_split: true,  // 将思考过程分离到 delta.reasoning_details
     }),
   });
 

@@ -1,114 +1,110 @@
 // hooks/useUserMemory.ts
 import { useCallback } from 'react';
-import { UserMemory, Interest, KnowledgeGap, QuestionPattern, LearningRecord, ConversationSummary } from '@/types/course';
+import {
+  analyzeChatMessageForMemory,
+  appendChatSignalsToMemoryStore,
+  createDefaultUserMemory,
+  decayUserMemory,
+  detectAssistantExplanationStyle,
+  detectChatLearningPreferences,
+  detectExplicitMasteredConcept,
+  getChatMemoryPayload,
+  getPlanningMemoryPayload,
+  getTeachingMemoryPayload,
+  isMemoryStoreV2,
+  migrateUserMemoryToV2,
+  normalizeConceptKey,
+  recordChatInsightInMemory,
+  recordLearningPreferenceInMemory,
+  recordMasteredConceptInMemory,
+  recordQuestionAttemptInMemory,
+  type ChatSignalInput,
+  type QuestionAttemptPayload,
+} from '@/lib/memory/aggregator';
+import { createMemoryRepository } from '@/lib/memory/repository';
 import { getUserProfile } from '@/lib/storage';
-
-const USER_MEMORY_KEY = 'userMemory';
+import type { ConversationSummary, MemoryStoreV2, UserMemory } from '@/types/course';
 
 const MAX_QUESTION_PATTERNS = 50;
-const INTEREST_DECAY_DAYS = 30;
-const INTEREST_DECAY_FACTOR = 0.5;
 
-const defaultMemory: UserMemory = {
-  profile: null as any,
-  learningHistory: [],
-  extractedInsights: {
-    interests: [],
-    knowledgeGaps: [],
-    questionPatterns: [],
-  },
-  lastUpdated: Date.now(),
-  version: 1,
-  conversationSummaries: [],
-};
-
-function getMemory(): UserMemory {
-  if (typeof window === 'undefined') return defaultMemory;
-
-  try {
-    const raw = localStorage.getItem(USER_MEMORY_KEY);
-    if (!raw) {
-      // 首次初始化，合并 userProfile
-      const profile = getUserProfile() || {
-        targetJob: '',
-        workExperience: [],
-        education: [],
-      };
-      const memory: UserMemory = { ...defaultMemory, profile };
-      localStorage.setItem(USER_MEMORY_KEY, JSON.stringify(memory));
-      return memory;
-    }
-    return JSON.parse(raw) as UserMemory;
-  } catch {
-    return defaultMemory;
-  }
+function getRepository() {
+  return createMemoryRepository({ getProfile: getUserProfile });
 }
 
-function saveMemory(memory: UserMemory): void {
-  if (typeof window === 'undefined') return;
-  memory.lastUpdated = Date.now();
-  memory.version += 1;
-  localStorage.setItem(USER_MEMORY_KEY, JSON.stringify(memory));
+export {
+  analyzeChatMessageForMemory,
+  appendChatSignalsToMemoryStore,
+  createDefaultUserMemory,
+  decayUserMemory,
+  detectAssistantExplanationStyle,
+  detectChatLearningPreferences,
+  detectExplicitMasteredConcept,
+  getChatMemoryPayload,
+  getPlanningMemoryPayload,
+  getTeachingMemoryPayload,
+  isMemoryStoreV2,
+  migrateUserMemoryToV2,
+  normalizeConceptKey,
+  recordChatInsightInMemory,
+  recordLearningPreferenceInMemory,
+  recordMasteredConceptInMemory,
+  recordQuestionAttemptInMemory,
+};
+
+export function getUserMemorySnapshot(): UserMemory {
+  return getRepository().getLegacyMemory();
+}
+
+export function getUserMemoryStoreSnapshot(): MemoryStoreV2 {
+  return getRepository().getMemoryStore();
 }
 
 export function useUserMemory() {
-  const memory = getMemory();
+  const repository = getRepository();
+  const memory = repository.getLegacyMemory();
+  const memoryStore = repository.getMemoryStore();
 
   const updateInterests = useCallback((topic: string, source: 'course' | 'chat', courseId?: string): void => {
     const now = Date.now();
+    decayUserMemory(memory, now);
+
     for (const interest of memory.extractedInsights.interests) {
-      const daysSinceInteraction = (now - interest.lastInteraction) / (1000 * 60 * 60 * 24);
-      if (daysSinceInteraction > INTEREST_DECAY_DAYS) {
-        interest.weight = Math.max(1, interest.weight * INTEREST_DECAY_FACTOR);
-      }
+      if (interest.topic !== topic) continue;
+      interest.weight = Math.min(5, interest.weight + (source === 'course' ? 2 : 1));
+      interest.lastInteraction = now;
+      interest.confidence = source === 'course' ? 0.95 : Math.max(interest.confidence || 0.4, 0.6);
+      repository.saveLegacyMemory(memory);
+      return;
     }
 
-    const interests = memory.extractedInsights.interests;
-    const existing = interests.find(i => i.topic === topic);
+    memory.extractedInsights.interests.push({
+      topic,
+      weight: 1,
+      source,
+      courseId,
+      lastInteraction: now,
+      confidence: source === 'course' ? 0.95 : 0.6,
+    });
+    repository.saveLegacyMemory(memory);
+  }, [memory, repository]);
 
-    if (existing) {
-      existing.weight = Math.min(5, existing.weight + (source === 'course' ? 2 : 1));
-      existing.lastInteraction = now;
-    } else {
-      interests.push({
-        topic,
-        weight: 1,
-        source,
-        courseId,
-        lastInteraction: now,
-      });
-    }
+  const addKnowledgeGap = useCallback((concept: string, topic: string, evidence: string, confidence: number = 0.65): void => {
+    recordChatInsightInMemory(memory, { concept, topic, evidence, confidence });
+    repository.saveLegacyMemory(memory);
+  }, [memory, repository]);
 
-    saveMemory(memory);
-  }, [memory]);
-
-  const addKnowledgeGap = useCallback((concept: string, topic: string, evidence: string): void => {
-    const gaps = memory.extractedInsights.knowledgeGaps;
-    const existing = gaps.find(g => g.concept === concept && g.topic === topic);
-
-    if (existing) {
-      if (!existing.evidence.includes(evidence)) {
-        existing.evidence.push(evidence);
-      }
-      // 多次问到，提高 severity
-      if (existing.severity === 'low') existing.severity = 'medium';
-    } else {
-      gaps.push({
-        concept,
-        topic,
-        evidence: [evidence],
-        severity: 'low',
-      });
-    }
-
-    saveMemory(memory);
-  }, [memory]);
+  const recordQuestionAttempt = useCallback((payload: QuestionAttemptPayload): void => {
+    recordQuestionAttemptInMemory(memory, payload);
+    repository.saveLegacyMemory(memory);
+  }, [memory, repository]);
 
   const addQuestionPattern = useCallback((question: string, topic: string): void => {
     memory.extractedInsights.questionPatterns.push({
       question,
       topic,
       timestamp: Date.now(),
+      confidence: 0.6,
+      source: 'chat',
     });
 
     if (memory.extractedInsights.questionPatterns.length > MAX_QUESTION_PATTERNS) {
@@ -116,11 +112,11 @@ export function useUserMemory() {
       memory.extractedInsights.questionPatterns = memory.extractedInsights.questionPatterns.slice(0, MAX_QUESTION_PATTERNS);
     }
 
-    saveMemory(memory);
-  }, [memory]);
+    repository.saveLegacyMemory(memory);
+  }, [memory, repository]);
 
-  const addLearningRecord = useCallback((record: Omit<LearningRecord, 'completedAt'>): void => {
-    const existing = memory.learningHistory.find(h => h.courseId === record.courseId);
+  const addLearningRecord = useCallback((record: Omit<UserMemory['learningHistory'][number], 'completedAt'>): void => {
+    const existing = memory.learningHistory.find((item) => item.courseId === record.courseId);
     if (existing) {
       existing.nodesCompleted = record.nodesCompleted;
       existing.completedAt = Date.now();
@@ -130,22 +126,22 @@ export function useUserMemory() {
         completedAt: Date.now(),
       });
     }
-    saveMemory(memory);
-  }, [memory]);
 
-  // 标记节点完成（更新对应 learningRecord 的完成时间）
+    repository.saveLegacyMemory(memory);
+  }, [memory, repository]);
+
   const markNodeCompleted = useCallback((courseId: string): void => {
-    const record = memory.learningHistory.find(h => h.courseId === courseId);
-    if (record) {
-      record.completedAt = Date.now();
-      saveMemory(memory);
-    }
-  }, [memory]);
+    const record = memory.learningHistory.find((item) => item.courseId === courseId);
+    if (!record) return;
+    record.completedAt = Date.now();
+    repository.saveLegacyMemory(memory);
+  }, [memory, repository]);
 
-  const addConversationSummary = useCallback((courseId: string, summary: string): void => {
-    const existing = memory.conversationSummaries?.find(s => s.courseId === courseId);
+  const addConversationSummary = useCallback((courseId: string, summary: string | Omit<ConversationSummary, 'courseId' | 'timestamp'>): void => {
+    const summaryInput = typeof summary === 'string' ? { summary } : summary;
+    const existing = memory.conversationSummaries?.find((item) => item.courseId === courseId);
     if (existing) {
-      existing.summary = summary;
+      Object.assign(existing, summaryInput);
       existing.timestamp = Date.now();
     } else {
       if (!memory.conversationSummaries) {
@@ -153,25 +149,49 @@ export function useUserMemory() {
       }
       memory.conversationSummaries.push({
         courseId,
-        summary,
+        ...summaryInput,
         timestamp: Date.now(),
       });
     }
-    saveMemory(memory);
-  }, [memory]);
+
+    repository.saveLegacyMemory(memory);
+  }, [memory, repository]);
+
+  const addLearningPreference = useCallback((preference: UserMemory['extractedInsights']['learningPreferences'][number]): void => {
+    recordLearningPreferenceInMemory(memory, preference);
+    repository.saveLegacyMemory(memory);
+  }, [memory, repository]);
+
+  const addMasteredConcept = useCallback((mastered: UserMemory['extractedInsights']['masteredConcepts'][number]): void => {
+    recordMasteredConceptInMemory(memory, mastered);
+    repository.saveLegacyMemory(memory);
+  }, [memory, repository]);
 
   const getConversationSummary = useCallback((courseId: string): ConversationSummary | undefined => {
-    return memory.conversationSummaries?.find(s => s.courseId === courseId);
+    return memory.conversationSummaries?.find((item) => item.courseId === courseId);
   }, [memory]);
+
+  const recordChatSignals = useCallback((input: ChatSignalInput): void => {
+    const updatedStore = appendChatSignalsToMemoryStore(repository.getMemoryStore(), {
+      ...input,
+      confusionConcept: input.confusionConcept ? normalizeConceptKey(input.confusionConcept) : input.confusionConcept,
+    });
+    repository.saveMemoryStore(updatedStore);
+  }, [repository]);
 
   return {
     userMemory: memory,
+    memoryStore,
     updateInterests,
     addKnowledgeGap,
     addQuestionPattern,
     addLearningRecord,
     markNodeCompleted,
+    recordQuestionAttempt,
     addConversationSummary,
+    addLearningPreference,
+    addMasteredConcept,
     getConversationSummary,
+    recordChatSignals,
   };
 }

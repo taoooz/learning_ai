@@ -1,15 +1,18 @@
 // hooks/useChatHistory.ts
 import { useCallback } from 'react';
-import { ChatMessage } from '@/types/chat';
+import type { ChatMessage } from '@/types/chat';
+import type { ConversationSummary } from '@/types/course';
+import {
+  analyzeChatMessageForMemory,
+  detectAssistantExplanationStyle,
+  detectChatLearningPreferences,
+} from '@/lib/memory/aggregator';
+import { generateId } from '@/lib/quiz-utils';
 
 const CHAT_HISTORY_PREFIX = 'chatHistory_';
 const EXPIRATION_DAYS = 7;
 const MAX_MESSAGE_PAIRS = 5;  // 最多保留5对问答
 const MAX_TOTAL_CHARS = 2000;  // 总字符数限制
-
-function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
 
 function groupMessagesIntoPairs(messages: ChatMessage[]): Array<{ q: ChatMessage; a: ChatMessage }> {
   const pairs: Array<{ q: ChatMessage; a: ChatMessage }> = [];
@@ -53,16 +56,69 @@ function checkExpiration(messages: ChatMessage[]): boolean {
   return daysSinceLastMessage > EXPIRATION_DAYS;
 }
 
-function generateSimpleSummary(messages: ChatMessage[]): string {
-  const userQuestions = messages
-    .filter(m => m.role === 'user')
-    .map(m => m.content)
-    .slice(-3);
+function truncateText(text: string, maxLength: number = 26): string {
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+}
 
-  if (userQuestions.length === 0) return '用户询问了课程相关问题';
+function inferResolutionStatus(messages: ChatMessage[]): ConversationSummary['resolutionStatus'] {
+  const lastUserMessage = [...messages].reverse().find((message) => message.role === 'user');
+  if (!lastUserMessage) return 'partial';
 
-  const firstQuestion = userQuestions[0];
-  return `用户问了：${firstQuestion.slice(0, 15)}${firstQuestion.length > 15 ? '...' : ''}`;
+  const latestSignal = analyzeChatMessageForMemory(lastUserMessage.content);
+  if (latestSignal.shouldAddKnowledgeGap) return 'open';
+  return 'partial';
+}
+
+export function generateConversationSummary(messages: ChatMessage[]): Omit<ConversationSummary, 'courseId' | 'timestamp'> {
+  const userMessages = messages.filter((message) => message.role === 'user');
+  const assistantMessages = messages.filter((message) => message.role === 'assistant');
+  const mainQuestions = userMessages
+    .map((message) => message.content.trim())
+    .filter(Boolean)
+    .slice(-3)
+    .map((item) => truncateText(item, 32));
+
+  const unresolvedConcepts = Array.from(new Set(
+    userMessages
+      .map((message) => analyzeChatMessageForMemory(message.content))
+      .filter((result) => result.shouldAddKnowledgeGap && result.extractedConcept)
+      .map((result) => result.extractedConcept as string),
+  )).slice(0, 3);
+
+  const preferredExplanationStyles = Array.from(new Set(
+    userMessages.flatMap((message) => detectChatLearningPreferences(message.content).map((item) => item.value)),
+  )).slice(0, 3);
+
+  const explanationPath = [...assistantMessages]
+    .reverse()
+    .map((message) => detectAssistantExplanationStyle(message.content))
+    .find(Boolean);
+
+  const resolutionStatus = inferResolutionStatus(messages);
+  const followUp = unresolvedConcepts[0]
+    ? `下次优先跟进 ${unresolvedConcepts[0]}`
+    : mainQuestions[mainQuestions.length - 1]
+      ? `下次可继续跟进 ${mainQuestions[mainQuestions.length - 1]}`
+      : undefined;
+
+  const summaryParts = [
+    mainQuestions.length ? `主要问题：${mainQuestions.join('；')}` : '',
+    unresolvedConcepts.length ? `未解概念：${unresolvedConcepts.join('、')}` : '',
+    preferredExplanationStyles.length ? `偏好：${preferredExplanationStyles.join('、')}` : '',
+    explanationPath ? `已用解释路径：${explanationPath}` : '',
+    `状态：${resolutionStatus === 'open' ? '仍有未解决点' : resolutionStatus === 'resolved' ? '已解决' : '部分解决'}`,
+    followUp ? `待跟进：${followUp}` : '',
+  ].filter(Boolean);
+
+  return {
+    summary: summaryParts.join('；') || '用户询问了课程相关问题',
+    mainQuestions,
+    unresolvedConcepts,
+    preferredExplanationStyles,
+    explanationPath,
+    resolutionStatus,
+    followUp,
+  };
 }
 
 export function useChatHistory(courseId: string) {
@@ -81,7 +137,7 @@ export function useChatHistory(courseId: string) {
   const addMessage = useCallback((
     message: Omit<ChatMessage, 'id' | 'timestamp'>,
     options?: {
-      onExpire?: (courseId: string, summary: string) => void;
+      onExpire?: (courseId: string, summary: Omit<ConversationSummary, 'courseId' | 'timestamp'>) => void;
     }
   ): void => {
     if (typeof window === 'undefined') return;
@@ -98,7 +154,7 @@ export function useChatHistory(courseId: string) {
     const isExpired = checkExpiration(updatedMessages);
 
     if (isExpired) {
-      const summary = generateSimpleSummary(updatedMessages);
+      const summary = generateConversationSummary(updatedMessages);
       updatedMessages = updatedMessages.map(m => ({ ...m, isExpired: true }));
       options?.onExpire?.(courseId, summary);
     }

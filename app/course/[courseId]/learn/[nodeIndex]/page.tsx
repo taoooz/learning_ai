@@ -10,7 +10,7 @@ import { useCourse } from '@/contexts/CourseContext';
 import { useProgress } from '@/contexts/ProgressContext';
 import { RetryModal } from '@/components/RetryModal';
 import { LearningCard, Question } from '@/types/course';
-import { ChatWidget } from '@/components/ui/ChatWidget';
+import { ChatLauncher, ChatWidget } from '@/components/ui/ChatWidget';
 import { useUserMemory } from '@/hooks/useUserMemory';
 
 type LearningPhase = 'loading' | 'learning' | 'complete';
@@ -27,6 +27,13 @@ function getOptionBadgeLabel(option: string, index: number): string {
   const extracted = extractAnswerKey(option);
   if (/^[A-D]$/.test(extracted)) return extracted;
   return String.fromCharCode(65 + index);
+}
+
+function extractQuestionConcept(question: Question): string {
+  if (question.concept?.trim()) return question.concept.trim();
+
+  const match = question.question.match(/([^，。？?\s]{2,12})/);
+  return match ? match[1] : '当前知识点';
 }
 
 function checkIsCorrect(question: Question, selectedAnswer: string[], sortOptions: string[]): boolean {
@@ -240,11 +247,11 @@ export default function LearnPage() {
     if (course && node) {
       userMemory.addLearningRecord({
         courseId,
-        topic: node.title,
+        topic: course.topic,
         nodesCompleted: nodeIndex + 1,
         totalNodes: course.totalNodes,
       });
-      userMemory.updateInterests(node.title, 'course', courseId);
+      userMemory.updateInterests(course.topic, 'course', courseId);
     }
 
     setPhase('complete');
@@ -284,6 +291,18 @@ export default function LearnPage() {
     const correct = checkIsCorrect(currentStep.question, selectedAnswer, sortOptions);
     setIsCorrect(correct);
     setIsAnswered(true);
+
+    if (course) {
+      userMemory.recordQuestionAttempt({
+        courseId,
+        topic: course.topic,
+        concept: extractQuestionConcept(currentStep.question),
+        question: currentStep.question.question,
+        isCorrect: correct,
+        difficulty: currentStep.question.difficulty,
+        dimension: currentStep.question.dimension,
+      });
+    }
   };
 
   const handleRetry = async () => {
@@ -389,7 +408,7 @@ export default function LearnPage() {
                     <>
                       <div className="mb-5 flex items-center gap-2">
                         <p className="text-sm font-medium text-accent">第 {currentStepIndex + 1} 步</p>
-                        <div className="rounded-full bg-[#ECEEEC] px-3 py-1 text-xs font-medium text-secondary">
+                        <div className="rounded-full bg-tag px-3 py-1 text-xs font-medium text-secondary">
                           理解一下
                         </div>
                       </div>
@@ -416,7 +435,7 @@ export default function LearnPage() {
                     <>
                       <div className="mb-5 flex items-center gap-2">
                         <p className="text-sm font-medium text-accent">第 {currentStepIndex + 1} 步</p>
-                        <div className="rounded-full bg-[#ECEEEC] px-3 py-1 text-xs font-medium text-secondary">
+                        <div className="rounded-full bg-tag px-3 py-1 text-xs font-medium text-secondary">
                           试一试
                         </div>
                         {currentStep.question.dimension && (
@@ -475,9 +494,12 @@ export default function LearnPage() {
                                         setSortOptions(newOptions);
                                       }}
                                       disabled={optionIndex === 0}
-                                      className="w-6 h-6 rounded bg-subtle text-xs disabled:opacity-30"
+                                      aria-label="上移"
+                                      className="flex items-center justify-center w-10 h-10 rounded-xl bg-subtle text-secondary hover:bg-subtle/80 active:scale-95 transition-all duration-150 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                     >
-                                      ↑
+                                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                      </svg>
                                     </button>
                                     <button
                                       onClick={() => {
@@ -488,9 +510,12 @@ export default function LearnPage() {
                                         setSortOptions(newOptions);
                                       }}
                                       disabled={optionIndex === sortOptions.length - 1}
-                                      className="w-6 h-6 rounded bg-subtle text-xs disabled:opacity-30"
+                                      aria-label="下移"
+                                      className="flex items-center justify-center w-10 h-10 rounded-xl bg-subtle text-secondary hover:bg-subtle/80 active:scale-95 transition-all duration-150 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
                                     >
-                                      ↓
+                                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                      </svg>
                                     </button>
                                   </div>
                                 )}
@@ -654,20 +679,13 @@ export default function LearnPage() {
         message="这一节内容还没准备好，我们可以再试一次，或者先去下一节。"
       />
 
-      {/* Chat Assistant Button */}
-      <button
-        onClick={() => setIsChatOpen(true)}
-        className="fixed bottom-24 right-6 w-14 h-14 rounded-full bg-accent text-white shadow-lg hover:scale-105 transition-shadow z-40"
-      >
-        <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-        </svg>
-      </button>
+      <ChatLauncher onClick={() => setIsChatOpen(true)} />
 
       {node && (
         <ChatWidget
           courseId={courseId}
           courseTitle={node.title}
+          memoryTopic={course.topic}
           isOpen={isChatOpen}
           onClose={() => setIsChatOpen(false)}
           contextInfo={{

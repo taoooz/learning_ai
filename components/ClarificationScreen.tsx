@@ -105,7 +105,7 @@ export function ClarificationScreen({
 
                 <div className="relative z-[1]">
                   <div className="mb-3 flex items-center gap-2">
-                    <div className="rounded-full bg-[#ECEEEC] px-3 py-1 text-xs font-medium text-secondary">
+                    <div className="rounded-full bg-tag px-3 py-1 text-xs font-medium text-secondary">
                       问题 {currentIndex + 1}
                     </div>
                   </div>

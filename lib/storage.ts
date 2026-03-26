@@ -1,5 +1,5 @@
 // lib/storage.ts
-import { StoredData, CourseTree, CourseProgress, UserProfile } from '@/types/course';
+import type { StoredData, CourseTree, UserProfile } from '../types/course';
 
 const STORAGE_KEY = 'ai-learning-data';
 
@@ -24,7 +24,11 @@ export function getStoredData(): StoredData {
 
 export function saveStoredData(data: StoredData): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (error) {
+    console.error('Failed to save stored data:', error);
+  }
 }
 
 export function addCourse(course: CourseTree): void {

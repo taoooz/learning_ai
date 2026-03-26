@@ -135,7 +135,7 @@ export default function HomePage() {
           style={{
             backgroundImage:
               'linear-gradient(to right, rgba(56,189,248,0.14) 1px, transparent 1px), linear-gradient(to bottom, rgba(56,189,248,0.12) 1px, transparent 1px)',
-            backgroundSize: '22px 22px',
+            backgroundSize: '18px 18px',
             maskImage: 'radial-gradient(circle at 30% 34%, black 0%, rgba(0,0,0,0.92) 34%, rgba(0,0,0,0.45) 62%, transparent 86%)',
             WebkitMaskImage: 'radial-gradient(circle at 30% 34%, black 0%, rgba(0,0,0,0.92) 34%, rgba(0,0,0,0.45) 62%, transparent 86%)',
           }}
@@ -321,7 +321,7 @@ export default function HomePage() {
               />
 
               <div className="relative z-[1]">
-                <div className="rounded-full bg-[#ECEEEC] px-3 py-1 text-xs font-medium text-secondary w-fit">
+                <div className="rounded-full bg-tag px-3 py-1 text-xs font-medium text-secondary w-fit">
                   第一次开始
                 </div>
                 <h2 className="mt-3 text-xl font-semibold tracking-tight text-primary">
@@ -373,7 +373,7 @@ export default function HomePage() {
               </button>
               <button
                 onClick={confirmDelete}
-                className="flex-1 rounded-2xl bg-[#EF476F] px-4 py-3 text-sm font-medium text-white shadow-sm transition-all duration-150 hover:bg-[#d93f64] active:scale-[0.98]"
+                className="flex-1 rounded-2xl bg-error px-4 py-3 text-sm font-medium text-white shadow-sm transition-all duration-150 hover:bg-[var(--color-error-dark)] active:scale-[0.98]"
               >
                 删除
               </button>

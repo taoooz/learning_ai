@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { CourseNode as CourseNodeType } from '@/types/course';
 
 interface CourseNodeProps {
@@ -15,17 +16,23 @@ export function CourseNode({ node, isCurrent, top, offset, onClick }: CourseNode
   const isCompleted = node.status === 'completed';
   const isAvailable = !isLocked && !isCompleted && !isCurrent;
   const badgeText = isCompleted ? '已完成' : isLocked ? '待解锁' : isCurrent ? '现在学习' : '下一节';
+  const nodeScaleWhileTap = isLocked ? 1 : 0.965;
+  const cardScaleWhileTap = isLocked ? 1 : 0.985;
 
   return (
     <div className="absolute left-0 right-0" style={{ top: `${top}px` }}>
       <div className="absolute left-[18%]" style={{ transform: `translateX(${offset}px)` }}>
-        <button
+        <motion.button
           type="button"
           onClick={onClick}
           disabled={isLocked}
           aria-label={`${node.title}${isLocked ? '，待解锁' : ''}`}
+          whileHover={isLocked ? undefined : { y: -1, scale: isCurrent ? 1.01 : 1.02 }}
+          whileTap={isLocked ? undefined : { y: 1, scale: nodeScaleWhileTap }}
+          animate={isCurrent ? { y: [0, -1.5, 0], scale: [1, 1.012, 1] } : undefined}
+          transition={isCurrent ? { duration: 2.8, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.18 }}
           className={`absolute top-7 h-[56px] w-[56px] -translate-x-1/2 rounded-full transition-all duration-200 ${
-            isLocked ? 'cursor-default' : 'cursor-pointer active:translate-y-[1px] active:scale-[0.965]'
+            isLocked ? 'cursor-default' : 'cursor-pointer'
           } ${
             isCompleted
               ? 'bg-[linear-gradient(180deg,#FFFFFF,#F7FBF8)]'
@@ -36,6 +43,14 @@ export function CourseNode({ node, isCurrent, top, offset, onClick }: CourseNode
                   : 'bg-[linear-gradient(180deg,#F0F0EE,#E4E3E0)]'
           }`}
         >
+          {isCurrent && (
+            <motion.div
+              aria-hidden="true"
+              className="absolute inset-[-8px] rounded-full border border-[rgba(255,138,0,0.18)]"
+              animate={{ opacity: [0.18, 0.38, 0.18], scale: [0.96, 1.08, 0.96] }}
+              transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
+            />
+          )}
           <div
             className={`flex h-full w-full items-center justify-center rounded-full border-[4px] ${
               isLocked ? 'border-white/72' : 'border-white/92'
@@ -71,19 +86,21 @@ export function CourseNode({ node, isCurrent, top, offset, onClick }: CourseNode
               </div>
             )}
           </div>
-        </button>
+        </motion.button>
 
-        <button
+        <motion.button
           type="button"
           onClick={onClick}
           disabled={isLocked}
+          whileHover={isLocked ? undefined : { y: -2, scale: isCurrent ? 1.01 : 1.012 }}
+          whileTap={isLocked ? undefined : { y: 1, scale: cardScaleWhileTap }}
           className={`absolute left-[44px] top-2 w-[204px] rounded-[18px] border px-4 py-2.5 text-left transition-all duration-200 ${
-            isLocked ? 'cursor-default' : 'cursor-pointer active:translate-y-[1px] active:scale-[0.985]'
+            isLocked ? 'cursor-default' : 'cursor-pointer'
           } ${
             isLocked
               ? 'border-black/5 bg-[#F4F3EF] text-tertiary'
               : isCompleted
-                ? 'border-[#DCEFE4] bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(247,252,249,0.96))] text-primary'
+                ? 'border-completed bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(247,252,249,0.96))] text-primary'
                 : isCurrent
                   ? 'border-[rgba(255,138,0,0.20)] bg-[linear-gradient(135deg,rgba(255,255,255,1),rgba(255,247,239,0.98))] text-primary'
                   : 'border-[rgba(255,138,0,0.08)] bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(255,249,244,0.96))] text-primary hover:border-[rgba(255,138,0,0.14)]'
@@ -99,7 +116,7 @@ export function CourseNode({ node, isCurrent, top, offset, onClick }: CourseNode
           <div className={`mt-1 leading-[1.35] ${isCurrent ? 'text-[16px] font-semibold' : 'text-[15px] font-semibold'}`}>
             {node.title}
           </div>
-        </button>
+        </motion.button>
       </div>
     </div>
   );

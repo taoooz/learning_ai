@@ -15,6 +15,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-CN" data-scroll-behavior="smooth">
+      <head>
+        <link
+          href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body>
         <CombinedProvider>
           {children}
