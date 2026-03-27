@@ -15,8 +15,28 @@ import type {
   UserProfile,
 } from '../types/course';
 
-const STORAGE_KEY = 'ai-learning-data-v2';
+const STORAGE_KEY_PREFIX = 'ai-learning-data-v2';
 const LEGACY_STORAGE_KEYS = ['ai-learning-data', 'userMemory', 'userMemoryV2'] as const;
+const AUTH_STORAGE_KEY = 'ai-learning-auth';
+
+// 获取当前用户邀请码（从 localStorage）
+export function getCurrentUserInviteCode(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const stored = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (stored) {
+      const { inviteCode } = JSON.parse(stored);
+      return inviteCode || null;
+    }
+  } catch {}
+  return null;
+}
+
+// 获取当前用户的存储 key
+function getUserStorageKey(): string {
+  const inviteCode = getCurrentUserInviteCode();
+  return inviteCode ? `${STORAGE_KEY_PREFIX}:${inviteCode}` : STORAGE_KEY_PREFIX;
+}
 
 const defaultDataV2: StoredDataV2 = {
   courses: [],
@@ -490,16 +510,41 @@ function hydrateStoredData(data: StoredDataV2): StoredData {
 export function getStoredDataV2(): StoredDataV2 {
   if (typeof window === 'undefined') return defaultDataV2;
 
+  const userKey = getUserStorageKey();
+
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultDataV2;
-    const parsed = JSON.parse(raw) as StoredDataV2;
-    return {
-      ...defaultDataV2,
-      ...parsed,
-      courses: Array.isArray(parsed.courses) ? parsed.courses : [],
-      courseProgress: parsed.courseProgress || {},
-    };
+    // 先尝试用户专属的 key
+    const raw = localStorage.getItem(userKey);
+    if (raw) {
+      const parsed = JSON.parse(raw) as StoredDataV2;
+      return {
+        ...defaultDataV2,
+        ...parsed,
+        courses: Array.isArray(parsed.courses) ? parsed.courses : [],
+        courseProgress: parsed.courseProgress || {},
+      };
+    }
+
+    // 如果是登录用户且没有专属数据，检查是否有旧数据（兼容迁移）
+    const inviteCode = getCurrentUserInviteCode();
+    if (inviteCode) {
+      const legacyRaw = localStorage.getItem(STORAGE_KEY_PREFIX);
+      if (legacyRaw) {
+        const parsed = JSON.parse(legacyRaw) as StoredDataV2;
+        // 迁移旧数据到用户专属 key
+        const migrated: StoredDataV2 = {
+          ...defaultDataV2,
+          ...parsed,
+          courses: Array.isArray(parsed.courses) ? parsed.courses : [],
+          courseProgress: parsed.courseProgress || {},
+        };
+        // 保存到用户专属 key
+        localStorage.setItem(userKey, JSON.stringify(migrated));
+        return migrated;
+      }
+    }
+
+    return defaultDataV2;
   } catch {
     return defaultDataV2;
   }
@@ -512,7 +557,7 @@ export function getStoredData(): StoredData {
 export function saveStoredDataV2(data: StoredDataV2): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    localStorage.setItem(getUserStorageKey(), JSON.stringify(data));
   } catch (error) {
     console.error('Failed to save stored data:', error);
   }
