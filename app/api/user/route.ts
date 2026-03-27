@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { kv, userKey, UserData } from '@/lib/kv'
+import { kv, userKey, UserData } from '@/lib/redis'
 
 // GET /api/user - 获取当前用户信息
 export async function GET(request: NextRequest) {
