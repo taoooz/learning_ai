@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const userData = await kv.get<UserData>(userKey(inviteCode))
+    const userData = await redis.get<UserData>(userKey(inviteCode))
 
     if (!userData) {
       return NextResponse.json(
@@ -57,7 +57,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     // 获取现有用户
-    const existingUser = await kv.get<UserData>(userKey(inviteCode))
+    const existingUser = await redis.get<UserData>(userKey(inviteCode))
 
     if (!existingUser) {
       return NextResponse.json(
@@ -72,7 +72,7 @@ export async function PATCH(request: NextRequest) {
       nickname: nickname?.trim() || existingUser.nickname,
     }
 
-    await kv.set(userKey(inviteCode), JSON.stringify(updatedUser))
+    await redis.set(userKey(inviteCode), JSON.stringify(updatedUser))
 
     return NextResponse.json(updatedUser)
   } catch (error) {

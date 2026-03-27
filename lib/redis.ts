@@ -1,9 +1,10 @@
-import { createClient } from '@vercel/kv'
+import { Redis } from '@upstash/redis'
 
-// Vercel KV 客户端
-export const kv = createClient({
-  url: process.env.KV_REST_API_URL!,
-  token: process.env.KV_REST_API_TOKEN!,
+// Upstash Redis 客户端
+// Vercel Storage 提供 REDIS_URL 和 REDIS_TOKEN
+export const redis = new Redis({
+  url: process.env.REDIS_URL!,
+  token: process.env.REDIS_TOKEN!,
 })
 
 // 邀请码列表（硬编码）
