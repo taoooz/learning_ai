@@ -23,6 +23,12 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 const STORAGE_KEY = 'ai-learning-auth'
+const USER_CACHE_KEY = 'ai-learning-user'
+
+// 检查是否有 Redis 配置
+const hasRedisConfig = typeof window !== 'undefined' && (
+  process.env.NEXT_PUBLIC_KV_REST_API_URL || process.env.KV_REST_API_URL
+)
 
 // 设置 cookie（供 AuthContext 调用）
 async function setAuthCookie(inviteCode: string) {
@@ -35,6 +41,23 @@ async function setAuthCookie(inviteCode: string) {
   } catch (error) {
     console.error('Failed to set auth cookie:', error)
   }
+}
+
+// 本地存储模式的用户数据管理
+function getLocalUser(inviteCode: string): User | null {
+  try {
+    const cached = localStorage.getItem(`${USER_CACHE_KEY}:${inviteCode}`)
+    if (cached) {
+      return JSON.parse(cached)
+    }
+  } catch {}
+  return null
+}
+
+function setLocalUser(inviteCode: string, user: User) {
+  try {
+    localStorage.setItem(`${USER_CACHE_KEY}:${inviteCode}`, JSON.stringify(user))
+  } catch {}
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -61,6 +84,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUser = async (inviteCode: string) => {
     try {
+      // 如果没有 Redis 配置，使用本地存储
+      if (!hasRedisConfig) {
+        const localUser = getLocalUser(inviteCode)
+        if (localUser) {
+          setUser(localUser)
+          setVerifiedCode(inviteCode)
+          setIsVerified(true)
+          setAuthCookie(inviteCode)
+        } else {
+          // 本地模式：邀请码有效但未注册
+          setVerifiedCode(inviteCode)
+          setIsVerified(true)
+          setUser(null)
+          setAuthCookie(inviteCode)
+        }
+        setIsLoading(false)
+        return
+      }
+
       const res = await fetch('/api/user', {
         headers: { 'x-invite-code': inviteCode },
       })
@@ -126,6 +168,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      // 如果没有 Redis 配置，使用本地存储
+      if (!hasRedisConfig) {
+        const localUser: User = {
+          inviteCode: verifiedCode,
+          nickname: nickname.trim(),
+          createdAt: new Date().toISOString(),
+        }
+        setUser(localUser)
+        setLocalUser(verifiedCode, localUser)
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ inviteCode: verifiedCode }))
+        setAuthCookie(verifiedCode)
+        return { success: true }
+      }
+
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
