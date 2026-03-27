@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { redis, userKey, UserData } from '@/lib/redis'
 
 // GET /api/user - 获取当前用户信息
 export async function GET(request: NextRequest) {
@@ -13,24 +13,16 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const user = await prisma.user.findUnique({
-      where: { inviteCode },
-      select: {
-        inviteCode: true,
-        nickname: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    })
+    const userData = await redis.get<UserData>(userKey(inviteCode))
 
-    if (!user) {
+    if (!userData) {
       return NextResponse.json(
         { error: '用户不存在' },
         { status: 404 }
       )
     }
 
-    return NextResponse.json(user)
+    return NextResponse.json(userData)
   } catch (error) {
     console.error('Get user error:', error)
     return NextResponse.json(
@@ -64,20 +56,25 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
-    const user = await prisma.user.update({
-      where: { inviteCode },
-      data: {
-        ...(nickname && { nickname: nickname.trim() }),
-      },
-      select: {
-        inviteCode: true,
-        nickname: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    })
+    // 获取现有用户
+    const existingUser = await redis.get<UserData>(userKey(inviteCode))
 
-    return NextResponse.json(user)
+    if (!existingUser) {
+      return NextResponse.json(
+        { error: '用户不存在' },
+        { status: 404 }
+      )
+    }
+
+    // 更新用户
+    const updatedUser: UserData = {
+      ...existingUser,
+      nickname: nickname?.trim() || existingUser.nickname,
+    }
+
+    await redis.set(userKey(inviteCode), JSON.stringify(updatedUser))
+
+    return NextResponse.json(updatedUser)
   } catch (error) {
     console.error('Update user error:', error)
     return NextResponse.json(

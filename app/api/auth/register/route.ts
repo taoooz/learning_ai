@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { redis, isValidInviteCode, userKey, UserData } from '@/lib/redis'
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,21 +32,15 @@ export async function POST(request: NextRequest) {
     }
 
     // 验证邀请码存在
-    const codeExists = await prisma.inviteCode.findUnique({
-      where: { code: inviteCode },
-    })
-
-    if (!codeExists) {
+    if (!isValidInviteCode(inviteCode)) {
       return NextResponse.json(
         { success: false, error: '邀请码不存在' },
         { status: 404 }
       )
     }
 
-    // 检查用户是否已存在（同一邀请码不可重复注册）
-    const existingUser = await prisma.user.findUnique({
-      where: { inviteCode },
-    })
+    // 检查用户是否已存在
+    const existingUser = await redis.get<UserData>(userKey(inviteCode))
 
     if (existingUser) {
       return NextResponse.json(
@@ -55,19 +49,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 创建用户
-    const user = await prisma.user.create({
-      data: {
-        inviteCode,
-        nickname: nickname.trim(),
-      },
-    })
+    // 创建用户（存储到 Redis）
+    const userData: UserData = {
+      inviteCode,
+      nickname: nickname.trim(),
+      createdAt: new Date().toISOString(),
+    }
+
+    await redis.set(userKey(inviteCode), JSON.stringify(userData))
 
     return NextResponse.json({
       success: true,
       user: {
-        inviteCode: user.inviteCode,
-        nickname: user.nickname,
+        inviteCode: userData.inviteCode,
+        nickname: userData.nickname,
       },
     })
   } catch (error) {

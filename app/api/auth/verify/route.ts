@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { isValidInviteCode } from '@/lib/redis'
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,12 +15,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 查询邀请码是否存在
-    const exists = await prisma.inviteCode.findUnique({
-      where: { code: inviteCode },
-    })
-
-    if (!exists) {
+    // 验证邀请码是否存在
+    if (!isValidInviteCode(inviteCode)) {
       return NextResponse.json(
         { valid: false, error: '邀请码不存在' },
         { status: 404 }
