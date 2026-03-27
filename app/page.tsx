@@ -184,7 +184,7 @@ export default function HomePage() {
           </div>
 
           <form onSubmit={handleSubmit} className="mt-6">
-            <div className="flex flex-col gap-2.5 sm:flex-row sm:items-stretch">
+            <div className="flex flex-col gap-2.5">
               <div className="relative flex-1 overflow-hidden rounded-[30px] border border-white/75 bg-surface shadow-[0_16px_38px_rgba(148,163,184,0.08)] transition-all duration-200 focus-within:border-accent/25 focus-within:shadow-[0_18px_42px_rgba(148,163,184,0.12)]">
                 <div className="pointer-events-none absolute inset-0 rounded-[30px] ring-1 ring-white/55" />
                 <div className="pointer-events-none absolute right-5 top-5 h-16 w-16 rounded-full bg-gradient-to-br from-sky-400/8 to-transparent blur-2xl" />
@@ -202,7 +202,7 @@ export default function HomePage() {
                 type="submit"
                 disabled={!topic.trim() || isGenerating}
                 aria-label="生成专属学习计划"
-                className="inline-flex min-h-14 items-center justify-center rounded-[28px] bg-cta px-7 py-4 text-sm font-semibold text-cta shadow-[0_18px_34px_rgba(17,24,39,0.22)] transition-all duration-200 hover:translate-y-[-1px] hover:shadow-[0_20px_38px_rgba(17,24,39,0.26)] active:scale-[0.98] disabled:opacity-40 disabled:shadow-none sm:mb-1 sm:min-w-[164px] sm:self-end"
+                className="inline-flex min-h-14 items-center justify-center rounded-[28px] bg-cta px-7 py-4 text-sm font-semibold text-cta shadow-[0_18px_34px_rgba(17,24,39,0.22)] transition-all duration-200 hover:translate-y-[-1px] hover:shadow-[0_20px_38px_rgba(17,24,39,0.26)] active:scale-[0.98] disabled:opacity-40 disabled:shadow-none sm:self-end"
               >
                 生成专属学习计划
               </button>
