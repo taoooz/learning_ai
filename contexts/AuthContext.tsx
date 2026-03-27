@@ -24,6 +24,19 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 const STORAGE_KEY = 'ai-learning-auth'
 
+// 设置 cookie（供 AuthContext 调用）
+async function setAuthCookie(inviteCode: string) {
+  try {
+    await fetch('/api/auth/set-cookie', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inviteCode }),
+    })
+  } catch (error) {
+    console.error('Failed to set auth cookie:', error)
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -57,11 +70,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(userData)
         setVerifiedCode(inviteCode)
         setIsVerified(true)
+        setAuthCookie(inviteCode) // 设置 cookie 供 middleware 使用
       } else if (res.status === 404) {
         // 用户不存在，但邀请码有效
         setVerifiedCode(inviteCode)
         setIsVerified(true)
         setUser(null)
+        setAuthCookie(inviteCode) // 设置 cookie 供 middleware 使用
       }
     } catch (error) {
       console.error('Fetch user error:', error)
@@ -122,6 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (data.success) {
         setUser(data.user)
         localStorage.setItem(STORAGE_KEY, JSON.stringify({ inviteCode: verifiedCode }))
+        setAuthCookie(verifiedCode) // 设置 cookie 供 middleware 使用
         return { success: true }
       } else {
         return { success: false, error: data.error }

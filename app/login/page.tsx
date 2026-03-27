@@ -1,12 +1,15 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import styles from './page.module.css'
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirect = searchParams.get('redirect') || '/'
   const { isLoading, isVerified, verifiedCode, verifyInviteCode, register } = useAuth()
 
   const [inviteCode, setInviteCode] = useState('')
@@ -23,9 +26,9 @@ export default function LoginPage() {
     )
   }
 
-  // 已登录，跳转首页
+  // 已登录，跳转原页面
   if (isVerified && verifiedCode && !error) {
-    router.replace('/')
+    router.replace(redirect)
     return null
   }
 
@@ -59,7 +62,7 @@ export default function LoginPage() {
     const result = await register(nickname.trim())
 
     if (result.success) {
-      router.replace('/')
+      router.replace(redirect)
     } else {
       setError(result.error || '注册失败')
     }
@@ -143,5 +146,21 @@ export default function LoginPage() {
         {error && <p className={styles.error}>{error}</p>}
       </div>
     </div>
+  )
+}
+
+function Loading() {
+  return (
+    <div className={styles.container}>
+      <div className={styles.title}>加载中...</div>
+    </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <LoginContent />
+    </Suspense>
   )
 }
