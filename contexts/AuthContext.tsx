@@ -129,6 +129,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const verifyInviteCode = async (code: string) => {
     try {
+      // 本地模式：直接验证并检查本地存储
+      if (!hasRedisConfig) {
+        // 简单验证格式
+        const formatRegex = /^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$/
+        if (!formatRegex.test(code)) {
+          return { valid: false, error: '邀请码格式不正确' }
+        }
+
+        // 检查本地存储的用户
+        const localUser = getLocalUser(code)
+        if (localUser) {
+          setUser(localUser)
+          setVerifiedCode(code)
+          setIsVerified(true)
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({ inviteCode: code }))
+          setAuthCookie(code)
+        } else {
+          // 未注册，需要输入昵称
+          setVerifiedCode(code)
+          setIsVerified(true)
+          setAuthCookie(code)
+        }
+        return { valid: true }
+      }
+
       const res = await fetch('/api/auth/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
