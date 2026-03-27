@@ -1,16 +1,21 @@
 import {
+  appendEventToMemoryStoreV3,
   createDefaultUserMemory,
   decayUserMemory,
   getChatMemoryPayload,
   getPlanningMemoryPayload,
   getTeachingMemoryPayload,
+  isMemoryStoreV3,
   isMemoryStoreV2,
   mergeProfileIntoMemory,
+  migrateMemoryToV3,
   migrateUserMemoryToV2,
 } from '@/lib/memory/aggregator';
 import { getUserProfile } from '@/lib/storage';
 import type {
   ChatMemoryPayload,
+  MemoryEvent,
+  MemoryStoreV3,
   MemoryStoreV2,
   PlanningMemoryPayload,
   TeachingMemoryPayload,
@@ -20,13 +25,14 @@ import type {
 
 const USER_MEMORY_KEY = 'userMemory';
 const USER_MEMORY_V2_KEY = 'userMemoryV2';
+const USER_MEMORY_V3_KEY = 'userMemoryV3';
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
 
 type CreateMemoryRepositoryOptions = {
   storage?: StorageLike;
   getProfile?: () => UserProfile | null;
-  initialMemory?: UserMemory | MemoryStoreV2 | null;
+  initialMemory?: UserMemory | MemoryStoreV2 | MemoryStoreV3 | null;
 };
 
 function getStorage(storage?: StorageLike): StorageLike | null {
@@ -43,7 +49,7 @@ export function createMemoryRepository(options: CreateMemoryRepositoryOptions = 
   function getLegacyMemory(): UserMemory {
     const profile = getProfile();
 
-    if (initialMemory && !isMemoryStoreV2(initialMemory)) {
+    if (initialMemory && !isMemoryStoreV2(initialMemory) && !isMemoryStoreV3(initialMemory)) {
       return decayUserMemory(mergeProfileIntoMemory(initialMemory, profile));
     }
 
@@ -78,7 +84,7 @@ export function createMemoryRepository(options: CreateMemoryRepositoryOptions = 
   }
 
   function getMemoryStore(): MemoryStoreV2 {
-    if (initialMemory) {
+    if (initialMemory && !isMemoryStoreV3(initialMemory)) {
       return migrateUserMemoryToV2(initialMemory, getProfile());
     }
 
@@ -106,8 +112,43 @@ export function createMemoryRepository(options: CreateMemoryRepositoryOptions = 
     storage.setItem(USER_MEMORY_V2_KEY, JSON.stringify(memoryStore));
   }
 
+  function getMemoryStoreV3(): MemoryStoreV3 {
+    if (initialMemory) {
+      return migrateMemoryToV3(initialMemory, getProfile());
+    }
+
+    if (!storage) return migrateMemoryToV3(getMemoryStore(), getProfile());
+
+    try {
+      const raw = storage.getItem(USER_MEMORY_V3_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as MemoryStoreV3;
+        if (isMemoryStoreV3(parsed)) {
+          return parsed;
+        }
+      }
+    } catch {
+      // 损坏数据回退迁移
+    }
+
+    const migrated = migrateMemoryToV3(getMemoryStore(), getProfile());
+    saveMemoryStoreV3(migrated);
+    return migrated;
+  }
+
+  function saveMemoryStoreV3(memoryStore: MemoryStoreV3): void {
+    if (!storage) return;
+    storage.setItem(USER_MEMORY_V3_KEY, JSON.stringify(memoryStore));
+  }
+
+  function appendMemoryEvent(event: MemoryEvent): MemoryStoreV3 {
+    const next = appendEventToMemoryStoreV3(getMemoryStoreV3(), event);
+    saveMemoryStoreV3(next);
+    return next;
+  }
+
   function getPlanningPayload(topic: string): PlanningMemoryPayload {
-    return getPlanningMemoryPayload(topic, getMemoryStore());
+    return getPlanningMemoryPayload(topic, getMemoryStoreV3());
   }
 
   function getTeachingPayload(input: {
@@ -118,7 +159,7 @@ export function createMemoryRepository(options: CreateMemoryRepositoryOptions = 
   }): TeachingMemoryPayload {
     return getTeachingMemoryPayload({
       ...input,
-      userMemory: getMemoryStore(),
+      userMemory: getMemoryStoreV3(),
     });
   }
 
@@ -129,7 +170,7 @@ export function createMemoryRepository(options: CreateMemoryRepositoryOptions = 
   }): ChatMemoryPayload {
     return getChatMemoryPayload({
       ...input,
-      userMemory: getMemoryStore(),
+      userMemory: getMemoryStoreV3(),
     });
   }
 
@@ -138,6 +179,9 @@ export function createMemoryRepository(options: CreateMemoryRepositoryOptions = 
     saveLegacyMemory,
     getMemoryStore,
     saveMemoryStore,
+    getMemoryStoreV3,
+    saveMemoryStoreV3,
+    appendMemoryEvent,
     getPlanningPayload,
     getTeachingPayload,
     getChatPayload,

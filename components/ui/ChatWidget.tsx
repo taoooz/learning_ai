@@ -2,7 +2,7 @@
 'use client';
 
 import { AnimatePresence, motion } from 'framer-motion';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { ChatMessage } from './ChatMessage';
 import { useChatHistory } from '@/hooks/useChatHistory';
 import {
@@ -79,10 +79,15 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
   const [isLoading, setIsLoading] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
-  const { messages, addMessage } = useChatHistory(courseId);
+  const { messages, addMessage, flushSummary } = useChatHistory(courseId);
   const userMemory = useUserMemory();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const wasOpenRef = useRef(isOpen);
+
+  const persistConversationSummary = useCallback((targetCourseId: string, summary: Parameters<typeof userMemory.addConversationSummary>[1]) => {
+    userMemory.addConversationSummary(targetCourseId, summary);
+  }, [userMemory]);
 
   useEffect(() => {
     if (isOpen) {
@@ -90,6 +95,13 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
       messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (wasOpenRef.current && !isOpen) {
+      flushSummary(persistConversationSummary);
+    }
+    wasOpenRef.current = isOpen;
+  }, [flushSummary, isOpen, persistConversationSummary]);
 
   useEffect(() => {
     if (messages.length > 0 || streamingContent || isThinking) {
@@ -109,12 +121,26 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
       }
     };
 
+    const handlePageHide = () => {
+      flushSummary(persistConversationSummary);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        handlePageHide();
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('pagehide', handlePageHide);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('pagehide', handlePageHide);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [isOpen, onClose]);
+  }, [flushSummary, isOpen, onClose, persistConversationSummary]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,9 +155,8 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
     addMessage(
       { role: 'user', content: userMessage },
       {
-        onExpire: (courseId, summary) => {
-          userMemory.addConversationSummary(courseId, summary);
-        },
+        onExpire: persistConversationSummary,
+        onCompact: persistConversationSummary,
       }
     );
 
@@ -222,7 +247,10 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
         }
       }
 
-      addMessage({ role: 'assistant', content: fullContent });
+      addMessage(
+        { role: 'assistant', content: fullContent },
+        { onCompact: persistConversationSummary },
+      );
       setStreamingContent('');
       setIsThinking(false);
 

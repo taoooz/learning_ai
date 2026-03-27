@@ -1,43 +1,80 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const modulePath = '../lib/course-tree-layout.ts';
-const {
-  getCourseTreeLayout,
-  getCourseTreeInitialScrollTop,
-} = await import(modulePath);
-const {
-  buildCourseTreePrompt,
-  buildNodeContentPrompt,
-  selectPersonalizationSignals,
-} = await import('../lib/prompt');
-const { buildChatContext } = await import('../lib/chat-context');
-const { generateConversationSummary } = await import('../hooks/useChatHistory');
-const { createMemoryRepository } = await import('../lib/memory/repository');
-const {
-  CHAT_CONCEPT_ALIASES,
-  appendChatSignalsToMemoryStore: appendChatSignalsInAggregator,
-  detectChatLearningPreferences,
-  detectExplicitMasteredConcept,
-  getChatMemoryPayload: getChatPayloadFromAggregator,
-  getPlanningMemoryPayload: getPlanningPayloadFromAggregator,
-  getTeachingMemoryPayload: getTeachingPayloadFromAggregator,
-  migrateUserMemoryToV2: migrateToV2FromAggregator,
-  normalizeConceptKey: normalizeConceptKeyFromAggregator,
-} = await import('../lib/memory/aggregator');
-const {
-  appendChatSignalsToMemoryStore,
-  analyzeChatMessageForMemory,
-  createDefaultUserMemory,
-  decayUserMemory,
-  getChatMemoryPayload,
-  getPlanningMemoryPayload,
-  getTeachingMemoryPayload,
-  migrateUserMemoryToV2,
-  normalizeConceptKey,
-  recordQuestionAttemptInMemory,
-  recordChatInsightInMemory,
-} = await import('../hooks/useUserMemory');
+let getCourseTreeLayout: typeof import('../lib/course-tree-layout').getCourseTreeLayout;
+let getCourseTreeInitialScrollTop: typeof import('../lib/course-tree-layout').getCourseTreeInitialScrollTop;
+let buildCourseTreePrompt: typeof import('../lib/prompt').buildCourseTreePrompt;
+let buildNodeContentPrompt: typeof import('../lib/prompt').buildNodeContentPrompt;
+let selectPersonalizationSignals: typeof import('../lib/prompt').selectPersonalizationSignals;
+let buildChatContext: typeof import('../lib/chat-context').buildChatContext;
+let compactChatHistoryMessages: typeof import('../hooks/useChatHistory').compactChatHistoryMessages;
+let generateConversationSummary: typeof import('../hooks/useChatHistory').generateConversationSummary;
+let createMemoryRepository: typeof import('../lib/memory/repository').createMemoryRepository;
+let CHAT_CONCEPT_ALIASES: typeof import('../lib/memory/aggregator').CHAT_CONCEPT_ALIASES;
+let appendChatSignalsInAggregator: typeof import('../lib/memory/aggregator').appendChatSignalsToMemoryStore;
+let detectChatLearningPreferences: typeof import('../lib/memory/aggregator').detectChatLearningPreferences;
+let detectExplicitMasteredConcept: typeof import('../lib/memory/aggregator').detectExplicitMasteredConcept;
+let getChatPayloadFromAggregator: typeof import('../lib/memory/aggregator').getChatMemoryPayload;
+let getPlanningPayloadFromAggregator: typeof import('../lib/memory/aggregator').getPlanningMemoryPayload;
+let getTeachingPayloadFromAggregator: typeof import('../lib/memory/aggregator').getTeachingMemoryPayload;
+let migrateToV2FromAggregator: typeof import('../lib/memory/aggregator').migrateUserMemoryToV2;
+let normalizeConceptKeyFromAggregator: typeof import('../lib/memory/aggregator').normalizeConceptKey;
+let appendChatSignalsToMemoryStore: typeof import('../hooks/useUserMemory').appendChatSignalsToMemoryStore;
+let analyzeChatMessageForMemory: typeof import('../hooks/useUserMemory').analyzeChatMessageForMemory;
+let createDefaultUserMemory: typeof import('../hooks/useUserMemory').createDefaultUserMemory;
+let decayUserMemory: typeof import('../hooks/useUserMemory').decayUserMemory;
+let getChatMemoryPayload: typeof import('../hooks/useUserMemory').getChatMemoryPayload;
+let getPlanningMemoryPayload: typeof import('../hooks/useUserMemory').getPlanningMemoryPayload;
+let getTeachingMemoryPayload: typeof import('../hooks/useUserMemory').getTeachingMemoryPayload;
+let migrateUserMemoryToV2: typeof import('../hooks/useUserMemory').migrateUserMemoryToV2;
+let normalizeConceptKey: typeof import('../hooks/useUserMemory').normalizeConceptKey;
+let recordQuestionAttemptInMemory: typeof import('../hooks/useUserMemory').recordQuestionAttemptInMemory;
+let recordChatInsightInMemory: typeof import('../hooks/useUserMemory').recordChatInsightInMemory;
+
+test.before(async () => {
+  const layoutModule = await import('../lib/course-tree-layout');
+  getCourseTreeLayout = layoutModule.getCourseTreeLayout;
+  getCourseTreeInitialScrollTop = layoutModule.getCourseTreeInitialScrollTop;
+
+  const promptModule = await import('../lib/prompt');
+  buildCourseTreePrompt = promptModule.buildCourseTreePrompt;
+  buildNodeContentPrompt = promptModule.buildNodeContentPrompt;
+  selectPersonalizationSignals = promptModule.selectPersonalizationSignals;
+
+  const chatContextModule = await import('../lib/chat-context');
+  buildChatContext = chatContextModule.buildChatContext;
+
+  const chatHistoryModule = await import('../hooks/useChatHistory');
+  compactChatHistoryMessages = chatHistoryModule.compactChatHistoryMessages;
+  generateConversationSummary = chatHistoryModule.generateConversationSummary;
+
+  const repositoryModule = await import('../lib/memory/repository');
+  createMemoryRepository = repositoryModule.createMemoryRepository;
+
+  const aggregatorModule = await import('../lib/memory/aggregator');
+  CHAT_CONCEPT_ALIASES = aggregatorModule.CHAT_CONCEPT_ALIASES;
+  appendChatSignalsInAggregator = aggregatorModule.appendChatSignalsToMemoryStore;
+  detectChatLearningPreferences = aggregatorModule.detectChatLearningPreferences;
+  detectExplicitMasteredConcept = aggregatorModule.detectExplicitMasteredConcept;
+  getChatPayloadFromAggregator = aggregatorModule.getChatMemoryPayload;
+  getPlanningPayloadFromAggregator = aggregatorModule.getPlanningMemoryPayload;
+  getTeachingPayloadFromAggregator = aggregatorModule.getTeachingMemoryPayload;
+  migrateToV2FromAggregator = aggregatorModule.migrateUserMemoryToV2;
+  normalizeConceptKeyFromAggregator = aggregatorModule.normalizeConceptKey;
+
+  const userMemoryModule = await import('../hooks/useUserMemory');
+  appendChatSignalsToMemoryStore = userMemoryModule.appendChatSignalsToMemoryStore;
+  analyzeChatMessageForMemory = userMemoryModule.analyzeChatMessageForMemory;
+  createDefaultUserMemory = userMemoryModule.createDefaultUserMemory;
+  decayUserMemory = userMemoryModule.decayUserMemory;
+  getChatMemoryPayload = userMemoryModule.getChatMemoryPayload;
+  getPlanningMemoryPayload = userMemoryModule.getPlanningMemoryPayload;
+  getTeachingMemoryPayload = userMemoryModule.getTeachingMemoryPayload;
+  migrateUserMemoryToV2 = userMemoryModule.migrateUserMemoryToV2;
+  normalizeConceptKey = userMemoryModule.normalizeConceptKey;
+  recordQuestionAttemptInMemory = userMemoryModule.recordQuestionAttemptInMemory;
+  recordChatInsightInMemory = userMemoryModule.recordChatInsightInMemory;
+});
 
 test('getCourseTreeLayout returns left-biased staggered positions', () => {
   const layout = getCourseTreeLayout([0, 1, 2, 3]) as Array<{
@@ -56,6 +93,34 @@ test('getCourseTreeLayout returns left-biased staggered positions', () => {
       { index: 3, top: 342, offset: 12 },
     ],
   );
+});
+
+test('getCourseTreeLayout adds extra vertical space for a tall current node card', () => {
+  const layout = getCourseTreeLayout([
+    {
+      index: 0,
+      title: '什么是强化学习（RL）——概念、历史、应用概览，以及为什么它会成为现代智能决策系统的重要基础',
+      status: 'available',
+    },
+    {
+      index: 1,
+      title: '强化学习的核心要素：Agent、Environment、State、Action、Reward',
+      status: 'locked',
+    },
+    {
+      index: 2,
+      title: '奖励设计：业务目标如何映射为奖励函数',
+      status: 'locked',
+    },
+  ]) as Array<{
+    index: number;
+    top: number;
+    offset: number;
+  }>;
+
+  assert.equal(layout[0]?.top, 18);
+  assert.ok(layout[1]?.top > 126);
+  assert.ok(layout[2]?.top - layout[1]?.top > 108);
 });
 
 test('getCourseTreeInitialScrollTop keeps the current node near upper-middle viewport', () => {
@@ -708,12 +773,13 @@ test('buildChatContext prefers structured v2 payload over legacy chat memory noi
     {
       courseId: 'course-agent',
       topic: 'Agent',
+      courseGoal: '学习 Agent 开发',
       difficultySummary: '适合初学者',
       totalNodes: 3,
       nodes: [
-        { index: 0, title: '什么是 Agent', cardCount: 8, status: 'completed' },
-        { index: 1, title: '工具调用', cardCount: 8, status: 'available' },
-        { index: 2, title: '工作流编排', cardCount: 8, status: 'locked' },
+        { index: 0, title: '什么是 Agent', status: 'completed' },
+        { index: 1, title: '工具调用', status: 'available' },
+        { index: 2, title: '工作流编排', status: 'locked' },
       ],
     },
     migrateUserMemoryToV2(createDefaultUserMemory()),
@@ -762,6 +828,23 @@ test('generateConversationSummary preserves questions confusion styles and follo
   assert.equal(summary.explanationPath, '分步拆解');
   assert.equal(summary.resolutionStatus, 'open');
   assert.equal(summary.followUp?.includes('工作流编排'), true);
+});
+
+test('compactChatHistoryMessages summarizes truncated history instead of silently dropping it', () => {
+  const longMessages = [
+    { id: '1', role: 'user' as const, content: '工具调用和工作流编排到底有什么区别？', timestamp: 1 },
+    { id: '2', role: 'assistant' as const, content: '先看是否需要外部信息，再看是否需要多步编排。', timestamp: 2 },
+    { id: '3', role: 'user' as const, content: '那 ReAct 和工作流编排又是什么关系？', timestamp: 3 },
+    { id: '4', role: 'assistant' as const, content: 'ReAct 更偏单轮推理加动作，工作流是更显式的步骤设计。', timestamp: 4 },
+    { id: '5', role: 'user' as const, content: '能不能一步一步再讲一次工具调用？', timestamp: 5 },
+    { id: '6', role: 'assistant' as const, content: '第一步判断是否缺少外部信息，第二步再决定是否调用工具。', timestamp: 6 },
+  ];
+
+  const result = compactChatHistoryMessages(longMessages, 2, 200);
+
+  assert.equal(result.messages.length, 4);
+  assert.equal(result.messages[0].id, '3');
+  assert.equal(result.droppedSummary?.summary.includes('工具调用和工作流编排'), true);
 });
 
 test('positive chat memory flows into teaching and chat payloads', () => {

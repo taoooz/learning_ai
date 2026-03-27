@@ -29,7 +29,7 @@ export interface LearningCard {
   id: string;
   title: string;
   content: string;              // Markdown 内容
-  imageUrl?: string;
+  imageUrl?: string | null;
   visualization?: Visualization; // 可视化配置
 }
 
@@ -44,6 +44,7 @@ export interface Question {
   dimension?: 'memory' | 'understanding' | 'application' | 'analysis';
   difficulty?: 1 | 2 | 3;
   cardId?: string;
+  targetConceptId?: string;
 }
 
 export interface ClarificationQuestion {
@@ -62,7 +63,6 @@ export interface ClarificationAnswer {
 export interface CourseNode {
   index: number;
   title: string;
-  cardCount: number;
   status: 'locked' | 'available' | 'completed';
   cards?: LearningCard[];
   questions?: Question[];
@@ -77,7 +77,6 @@ export interface CourseTreeResponse {
   nodes: Array<{
     index: number;
     title: string;
-    cardCount: number;
     status: 'locked' | 'available';
   }>;
 }
@@ -85,9 +84,97 @@ export interface CourseTreeResponse {
 export interface CourseTree {
   courseId: string;
   topic: string;
+  courseGoal: string;
   difficultySummary: string;
   totalNodes: number;
   nodes: CourseNode[];
+}
+
+export interface CanonicalConcept {
+  id: string;
+  name: string;
+  aliases: string[];
+}
+
+export interface CourseBlueprintNode {
+  index: number;
+  title: string;
+  teachingGoal: string;
+  teachConceptIds: string[];
+  prerequisiteConceptIds: string[];
+  assessmentTargetIds?: string[];
+  bridgeFromPreviousNode: string;
+  personalizationHooks?: {
+    mustRemediateConceptIds: string[];
+    canCompressKnownConceptIds: string[];
+    analogyFactIds: string[];
+  };
+  status: 'locked' | 'available' | 'completed';
+}
+
+export interface CourseBlueprint {
+  courseId: string;
+  topic: string;
+  learnerPositioning: {
+    estimatedLevel: 'novice' | 'beginner' | 'intermediate' | 'advanced';
+    difficultySummary: string;
+    whyThisCourseFits: string;
+  };
+  courseGoal: string;
+  globalConcepts: CanonicalConcept[];
+  nodes: CourseBlueprintNode[];
+  coverage?: {
+    introducedConceptIds: string[];
+    assessedConceptIds: string[];
+    remediatedConceptIds: string[];
+  };
+  generationNotes?: {
+    compressedKnownConceptIds: string[];
+    emphasizedRiskConceptIds: string[];
+    selectedAnalogyFactIds: string[];
+  };
+}
+
+export interface CourseTreeView {
+  courseId: string;
+  topic: string;
+  courseGoal: string;
+  difficultySummary: string;
+  totalNodes: number;
+  nodes: Array<{
+    index: number;
+    title: string;
+    status: 'locked' | 'available' | 'completed';
+  }>;
+}
+
+export interface NodeLessonCard extends LearningCard {
+  coveredConceptIds: string[];
+}
+
+export interface NodeLessonQuestion extends Question {
+  targetConceptId: string;
+}
+
+export interface NodeLesson {
+  courseId: string;
+  nodeIndex: number;
+  title: string;
+  teachingGoal: string;
+  teachConceptIds: string[];
+  assessmentTargetIds: string[];
+  cards: NodeLessonCard[];
+  questions: NodeLessonQuestion[];
+  validatorSummary?: {
+    passed: boolean;
+    issues: string[];
+  };
+}
+
+export interface StoredCourseBundle {
+  blueprint: CourseBlueprint;
+  treeView: CourseTreeView;
+  lessons: Record<number, NodeLesson>;
 }
 
 export interface CourseProgress {
@@ -98,6 +185,13 @@ export interface CourseProgress {
 
 export interface StoredData {
   courses: CourseTree[];
+  currentCourseId: string | null;
+  courseProgress: CourseProgress;
+  userProfile: UserProfile | null;
+}
+
+export interface StoredDataV2 {
+  courses: StoredCourseBundle[];
   currentCourseId: string | null;
   courseProgress: CourseProgress;
   userProfile: UserProfile | null;
@@ -237,6 +331,76 @@ export interface MemoryStoreV2 {
   updatedAt: number;
 }
 
+export interface MemoryEvent {
+  type:
+    | 'course_generated'
+    | 'node_started'
+    | 'question_answered'
+    | 'chat_user_message'
+    | 'chat_session_summarized'
+    | 'node_completed';
+  topic: string;
+  courseId?: string;
+  nodeIndex?: number;
+  occurredAt: number;
+  payload: Record<string, unknown>;
+}
+
+export interface ConceptProjection {
+  topic: string;
+  conceptId: string;
+  conceptName: string;
+  masteryScore: number;
+  status: 'unknown' | 'learning' | 'fragile' | 'mastered';
+  recentErrors: number;
+  recentSuccesses: number;
+  misconceptionHints: string[];
+  confidence: number;
+  lastSeenAt?: number;
+  nextReviewAt?: number;
+  updatedAt: number;
+}
+
+export interface TopicProjection {
+  topic: string;
+  familiarityScore: number;
+  estimatedLevel: 'novice' | 'beginner' | 'intermediate' | 'advanced';
+  mustCoverConceptIds: string[];
+  skippableConceptIds: string[];
+  riskConceptIds: string[];
+  confidence: number;
+  updatedAt: number;
+}
+
+export interface EpisodicProjection {
+  id: string;
+  topic: string;
+  courseId?: string;
+  kind: 'course' | 'chat';
+  summary: string;
+  conceptIds: string[];
+  explanationStyles: string[];
+  followUp?: string;
+  updatedAt: number;
+}
+
+export interface MemoryStoreV3 {
+  version: 3;
+  learnerId: string;
+  profile: {
+    stableFacts: MemoryStableFact[];
+    goals: MemoryGoal[];
+    preferences: LearningPreference[];
+  };
+  events: MemoryEvent[];
+  projections: {
+    conceptProjections: ConceptProjection[];
+    topicProjections: TopicProjection[];
+    episodicProjections: EpisodicProjection[];
+  };
+  updatedAt: number;
+}
+
 export interface PlanningMemoryPayload {
   learnerSnapshot: {
     targetGoal?: string;
@@ -248,6 +412,28 @@ export interface PlanningMemoryPayload {
   skippableBasics: string[];
   riskConcepts: string[];
   recentRelevantCourses: Array<{
+    topic: string;
+    summary: string;
+  }>;
+}
+
+export interface CourseBlueprintPromptPayload {
+  learnerSnapshot: {
+    targetGoal?: string;
+    estimatedLevel: 'novice' | 'beginner' | 'intermediate' | 'advanced';
+    confidence: number;
+  };
+  mustCoverConceptIds: string[];
+  mustCoverConceptNames: string[];
+  skippableConceptIds: string[];
+  skippableConceptNames: string[];
+  riskConceptIds: string[];
+  riskConceptNames: string[];
+  analogyFacts: Array<{
+    id: string;
+    text: string;
+  }>;
+  recentEpisodes: Array<{
     topic: string;
     summary: string;
   }>;
@@ -270,6 +456,18 @@ export interface TeachingMemoryPayload {
   recentQuestionSummaries: string[];
   analogyHints: string[];
   preferredExplanationStyles: string[];
+}
+
+export interface NodeLessonPromptPayload {
+  nodeTopic: string;
+  nodeTitle: string;
+  teachingGoal: string;
+  analogyFacts: Array<{
+    id: string;
+    text: string;
+  }>;
+  preferredExplanationStyles: string[];
+  recentRelevantQuestions: string[];
 }
 
 export interface ChatMemoryPayload {

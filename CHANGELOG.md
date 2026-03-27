@@ -1,6 +1,62 @@
 # 项目迭代日志
 
+## 2026-03-27
+
+### 课程目录排布与标题截断修复
+
+- 课程目录页不再使用固定节点步长，改为按节点按钮与标题卡片的估算整体高度动态排布，长标题节点会自动为后续节点让出更多纵向空间
+- 课程目录节点从绝对定位改为真实文档流纵向排布，节点卡片会按实际渲染高度自然撑开，避免首个长标题把第二个节点挤住
+- 课程树容器高度同步改为按真实布局结果计算，避免内容变高后底部被截断或滚动定位偏差
+- 学习页头部标题改回统一单行省略策略，超长节点标题现在会显示 `...`，不再把顶部栏位和右侧进度挤乱
+- 目录节点标题现在统一最多显示 3 行，超出内容会省略；当前学习节点也按同一行高规则参与布局估算，避免首个长标题与下一节点重叠
+- 课程目录进一步收紧了统一节距，节点行高和列表间隙同步下调，避免整体路径过松
+- 课程节点卡片从固定高度改为最小高度，标题区域会按内容自适应撑开，避免文字被截断或短标题产生多余留白
+- 为课程树布局补上回归测试，覆盖“长标题节点会拉开后续间距”的场景，并验证相关测试通过
+
 ## 2026-03-26
+
+### 课程生成环境变量兜底
+
+- 修复本地课程生成在服务端拿不到 `MINIMAX_API_KEY` 时直接 500 的问题，`lib/minimax.ts` 现在会先读 `process.env`，缺失时再回退读取 `.env.local`
+- 为 MiniMax 请求补上 env 文件回退测试，覆盖“进程环境为空但 `.env.local` 已配置”的场景
+- 清理了未完成改动留下的类型错误和无效测试依赖，恢复 `npm test`、`npm run typecheck` 通过
+
+### 轻量课程目录蓝图
+
+- 课程目录生成从“直接产出完整 `CourseBlueprint`”收缩为“先生成轻量课程目录大纲，再由本地映射成 `blueprint`”，把评估与个性化细节下放到节点生成阶段
+- `CourseBlueprint` 的目录阶段字段收缩为最小必要集；`assessmentTargetIds / personalizationHooks / coverage / generationNotes` 现在允许缺省，并在运行时自动补默认值
+- `course-validator` 改为适配轻量目录蓝图，不再要求目录阶段就完成 remediation/coverage 明细
+- `/api/generate` 的超时与 token 预算从重型试验值收回，当前真实目录生成失败时会在约 26 秒内返回可重试超时，而不是等待 40 到 100 秒
+
+### 生成超时兜底与 MiniMax 请求收紧
+
+- 追查生成超时后确认 `MiniMax` 非流式请求会把 `<think>` 推理内容塞进 `message.content`，现在统一为 JSON 生成请求增加 `reasoning_split: true`，并同时发送 `max_tokens + max_completion_tokens`
+- 课程与节点生成主链路不再默认走搜索增强，节点主请求也移除了“新 lesson prompt + 旧 fallback prompt”拼接，减少无效 token 和响应时延
+- 为课程与节点主生成增加“两段式尝试”：第一次保留主要质量预算，超时后会中断请求并用更紧的 token 预算重试，而不是傻等满 45 秒
+- `refine` 结果现在会强制再次通过 validator，不再把“修了但仍不合法”的 blueprint / lesson 直接放行
+- 课程与节点在自动重试后若仍超时，不再静默返回降级课程，而是向前端返回可重试错误；生成页和学习页会明确提示用户手动重试
+- `smoke:generation` 回到“真实失败即失败”的策略，用于持续观察供应侧时延，不再用本地 fallback 掩盖真实超时
+- 为 `max_tokens/max_completion_tokens/reasoning_split` 请求参数与超时重试链路补上回归测试，并再次验证 `npm test` 与 `npm run typecheck` 通过
+
+### 首页系统推荐课程
+
+- 新增两门系统预生成课程：“人人都该懂的 AI 课”和“普通人应该如何理财”，在用户还没有任何课程时会出现在首页下方作为引导入口
+- 推荐课程不会默认混入“最近学习”列表，而是先以单独样式的推荐卡展示；点击后才会写入本地课程列表并直接进入第一节学习页
+- 去掉无课程状态下额外的“第一次开始”引导卡，首页空态仅保留系统推荐课程；一旦用户已有自己的课程，推荐区也会一并隐藏
+- 存储层新增系统课程推荐元数据与预置 `StoredCourseBundle`，保证推荐课可以离线直开，不依赖实时生成
+- 为系统推荐课程补上回归测试，验证推荐项数量正确且点击后会真正写入课程存储
+
+### Course Blueprint / Memory V3 首轮落地
+
+- 新增 `CourseBlueprint / NodeLesson / StoredCourseBundle / MemoryStoreV3` 核心类型，并补上 `lib/course-blueprint.ts` 作为课程中间层与运行时视图之间的转换入口
+- 课程生成 API 改为优先生成 `CourseBlueprint`，并在服务端增加 `validateCourseBlueprint + refine` 双阶段生成；节点生成 API 改为输出 `NodeLesson`，同时校验 `coveredConceptIds / targetConceptId / cardId`
+- 本地存储底层切换为 `ai-learning-data-v2` 形态，真相源变成 `blueprint + treeView + lessons`，前端仍消费水合后的 `CourseTree`，降低页面改造面
+- `CourseContext / ProgressContext / 学习页` 接通新链路：课程保存改走 blueprint，节点内容保存改走 lesson，答题回写优先使用 `targetConceptId`
+- `memory repository / useUserMemory / aggregator` 新增 `MemoryStoreV3` 读写与事件投影能力，课程生成、聊天、答题、节点完成会开始写入 event-sourced memory，并由 v3 projections 直接支撑 planning payload
+- 聊天历史在“被截断”和“会话关闭 / 页面隐藏”两种场景下都会主动产出摘要，不再只在 7 天过期时才整理 memory
+- 新增 `npm run smoke:generation`，可直接用真实 MiniMax 跑 `CourseBlueprint -> NodeLesson -> validator` 的 smoke 验证，并为该脚本补上阶段日志与超时保护
+- 课程生成与节点生成 API 现已输出统一 `generationMeta`，记录 `prompt_build / primary_model / parse / validate / refine` 各阶段耗时、是否触发 refine，以及 timeout/runtime 错误归因
+- 新增 blueprint / lesson / validator / memory v3 回归测试，补上 `tsx` 测试入口，并验证 `npm test` 与 `npm run typecheck` 通过
 
 ### Memory V2 与双层 Retrieval
 

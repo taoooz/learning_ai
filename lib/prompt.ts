@@ -1,6 +1,14 @@
 // lib/prompt.ts
 
-import type { ClarificationAnswer, PlanningMemoryPayload, TeachingMemoryPayload, UserMemory, UserProfile } from '../types/course';
+import type {
+  ClarificationAnswer,
+  CourseBlueprintPromptPayload,
+  NodeLessonPromptPayload,
+  PlanningMemoryPayload,
+  TeachingMemoryPayload,
+  UserMemory,
+  UserProfile,
+} from '../types/course';
 import type { KnowledgeGap } from '../types/course';
 
 interface NodeGenerationContext {
@@ -202,6 +210,106 @@ ${payload.analogyHints.length ? payload.analogyHints.map((item) => `- ${item}`).
 偏好解释方式：
 ${payload.preferredExplanationStyles.length ? payload.preferredExplanationStyles.map((item) => `- ${item}`).join('\n') : '暂无'}
 `;
+}
+
+export function buildCompactCourseBlueprintPrompt(topic: string, payload: CourseBlueprintPromptPayload): string {
+  return `你需要生成一份课程目录大纲，只返回 JSON。
+
+主题：${topic}
+用户水平：${payload.learnerSnapshot.estimatedLevel}
+用户目标：${payload.learnerSnapshot.targetGoal || '未提供'}
+
+个性化要求：
+- 必须覆盖：${payload.mustCoverConceptNames.join('、') || '无'}
+- 高风险概念（需特别注意）：${payload.riskConceptNames.join('、') || '无'}
+- 可快速跳过：${payload.skippableConceptIds.join(', ') || '无'}
+- 用户背景类比：${payload.analogyFacts.map((item) => item.text).join('；') || '无'}
+- 相关历史课程：${payload.recentEpisodes.map((item) => item.summary).join('；') || '无'}
+
+生成建议：
+- 根据主题复杂度生成 5~15 个节点
+- 输出内容使用中文
+- 课程名称建议在10字以内
+- 每个节点标题建议在20字以内
+- 简要整理 difficultySummary 和 courseGoal 内容
+- 每个 teachingGoal 简要整理
+
+输出格式：
+{
+  "courseName": "课程名称",
+  "difficultySummary": "一句话描述",
+  "courseGoal": "一句话描述",
+  "nodes": [{
+    "title": "具体标题",
+    "teachingGoal": "一句话目标"
+  }]
+}
+
+只返回 JSON。`;
+}
+
+export function buildNodeLessonPrompt(topic: string, payload: NodeLessonPromptPayload): string {
+  const analogySection = payload.analogyFacts.length
+    ? `## 可用类比\n${payload.analogyFacts.map((item) => `- ${item.text}`).join('\n')}\n\n`
+    : '';
+  const stylesSection = payload.preferredExplanationStyles.length
+    ? `## 偏好解释方式\n${payload.preferredExplanationStyles.map((item) => `- ${item}`).join('\n')}\n\n`
+    : '';
+  const questionsSection = payload.recentRelevantQuestions.length
+    ? `## 最近相关提问\n${payload.recentRelevantQuestions.map((item) => `- ${item}`).join('\n')}\n\n`
+    : '';
+
+  return `你是 AI 导师，请生成一节 NodeLesson。
+
+主题：${topic}
+当前节点：${payload.nodeTitle}
+节点目标：${payload.teachingGoal}
+
+${analogySection}${stylesSection}${questionsSection}## 内容要求
+- 根据提供的课程、用户信息生成该节点课程内容
+- 优先判断该节课需要的知识及问题卡片数量。知识建议在 5~8 条，问题 2~5 个。
+- 知识卡片内容应循序渐进，尽量避免重复内容
+- 每张知识卡片包含 title、content（Markdown，建议 150-400字）
+- 知识卡片可根据需要添加 visualization 字段来辅助理解
+- 问题必须基于前面知识卡片中的内容来出，确保与知识强相关
+- 问题卡片间尽量避免重复内容
+- 问题类型：single（单选）、multiple（多选）、sorting（排序）
+
+## 可视化类型说明
+- flowchart: 流程图，使用 Mermaid 语法，如 "graph TD; A-->B"
+- timeline: 时间线，包含 events 数组，每项有 time/title/description
+- comparison: 对比表，包含 columns（列标题）和 rows（行数据）
+
+## 输出 JSON
+{
+  "courseId": "课程 ID",
+  "nodeIndex": 0,
+  "title": "${payload.nodeTitle}",
+  "teachingGoal": "${payload.teachingGoal}",
+  "cards": [{
+    "id": "card-1",
+    "title": "标题",
+    "content": "Markdown 内容",
+    "visualization": {
+      "type": "flowchart|timeline|comparison",
+      "title": "可选标题",
+      "mermaidCode": "Mermaid 语法（flowchart 类型时）",
+      "events": [{"time": "时间", "title": "事件", "description": "描述"}],
+      "columns": ["列1", "列2"],
+      "rows": [["行1列1", "行1列2"], ["行2列1", "行2列2"]]
+    }
+  }],
+  "questions": [{
+    "id": "q-1",
+    "type": "single|multiple|sorting",
+    "question": "题干",
+    "options": ["A", "B"],
+    "answer": "答案",
+    "explanation": "解析"
+  }]
+}
+
+只返回 JSON。`;
 }
 
 export function buildCourseTreePrompt(

@@ -43,6 +43,36 @@ function truncateByPairs(messages: ChatMessage[], maxPairs: number, maxChars: nu
   return validPairs.flatMap(pair => [pair.q, pair.a]);
 }
 
+function diffDroppedMessages(previous: ChatMessage[], next: ChatMessage[]): ChatMessage[] {
+  const nextIds = new Set(next.map((message) => message.id));
+  return previous.filter((message) => !nextIds.has(message.id));
+}
+
+export function compactChatHistoryMessages(
+  messages: ChatMessage[],
+  maxPairs: number = MAX_MESSAGE_PAIRS,
+  maxChars: number = MAX_TOTAL_CHARS,
+): {
+  messages: ChatMessage[];
+  droppedSummary?: Omit<ConversationSummary, 'courseId' | 'timestamp'>;
+} {
+  const pairs = groupMessagesIntoPairs(messages);
+  if (pairs.length <= maxPairs && calculateTotalChars(pairs) <= maxChars) {
+    return { messages };
+  }
+
+  const compacted = truncateByPairs(messages, maxPairs, maxChars);
+  const droppedMessages = diffDroppedMessages(messages, compacted);
+  if (droppedMessages.length < 2) {
+    return { messages: compacted };
+  }
+
+  return {
+    messages: compacted,
+    droppedSummary: generateConversationSummary(droppedMessages),
+  };
+}
+
 function calculateTotalChars(pairs: Array<{ q: ChatMessage; a: ChatMessage }>): number {
   return pairs.reduce((sum, pair) => sum + pair.q.content.length + pair.a.content.length, 0);
 }
@@ -138,6 +168,7 @@ export function useChatHistory(courseId: string) {
     message: Omit<ChatMessage, 'id' | 'timestamp'>,
     options?: {
       onExpire?: (courseId: string, summary: Omit<ConversationSummary, 'courseId' | 'timestamp'>) => void;
+      onCompact?: (courseId: string, summary: Omit<ConversationSummary, 'courseId' | 'timestamp'>) => void;
     }
   ): void => {
     if (typeof window === 'undefined') return;
@@ -160,9 +191,10 @@ export function useChatHistory(courseId: string) {
     }
 
     if (!isExpired) {
-      const pairs = groupMessagesIntoPairs(updatedMessages);
-      if (pairs.length > MAX_MESSAGE_PAIRS || calculateTotalChars(pairs) > MAX_TOTAL_CHARS) {
-        updatedMessages = truncateByPairs(updatedMessages, MAX_MESSAGE_PAIRS, MAX_TOTAL_CHARS);
+      const compacted = compactChatHistoryMessages(updatedMessages);
+      updatedMessages = compacted.messages;
+      if (compacted.droppedSummary) {
+        options?.onCompact?.(courseId, compacted.droppedSummary);
       }
     }
 
@@ -171,6 +203,14 @@ export function useChatHistory(courseId: string) {
     } catch {
       // localStorage 可能已满，忽略
     }
+  }, [courseId, getMessages]);
+
+  const flushSummary = useCallback((
+    callback?: (courseId: string, summary: Omit<ConversationSummary, 'courseId' | 'timestamp'>) => void,
+  ): void => {
+    const messages = getMessages().filter((message) => !message.isExpired);
+    if (messages.length < 2) return;
+    callback?.(courseId, generateConversationSummary(messages));
   }, [courseId, getMessages]);
 
   const clearHistory = useCallback((): void => {
@@ -182,5 +222,6 @@ export function useChatHistory(courseId: string) {
     messages: getMessages(),
     addMessage,
     clearHistory,
+    flushSummary,
   };
 }

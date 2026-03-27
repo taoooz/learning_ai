@@ -30,11 +30,11 @@ export function CourseHeaderBar({
               </svg>
             </button>
 
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 overflow-hidden">
               {typeof title === 'string' ? (
                 <p className="truncate text-[15px] font-semibold leading-5 text-primary">{title}</p>
               ) : (
-                title
+                <div className="truncate text-[15px] font-semibold leading-5 text-primary">{title}</div>
               )}
             </div>
 

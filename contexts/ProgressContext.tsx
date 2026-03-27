@@ -1,7 +1,8 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { markNodeCompleted, getStoredData } from '@/lib/storage';
+import { markNodeCompleted, getStoredCourseBundle, getStoredData } from '@/lib/storage';
+import { createMemoryRepository } from '@/lib/memory/repository';
 
 interface ProgressContextType {
   completedNodes: Set<string>; // "courseId-nodeIndex" 格式
@@ -34,6 +35,21 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
 
   const markCompleted = useCallback((courseId: string, nodeIndex: number) => {
     markNodeCompleted(courseId, nodeIndex);
+    const bundle = getStoredCourseBundle(courseId);
+    const node = bundle?.blueprint.nodes[nodeIndex];
+    if (bundle && node) {
+      createMemoryRepository().appendMemoryEvent({
+        type: 'node_completed',
+        topic: bundle.blueprint.topic,
+        courseId,
+        nodeIndex,
+        occurredAt: Date.now(),
+        payload: {
+          teachConceptIds: node.teachConceptIds,
+          teachConceptNames: node.teachConceptIds.map((conceptId) => bundle.blueprint.globalConcepts.find((item) => item.id === conceptId)?.name || conceptId),
+        },
+      });
+    }
     // 触发自定义事件通知 CourseContext 刷新
     window.dispatchEvent(new CustomEvent('node-completed', { detail: { courseId, nodeIndex } }));
     refreshProgress();

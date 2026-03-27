@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { CourseTree as CourseTreeType } from '@/types/course';
 import { CourseNode } from './CourseNode';
 import {
-  getCourseTreeHeight,
   getCourseTreeInitialScrollTop,
   getCourseTreeLayout,
 } from '@/lib/course-tree-layout';
@@ -27,8 +26,6 @@ export function CourseTree({ course }: CourseTreeProps) {
       ...positions[index],
     }));
   }, [course.nodes]);
-
-  const height = getCourseTreeHeight(course.nodes.length);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => setAnimateIn(true));
@@ -55,7 +52,7 @@ export function CourseTree({ course }: CourseTreeProps) {
 
   return (
     <div className="relative overflow-hidden rounded-[34px] px-1 py-1.5">
-      <div className="relative mx-auto w-full max-w-[360px]" style={{ height: `${height}px` }}>
+      <div className="relative mx-auto flex w-full max-w-[360px] flex-col gap-2 pt-2">
         {layout.map((item) => (
           <motion.div
             key={item.node.index}
@@ -68,7 +65,6 @@ export function CourseTree({ course }: CourseTreeProps) {
             <CourseNode
               node={item.node}
               isCurrent={item.node.index === nextNodeIndex}
-              top={item.top}
               offset={item.offset}
               onClick={() => handleNodeClick(item.node.index)}
             />

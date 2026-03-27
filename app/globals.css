@@ -180,6 +180,34 @@ html {
   margin-bottom: 0.25rem;
 }
 
+/* === Table Styles === */
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.prose thead {
+  background-color: var(--color-subtle);
+}
+
+.prose th,
+.prose td {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  text-align: left;
+}
+
+.prose th {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.prose tbody tr:nth-child(even) {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
 /* === Focus States === */
 :focus-visible {
   outline: none;

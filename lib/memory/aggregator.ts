@@ -1,10 +1,16 @@
 import type {
   ChatMemoryPayload,
   ConceptState,
+  CourseSummary,
+  EpisodicProjection,
+  LearningSignal,
+  MemoryEvent,
+  MemoryStoreV3,
   MemoryStoreV2,
   PlanningMemoryPayload,
   TeachingMemoryPayload,
   TopicState,
+  TopicSummary,
   UserMemory,
   UserProfile,
 } from '@/types/course';
@@ -19,6 +25,8 @@ const CHAT_SIGNAL_DECAY_FACTOR = 0.78;
 const MIN_CONFIDENCE = 0.2;
 const DEFAULT_QUESTION_CONFIDENCE = 0.62;
 const DEFAULT_CHAT_GAP_CONFIDENCE = 0.65;
+const MAX_V3_HOT_EVENTS = 180;
+const MAX_V3_IMPORTANT_EVENTS = 40;
 
 export type QuestionAttemptPayload = {
   courseId: string;
@@ -48,14 +56,14 @@ export type TeachingPayloadInput = {
   nodeTitle: string;
   nodeConcepts: string[];
   prerequisiteConcepts?: string[];
-  userMemory?: UserMemory | MemoryStoreV2 | null;
+  userMemory?: UserMemory | MemoryStoreV2 | MemoryStoreV3 | null;
 };
 
 export type ChatPayloadInput = {
   topic: string;
   currentNodeTitle?: string;
   currentQuestion?: string;
-  userMemory?: UserMemory | MemoryStoreV2 | null;
+  userMemory?: UserMemory | MemoryStoreV2 | MemoryStoreV3 | null;
 };
 
 export type ChatSignalInput = {
@@ -580,7 +588,7 @@ function getAssessmentGapConfidence(errorEvidenceCount: number, previousSource?:
   return Number(Math.min(0.78, base + errorEvidenceCount * 0.12).toFixed(2));
 }
 
-export function isMemoryStoreV2(memory: UserMemory | MemoryStoreV2 | null | undefined): memory is MemoryStoreV2 {
+export function isMemoryStoreV2(memory: UserMemory | MemoryStoreV2 | MemoryStoreV3 | null | undefined): memory is MemoryStoreV2 {
   return Boolean(memory && typeof memory === 'object' && 'signals' in memory && 'states' in memory && memory.version === 2);
 }
 
@@ -646,6 +654,506 @@ function buildGoals(profile: UserProfile) {
     confidence: 0.92,
     updatedAt: Date.now(),
   }];
+}
+
+export function createEmptyMemoryStoreV3(profile?: UserProfile | null): MemoryStoreV3 {
+  const normalizedProfile = createEmptyProfile(profile);
+
+  return {
+    version: 3,
+    learnerId: 'local-user',
+    profile: {
+      stableFacts: buildStableFacts(normalizedProfile),
+      goals: buildGoals(normalizedProfile),
+      preferences: [],
+    },
+    events: [],
+    projections: {
+      conceptProjections: [],
+      topicProjections: [],
+      episodicProjections: [],
+    },
+    updatedAt: Date.now(),
+  };
+}
+
+export function isMemoryStoreV3(memory: UserMemory | MemoryStoreV2 | MemoryStoreV3 | null | undefined): memory is MemoryStoreV3 {
+  if (!memory || typeof memory !== 'object') return false;
+  return (memory as MemoryStoreV3).version === 3 && Array.isArray((memory as MemoryStoreV3).events) && !!(memory as MemoryStoreV3).projections;
+}
+
+function getEventPayloadValue<T>(payload: Record<string, unknown>, key: string, fallback: T): T {
+  if (!(key in payload)) return fallback;
+  return payload[key] as T;
+}
+
+function compactMemoryEvents(events: MemoryEvent[]): MemoryEvent[] {
+  const importantTypes = new Set<MemoryEvent['type']>(['course_generated', 'chat_session_summarized']);
+  const important = events.filter((event) => importantTypes.has(event.type)).slice(0, MAX_V3_IMPORTANT_EVENTS);
+  const hot = events.filter((event) => !importantTypes.has(event.type)).slice(0, MAX_V3_HOT_EVENTS);
+  return [...important, ...hot].sort((a, b) => b.occurredAt - a.occurredAt);
+}
+
+function determineProjectionStatus(masteryScore: number, recentErrors: number): 'unknown' | 'learning' | 'fragile' | 'mastered' {
+  if (masteryScore >= 0.78 && recentErrors === 0) return 'mastered';
+  if (masteryScore >= 0.6) return 'fragile';
+  if (masteryScore > 0 || recentErrors > 0) return 'learning';
+  return 'unknown';
+}
+
+function upsertConceptProjection(
+  memoryStore: MemoryStoreV3,
+  topic: string,
+  conceptId: string,
+  conceptName: string,
+  updater: (current: MemoryStoreV3['projections']['conceptProjections'][number]) => void,
+  occurredAt: number,
+): void {
+  const list = memoryStore.projections.conceptProjections;
+  const existing = list.find((item) => item.topic === topic && item.conceptId === conceptId);
+  const base = existing || {
+    topic,
+    conceptId,
+    conceptName,
+    masteryScore: 0,
+    status: 'unknown' as const,
+    recentErrors: 0,
+    recentSuccesses: 0,
+    misconceptionHints: [],
+    confidence: 0.4,
+    updatedAt: occurredAt,
+  };
+
+  updater(base);
+  base.conceptName = conceptName || base.conceptName;
+  base.updatedAt = Math.max(base.updatedAt, occurredAt);
+  base.lastSeenAt = occurredAt;
+  base.status = determineProjectionStatus(base.masteryScore, base.recentErrors);
+
+  if (!existing) {
+    list.unshift(base);
+  }
+}
+
+function recomputeTopicProjection(memoryStore: MemoryStoreV3, topic: string, occurredAt: number): void {
+  const conceptProjections = memoryStore.projections.conceptProjections.filter((item) => item.topic === topic);
+  const familiarityBase = conceptProjections.length
+    ? conceptProjections.reduce((sum, item) => sum + item.masteryScore, 0) / conceptProjections.length
+    : 0;
+  const current = memoryStore.projections.topicProjections.find((item) => item.topic === topic);
+  const next = current || {
+    topic,
+    familiarityScore: 0,
+    estimatedLevel: 'novice' as const,
+    mustCoverConceptIds: [],
+    skippableConceptIds: [],
+    riskConceptIds: [],
+    confidence: 0.4,
+    updatedAt: occurredAt,
+  };
+
+  next.familiarityScore = Number(Math.min(0.95, familiarityBase).toFixed(2));
+  next.estimatedLevel = inferLevel(next.familiarityScore);
+  next.mustCoverConceptIds = uniqueStrings(
+    conceptProjections
+      .filter((item) => item.status === 'learning' || item.status === 'fragile')
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map((item) => item.conceptId),
+  ).slice(0, 4);
+  next.skippableConceptIds = uniqueStrings(
+    conceptProjections
+      .filter((item) => item.status === 'mastered')
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map((item) => item.conceptId),
+  ).slice(0, 3);
+  next.riskConceptIds = uniqueStrings(
+    conceptProjections
+      .filter((item) => item.recentErrors > 0 || item.misconceptionHints.length > 0)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map((item) => item.conceptId),
+  ).slice(0, 4);
+  next.confidence = Number(Math.min(0.92, 0.45 + conceptProjections.length * 0.08).toFixed(2));
+  next.updatedAt = Math.max(next.updatedAt, occurredAt);
+
+  if (!current) {
+    memoryStore.projections.topicProjections.unshift(next);
+  }
+}
+
+function upsertEpisodicProjection(memoryStore: MemoryStoreV3, projection: EpisodicProjection): void {
+  const list = memoryStore.projections.episodicProjections;
+  const existingIndex = list.findIndex((item) => item.id === projection.id);
+  if (existingIndex >= 0) {
+    list[existingIndex] = projection;
+    return;
+  }
+  list.unshift(projection);
+}
+
+export function appendEventToMemoryStoreV3(memoryStore: MemoryStoreV3, event: MemoryEvent): MemoryStoreV3 {
+  const next: MemoryStoreV3 = {
+    ...memoryStore,
+    events: compactMemoryEvents([event, ...memoryStore.events]),
+    profile: {
+      ...memoryStore.profile,
+      preferences: [...memoryStore.profile.preferences],
+    },
+    projections: {
+      conceptProjections: memoryStore.projections.conceptProjections.map((item) => ({ ...item, misconceptionHints: [...item.misconceptionHints] })),
+      topicProjections: memoryStore.projections.topicProjections.map((item) => ({ ...item, mustCoverConceptIds: [...item.mustCoverConceptIds], skippableConceptIds: [...item.skippableConceptIds], riskConceptIds: [...item.riskConceptIds] })),
+      episodicProjections: memoryStore.projections.episodicProjections.map((item) => ({ ...item, conceptIds: [...item.conceptIds], explanationStyles: [...item.explanationStyles] })),
+    },
+    updatedAt: Math.max(memoryStore.updatedAt, event.occurredAt),
+  };
+
+  if (event.type === 'question_answered') {
+    const conceptId = String(getEventPayloadValue(event.payload, 'conceptId', getEventPayloadValue(event.payload, 'conceptName', 'concept-unknown')));
+    const conceptName = String(getEventPayloadValue(event.payload, 'conceptName', conceptId));
+    const isCorrect = Boolean(getEventPayloadValue(event.payload, 'isCorrect', false));
+    upsertConceptProjection(next, event.topic, conceptId, conceptName, (current) => {
+      current.masteryScore = Number(Math.max(0, Math.min(1, current.masteryScore + (isCorrect ? 0.18 : -0.22))).toFixed(2));
+      current.confidence = Number(Math.min(0.96, current.confidence + 0.08).toFixed(2));
+      if (isCorrect) {
+        current.recentSuccesses += 1;
+      } else {
+        current.recentErrors += 1;
+        const question = getEventPayloadValue(event.payload, 'question', '');
+        if (question) {
+          current.misconceptionHints = uniqueStrings([...current.misconceptionHints, summarizeEvidence(String(question))]).slice(0, 3);
+        }
+      }
+      current.nextReviewAt = event.occurredAt + (isCorrect ? 7 : 2) * 24 * 60 * 60 * 1000;
+    }, event.occurredAt);
+    recomputeTopicProjection(next, event.topic, event.occurredAt);
+  }
+
+  if (event.type === 'chat_user_message') {
+    const explanationStyles = getEventPayloadValue<string[]>(event.payload, 'explanationStyles', []);
+    for (const style of explanationStyles) {
+      const existing = next.profile.preferences.find((item) => item.kind === 'explanation_style' && item.value === style);
+      if (existing) {
+        existing.confidence = Number(Math.min(0.95, existing.confidence + 0.05).toFixed(2));
+        existing.updatedAt = event.occurredAt;
+      } else {
+        next.profile.preferences.unshift({
+          id: createMemoryId('preference', 'explanation_style', style),
+          kind: 'explanation_style',
+          value: style,
+          confidence: 0.72,
+          source: 'chat',
+          updatedAt: event.occurredAt,
+        });
+      }
+    }
+
+    const confusionConceptId = getEventPayloadValue<string | undefined>(event.payload, 'confusionConceptId', undefined);
+    if (confusionConceptId) {
+      const confusionConceptName = String(getEventPayloadValue(event.payload, 'confusionConceptName', confusionConceptId));
+      const question = String(getEventPayloadValue(event.payload, 'question', ''));
+      upsertConceptProjection(next, event.topic, confusionConceptId, confusionConceptName, (current) => {
+        current.masteryScore = Number(Math.min(current.masteryScore || 0.4, 0.4).toFixed(2));
+        current.recentErrors += 1;
+        current.confidence = Number(Math.min(0.9, current.confidence + 0.06).toFixed(2));
+        if (question) {
+          current.misconceptionHints = uniqueStrings([...current.misconceptionHints, summarizeEvidence(question)]).slice(0, 3);
+        }
+      }, event.occurredAt);
+      recomputeTopicProjection(next, event.topic, event.occurredAt);
+    }
+  }
+
+  if (event.type === 'node_completed') {
+    const teachConceptIds = getEventPayloadValue<string[]>(event.payload, 'teachConceptIds', []);
+    const teachConceptNames = getEventPayloadValue<string[]>(event.payload, 'teachConceptNames', []);
+    teachConceptIds.forEach((conceptId, index) => {
+      upsertConceptProjection(next, event.topic, conceptId, teachConceptNames[index] || conceptId, (current) => {
+        current.masteryScore = Number(Math.max(current.masteryScore, 0.62).toFixed(2));
+        current.recentSuccesses += 1;
+        current.confidence = Number(Math.min(0.92, current.confidence + 0.04).toFixed(2));
+      }, event.occurredAt);
+    });
+    recomputeTopicProjection(next, event.topic, event.occurredAt);
+    if (event.courseId) {
+      upsertEpisodicProjection(next, {
+        id: createMemoryId('episode', 'course', event.courseId),
+        topic: event.topic,
+        courseId: event.courseId,
+        kind: 'course',
+        summary: `最近完成了 ${event.topic} 的第 ${typeof event.nodeIndex === 'number' ? event.nodeIndex + 1 : '?'} 节`,
+        conceptIds: teachConceptIds,
+        explanationStyles: [],
+        updatedAt: event.occurredAt,
+      });
+    }
+  }
+
+  if (event.type === 'course_generated') {
+    recomputeTopicProjection(next, event.topic, event.occurredAt);
+    if (event.courseId) {
+      upsertEpisodicProjection(next, {
+        id: createMemoryId('episode', 'course', event.courseId),
+        topic: event.topic,
+        courseId: event.courseId,
+        kind: 'course',
+        summary: String(getEventPayloadValue(event.payload, 'goal', `刚生成了一门关于 ${event.topic} 的课程`)),
+        conceptIds: getEventPayloadValue<string[]>(event.payload, 'conceptIds', []),
+        explanationStyles: [],
+        updatedAt: event.occurredAt,
+      });
+    }
+  }
+
+  if (event.type === 'chat_session_summarized') {
+    upsertEpisodicProjection(next, {
+      id: String(getEventPayloadValue(event.payload, 'id', createMemoryId('episode', event.courseId || event.topic, event.occurredAt))),
+      topic: event.topic,
+      courseId: event.courseId,
+      kind: 'chat',
+      summary: String(getEventPayloadValue(event.payload, 'summary', '')),
+      conceptIds: getEventPayloadValue<string[]>(event.payload, 'conceptIds', []),
+      explanationStyles: getEventPayloadValue<string[]>(event.payload, 'explanationStyles', []),
+      followUp: getEventPayloadValue<string | undefined>(event.payload, 'followUp', undefined),
+      updatedAt: event.occurredAt,
+    });
+  }
+
+  return next;
+}
+
+function convertEventsFromV2(memoryStore: MemoryStoreV2): MemoryEvent[] {
+  return memoryStore.signals.map((signal) => {
+    if (signal.type === 'question_attempt') {
+      return {
+        type: 'question_answered' as const,
+        topic: signal.topic,
+        courseId: signal.courseId,
+        occurredAt: signal.occurredAt,
+        payload: {
+          conceptId: signal.concept || 'concept-unknown',
+          conceptName: signal.concept || '未知概念',
+          isCorrect: Number(signal.payload.accuracy || 0) >= 0.7,
+          question: String(signal.payload.question || ''),
+        },
+      };
+    }
+
+    if (signal.type === 'chat_question' || signal.type === 'chat_confusion' || signal.type === 'chat_mastery') {
+      return {
+        type: 'chat_user_message' as const,
+        topic: signal.topic,
+        courseId: signal.courseId,
+        occurredAt: signal.occurredAt,
+        payload: {
+          question: String(signal.payload.question || signal.payload.evidence || ''),
+          confusionConceptId: signal.type === 'chat_confusion' ? signal.concept : undefined,
+          confusionConceptName: signal.type === 'chat_confusion' ? signal.concept : undefined,
+        },
+      };
+    }
+
+    return {
+      type: 'node_completed' as const,
+      topic: signal.topic,
+      courseId: signal.courseId,
+      occurredAt: signal.occurredAt,
+      payload: {},
+    };
+  }).sort((a, b) => b.occurredAt - a.occurredAt);
+}
+
+function buildTopicSummariesFromV3(memoryStore: MemoryStoreV3): TopicSummary[] {
+  return memoryStore.projections.topicProjections.map((item) => {
+    const mustCover = item.mustCoverConceptIds
+      .map((conceptId) => memoryStore.projections.conceptProjections.find((projection) => projection.topic === item.topic && projection.conceptId === conceptId)?.conceptName || conceptId);
+    const strengths = item.skippableConceptIds
+      .map((conceptId) => memoryStore.projections.conceptProjections.find((projection) => projection.topic === item.topic && projection.conceptId === conceptId)?.conceptName || conceptId);
+
+    return {
+      topic: item.topic,
+      summary: mustCover.length ? `${item.topic} 当前最需要补的是 ${mustCover.join('、')}` : `${item.topic} 暂无明确薄弱点`,
+      keyGaps: mustCover,
+      keyStrengths: strengths,
+      updatedAt: item.updatedAt,
+    };
+  });
+}
+
+function buildCourseSummariesFromV3(memoryStore: MemoryStoreV3): CourseSummary[] {
+  return memoryStore.projections.episodicProjections
+    .filter((item) => item.kind === 'course' && item.courseId)
+    .map((item) => ({
+      courseId: item.courseId as string,
+      topic: item.topic,
+      summary: item.summary,
+      completedNodes: Number(getEventPayloadValue({ completedNodes: 0 }, 'completedNodes', 0)),
+      totalNodes: Number(getEventPayloadValue({ totalNodes: 0 }, 'totalNodes', 0)),
+      updatedAt: item.updatedAt,
+    }));
+}
+
+function convertMemoryStoreV3ToV2(memoryStore: MemoryStoreV3): MemoryStoreV2 {
+  const conceptStates: ConceptState[] = memoryStore.projections.conceptProjections.map((item) => ({
+    topic: item.topic,
+    concept: item.conceptName,
+    masteryScore: item.masteryScore,
+    status: item.status,
+    evidenceCount: item.recentErrors + item.recentSuccesses,
+    recentErrors: item.recentErrors,
+    recentSuccesses: item.recentSuccesses,
+    lastSeenAt: item.lastSeenAt,
+    nextReviewAt: item.nextReviewAt,
+    misconceptionHints: item.misconceptionHints,
+    confidence: item.confidence,
+    updatedAt: item.updatedAt,
+  }));
+
+  const topicStates: TopicState[] = memoryStore.projections.topicProjections.map((item) => ({
+    topic: item.topic,
+    familiarityScore: item.familiarityScore,
+    estimatedLevel: item.estimatedLevel,
+    transferableBackground: memoryStore.profile.stableFacts
+      .filter((fact) => fact.kind === 'knowledge_background' || fact.kind === 'analogy_experience')
+      .map((fact) => fact.text)
+      .slice(0, 3),
+    mustCoverConcepts: item.mustCoverConceptIds.map((conceptId) => memoryStore.projections.conceptProjections.find((projection) => projection.topic === item.topic && projection.conceptId === conceptId)?.conceptName || conceptId),
+    skippableBasics: item.skippableConceptIds.map((conceptId) => memoryStore.projections.conceptProjections.find((projection) => projection.topic === item.topic && projection.conceptId === conceptId)?.conceptName || conceptId),
+    riskConcepts: item.riskConceptIds.map((conceptId) => memoryStore.projections.conceptProjections.find((projection) => projection.topic === item.topic && projection.conceptId === conceptId)?.conceptName || conceptId),
+    confidence: item.confidence,
+    updatedAt: item.updatedAt,
+  }));
+
+  const signals: LearningSignal[] = memoryStore.events.flatMap((event) => {
+    if (event.type === 'question_answered') {
+      const isCorrect = Boolean(getEventPayloadValue(event.payload, 'isCorrect', false));
+      return [{
+        id: createMemoryId('signal', 'v3-question', event.topic, event.occurredAt),
+        type: 'question_attempt' as const,
+        topic: event.topic,
+        concept: String(getEventPayloadValue(event.payload, 'conceptName', getEventPayloadValue(event.payload, 'conceptId', '未知概念'))),
+        courseId: event.courseId,
+        source: 'assessment' as const,
+        confidence: 0.8,
+        occurredAt: event.occurredAt,
+        payload: {
+          accuracy: isCorrect ? 1 : 0,
+          question: String(getEventPayloadValue(event.payload, 'question', '')),
+        },
+      }];
+    }
+
+    if (event.type === 'chat_user_message') {
+      const signals: LearningSignal[] = [{
+        id: createMemoryId('signal', 'v3-chat-question', event.topic, event.occurredAt),
+        type: 'chat_question',
+        topic: event.topic,
+        courseId: event.courseId,
+        source: 'chat',
+        confidence: DEFAULT_QUESTION_CONFIDENCE,
+        occurredAt: event.occurredAt,
+        payload: {
+          question: String(getEventPayloadValue(event.payload, 'question', '')),
+        },
+      }];
+
+      const confusionConceptName = getEventPayloadValue<string | undefined>(event.payload, 'confusionConceptName', undefined);
+      if (confusionConceptName) {
+        signals.push({
+          id: createMemoryId('signal', 'v3-chat-confusion', event.topic, confusionConceptName, event.occurredAt),
+          type: 'chat_confusion',
+          topic: event.topic,
+          concept: confusionConceptName,
+          courseId: event.courseId,
+          source: 'chat',
+          confidence: DEFAULT_CHAT_GAP_CONFIDENCE,
+          occurredAt: event.occurredAt,
+          payload: {
+            evidence: [String(getEventPayloadValue(event.payload, 'question', ''))],
+          },
+        });
+      }
+      return signals;
+    }
+
+    return [];
+  });
+
+  return {
+    version: 2,
+    learnerId: memoryStore.learnerId,
+    profile: memoryStore.profile,
+    signals,
+    states: {
+      topicStates,
+      conceptStates,
+    },
+    summaries: {
+      topicSummaries: buildTopicSummariesFromV3(memoryStore),
+      courseSummaries: buildCourseSummariesFromV3(memoryStore),
+    },
+    updatedAt: memoryStore.updatedAt,
+  };
+}
+
+export function migrateMemoryToV3(memory: UserMemory | MemoryStoreV2 | MemoryStoreV3 | null | undefined, profile?: UserProfile | null): MemoryStoreV3 {
+  if (isMemoryStoreV3(memory)) {
+    return memory;
+  }
+
+  const v2 = migrateUserMemoryToV2(memory as UserMemory | MemoryStoreV2 | null | undefined, profile);
+  return {
+    version: 3,
+    learnerId: v2.learnerId,
+    profile: v2.profile,
+    events: compactMemoryEvents(convertEventsFromV2(v2)),
+    projections: {
+      conceptProjections: v2.states.conceptStates.map((item) => ({
+        topic: item.topic,
+        conceptId: createMemoryId('concept', item.topic, item.concept),
+        conceptName: item.concept,
+        masteryScore: item.masteryScore,
+        status: item.status,
+        recentErrors: item.recentErrors,
+        recentSuccesses: item.recentSuccesses,
+        misconceptionHints: item.misconceptionHints,
+        confidence: item.confidence,
+        lastSeenAt: item.lastSeenAt,
+        nextReviewAt: item.nextReviewAt,
+        updatedAt: item.updatedAt,
+      })),
+      topicProjections: v2.states.topicStates.map((item) => ({
+        topic: item.topic,
+        familiarityScore: item.familiarityScore,
+        estimatedLevel: item.estimatedLevel,
+        mustCoverConceptIds: item.mustCoverConcepts.map((concept) => createMemoryId('concept', item.topic, concept)),
+        skippableConceptIds: item.skippableBasics.map((concept) => createMemoryId('concept', item.topic, concept)),
+        riskConceptIds: item.riskConcepts.map((concept) => createMemoryId('concept', item.topic, concept)),
+        confidence: item.confidence,
+        updatedAt: item.updatedAt,
+      })),
+      episodicProjections: [
+        ...v2.summaries.courseSummaries.map((item) => ({
+          id: createMemoryId('episode', 'course', item.courseId),
+          topic: item.topic,
+          courseId: item.courseId,
+          kind: 'course' as const,
+          summary: item.summary,
+          conceptIds: [],
+          explanationStyles: [],
+          updatedAt: item.updatedAt,
+        })),
+        ...v2.summaries.topicSummaries.map((item) => ({
+          id: createMemoryId('episode', 'topic', item.topic),
+          topic: item.topic,
+          kind: 'chat' as const,
+          summary: item.summary,
+          conceptIds: item.keyGaps,
+          explanationStyles: [],
+          updatedAt: item.updatedAt,
+        })),
+      ],
+    },
+    updatedAt: v2.updatedAt,
+  };
 }
 
 function buildPreferencesFromLegacy(memory: UserMemory): MemoryStoreV2['profile']['preferences'] {
@@ -893,9 +1401,13 @@ function buildTopicSummaries(memory: UserMemory, conceptStates: ConceptState[]) 
   });
 }
 
-export function migrateUserMemoryToV2(memory: UserMemory | MemoryStoreV2 | null | undefined, profile?: UserProfile | null): MemoryStoreV2 {
+export function migrateUserMemoryToV2(memory: UserMemory | MemoryStoreV2 | MemoryStoreV3 | null | undefined, profile?: UserProfile | null): MemoryStoreV2 {
   if (isMemoryStoreV2(memory)) {
     return memory;
+  }
+
+  if (isMemoryStoreV3(memory)) {
+    return convertMemoryStoreV3ToV2(memory);
   }
 
   const legacyMemory = memory ? decayUserMemory(mergeProfileIntoMemory(memory, profile || memory.profile)) : createDefaultUserMemory(profile);
@@ -1081,8 +1593,8 @@ export function appendChatSignalsToMemoryStore(memoryStore: MemoryStoreV2, input
   return rebuildStatesFromSignals({ ...memoryStore, signals: nextSignals, updatedAt: now });
 }
 
-export function getPlanningMemoryPayload(topic: string, userMemory?: UserMemory | MemoryStoreV2 | null): PlanningMemoryPayload {
-  const memoryStore = migrateUserMemoryToV2(userMemory);
+export function getPlanningMemoryPayload(topic: string, userMemory?: UserMemory | MemoryStoreV2 | MemoryStoreV3 | null): PlanningMemoryPayload {
+  const memoryStore = isMemoryStoreV3(userMemory) ? convertMemoryStoreV3ToV2(userMemory) : migrateUserMemoryToV2(userMemory);
   const topicState = memoryStore.states.topicStates
     .map((item) => ({ item, score: getTopicRelevanceScore(topic, item.topic) * item.confidence * getFreshnessScore(item.updatedAt) }))
     .filter((entry) => entry.score >= 0.2)
@@ -1111,7 +1623,7 @@ export function getPlanningMemoryPayload(topic: string, userMemory?: UserMemory 
 
 export function getTeachingMemoryPayload(input: TeachingPayloadInput): TeachingMemoryPayload {
   const { topic, nodeTitle, nodeConcepts, prerequisiteConcepts = [], userMemory } = input;
-  const memoryStore = migrateUserMemoryToV2(userMemory);
+  const memoryStore = isMemoryStoreV3(userMemory) ? convertMemoryStoreV3ToV2(userMemory) : migrateUserMemoryToV2(userMemory);
   const conceptStates = memoryStore.states.conceptStates.filter((item) => getTopicRelevanceScore(topic, item.topic) >= 0.45);
   const normalizedNodeConcepts = nodeConcepts.map(normalizeConceptKey);
   const normalizedPrerequisiteConcepts = prerequisiteConcepts.map(normalizeConceptKey);
@@ -1174,7 +1686,7 @@ export function getTeachingMemoryPayload(input: TeachingPayloadInput): TeachingM
 
 export function getChatMemoryPayload(input: ChatPayloadInput): ChatMemoryPayload {
   const { topic, currentNodeTitle = '', currentQuestion = '', userMemory } = input;
-  const memoryStore = migrateUserMemoryToV2(userMemory);
+  const memoryStore = isMemoryStoreV3(userMemory) ? convertMemoryStoreV3ToV2(userMemory) : migrateUserMemoryToV2(userMemory);
   const focusSource = currentNodeTitle || currentQuestion || topic;
 
   const topicState = memoryStore.states.topicStates

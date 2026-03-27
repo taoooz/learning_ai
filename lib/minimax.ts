@@ -1,6 +1,14 @@
 // lib/minimax.ts
 
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { buildSearchResultsSection, buildPageFetchSection } from './prompt';
+
+export interface MiniMaxCallOptions {
+  maxTokens?: number;
+  signal?: AbortSignal;
+}
 
 export interface SearchNeededResponse {
   needsSearch: true;
@@ -48,11 +56,39 @@ export function extractPageUrls(content: string): string[] {
   }
 }
 
+let cachedApiKeyFromFile: string | null | undefined;
+
+function readApiKeyFromEnvFile(): string | null {
+  if (cachedApiKeyFromFile !== undefined) {
+    return cachedApiKeyFromFile;
+  }
+
+  try {
+    const envFilePath = process.env.MINIMAX_ENV_FILE || join(process.cwd(), '.env.local');
+    if (!existsSync(envFilePath)) {
+      cachedApiKeyFromFile = null;
+      return cachedApiKeyFromFile;
+    }
+
+    const envText = readFileSync(envFilePath, 'utf8');
+    const match = envText.match(/(?:^|\n)\s*MINIMAX_API_KEY\s*=\s*(.+)\s*(?:\n|$)/);
+    cachedApiKeyFromFile = match?.[1]?.trim().replace(/^['"]|['"]$/g, '') || null;
+    return cachedApiKeyFromFile;
+  } catch {
+    cachedApiKeyFromFile = null;
+    return cachedApiKeyFromFile;
+  }
+}
+
+function getMiniMaxApiKey(): string | null {
+  return process.env.MINIMAX_API_KEY || readApiKeyFromEnvFile();
+}
+
 export async function callMiniMaxChatStream(
   messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
   maxTokens: number = 1500
 ): Promise<Response> {
-  const apiKey = process.env.MINIMAX_API_KEY;
+  const apiKey = getMiniMaxApiKey();
 
   if (!apiKey) {
     throw new Error('MINIMAX_API_KEY is not set');
@@ -87,8 +123,8 @@ export async function callMiniMaxChatStream(
   });
 }
 
-export async function callMiniMax(prompt: string): Promise<string> {
-  const apiKey = process.env.MINIMAX_API_KEY;
+export async function callMiniMax(prompt: string, options: MiniMaxCallOptions = {}): Promise<string> {
+  const apiKey = getMiniMaxApiKey();
 
   if (!apiKey) {
     throw new Error('MINIMAX_API_KEY is not set');
@@ -100,6 +136,7 @@ export async function callMiniMax(prompt: string): Promise<string> {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
     },
+    signal: options.signal,
     body: JSON.stringify({
       model: 'MiniMax-M2.7',
       messages: [
@@ -108,6 +145,13 @@ export async function callMiniMax(prompt: string): Promise<string> {
           content: prompt,
         },
       ],
+      reasoning_split: true,
+      ...(typeof options.maxTokens === 'number'
+        ? {
+          max_tokens: options.maxTokens,
+          max_completion_tokens: options.maxTokens,
+        }
+        : {}),
     }),
   });
 
@@ -122,16 +166,20 @@ export async function callMiniMax(prompt: string): Promise<string> {
     throw new Error('No response from MiniMax');
   }
 
+  // 打印完整响应（包含思考内容）到文件
+  const fs = await import('fs');
+  const logPath = '/tmp/minimax_raw_response.json';
+  fs.writeFileSync(logPath, JSON.stringify(data, null, 2));
+  console.log('[MiniMax] Raw response saved to:', logPath);
+
   return data.choices[0].message.content;
 }
 
 export function parseJSONResponse<T>(content: string): T {
   // Pre-processing: Extract from markdown code blocks if present
-  let extractedContent = content;
-  const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (codeBlockMatch && codeBlockMatch[1]) {
-    extractedContent = codeBlockMatch[1].trim();
-  }
+  let extractedContent = content
+    .replace(/^```json\s*/i, '')  // Remove opening ```json
+    .replace(/\s*```$/, '');      // Remove closing ```
 
   // Find the first opening brace
   const firstBrace = extractedContent.indexOf('{');
@@ -139,12 +187,11 @@ export function parseJSONResponse<T>(content: string): T {
     throw new Error('No JSON found in response');
   }
 
-  // Strategy 1: Try direct JSON.parse first on the whole content
-  // This handles cases where content is a clean JSON
+  // Strategy 1: Try direct JSON.parse on content after first brace
   try {
-    const trimmed = extractedContent.trim();
-    if (trimmed.startsWith('{')) {
-      return JSON.parse(trimmed) as T;
+    const jsonContent = extractedContent.substring(firstBrace).trim();
+    if (jsonContent.startsWith('{')) {
+      return JSON.parse(jsonContent) as T;
     }
   } catch {
     // Continue to next strategy
@@ -229,7 +276,8 @@ export async function callMiniMaxWithSearch(
   basePrompt: string,
   searchResults?: string,
   pageContents?: string,
-  callCount: number = 1
+  callCount: number = 1,
+  options: MiniMaxCallOptions = {},
 ): Promise<string> {
   // 构建当前轮次的 prompt
   let currentPrompt = basePrompt;
@@ -240,7 +288,7 @@ export async function callMiniMaxWithSearch(
   }
 
   // 调用 API
-  const content = await callMiniMax(currentPrompt);
+  const content = await callMiniMax(currentPrompt, options);
 
   // 判断是否需要继续
   if (callCount >= 3) {
@@ -261,7 +309,7 @@ export async function callMiniMaxWithSearch(
     const formattedResults = formatSearchResults(allResults);
 
     // 递归调用，注入搜索结果
-    return callMiniMaxWithSearch(basePrompt, formattedResults, undefined, callCount + 1);
+    return callMiniMaxWithSearch(basePrompt, formattedResults, undefined, callCount + 1, options);
   }
 
   if (isPageFetchNeededResponse(content)) {
@@ -285,7 +333,7 @@ export async function callMiniMaxWithSearch(
     }
 
     // 递归调用，注入页面内容
-    return callMiniMaxWithSearch(basePrompt, undefined, combinedPageContents, callCount + 1);
+    return callMiniMaxWithSearch(basePrompt, undefined, combinedPageContents, callCount + 1, options);
   }
 
   // 不需要继续，返回内容

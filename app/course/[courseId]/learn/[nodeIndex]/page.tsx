@@ -5,12 +5,14 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useParams, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { CourseHeaderBar } from '@/components/CourseHeaderBar';
 import { useCourse } from '@/contexts/CourseContext';
 import { useProgress } from '@/contexts/ProgressContext';
 import { RetryModal } from '@/components/RetryModal';
 import { LearningCard, Question } from '@/types/course';
 import { ChatLauncher, ChatWidget } from '@/components/ui/ChatWidget';
+import { CardVisualization } from '@/components/ui/CardVisualization';
 import { useUserMemory } from '@/hooks/useUserMemory';
 
 type LearningPhase = 'loading' | 'learning' | 'complete';
@@ -222,6 +224,16 @@ export default function LearnPage() {
     setIsCorrect(false);
   }, [courseId, nodeIndex, steps.length]);
 
+  // 当步骤变化时，如果是排序题，初始化 sortOptions
+  useEffect(() => {
+    if (!currentStep || currentStep.type !== 'question') return;
+    if (currentStep.question.type !== 'sorting') return;
+    if (!currentStep.question.options) return;
+    setSortOptions([...currentStep.question.options]);
+    setIsAnswered(false);
+    setIsCorrect(false);
+  }, [currentStepIndex, currentStep]);
+
   const loadNodeContent = async () => {
     if (!course) return;
 
@@ -344,15 +356,7 @@ export default function LearnPage() {
       </div>
 
       <CourseHeaderBar
-        title={(
-          <LastLineMarker
-            className="min-w-0"
-            contentClassName="text-[15px] font-semibold leading-5 text-primary [text-shadow:0_8px_18px_rgba(56,189,248,0.06)]"
-            markerClassName="bg-gradient-to-r from-sky-300/18 via-sky-200/12 to-accent/10 blur-[0.55px]"
-          >
-            {node.title}
-          </LastLineMarker>
-        )}
+        title={node.title}
         backLabel="返回课程"
         onBack={() => router.push(`/course/${courseId}`)}
         trailing={(
@@ -422,13 +426,17 @@ export default function LearnPage() {
                       </div>
 
                       <div className="prose prose-p:mb-4 prose-strong:text-primary max-w-none text-[15px] leading-7 text-[rgba(31,31,31,0.82)]">
-                        <ReactMarkdown>{currentStep.card.content}</ReactMarkdown>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{currentStep.card.content}</ReactMarkdown>
                       </div>
 
                       {currentStep.card.imageUrl && (
                         <div className="mt-5 overflow-hidden rounded-2xl">
                           <img src={currentStep.card.imageUrl} alt="" className="max-h-48 w-full object-cover" />
                         </div>
+                      )}
+
+                      {currentStep.card.visualization && (
+                        <CardVisualization visualization={currentStep.card.visualization} />
                       )}
                     </>
                   ) : (
@@ -455,7 +463,7 @@ export default function LearnPage() {
                           contentClassName="text-[26px] font-semibold leading-[1.24] tracking-tight text-primary [&_p]:m-0"
                           markerClassName="bg-gradient-to-r from-sky-300/18 via-sky-200/14 to-accent/12 blur-[0.7px]"
                         >
-                          <ReactMarkdown>{currentStep.question.question}</ReactMarkdown>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{currentStep.question.question}</ReactMarkdown>
                         </LastLineMarker>
                       </div>
 
@@ -481,7 +489,7 @@ export default function LearnPage() {
                                     ${!isAnswered ? 'border-black/6 bg-white' : ''}
                                   `}
                                 >
-                                  <ReactMarkdown>{option}</ReactMarkdown>
+                                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{option}</ReactMarkdown>
                                 </div>
                                 {!isAnswered && (
                                   <div className="flex flex-col gap-1">
@@ -558,7 +566,7 @@ export default function LearnPage() {
                                     {getOptionBadgeLabel(option, optionIndex)}
                                   </div>
                                   <div className="min-w-0 flex-1 leading-6 text-[rgba(31,31,31,0.82)]">
-                                    <ReactMarkdown>{option}</ReactMarkdown>
+                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{option}</ReactMarkdown>
                                   </div>
                                 </div>
                               </button>

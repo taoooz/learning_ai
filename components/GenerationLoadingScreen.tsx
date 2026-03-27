@@ -14,10 +14,18 @@ const loadingMessages = [
 
 interface GenerationLoadingScreenProps {
   title?: string;
+  errorMessage?: string | null;
+  onRetry?: () => void;
+  onBack?: () => void;
+  isRetrying?: boolean;
 }
 
 export function GenerationLoadingScreen({
   title = '正在为你编排学习路径',
+  errorMessage = null,
+  onRetry,
+  onBack,
+  isRetrying = false,
 }: GenerationLoadingScreenProps) {
   const [messageIndex, setMessageIndex] = useState(0);
 
@@ -180,21 +188,56 @@ export function GenerationLoadingScreen({
           </div>
 
           <div className="mt-7 flex items-center justify-center gap-2">
-            <motion.div
-              animate={{ y: [0, -5, 0], opacity: [0.4, 1, 0.4] }}
-              transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
-              className="h-2.5 w-2.5 rounded-full bg-accent"
-            />
-            <motion.div
-              animate={{ y: [0, -5, 0], opacity: [0.4, 1, 0.4] }}
-              transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut', delay: 0.16 }}
-              className="h-2.5 w-2.5 rounded-full bg-accent/85"
-            />
-            <motion.div
-              animate={{ y: [0, -5, 0], opacity: [0.4, 1, 0.4] }}
-              transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut', delay: 0.32 }}
-              className="h-2.5 w-2.5 rounded-full bg-sky-400/70"
-            />
+            {errorMessage ? (
+              <div className="w-full max-w-lg rounded-[28px] border border-warning/25 bg-white/84 px-5 py-5 text-left shadow-[0_16px_40px_rgba(15,23,42,0.08)]">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning/12 text-warning">
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 9v3m0 4h.01M4.93 19h14.14c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.2 16c-.77 1.33.19 3 1.73 3z" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-primary">这次生成没来得及完成</p>
+                    <p className="mt-1 text-sm leading-6 text-secondary">{errorMessage}</p>
+                  </div>
+                </div>
+                <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={onRetry}
+                    disabled={!onRetry || isRetrying}
+                    className="inline-flex min-h-12 flex-1 items-center justify-center rounded-full bg-cta px-5 py-3 text-sm font-semibold text-cta shadow-[0_10px_24px_rgba(17,24,39,0.10)] transition-all duration-150 active:scale-[0.985] disabled:opacity-50"
+                  >
+                    {isRetrying ? '正在重试...' : '手动重试'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onBack}
+                    className="inline-flex min-h-12 flex-1 items-center justify-center rounded-full border border-black/8 bg-white/76 px-5 py-3 text-sm font-medium text-secondary transition-all duration-150 active:scale-[0.985]"
+                  >
+                    返回重新输入
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <motion.div
+                  animate={{ y: [0, -5, 0], opacity: [0.4, 1, 0.4] }}
+                  transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+                  className="h-2.5 w-2.5 rounded-full bg-accent"
+                />
+                <motion.div
+                  animate={{ y: [0, -5, 0], opacity: [0.4, 1, 0.4] }}
+                  transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut', delay: 0.16 }}
+                  className="h-2.5 w-2.5 rounded-full bg-accent/85"
+                />
+                <motion.div
+                  animate={{ y: [0, -5, 0], opacity: [0.4, 1, 0.4] }}
+                  transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut', delay: 0.32 }}
+                  className="h-2.5 w-2.5 rounded-full bg-sky-400/70"
+                />
+              </>
+            )}
           </div>
         </motion.div>
         </div>

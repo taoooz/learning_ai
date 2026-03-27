@@ -11,8 +11,9 @@ export default function HomePage() {
   const [error, setError] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [showDeleteMenu, setShowDeleteMenu] = useState<string | null>(null);
+  const [startingSystemCourseId, setStartingSystemCourseId] = useState<string | null>(null);
   const router = useRouter();
-  const { courses, generateCourse, deleteCourse } = useCourse();
+  const { courses, generateCourse, deleteCourse, systemCourseRecommendations, startSystemCourse } = useCourse();
   const { userProfile } = useUserProfile();
   const deleteMenuRef = useRef<HTMLDivElement | null>(null);
   const hasProfileContent = Boolean(
@@ -60,7 +61,6 @@ export default function HomePage() {
     try {
       await generateCourse(topic.trim());
     } catch {
-      router.push('/');
       setIsGenerating(false);
     }
   };
@@ -109,17 +109,14 @@ export default function HomePage() {
     'bg-[linear-gradient(135deg,rgba(249,115,22,0.10),rgba(255,247,240,0.95)_42%,rgba(255,255,255,0.98))]',
   ];
 
-  const handleTopicClick = (selectedTopic: string) => {
-    setTopic(selectedTopic);
-    setIsGenerating(true);
-    setError('');
-    router.push('/generate');
-
-    generateCourse(selectedTopic)
-      .catch(() => {
-        router.push('/');
-        setIsGenerating(false);
-      });
+  const handleSystemCourseClick = (courseId: string) => {
+    setStartingSystemCourseId(courseId);
+    try {
+      startSystemCourse(courseId);
+      router.push(`/course/${courseId}/learn/0`);
+    } finally {
+      setStartingSystemCourseId(null);
+    }
   };
 
   return (
@@ -308,45 +305,60 @@ export default function HomePage() {
 
         {!hasCourses && (
           <section className="pt-1">
-            <div className="relative overflow-hidden rounded-[30px] border border-white/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(255,248,241,0.98)_58%,rgba(255,255,255,0.95))] px-5 py-5 shadow-[0_12px_28px_rgba(15,23,42,0.06)] sm:px-6">
-              <div
-                className="pointer-events-none absolute left-0 top-0 h-28 w-36 opacity-30"
-                style={{
-                  backgroundImage:
-                    'linear-gradient(to right, rgba(56,189,248,0.12) 1px, transparent 1px), linear-gradient(to bottom, rgba(56,189,248,0.10) 1px, transparent 1px)',
-                  backgroundSize: '18px 18px',
-                  maskImage: 'radial-gradient(circle at 24% 18%, black 0%, rgba(0,0,0,0.82) 28%, transparent 78%)',
-                  WebkitMaskImage: 'radial-gradient(circle at 24% 18%, black 0%, rgba(0,0,0,0.82) 28%, transparent 78%)',
-                }}
-              />
-
-              <div className="relative z-[1]">
-                <div className="rounded-full bg-tag px-3 py-1 text-xs font-medium text-secondary w-fit">
-                  第一次开始
+            <div className="rounded-[30px] border border-sky-200/65 bg-[linear-gradient(135deg,rgba(241,248,255,0.96),rgba(248,251,255,0.98)_58%,rgba(255,255,255,0.96))] px-5 py-5 shadow-[0_12px_28px_rgba(56,189,248,0.10)] sm:px-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="w-fit rounded-full bg-sky-500/10 px-3 py-1 text-xs font-medium text-sky-700">
+                    系统推荐课程
+                  </div>
+                  <h2 className="mt-3 text-xl font-semibold tracking-tight text-primary">
+                    不知道先学什么的话，可以先从这两门开始
+                  </h2>
+                  <p className="mt-2 text-sm leading-6 text-secondary">
+                    这两门课是系统预先准备好的引导课程。点击后会直接加入你的课程列表，并从第一节开始学。
+                  </p>
                 </div>
-                <h2 className="mt-3 text-xl font-semibold tracking-tight text-primary">
-                  先生成一门真正想学的课
-                </h2>
-                <p className="mt-2 text-sm leading-6 text-secondary">
-                  不用只写一个主题。把你想学什么、现在基础如何、最想解决什么问题写进去，生成出来的内容会更贴近你。
-                </p>
+              </div>
 
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {[
-                    '转型 AI 产品经理，要补 Agent 原理',
-                    '想系统学提示词，不只会写几句',
-                    '零基础入门 Python，能做自动化小工具',
-                  ].map((idea) => (
+              <div className="mt-4 grid grid-cols-1 gap-3">
+                {systemCourseRecommendations.map((course, index) => {
+                  const palette = index === 0
+                    ? 'border-sky-200/70 bg-[linear-gradient(135deg,rgba(239,246,255,0.96),rgba(255,255,255,0.98))]'
+                    : 'border-emerald-200/70 bg-[linear-gradient(135deg,rgba(240,253,244,0.96),rgba(255,255,255,0.98))]';
+
+                  return (
                     <button
-                      key={idea}
+                      key={course.courseId}
                       type="button"
-                      onClick={() => handleTopicClick(idea)}
-                      className="rounded-full border border-black/6 bg-white/84 px-3.5 py-2 text-sm text-secondary transition-all duration-150 hover:border-accent/18 hover:bg-white hover:text-primary active:scale-[0.985]"
+                      onClick={() => handleSystemCourseClick(course.courseId)}
+                      disabled={startingSystemCourseId === course.courseId}
+                      className={`group rounded-[26px] border p-5 text-left shadow-[0_8px_22px_rgba(15,23,42,0.05)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_28px_rgba(15,23,42,0.08)] disabled:opacity-60 ${palette}`}
                     >
-                      {idea}
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-secondary/75">
+                            {course.badge}
+                          </div>
+                          <h3 className="mt-2 text-lg font-semibold text-primary">
+                            {course.title}
+                          </h3>
+                          <p className="mt-2 text-sm leading-6 text-secondary">
+                            {course.summary}
+                          </p>
+                        </div>
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/80 text-primary shadow-sm transition-transform duration-200 group-hover:translate-x-0.5">
+                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                          </svg>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/78 px-3.5 py-2 text-sm font-medium text-primary">
+                        {startingSystemCourseId === course.courseId ? '正在加入课程...' : course.cta}
+                      </div>
                     </button>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
             </div>
           </section>

@@ -1,7 +1,7 @@
 // lib/chat-context.ts
 
 import type { ChatMessage } from '@/types/chat';
-import type { ChatMemoryPayload, ConversationSummary, CourseTree, MemoryStoreV2, UserMemory } from '@/types/course';
+import type { ChatMemoryPayload, ConversationSummary, CourseTree, MemoryStoreV2, MemoryStoreV3, UserMemory } from '@/types/course';
 
 interface ContextInfo {
   currentNodeTitle?: string;
@@ -27,7 +27,7 @@ ${payload.focusConceptStates.length
 
 export function buildChatContext(
   course: CourseTree,
-  userMemory: UserMemory | MemoryStoreV2,
+  userMemory: UserMemory | MemoryStoreV2 | MemoryStoreV3,
   chatHistory: ChatMessage[],
   contextInfo?: ContextInfo,
   conversationSummary?: ConversationSummary,

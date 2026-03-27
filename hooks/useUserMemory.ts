@@ -23,7 +23,7 @@ import {
 } from '@/lib/memory/aggregator';
 import { createMemoryRepository } from '@/lib/memory/repository';
 import { getUserProfile } from '@/lib/storage';
-import type { ConversationSummary, MemoryStoreV2, UserMemory } from '@/types/course';
+import type { ConversationSummary, MemoryStoreV3, UserMemory } from '@/types/course';
 
 const MAX_QUESTION_PATTERNS = 50;
 
@@ -55,14 +55,14 @@ export function getUserMemorySnapshot(): UserMemory {
   return getRepository().getLegacyMemory();
 }
 
-export function getUserMemoryStoreSnapshot(): MemoryStoreV2 {
-  return getRepository().getMemoryStore();
+export function getUserMemoryStoreSnapshot(): MemoryStoreV3 {
+  return getRepository().getMemoryStoreV3();
 }
 
 export function useUserMemory() {
   const repository = getRepository();
   const memory = repository.getLegacyMemory();
-  const memoryStore = repository.getMemoryStore();
+  const memoryStore = repository.getMemoryStoreV3();
 
   const updateInterests = useCallback((topic: string, source: 'course' | 'chat', courseId?: string): void => {
     const now = Date.now();
@@ -96,6 +96,20 @@ export function useUserMemory() {
   const recordQuestionAttempt = useCallback((payload: QuestionAttemptPayload): void => {
     recordQuestionAttemptInMemory(memory, payload);
     repository.saveLegacyMemory(memory);
+    repository.appendMemoryEvent({
+      type: 'question_answered',
+      topic: payload.topic,
+      courseId: payload.courseId,
+      occurredAt: Date.now(),
+      payload: {
+        conceptId: normalizeConceptKey(payload.concept),
+        conceptName: normalizeConceptKey(payload.concept),
+        question: payload.question,
+        isCorrect: payload.isCorrect,
+        difficulty: payload.difficulty,
+        dimension: payload.dimension,
+      },
+    });
   }, [memory, repository]);
 
   const addQuestionPattern = useCallback((question: string, topic: string): void => {
@@ -155,6 +169,19 @@ export function useUserMemory() {
     }
 
     repository.saveLegacyMemory(memory);
+    repository.appendMemoryEvent({
+      type: 'chat_session_summarized',
+      topic: courseId,
+      courseId,
+      occurredAt: Date.now(),
+      payload: {
+        id: `chat-summary-${courseId}`,
+        summary: summaryInput.summary,
+        conceptIds: summaryInput.unresolvedConcepts || [],
+        explanationStyles: summaryInput.preferredExplanationStyles || [],
+        followUp: summaryInput.followUp,
+      },
+    });
   }, [memory, repository]);
 
   const addLearningPreference = useCallback((preference: UserMemory['extractedInsights']['learningPreferences'][number]): void => {
@@ -177,6 +204,17 @@ export function useUserMemory() {
       confusionConcept: input.confusionConcept ? normalizeConceptKey(input.confusionConcept) : input.confusionConcept,
     });
     repository.saveMemoryStore(updatedStore);
+    repository.appendMemoryEvent({
+      type: 'chat_user_message',
+      topic: input.topic,
+      courseId: input.courseId,
+      occurredAt: Date.now(),
+      payload: {
+        question: input.question,
+        confusionConceptId: input.confusionConcept ? normalizeConceptKey(input.confusionConcept) : undefined,
+        confusionConceptName: input.confusionConcept ? normalizeConceptKey(input.confusionConcept) : undefined,
+      },
+    });
   }, [repository]);
 
   return {

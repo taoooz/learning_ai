@@ -6,22 +6,34 @@ import { CourseNode as CourseNodeType } from '@/types/course';
 interface CourseNodeProps {
   node: CourseNodeType;
   isCurrent: boolean;
-  top: number;
   offset: number;
   onClick: () => void;
 }
 
-export function CourseNode({ node, isCurrent, top, offset, onClick }: CourseNodeProps) {
+export function CourseNode({ node, isCurrent, offset, onClick }: CourseNodeProps) {
   const isLocked = node.status === 'locked';
   const isCompleted = node.status === 'completed';
   const isAvailable = !isLocked && !isCompleted && !isCurrent;
   const badgeText = isCompleted ? '已完成' : isLocked ? '待解锁' : isCurrent ? '现在学习' : '下一节';
   const nodeScaleWhileTap = isLocked ? 1 : 0.965;
   const cardScaleWhileTap = isLocked ? 1 : 0.985;
+  const titleLineHeightClassName = isCurrent ? 'leading-[22px]' : 'leading-[21px]';
+  const titleClampStyle = {
+    display: '-webkit-box',
+    WebkitBoxOrient: 'vertical' as const,
+    WebkitLineClamp: 3,
+    overflow: 'hidden',
+  };
 
   return (
-    <div className="absolute left-0 right-0" style={{ top: `${top}px` }}>
-      <div className="absolute left-[18%]" style={{ transform: `translateX(${offset}px)` }}>
+    <div className="relative min-h-[108px]">
+      <div
+        className="relative w-[248px]"
+        style={{
+          marginLeft: '18%',
+          transform: `translateX(${offset}px)`,
+        }}
+      >
         <motion.button
           type="button"
           onClick={onClick}
@@ -94,7 +106,7 @@ export function CourseNode({ node, isCurrent, top, offset, onClick }: CourseNode
           disabled={isLocked}
           whileHover={isLocked ? undefined : { y: -2, scale: isCurrent ? 1.01 : 1.012 }}
           whileTap={isLocked ? undefined : { y: 1, scale: cardScaleWhileTap }}
-          className={`absolute left-[44px] top-2 w-[204px] rounded-[18px] border px-4 py-2.5 text-left transition-all duration-200 ${
+          className={`ml-[44px] mt-2 flex min-h-[78px] w-[204px] flex-col rounded-[18px] border px-4 py-2.5 text-left transition-all duration-200 ${
             isLocked ? 'cursor-default' : 'cursor-pointer'
           } ${
             isLocked
@@ -113,7 +125,10 @@ export function CourseNode({ node, isCurrent, top, offset, onClick }: CourseNode
           >
             {badgeText}
           </div>
-          <div className={`mt-1 leading-[1.35] ${isCurrent ? 'text-[16px] font-semibold' : 'text-[15px] font-semibold'}`}>
+          <div
+            className={`mt-1 break-words ${titleLineHeightClassName} ${isCurrent ? 'text-[16px] font-semibold' : 'text-[15px] font-semibold'}`}
+            style={titleClampStyle}
+          >
             {node.title}
           </div>
         </motion.button>
