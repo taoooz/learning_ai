@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { kv, userKey, UserData } from '@/lib/redis'
+import { getRedis, userKey, UserData } from '@/lib/redis'
 
 // GET /api/user - 获取当前用户信息
 export async function GET(request: NextRequest) {
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const userData = await redis.get<UserData>(userKey(inviteCode))
+    const userData = await getRedis().get<UserData>(userKey(inviteCode))
 
     if (!userData) {
       return NextResponse.json(
@@ -57,7 +57,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     // 获取现有用户
-    const existingUser = await redis.get<UserData>(userKey(inviteCode))
+    const existingUser = await getRedis().get<UserData>(userKey(inviteCode))
 
     if (!existingUser) {
       return NextResponse.json(
@@ -72,7 +72,7 @@ export async function PATCH(request: NextRequest) {
       nickname: nickname?.trim() || existingUser.nickname,
     }
 
-    await redis.set(userKey(inviteCode), JSON.stringify(updatedUser))
+    await getRedis().set(userKey(inviteCode), JSON.stringify(updatedUser))
 
     return NextResponse.json(updatedUser)
   } catch (error) {

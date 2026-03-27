@@ -1,11 +1,4 @@
-import { Redis } from '@upstash/redis'
-
-// Upstash Redis 客户端
-// Vercel Storage 提供 REDIS_URL 和 REDIS_TOKEN
-export const redis = new Redis({
-  url: process.env.REDIS_URL!,
-  token: process.env.REDIS_TOKEN!,
-})
+import Redis from 'ioredis'
 
 // 邀请码列表（硬编码）
 export const INVITE_CODES = [
@@ -36,4 +29,13 @@ export function isValidInviteCode(code: string): boolean {
 // 用户存储key
 export function userKey(inviteCode: string): string {
   return `user:${inviteCode}`
+}
+
+// 获取 Redis 客户端（懒加载）
+export function getRedis(): Redis {
+  const url = process.env.REDIS_URL
+  if (!url) {
+    throw new Error('REDIS_URL environment variable is not set')
+  }
+  return new Redis(url)
 }
