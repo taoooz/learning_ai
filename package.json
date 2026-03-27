@@ -10,16 +10,25 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "smoke:generation": "node --import tsx scripts/smoke-generation.ts",
+    "generate:system-courses": "node --import tsx scripts/generate-system-courses.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@prisma/client": "^5.22.0",
     "@tailwindcss/postcss": "^4.2.2",
     "framer-motion": "^12.38.0",
     "mermaid": "^11.13.0",
     "next": "^16.2.1",
+    "prisma": "^5.22.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
@@ -35,6 +44,7 @@
     "eslint-config-next": "^16.2.1",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.2",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
 }
