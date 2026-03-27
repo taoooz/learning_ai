@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { redis, isValidInviteCode, userKey, UserData } from '@/lib/redis'
+import { kv, isValidInviteCode, userKey, UserData } from '@/lib/redis'
 
 export async function POST(request: NextRequest) {
   try {
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 检查用户是否已存在
-    const existingUser = await redis.get<UserData>(userKey(inviteCode))
+    const existingUser = await kv.get<UserData>(userKey(inviteCode))
 
     if (existingUser) {
       return NextResponse.json(
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
       createdAt: new Date().toISOString(),
     }
 
-    await redis.set(userKey(inviteCode), JSON.stringify(userData))
+    await kv.set(userKey(inviteCode), JSON.stringify(userData))
 
     return NextResponse.json({
       success: true,
