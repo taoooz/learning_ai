@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import { useAuth } from '@/hooks/useAuth'
@@ -17,7 +17,7 @@ function LoginContent() {
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // 加载中或已登录
+  // 加载中
   if (isLoading) {
     return (
       <div className={styles.container}>
@@ -26,11 +26,12 @@ function LoginContent() {
     )
   }
 
-  // 已登录，跳转原页面
-  if (isVerified && verifiedCode && !error) {
-    router.replace(redirect)
-    return null
-  }
+  // 已登录，跳转原页面（使用 useEffect 避免 React 警告）
+  useEffect(() => {
+    if (isVerified && verifiedCode && !error) {
+      router.replace(redirect)
+    }
+  }, [isVerified, verifiedCode, error, redirect, router])
 
   const handleVerify = async () => {
     if (!inviteCode.trim()) {
