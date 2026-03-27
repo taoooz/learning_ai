@@ -5,29 +5,29 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: linear-gradient(180deg, #f5f3ff 0%, #ffffff 100%);
+  background: var(--color-background);
 }
 
 .logo {
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .title {
-  font-size: 24px;
-  font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 4px;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin-bottom: 6px;
 }
 
 .subtitle {
-  font-size: 14px;
-  color: #6b7280;
-  margin-bottom: 32px;
+  font-size: 15px;
+  color: var(--color-text-secondary);
+  margin-bottom: 36px;
 }
 
 .form {
   width: 100%;
-  max-width: 320px;
+  max-width: 360px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -35,35 +35,44 @@
 
 .input {
   width: 100%;
-  padding: 14px 16px;
+  padding: 16px 18px;
   font-size: 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+  border: 1.5px solid rgba(0, 0, 0, 0.08);
+  border-radius: var(--radius-lg);
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
   box-sizing: border-box;
 }
 
+.input::placeholder {
+  color: var(--color-text-placeholder);
+}
+
 .input:focus {
-  border-color: #7c3aed;
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(255, 138, 0, 0.12);
 }
 
 .button {
   width: 100%;
-  padding: 14px 16px;
-  font-size: 16px;
-  font-weight: 500;
-  color: #ffffff;
-  background: #7c3aed;
+  padding: 16px 24px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-cta-text);
+  background: var(--color-cta);
   border: none;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: background-color 0.2s, transform 0.1s;
+  transition: transform var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
 }
 
 .button:hover {
-  background: #6d28d9;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
 }
 
 .button:active {
@@ -71,24 +80,28 @@
 }
 
 .button:disabled {
-  background: #a5b4fc;
+  opacity: 0.4;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .successMessage {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 16px;
+  padding: 14px 16px;
   font-size: 14px;
-  color: #059669;
-  background: #d1fae5;
-  border-radius: 8px;
-  margin-bottom: 8px;
+  font-weight: 500;
+  color: var(--color-completed);
+  background: var(--color-completed-light);
+  border: 1px solid var(--color-completed-border);
+  border-radius: var(--radius-md);
 }
 
 .error {
   font-size: 14px;
-  color: #dc2626;
+  color: var(--color-error);
   text-align: center;
+  padding: 8px 0;
 }
