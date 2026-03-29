@@ -11,6 +11,22 @@ import type {
 } from '../types/course';
 import type { KnowledgeGap } from '../types/course';
 
+// TOC API 使用的简化 blueprint 类型
+interface TocCourseBlueprint {
+  learningDirection: string;
+  learningGoal: string;
+  learnerPositioning: {
+    estimatedLevel: 'novice' | 'beginner' | 'intermediate' | 'advanced';
+    backgroundSummary: string;
+    skipBasics: string[];
+  };
+  nodes: Array<{
+    index: number;
+    title: string;
+    teachingGoal: string;
+  }>;
+}
+
 interface NodeGenerationContext {
   difficultySummary?: string;
   previousNodeTitle?: string;
@@ -698,6 +714,33 @@ ${messageSection}
     "nodes": [{ "index": 0, "title": "节点标题", "teachingGoal": "节点目标" }]
   },
   "questions": [{ "id": "q1", "question": "问题", "options": ["A", "B"] }]
+}
+
+只返回 JSON。`;
+}
+
+export function buildTocPrompt(blueprint: TocCourseBlueprint): string {
+  return `你是 AI 导师，请基于课程纲要生成课程目录。
+
+课程纲要：
+- 学习方向：${blueprint.learningDirection}
+- 学习目标：${blueprint.learningGoal}
+- 个人基础：${blueprint.learnerPositioning.backgroundSummary}
+- 跳过的基础：${blueprint.learnerPositioning.skipBasics.join('、') || '无'}
+
+节点列表：
+${blueprint.nodes.map((n, i) => `${i + 1}. ${n.title}：${n.teachingGoal}`).join('\n')}
+
+## 任务
+1. 生成课程名称（简洁有吸引力，10-20字）
+2. 生成课程描述（一句话，20-40字）
+3. 为每个节点生成详细描述（1-2句话，说明这节要学什么）
+
+## 输出格式
+{
+  "courseName": "课程名称",
+  "courseDescription": "课程描述",
+  "nodes": [{ "index": 0, "title": "节点标题", "description": "节点描述" }]
 }
 
 只返回 JSON。`;
