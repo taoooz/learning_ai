@@ -170,7 +170,7 @@ function LastLineMarker({
 export default function LearnPage() {
   const params = useParams();
   const router = useRouter();
-  const { courses, generateNodeContent, preloadNextNode } = useCourse();
+  const { courses, generateNodeCards, generateNodeQuestions, updateNodeContent, preloadNextNode } = useCourse();
   const { markCompleted } = useProgress();
   const userMemory = useUserMemory();
 
@@ -237,8 +237,61 @@ export default function LearnPage() {
   const loadNodeContent = async () => {
     if (!course) return;
 
+    const node = course.nodes[nodeIndex];
+    if (!node) return;
+
     try {
-      await generateNodeContent(courseId, nodeIndex);
+      // Step 1: Generate cards if not exist
+      if (!node.cards || node.cards.length === 0) {
+        const prevNode = nodeIndex > 0 ? course.nodes[nodeIndex - 1] : undefined;
+        const nextNode = nodeIndex < course.nodes.length - 1 ? course.nodes[nodeIndex + 1] : undefined;
+
+        // Get bundle to access blueprint info
+        const { getStoredCourseBundle } = await import('@/lib/storage');
+        const bundle = getStoredCourseBundle(courseId);
+
+        const cardsResult = await generateNodeCards(courseId, nodeIndex, {
+          learnerBackground: {
+            backgroundSummary: bundle?.blueprint.learnerPositioning?.difficultySummary || '一般学习者',
+            skipBasics: [],
+          },
+          prevNodeSummary: prevNode ? { title: prevNode.title, concepts: [] } : undefined,
+          nextNodeSummary: nextNode ? { title: nextNode.title, concepts: [] } : undefined,
+        });
+
+        // Update with cards
+        const lesson = {
+          courseId,
+          nodeIndex,
+          title: node.title,
+          teachingGoal: node.title,
+          teachConceptIds: [],
+          assessmentTargetIds: [],
+          cards: cardsResult.cards,
+          questions: [],
+        };
+        updateNodeContent(courseId, nodeIndex, lesson);
+      }
+
+      // Step 2: Generate questions after cards
+      // Re-fetch the node to get updated cards
+      const currentCourse = courses.find(c => c.courseId === courseId);
+      const updatedNode = currentCourse?.nodes[nodeIndex];
+      if (updatedNode && (!updatedNode.questions || updatedNode.questions.length === 0)) {
+        const questionsResult = await generateNodeQuestions(courseId, nodeIndex);
+        const existingLesson = {
+          courseId,
+          nodeIndex,
+          title: updatedNode.title,
+          teachingGoal: updatedNode.title,
+          teachConceptIds: [],
+          assessmentTargetIds: [],
+          cards: updatedNode.cards || [],
+          questions: questionsResult.questions,
+        };
+        updateNodeContent(courseId, nodeIndex, existingLesson);
+      }
+
       setPhase('learning');
       setRetryCount(0);
     } catch {
