@@ -594,3 +594,111 @@ ${pageContents}
 **超过最大调用次数后直接基于已有内容生成。**
 `;
 }
+
+function buildProfileSection(userProfile: UserProfile | null): string {
+  if (!userProfile) return '';
+
+  const { insights, targetJob, workExperience, education } = userProfile;
+
+  let insightSection = '';
+  if (insights) {
+    const { knowledgeBackground, analogyExperiences, summary } = insights;
+    insightSection = `
+用户背景总结：${summary || '暂无'}
+
+知识背景：
+${knowledgeBackground?.length ? knowledgeBackground.map(k => `- ${k}`).join('\n') : '暂无相关背景'}
+
+类比经历：
+${analogyExperiences?.length ? analogyExperiences.map(a => `- ${a}`).join('\n') : '暂无相关经历'}
+`;
+  }
+
+  let targetSection = '';
+  if (targetJob) {
+    targetSection = `\n目标岗位：${targetJob}\n`;
+  }
+
+  let experienceSection = '';
+  if (workExperience?.length) {
+    experienceSection = `
+工作经历：
+${workExperience.map(w => `- ${w.company}，${w.position}${w.description ? '，' + w.description : ''}`).join('\n')}
+`;
+  }
+
+  let educationSection = '';
+  if (education?.length) {
+    educationSection = `
+教育背景：
+${education.map(e => `- ${e.school}，${e.major}`).join('\n')}
+`;
+  }
+
+  if (!insightSection && !targetSection && !experienceSection && !educationSection) {
+    return '';
+  }
+
+  return `
+## 用户画像
+
+${insightSection}${targetSection}${experienceSection}${educationSection}`;
+}
+
+export function buildOutlinePrompt(
+  topic: string,
+  userProfile: UserProfile | null,
+  planningPayload: PlanningMemoryPayload,
+  options?: { clarificationAnswers?: ClarificationAnswer[]; userMessage?: string }
+): string {
+  const memorySection = buildPlanningMemorySection(planningPayload);
+  const profileSection = buildProfileSection(userProfile);
+
+  let clarificationSection = '';
+  if (options?.clarificationAnswers?.length) {
+    clarificationSection = `## 用户回答\n${options.clarificationAnswers.map(a => `Q: ${a.question}\nA: ${a.answer}`).join('\n')}\n`;
+  }
+
+  let messageSection = '';
+  if (options?.userMessage) {
+    messageSection = `## 用户补充信息\n${options.userMessage}\n`;
+  }
+
+  return `你是 AI 导师，请基于用户背景生成课程纲要。
+
+${profileSection}
+${memorySection}
+${clarificationSection}
+${messageSection}
+主题：${topic}
+
+## 课程纲要结构
+
+1. **学习方向**：这门课要讲什么，定调
+2. **学习目标**：服务用户的什么目标
+3. **个人基础**：根据用户背景，用熟悉的术语、例子创建，跳过已掌握内容
+4. **节点结构**：课程章节安排
+
+## 决策规则
+- 信息足够 → 输出确认卡片 type: "confirmation"
+- 有不确定信息 → 输出选择题 type: "questions"
+- 用户发消息 → type: "reconsider"
+
+## 输出格式
+{
+  "type": "confirmation"|"questions"|"reconsider",
+  "blueprint": {
+    "learningDirection": "学习方向描述",
+    "learningGoal": "学习目标描述",
+    "learnerPositioning": {
+      "estimatedLevel": "novice|beginner|intermediate|advanced",
+      "backgroundSummary": "个人基础总结",
+      "skipBasics": ["已跳过的基础1", "已跳过的基础2"]
+    },
+    "nodes": [{ "index": 0, "title": "节点标题", "teachingGoal": "节点目标" }]
+  },
+  "questions": [{ "id": "q1", "question": "问题", "options": ["A", "B"] }]
+}
+
+只返回 JSON。`;
+}
