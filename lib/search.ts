@@ -1,4 +1,4 @@
-import searchEngine from 'search-engine-tool';
+const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
 
 export interface SearchResult {
   title: string;
@@ -7,21 +7,59 @@ export interface SearchResult {
 }
 
 export async function searchWeb(query: string, timeout = 15000): Promise<SearchResult[]> {
-  try {
-    const results = await Promise.race([
-      searchEngine.google(query, 5),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Search timeout')), timeout)
-      )
-    ]);
+  if (!TAVILY_API_KEY) {
+    console.error('TAVILY_API_KEY is not configured');
+    return [];
+  }
 
-    return results.map(r => ({
-      title: r.title,
-      url: r.url,
-      description: r.description || ''
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    const response = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${TAVILY_API_KEY}`
+      },
+      body: JSON.stringify({
+        query,
+        search_depth: 'basic',
+        max_results: 5,
+        include_answer: false,
+        include_raw_content: false
+      })
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      console.error('Tavily API error:', response.status);
+      return [];
+    }
+
+    const data = await response.json();
+
+    if (!data.results || data.results.length === 0) {
+      return [];
+    }
+
+    return data.results.map((item: {
+      title: string;
+      url: string;
+      content?: string;
+    }) => ({
+      title: item.title,
+      url: item.url,
+      description: item.content || ''
     }));
   } catch (error) {
-    console.error('Search failed:', error);
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.error('Search timeout');
+    } else {
+      console.error('Search failed:', error);
+    }
     return [];
   }
 }

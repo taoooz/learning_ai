@@ -28,13 +28,12 @@
     "framer-motion": "^12.38.0",
     "ioredis": "^5.10.1",
     "mermaid": "^11.13.0",
-    "next": "^16.2.1",
+    "next": "^15.5.14",
     "prisma": "^5.22.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1",
-    "search-engine-tool": "^1.0.4"
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
