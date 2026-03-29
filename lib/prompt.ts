@@ -759,8 +759,8 @@ export function buildCardsPrompt(
     backgroundSummary: string;
     skipBasics: string[];
   },
-  prevNodeSummary?: { title: string; concepts: string[] };
-  nextNodeSummary?: { title: string; concepts: string[] };
+  prevNodeSummary?: { title: string; concepts: string[] },
+  nextNodeSummary?: { title: string; concepts: string[] },
 ): string {
   let prevSection = '';
   if (prevNodeSummary) {

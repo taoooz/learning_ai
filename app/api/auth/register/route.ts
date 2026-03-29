@@ -40,7 +40,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 检查用户是否已存在
-    const existingUser = await getRedis().get<UserData>(userKey(inviteCode))
+    const existingUserRaw = await getRedis().get(userKey(inviteCode))
+    const existingUser: UserData | null = existingUserRaw ? JSON.parse(existingUserRaw) : null
 
     if (existingUser) {
       return NextResponse.json(

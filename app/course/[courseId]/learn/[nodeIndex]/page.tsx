@@ -267,7 +267,7 @@ export default function LearnPage() {
           teachingGoal: node.title,
           teachConceptIds: [],
           assessmentTargetIds: [],
-          cards: cardsResult.cards,
+          cards: cardsResult.cards.map(c => ({ ...c, coveredConceptIds: [] })),
           questions: [],
         };
         updateNodeContent(courseId, nodeIndex, lesson);
@@ -286,7 +286,7 @@ export default function LearnPage() {
           teachingGoal: updatedNode.title,
           teachConceptIds: [],
           assessmentTargetIds: [],
-          cards: updatedNode.cards || [],
+          cards: (updatedNode.cards || []).map(c => ({ ...c, coveredConceptIds: [] })),
           questions: questionsResult.questions,
         };
         updateNodeContent(courseId, nodeIndex, existingLesson);

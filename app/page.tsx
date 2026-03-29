@@ -7,13 +7,12 @@ import { useUserProfile } from '@/contexts/UserProfileContext';
 
 export default function HomePage() {
   const [topic, setTopic] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [showDeleteMenu, setShowDeleteMenu] = useState<string | null>(null);
   const [startingSystemCourseId, setStartingSystemCourseId] = useState<string | null>(null);
   const router = useRouter();
-  const { courses, generateCourse, deleteCourse, systemCourseRecommendations, startSystemCourse } = useCourse();
+  const { courses, deleteCourse, systemCourseRecommendations, startSystemCourse } = useCourse();
   const { userProfile } = useUserProfile();
   const deleteMenuRef = useRef<HTMLDivElement | null>(null);
   const hasProfileContent = Boolean(
@@ -50,19 +49,11 @@ export default function HomePage() {
     };
   }, [showDeleteMenu]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!topic.trim()) return;
 
-    setIsGenerating(true);
-    setError('');
-    router.push('/generate');
-
-    try {
-      await generateCourse(topic.trim());
-    } catch {
-      setIsGenerating(false);
-    }
+    router.push(`/generate/confirm?topic=${encodeURIComponent(topic.trim())}`);
   };
 
   const handleCourseClick = (courseId: string) => {
@@ -194,13 +185,13 @@ export default function HomePage() {
                   onChange={(e) => setTopic(e.target.value)}
                   placeholder={`示例：${examplePrompt}`}
                   className="relative min-h-[152px] w-full resize-none bg-transparent px-5 py-5 text-[15px] leading-7 text-primary outline-none transition-all duration-200 placeholder:text-secondary/80 focus:outline-none"
-                  disabled={isGenerating}
+                  disabled={false}
                 />
               </div>
 
               <button
                 type="submit"
-                disabled={!topic.trim() || isGenerating}
+                disabled={!topic.trim()}
                 aria-label="生成专属学习计划"
                 className="inline-flex min-h-14 items-center justify-center rounded-[28px] bg-cta px-7 py-4 text-sm font-semibold text-cta shadow-[0_18px_34px_rgba(17,24,39,0.22)] transition-all duration-200 hover:translate-y-[-1px] hover:shadow-[0_20px_38px_rgba(17,24,39,0.26)] active:scale-[0.98] disabled:opacity-40 disabled:shadow-none sm:self-end"
               >

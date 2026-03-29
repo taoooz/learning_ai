@@ -1,7 +1,13 @@
 import type { CourseBlueprint, CourseBlueprintNode, CourseTree, CourseTreeView, StoredCourseBundle } from '@/types/course';
 
+// 统一规范化：移除空格和非字母数字字符，保留中文字符
 function normalizeConceptLookupValue(value: string): string {
-  return value.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9\u4e00-\u9fa5-]+/g, '');
+  return value.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '');
+}
+
+// 概念 ID 规范化：统一处理，移除空格和分隔符，确保与 lookup 结果一致
+function normalizeConceptId(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '');
 }
 
 export function createConceptIdFromName(name: string): string {
@@ -59,14 +65,18 @@ export function deriveCourseTreeFromStoredCourseBundle(bundle: StoredCourseBundl
 export function resolveConceptIdFromBlueprint(blueprint: CourseBlueprint, rawConcept: string): string {
   const lookup = normalizeConceptLookupValue(rawConcept);
   for (const concept of blueprint.globalConcepts) {
-    if (normalizeConceptLookupValue(concept.id) === lookup) return concept.id;
+    // 概念 ID 匹配：移除分隔符后比较
+    if (normalizeConceptId(concept.id) === lookup) return concept.id;
+    // 概念名称匹配
     if (normalizeConceptLookupValue(concept.name) === lookup) return concept.id;
+    // 别名匹配
     if (concept.aliases.some((alias) => normalizeConceptLookupValue(alias) === lookup)) {
       return concept.id;
     }
   }
 
-  return createConceptIdFromName(rawConcept);
+  // Fallback：基于标准化后的名称生成 ID，确保与查询逻辑一致
+  return `concept-${lookup}`;
 }
 
 export function resolveConceptNameFromBlueprint(blueprint: CourseBlueprint, conceptId: string): string {

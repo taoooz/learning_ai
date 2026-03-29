@@ -13,7 +13,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const userData = await getRedis().get<UserData>(userKey(inviteCode))
+    const userDataRaw = await getRedis().get(userKey(inviteCode))
+    const userData = userDataRaw ? JSON.parse(userDataRaw) as UserData : null
 
     if (!userData) {
       return NextResponse.json(
@@ -57,7 +58,8 @@ export async function PATCH(request: NextRequest) {
     }
 
     // 获取现有用户
-    const existingUser = await getRedis().get<UserData>(userKey(inviteCode))
+    const existingUserRaw = await getRedis().get(userKey(inviteCode))
+    const existingUser = existingUserRaw ? JSON.parse(existingUserRaw) as UserData : null
 
     if (!existingUser) {
       return NextResponse.json(

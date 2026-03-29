@@ -305,7 +305,18 @@ export async function callMiniMaxWithSearch(
     // 执行搜索
     const { searchWeb, formatSearchResults } = await import('./search');
     const searchResultsList = await Promise.all(queries.map(q => searchWeb(q)));
-    const allResults = searchResultsList.flat();
+
+    // 处理搜索结果，过滤不可用的情况
+    const availableResults = searchResultsList.filter((r): r is import('./search').SearchResult[] => !('unavailable' in r));
+    const unavailableReasons = searchResultsList
+      .filter((r): r is import('./search').SearchUnavailable => 'unavailable' in r)
+      .map(r => r.message);
+
+    if (unavailableReasons.length > 0) {
+      console.warn('Search unavailable:', unavailableReasons.join('; '));
+    }
+
+    const allResults = availableResults.flat();
     const formattedResults = formatSearchResults(allResults);
 
     // 递归调用，注入搜索结果

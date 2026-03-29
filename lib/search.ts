@@ -6,10 +6,21 @@ export interface SearchResult {
   description: string;
 }
 
-export async function searchWeb(query: string, timeout = 15000): Promise<SearchResult[]> {
+export type SearchUnavailable = {
+  unavailable: true;
+  reason: 'no_api_key' | 'network_error' | 'timeout' | 'api_error';
+  message: string;
+};
+
+export type SearchResponse = SearchResult[] | SearchUnavailable;
+
+export async function searchWeb(query: string, timeout = 15000): Promise<SearchResponse> {
   if (!TAVILY_API_KEY) {
-    console.error('TAVILY_API_KEY is not configured');
-    return [];
+    return {
+      unavailable: true,
+      reason: 'no_api_key',
+      message: '搜索服务未配置 TAVILY_API_KEY'
+    };
   }
 
   try {
@@ -35,8 +46,11 @@ export async function searchWeb(query: string, timeout = 15000): Promise<SearchR
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      console.error('Tavily API error:', response.status);
-      return [];
+      return {
+        unavailable: true,
+        reason: 'api_error',
+        message: `搜索 API 返回错误: ${response.status}`
+      };
     }
 
     const data = await response.json();
@@ -56,11 +70,17 @@ export async function searchWeb(query: string, timeout = 15000): Promise<SearchR
     }));
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      console.error('Search timeout');
-    } else {
-      console.error('Search failed:', error);
+      return {
+        unavailable: true,
+        reason: 'timeout',
+        message: '搜索请求超时'
+      };
     }
-    return [];
+    return {
+      unavailable: true,
+      reason: 'network_error',
+      message: `搜索失败: ${error instanceof Error ? error.message : '未知错误'}`
+    };
   }
 }
 
