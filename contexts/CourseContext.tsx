@@ -1,12 +1,14 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { CourseTree, GenerationStatus, NodeLesson, CourseBlueprint } from '@/types/course';
+import { CourseTree, GenerationStatus, NodeLesson, CourseBlueprint, StoredCourseBundle } from '@/types/course';
 import {
   activateSystemCourse,
+  addCourseBundle,
   deleteCourse as deleteCourseFromStorage,
   getStoredCourseBundle,
   getStoredData,
+  getStoredDataV2,
   getSystemCourseRecommendations,
   getUserProfile,
   saveCourseBlueprint,
@@ -27,6 +29,7 @@ interface CourseContextType {
   preloadNextNode: (courseId: string, currentNodeIndex: number) => void;
   updateNodeContent: (courseId: string, nodeIndex: number, lesson: NodeLesson) => void;
   deleteCourse: (courseId: string) => void;
+  addCourse: (bundle: StoredCourseBundle) => void;
   submitOutlineMessage: (topic: string, userMessage?: string) => Promise<{
     type: string;
     blueprint?: CourseBlueprint;
@@ -321,6 +324,15 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     setCurrentCourse(prev => prev?.courseId === courseId ? null : prev);
   }, []);
 
+  const addCourse = useCallback((bundle: StoredCourseBundle) => {
+    // Save bundle to storage
+    addCourseBundle(bundle);
+    // Reload and update state so UI reflects the new course immediately
+    const data = getStoredData();
+    setCourses(data.courses);
+    setCurrentCourse(data.courses.find(c => c.courseId === data.currentCourseId) || null);
+  }, []);
+
   return (
     <CourseContext.Provider value={{
       courses,
@@ -333,6 +345,7 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
       preloadNextNode,
       updateNodeContent,
       deleteCourse,
+      addCourse,
       submitOutlineMessage,
       generateToc,
       generateNodeCards,
