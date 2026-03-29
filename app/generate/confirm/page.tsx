@@ -13,68 +13,64 @@ function ConfirmPageContent() {
   const { submitOutlineMessage } = useCourse();
 
   const [response, setResponse] = useState<OutlineResponse | null>(null);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [currentQuestion, setCurrentQuestion] = useState<{ id: string; question: string; options?: string[] } | null>(null);
+  const [currentAnswer, setCurrentAnswer] = useState<string>('');
+  const [answers, setAnswers] = useState<string[]>([]);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (topic) {
-      fetchOutline();
+      fetchInitialOutline();
     }
   }, [topic]);
 
-  const fetchOutline = async () => {
+  const fetchInitialOutline = async () => {
     setIsLoading(true);
     setError(null);
     try {
       const result = await submitOutlineMessage(topic) as OutlineResponse;
-      setResponse(result);
-      // 初始化答案
-      if (result.questions) {
-        const initialAnswers: Record<string, string> = {};
-        result.questions.forEach(q => {
-          initialAnswers[q.id] = '';
-        });
-        setAnswers(initialAnswers);
-      }
+      handleResponse(result);
     } catch (err) {
       setError('生成失败，请稍后重试');
     }
     setIsLoading(false);
   };
 
-  const handleAnswerChange = (questionId: string, value: string) => {
-    setAnswers(prev => ({ ...prev, [questionId]: value }));
+  const handleResponse = (result: OutlineResponse) => {
+    setResponse(result);
+
+    if (result.type === 'confirmation' && result.blueprint) {
+      // 纲要已生成，直接显示确认
+      setCurrentQuestion(null);
+    } else if (result.type === 'questions' && result.questions && result.questions.length > 0) {
+      // 有问题，先问第一个
+      setCurrentQuestion(result.questions[0]);
+      setCurrentQuestionIndex(0);
+      setAnswers([]);
+    } else if (result.type === 'reconsider') {
+      // 模型重新思考，等用户触发重试
+      setCurrentQuestion(null);
+    }
   };
 
-  const handleSubmitAnswers = async () => {
-    if (!response?.questions) return;
-
-    // 检查是否所有问题都已回答
-    const unanswered = response.questions.filter(q => !answers[q.id]);
-    if (unanswered.length > 0) {
-      setError('请回答所有问题');
-      return;
-    }
+  const handleAnswerSubmit = async () => {
+    if (!currentAnswer || !currentQuestion) return;
 
     setIsSubmitting(true);
     setError(null);
 
+    const newAnswers = [...answers, currentAnswer];
+    setAnswers(newAnswers);
+    setCurrentAnswer('');
+
     try {
-      // 构建回答字符串
-      const answerText = response.questions
-        .map(q => `${q.question}: ${answers[q.id]}`)
-        .join('; ');
+      // 将之前所有答案合并发送给模型
+      const answerText = newAnswers.join('; ');
       const result = await submitOutlineMessage(topic, answerText) as OutlineResponse;
-      setResponse(result);
-      if (result.questions) {
-        const initialAnswers: Record<string, string> = {};
-        result.questions.forEach(q => {
-          initialAnswers[q.id] = '';
-        });
-        setAnswers(initialAnswers);
-      }
+      handleResponse(result);
     } catch (err) {
       setError('提交失败，请稍后重试');
     }
@@ -82,7 +78,6 @@ function ConfirmPageContent() {
   };
 
   const handleConfirm = (bp: OutlineBlueprint) => {
-    // 存储 outline 到 sessionStorage（不包含 nodes）
     sessionStorage.setItem('pendingOutline', JSON.stringify({
       topic,
       learningDirection: bp.learningDirection,
@@ -93,7 +88,7 @@ function ConfirmPageContent() {
   };
 
   const handleRetry = () => {
-    fetchOutline();
+    fetchInitialOutline();
   };
 
   if (isLoading) {
@@ -128,69 +123,6 @@ function ConfirmPageContent() {
     );
   }
 
-  // 提问模式
-  if (response?.type === 'questions' && response.questions && response.questions.length > 0) {
-    return (
-      <main className="min-h-screen flex flex-col bg-background">
-        <div className="flex-1 p-6">
-          <div className="max-w-2xl mx-auto">
-            <h1 className="text-2xl font-bold mb-2">补充信息</h1>
-            <p className="text-secondary mb-6">请回答以下问题，帮助我们为你定制课程：</p>
-
-            <div className="space-y-6">
-              {response.questions.map((q, index) => (
-                <div key={q.id} className="bg-card border rounded-xl p-4">
-                  <div className="flex items-start gap-3">
-                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-sm font-medium flex items-center justify-center">
-                      {index + 1}
-                    </span>
-                    <div className="flex-1">
-                      <p className="font-medium mb-3">{q.question}</p>
-                      <div className="space-y-2">
-                        {q.options?.map((option, optIndex) => (
-                          <label
-                            key={optIndex}
-                            className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                              answers[q.id] === option
-                                ? 'border-primary bg-primary/5'
-                                : 'border-border hover:border-primary/50'
-                            }`}
-                          >
-                            <input
-                              type="radio"
-                              name={q.id}
-                              value={option}
-                              checked={answers[q.id] === option}
-                              onChange={() => handleAnswerChange(q.id, option)}
-                              className="w-4 h-4 text-primary"
-                            />
-                            <span className="text-sm">{option}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {error && (
-              <p className="text-error text-sm mt-4">{error}</p>
-            )}
-
-            <button
-              onClick={handleSubmitAnswers}
-              disabled={isSubmitting}
-              className="w-full mt-6 px-6 py-3 rounded-full bg-primary text-white font-medium disabled:opacity-50"
-            >
-              {isSubmitting ? '提交中...' : '确认答案'}
-            </button>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
   // 重新思考模式
   if (response?.type === 'reconsider') {
     return (
@@ -203,6 +135,64 @@ function ConfirmPageContent() {
           >
             重新生成
           </button>
+        </div>
+      </main>
+    );
+  }
+
+  // 单题提问模式
+  if (currentQuestion) {
+    const questionNumber = currentQuestionIndex + 1;
+    const totalPossible = response?.questions?.length || 1;
+
+    return (
+      <main className="min-h-screen flex flex-col bg-background">
+        <div className="flex-1 p-6">
+          <div className="max-w-2xl mx-auto">
+            <div className="mb-6">
+              <p className="text-sm text-muted mb-1">问题 {questionNumber}</p>
+              <h1 className="text-2xl font-bold">补充信息</h1>
+              <p className="text-secondary mt-2">请回答以下问题，帮助我们为你定制课程：</p>
+            </div>
+
+            <div className="bg-card border rounded-xl p-6">
+              <p className="font-medium text-lg mb-4">{currentQuestion.question}</p>
+              <div className="space-y-3">
+                {currentQuestion.options?.map((option, optIndex) => (
+                  <label
+                    key={optIndex}
+                    className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
+                      currentAnswer === option
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:border-primary/50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="answer"
+                      value={option}
+                      checked={currentAnswer === option}
+                      onChange={() => setCurrentAnswer(option)}
+                      className="w-5 h-5 text-primary"
+                    />
+                    <span className="text-base">{option}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {error && (
+              <p className="text-error text-sm mt-4">{error}</p>
+            )}
+
+            <button
+              onClick={handleAnswerSubmit}
+              disabled={!currentAnswer || isSubmitting}
+              className="w-full mt-6 px-6 py-3 rounded-full bg-primary text-white font-medium disabled:opacity-50"
+            >
+              {isSubmitting ? '提交中...' : '确认答案'}
+            </button>
+          </div>
         </div>
       </main>
     );
