@@ -33,6 +33,7 @@ export function ClarificationScreen({ topic, initialMessages, questions, bluepri
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [isPreviewing, setIsPreviewing] = useState(false);
   const [editState, setEditState] = useState<EditState | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -74,7 +75,17 @@ export function ClarificationScreen({ topic, initialMessages, questions, bluepri
       whyThisCourseFits: blueprint.learnerPositioning?.whyThisCourseFits || '',
       nodes: blueprint.nodes.map(n => ({ title: n.title, teachingGoal: n.teachingGoal })),
     });
+    setIsPreviewing(true);
+  };
+
+  const handlePreviewEdit = () => {
+    setIsPreviewing(false);
     setIsEditing(true);
+  };
+
+  const handlePreviewCancel = () => {
+    setIsPreviewing(false);
+    setEditState(null);
   };
 
   const handleEditSave = () => {
@@ -107,6 +118,61 @@ export function ClarificationScreen({ topic, initialMessages, questions, bluepri
     setError(null);
     handleSend();
   };
+
+  // 预览模式
+  if (isPreviewing && editState && blueprint) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <h2 className="text-lg font-semibold">课程大纲预览</h2>
+
+          <div className="bg-card border rounded-xl p-4 space-y-4">
+            <div>
+              <h3 className="font-medium text-primary mb-1">主题</h3>
+              <p className="text-foreground">{blueprint.topic}</p>
+            </div>
+
+            <div>
+              <h3 className="font-medium text-primary mb-1">学习目标</h3>
+              <p className="text-foreground">{editState.courseGoal}</p>
+            </div>
+
+            <div>
+              <h3 className="font-medium text-primary mb-1">难度评估</h3>
+              <p className="text-foreground">{editState.difficultySummary}</p>
+            </div>
+
+            <div>
+              <h3 className="font-medium text-primary mb-1">为什么适合你</h3>
+              <p className="text-foreground">{editState.whyThisCourseFits}</p>
+            </div>
+
+            <div className="border-t pt-4">
+              <h3 className="font-medium text-primary mb-3">章节结构（共 {editState.nodes.length} 章）</h3>
+              <div className="space-y-3">
+                {editState.nodes.map((node, i) => (
+                  <div key={i} className="bg-muted/50 rounded-lg p-3">
+                    <div className="font-medium text-sm text-primary mb-1">第 {i + 1} 章</div>
+                    <div className="font-medium mb-1">{node.title}</div>
+                    <div className="text-sm text-secondary">{node.teachingGoal}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t p-4 flex gap-2">
+          <button onClick={handlePreviewCancel} className="flex-1 px-4 py-2 border rounded-lg">
+            返回
+          </button>
+          <button onClick={handlePreviewEdit} className="flex-1 px-4 py-2 bg-primary text-white rounded-lg">
+            开始编辑
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // 编辑模式
   if (isEditing && editState) {
