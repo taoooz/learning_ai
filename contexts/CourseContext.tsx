@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { CourseTree, GenerationStatus, NodeLesson } from '@/types/course';
+import { CourseTree, GenerationStatus, NodeLesson, CourseBlueprint } from '@/types/course';
 import {
   activateSystemCourse,
   deleteCourse as deleteCourseFromStorage,
@@ -16,39 +16,44 @@ import {
 import { getUserMemoryStoreSnapshot } from '@/hooks/useUserMemory';
 import { createMemoryRepository } from '@/lib/memory/repository';
 
-interface ClarificationState {
-  topic: string;
-  questions: Array<{
-    id: string;
-    question: string;
-    answer: string;
-  }>;
-}
-
 interface CourseContextType {
   courses: CourseTree[];
   currentCourse: CourseTree | null;
   generationStatus: GenerationStatus;
   generationError: string | null;
   systemCourseRecommendations: SystemCourseRecommendation[];
-  generateCourse: (topic: string) => Promise<void>;
-  retryCourseGeneration: () => Promise<void>;
   startSystemCourse: (courseId: string) => void;
   generateNodeContent: (courseId: string, nodeIndex: number) => Promise<void>;
   preloadNextNode: (courseId: string, currentNodeIndex: number) => void;
   updateNodeContent: (courseId: string, nodeIndex: number, lesson: NodeLesson) => void;
   deleteCourse: (courseId: string) => void;
-  clarification: ClarificationState | null;
-  setClarification: React.Dispatch<React.SetStateAction<ClarificationState | null>>;
-  submitClarification: () => Promise<void>;
+  submitOutlineMessage: (topic: string, userMessage?: string) => Promise<{
+    type: string;
+    blueprint?: CourseBlueprint;
+    questions?: Array<{ id: string; question: string }>;
+  }>;
+  generateToc: (blueprint: CourseBlueprint) => Promise<{
+    courseName: string;
+    courseDescription: string;
+    nodes: Array<{ index: number; title: string }>;
+  }>;
+  generateNodeCards: (
+    courseId: string,
+    nodeIndex: number,
+    options: {
+      learnerBackground: { backgroundSummary: string; skipBasics: string[] };
+      prevNodeSummary?: { title: string; concepts: string[] };
+      nextNodeSummary?: { title: string; concepts: string[] };
+    }
+  ) => Promise<{
+    cards: NodeLesson['cards'];
+  }>;
+  generateNodeQuestions: (courseId: string, nodeIndex: number) => Promise<{
+    questions: NodeLesson['questions'];
+  }>;
 }
 
 const CourseContext = createContext<CourseContextType | null>(null);
-
-interface CourseGenerationRequest {
-  topic: string;
-  clarificationAnswers?: ClarificationState['questions'];
-}
 
 function getGenerationErrorMessage(data: unknown, fallback: string): string {
   if (typeof data === 'object' && data !== null && 'error' in data && typeof data.error === 'string') {
@@ -63,9 +68,7 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
   const [currentCourse, setCurrentCourse] = useState<CourseTree | null>(null);
   const [generationStatus, setGenerationStatus] = useState<GenerationStatus>('idle');
   const [generationError, setGenerationError] = useState<string | null>(null);
-  const [clarification, setClarification] = useState<ClarificationState | null>(null);
   const [systemCourseRecommendations] = useState<SystemCourseRecommendation[]>(() => getSystemCourseRecommendations());
-  const lastGenerationRequestRef = useRef<CourseGenerationRequest | null>(null);
 
   // 使用 ref 来跟踪最新的 courses，避免依赖变化
   const coursesRef = useRef<CourseTree[]>([]);
@@ -94,190 +97,145 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('node-completed', handleNodeCompleted);
   }, []);
 
-  const generateCourse = useCallback(async (topic: string) => {
+  const submitOutlineMessage = useCallback(async (topic: string, userMessage?: string) => {
     setGenerationStatus('generating');
     setGenerationError(null);
-    lastGenerationRequestRef.current = { topic };
     try {
-      const response = await fetch('/api/generate', {
+      const response = await fetch('/api/generate/outline', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           topic,
           userProfile: getUserProfile(),
           userMemory: getUserMemoryStoreSnapshot(),
+          userMessage,
         }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(getGenerationErrorMessage(data, '课程生成失败，请稍后再试。'));
+        throw new Error(getGenerationErrorMessage(data, '大纲生成失败，请稍后再试。'));
       }
 
-      // 检查是否需要澄清
-      if (data.questions && Array.isArray(data.questions)) {
-        setClarification({
-          topic,
-          questions: data.questions.map((q: { id: string; question: string }) => ({
-            ...q,
-            answer: ''
-          }))
-        });
-        setGenerationStatus('success');
-        return;
-      }
-
-      // 直接返回课程
-      saveCourseBlueprint(data.blueprint);
-      createMemoryRepository().appendMemoryEvent({
-        type: 'course_generated',
-        topic,
-        courseId: data.blueprint.courseId,
-        occurredAt: Date.now(),
-        payload: {
-          goal: data.blueprint.courseGoal,
-          conceptIds: data.blueprint.globalConcepts.map((item: { id: string }) => item.id),
-        },
-      });
-      const storedData = getStoredData();
-      const course = storedData.courses.find((item) => item.courseId === data.blueprint.courseId) || null;
-      if (!course) throw new Error('Generated course missing after save');
-      setCourses(storedData.courses);
-      setCurrentCourse(course);
-
-      // 课程目录生成完成，立即返回，让用户看到课程
-      // 第一節內容在後台生成
       setGenerationStatus('success');
-
-      // 後台生成第一節內容，不阻塞主流程
-      const blueprint = data.blueprint;
-      const courseForNode = course;
-      setTimeout(() => {
-        generateNodeContent(courseForNode.courseId, 0).catch(() => {
-          // 第一節生成失敗不影響課程
-        });
-      }, 0);
+      return data;
     } catch (error) {
-      setGenerationError(error instanceof Error ? error.message : '课程生成失败，请稍后再试。');
+      setGenerationError(error instanceof Error ? error.message : '大纲生成失败，请稍后再试。');
       setGenerationStatus('error');
       throw error;
     }
   }, []);
 
-  const submitClarification = useCallback(async () => {
-    if (!clarification) return;
-
-    const unanswered = clarification.questions.filter(q => !q.answer.trim());
-    if (unanswered.length > 0) {
-      throw new Error('Please answer all questions');
-    }
-
+  const generateToc = useCallback(async (blueprint: CourseBlueprint) => {
     setGenerationStatus('generating');
     setGenerationError(null);
-    lastGenerationRequestRef.current = {
-      topic: clarification.topic,
-      clarificationAnswers: clarification.questions.map((item) => ({ ...item })),
-    };
     try {
-      const response = await fetch('/api/generate', {
+      const response = await fetch('/api/generate/toc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blueprint }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(getGenerationErrorMessage(data, '目录生成失败，请稍后再试。'));
+      }
+
+      setGenerationStatus('success');
+      return data;
+    } catch (error) {
+      setGenerationError(error instanceof Error ? error.message : '目录生成失败，请稍后再试。');
+      setGenerationStatus('error');
+      throw error;
+    }
+  }, []);
+
+  const generateNodeCards = useCallback(async (
+    courseId: string,
+    nodeIndex: number,
+    options: {
+      learnerBackground: { backgroundSummary: string; skipBasics: string[] };
+      prevNodeSummary?: { title: string; concepts: string[] };
+      nextNodeSummary?: { title: string; concepts: string[] };
+    }
+  ) => {
+    setGenerationStatus('generating');
+    setGenerationError(null);
+    try {
+      const bundle = getStoredCourseBundle(courseId);
+      if (!bundle) throw new Error('Course bundle not found');
+      const node = bundle.blueprint.nodes[nodeIndex];
+
+      const response = await fetch('/api/generate/node/cards', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          topic: clarification.topic,
-          clarificationAnswers: clarification.questions,
-          userProfile: getUserProfile(),
-          userMemory: getUserMemoryStoreSnapshot(),
+          topic: bundle.blueprint.topic,
+          nodeInfo: {
+            teachingGoal: node.teachingGoal,
+            teachConceptIds: node.teachConceptIds,
+            prerequisiteConceptIds: node.prerequisiteConceptIds,
+          },
+          learnerBackground: options.learnerBackground,
+          prevNodeSummary: options.prevNodeSummary,
+          nextNodeSummary: options.nextNodeSummary,
         }),
       });
 
       const data = await response.json();
+
       if (!response.ok) {
-        throw new Error(getGenerationErrorMessage(data, '课程生成失败，请稍后再试。'));
+        throw new Error(getGenerationErrorMessage(data, '卡片生成失败，请稍后再试。'));
       }
-      saveCourseBlueprint(data.blueprint);
-      createMemoryRepository().appendMemoryEvent({
-        type: 'course_generated',
-        topic: clarification.topic,
-        courseId: data.blueprint.courseId,
-        occurredAt: Date.now(),
-        payload: {
-          goal: data.blueprint.courseGoal,
-          conceptIds: data.blueprint.globalConcepts.map((item: { id: string }) => item.id),
-        },
-      });
-      const storedData = getStoredData();
-      const course = storedData.courses.find((item) => item.courseId === data.blueprint.courseId) || null;
-      if (!course) throw new Error('Generated course missing after save');
-      setCourses(storedData.courses);
-      setCurrentCourse(course);
-      setClarification(null);
+
       setGenerationStatus('success');
+      return data;
     } catch (error) {
-      setGenerationError(error instanceof Error ? error.message : '课程生成失败，请稍后再试。');
+      setGenerationError(error instanceof Error ? error.message : '卡片生成失败，请稍后再试。');
       setGenerationStatus('error');
       throw error;
     }
-  }, [clarification]);
+  }, []);
 
-  const retryCourseGeneration = useCallback(async () => {
-    const request = lastGenerationRequestRef.current;
-    if (!request) {
-      throw new Error('没有可重试的课程生成请求');
-    }
+  const generateNodeQuestions = useCallback(async (courseId: string, nodeIndex: number) => {
+    setGenerationStatus('generating');
+    setGenerationError(null);
+    try {
+      const bundle = getStoredCourseBundle(courseId);
+      if (!bundle) throw new Error('Course bundle not found');
+      const node = bundle.blueprint.nodes[nodeIndex];
+      const lesson = bundle.lessons[nodeIndex];
 
-    if (request.clarificationAnswers?.length) {
-      setGenerationStatus('generating');
-      setGenerationError(null);
-      setClarification({
-        topic: request.topic,
-        questions: request.clarificationAnswers.map((item) => ({ ...item })),
-      });
-      try {
-        const response = await fetch('/api/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            topic: request.topic,
-            clarificationAnswers: request.clarificationAnswers,
-            userProfile: getUserProfile(),
-            userMemory: getUserMemoryStoreSnapshot(),
-          }),
-        });
-
-        const data = await response.json();
-        if (!response.ok) {
-          throw new Error(getGenerationErrorMessage(data, '课程生成失败，请稍后再试。'));
-        }
-
-        saveCourseBlueprint(data.blueprint);
-        createMemoryRepository().appendMemoryEvent({
-          type: 'course_generated',
-          topic: request.topic,
-          courseId: data.blueprint.courseId,
-          occurredAt: Date.now(),
-          payload: {
-            goal: data.blueprint.courseGoal,
-            conceptIds: data.blueprint.globalConcepts.map((item: { id: string }) => item.id),
+      const response = await fetch('/api/generate/node/questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: bundle.blueprint.topic,
+          nodeInfo: {
+            teachingGoal: node.teachingGoal,
+            teachConceptIds: node.teachConceptIds,
+            prerequisiteConceptIds: node.prerequisiteConceptIds,
           },
-        });
-        const storedData = getStoredData();
-        const course = storedData.courses.find((item) => item.courseId === data.blueprint.courseId) || null;
-        if (!course) throw new Error('Generated course missing after save');
-        setCourses(storedData.courses);
-        setCurrentCourse(course);
-        setClarification(null);
-        setGenerationStatus('success');
-      } catch (error) {
-        setGenerationError(error instanceof Error ? error.message : '课程生成失败，请稍后再试。');
-        setGenerationStatus('error');
-        throw error;
-      }
-      return;
-    }
+          cards: lesson.cards,
+        }),
+      });
 
-    await generateCourse(request.topic);
-  }, [generateCourse]);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(getGenerationErrorMessage(data, '题目生成失败，请稍后再试。'));
+      }
+
+      setGenerationStatus('success');
+      return data;
+    } catch (error) {
+      setGenerationError(error instanceof Error ? error.message : '题目生成失败，请稍后再试。');
+      setGenerationStatus('error');
+      throw error;
+    }
+  }, []);
 
   const startSystemCourse = useCallback((courseId: string) => {
     const course = activateSystemCourse(courseId);
@@ -370,16 +328,15 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
       generationStatus,
       generationError,
       systemCourseRecommendations,
-      generateCourse,
-      retryCourseGeneration,
       startSystemCourse,
       generateNodeContent,
       preloadNextNode,
       updateNodeContent,
       deleteCourse,
-      clarification,
-      setClarification,
-      submitClarification,
+      submitOutlineMessage,
+      generateToc,
+      generateNodeCards,
+      generateNodeQuestions,
     }}>
       {children}
     </CourseContext.Provider>
