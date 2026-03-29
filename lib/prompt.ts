@@ -13,7 +13,7 @@ import type {
 } from '../types/course';
 import type { KnowledgeGap } from '../types/course';
 
-// TOC API 使用的简化 blueprint 类型
+// TOC API 使用的简化 blueprint 类型（不包含 nodes，nodes 由 TOC API 生成）
 interface TocCourseBlueprint {
   learningDirection: string;
   learningGoal: string;
@@ -22,11 +22,6 @@ interface TocCourseBlueprint {
     backgroundSummary: string;
     skipBasics: string[];
   };
-  nodes: Array<{
-    index: number;
-    title: string;
-    teachingGoal: string;
-  }>;
 }
 
 interface NodeGenerationContext {
@@ -690,19 +685,23 @@ ${clarificationSection}
 ${messageSection}
 主题：${topic}
 
-## 课程纲要结构
+## 课程纲要结构（只需要这三项，不需要章节结构）
 
-1. **学习方向**：这门课要讲什么，定调
-2. **学习目标**：服务用户的什么目标
-3. **个人基础**：根据用户背景，用熟悉的术语、例子创建，跳过已掌握内容
-4. **节点结构**：课程章节安排
+1. **学习方向（learningDirection）**：这门课要讲什么，定调。用一句话概括课程的核心内容和方向。
+2. **学习目标（learningGoal）**：服务用户的什么目标，为什么用户需要学这个，学完能做什么。
+3. **个人基础（learnerPositioning）**：根据用户背景判断
+   - estimatedLevel: 用户当前水平（novice/beginner/intermediate/advanced）
+   - difficultySummary: 一句话描述难度和适合的用户群体
+   - backgroundSummary: 用户的背景知识、学习偏好
+   - skipBasics: 已掌握的、可跳过的基础内容
+   - whyThisCourseFits: 为什么这门课适合这个用户
 
 ## 决策规则
 - 信息足够 → 输出确认卡片 type: "confirmation"
-- 有不确定信息 → 输出选择题 type: "questions"
+- 有不确定且影响课程质量的信息 → 输出选择题 type: "questions"（最多3道，必须是选择题）
 - 用户发消息 → type: "reconsider"
 
-## 输出格式
+## 输出格式（confirmation 时没有 nodes）
 {
   "type": "confirmation"|"questions"|"reconsider",
   "blueprint": {
@@ -710,12 +709,13 @@ ${messageSection}
     "learningGoal": "学习目标描述",
     "learnerPositioning": {
       "estimatedLevel": "novice|beginner|intermediate|advanced",
+      "difficultySummary": "难度描述",
       "backgroundSummary": "个人基础总结",
-      "skipBasics": ["已跳过的基础1", "已跳过的基础2"]
-    },
-    "nodes": [{ "index": 0, "title": "节点标题", "teachingGoal": "节点目标" }]
+      "skipBasics": ["已跳过1", "已跳过2"],
+      "whyThisCourseFits": "为什么适合"
+    }
   },
-  "questions": [{ "id": "q1", "question": "问题", "options": ["A", "B"] }]
+  "questions": [{ "id": "q1", "question": "问题", "options": ["A", "B", "C", "D"] }]
 }
 
 只返回 JSON。`;
@@ -727,22 +727,28 @@ export function buildTocPrompt(blueprint: TocCourseBlueprint): string {
 课程纲要：
 - 学习方向：${blueprint.learningDirection}
 - 学习目标：${blueprint.learningGoal}
-- 个人基础：${blueprint.learnerPositioning.backgroundSummary}
-- 跳过的基础：${blueprint.learnerPositioning.skipBasics.join('、') || '无'}
-
-节点列表：
-${blueprint.nodes.map((n, i) => `${i + 1}. ${n.title}：${n.teachingGoal}`).join('\n')}
+- 用户背景：${blueprint.learnerPositioning.backgroundSummary}
+- 难度定位：${blueprint.learnerPositioning.estimatedLevel}
+- 已跳过基础：${blueprint.learnerPositioning.skipBasics.join('、') || '无'}
 
 ## 任务
-1. 生成课程名称（简洁有吸引力，10-20字）
-2. 生成课程描述（一句话，20-40字）
-3. 为每个节点生成详细描述（1-2句话，说明这节要学什么）
+1. 根据学习方向和学习目标，设计课程章节结构（5-12个章节，取决于主题复杂度）
+2. 每个章节要有具体的学习目标
+3. 生成课程名称（简洁有吸引力，10-20字）
+4. 生成课程描述（一句话，20-40字）
+5. 为每个节点生成详细描述（1-2句话，说明这节要学什么）
+
+## 章节设计原则
+- 由浅入深，循序渐进
+- 每个章节有明确的学习目标
+- 章节之间有清晰的逻辑衔接
+- 考虑用户的背景和已跳过的基础
 
 ## 输出格式
 {
   "courseName": "课程名称",
   "courseDescription": "课程描述",
-  "nodes": [{ "index": 0, "title": "节点标题", "description": "节点描述" }]
+  "nodes": [{ "index": 0, "title": "节点标题", "teachingGoal": "节点学习目标", "description": "节点详细描述" }]
 }
 
 只返回 JSON。`;

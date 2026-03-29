@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { CourseTree, GenerationStatus, NodeLesson, CourseBlueprint, StoredCourseBundle } from '@/types/course';
+import { CourseTree, GenerationStatus, NodeLesson, CourseBlueprint, StoredCourseBundle, OutlineLearnerPositioning } from '@/types/course';
 import {
   activateSystemCourse,
   addCourseBundle,
@@ -32,13 +32,22 @@ interface CourseContextType {
   addCourse: (bundle: StoredCourseBundle) => void;
   submitOutlineMessage: (topic: string, userMessage?: string) => Promise<{
     type: string;
-    blueprint?: CourseBlueprint;
+    blueprint?: {
+      learningDirection: string;
+      learningGoal: string;
+      learnerPositioning: OutlineLearnerPositioning;
+    };
     questions?: Array<{ id: string; question: string }>;
   }>;
-  generateToc: (blueprint: CourseBlueprint) => Promise<{
+  generateToc: (outline: {
+    topic: string;
+    learningDirection: string;
+    learningGoal: string;
+    learnerPositioning: OutlineLearnerPositioning;
+  }) => Promise<{
     courseName: string;
     courseDescription: string;
-    nodes: Array<{ index: number; title: string }>;
+    nodes: Array<{ index: number; title: string; teachingGoal: string; description: string }>;
   }>;
   generateNodeCards: (
     courseId: string,
@@ -130,14 +139,19 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const generateToc = useCallback(async (blueprint: CourseBlueprint) => {
+  const generateToc = useCallback(async (outline: {
+    topic: string;
+    learningDirection: string;
+    learningGoal: string;
+    learnerPositioning: OutlineLearnerPositioning;
+  }) => {
     setGenerationStatus('generating');
     setGenerationError(null);
     try {
       const response = await fetch('/api/generate/toc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ blueprint }),
+        body: JSON.stringify({ blueprint: outline }),
       });
 
       const data = await response.json();

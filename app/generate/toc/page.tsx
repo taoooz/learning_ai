@@ -4,12 +4,19 @@ import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCourse } from '@/contexts/CourseContext';
 import { createStoredCourseBundleFromBlueprint } from '@/lib/course-blueprint';
-import type { CourseBlueprint, StoredCourseBundle } from '@/types/course';
+import type { CourseBlueprint, StoredCourseBundle, OutlineLearnerPositioning } from '@/types/course';
 
 interface TocResponse {
   courseName: string;
   courseDescription: string;
-  nodes: { index: number; title: string; description: string }[];
+  nodes: { index: number; title: string; teachingGoal: string; description: string }[];
+}
+
+interface PendingOutline {
+  topic: string;
+  learningDirection: string;
+  learningGoal: string;
+  learnerPositioning: OutlineLearnerPositioning;
 }
 
 function TocPageContent() {
@@ -21,41 +28,50 @@ function TocPageContent() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const blueprintData = sessionStorage.getItem('pendingBlueprint');
-    if (!blueprintData) {
+    const outlineData = sessionStorage.getItem('pendingOutline');
+    if (!outlineData) {
       setError('没有找到课程纲要，请重新开始');
       setIsLoading(false);
       return;
     }
 
-    const blueprint: CourseBlueprint = JSON.parse(blueprintData);
+    const outline: PendingOutline = JSON.parse(outlineData);
 
     // 调用 toc API 生成课程名称、描述、节点详情
-    generateToc(blueprint).then(async (result) => {
+    generateToc(outline).then(async (result) => {
       try {
         const tocResult = result as TocResponse;
-        // 更新 blueprint 的节点结构（添加 description）
-        // 注意：description 暂时存储在内存中，不修改原始 blueprint 类型
-        const updatedBlueprint: CourseBlueprint = {
-          ...blueprint,
-          // 使用 API 返回的 courseName 和 courseDescription 更新对应字段
-          courseGoal: tocResult.courseDescription || blueprint.courseGoal,
-          // 节点描述通过 generateNodeContent 动态生成，这里只需确保结构正确
-          nodes: blueprint.nodes.map((node, i) => ({
-            ...node,
-            // 如果 toc 返回了 description 则使用，否则使用 teachingGoal
-            teachingGoal: tocResult.nodes?.[i]?.description || node.teachingGoal,
+
+        // 构建完整的 CourseBlueprint
+        const blueprint: CourseBlueprint = {
+          courseId: `course-${Date.now()}`,
+          topic: outline.topic,
+          learnerPositioning: {
+            estimatedLevel: outline.learnerPositioning.estimatedLevel,
+            difficultySummary: outline.learnerPositioning.difficultySummary,
+            whyThisCourseFits: outline.learnerPositioning.whyThisCourseFits,
+          },
+          courseGoal: tocResult.courseDescription || outline.learningGoal,
+          globalConcepts: [],
+          nodes: tocResult.nodes.map((n, i) => ({
+            index: n.index,
+            title: n.title,
+            teachingGoal: n.teachingGoal,
+            teachConceptIds: [],
+            prerequisiteConceptIds: [],
+            bridgeFromPreviousNode: '',
+            status: 'available',
           })),
         };
 
         // 创建课程 bundle
-        const bundle: StoredCourseBundle = createStoredCourseBundleFromBlueprint(updatedBlueprint);
+        const bundle: StoredCourseBundle = createStoredCourseBundleFromBlueprint(blueprint);
 
         // 保存 bundle 并更新上下文状态
         addCourse(bundle);
 
         // 清理 sessionStorage
-        sessionStorage.removeItem('pendingBlueprint');
+        sessionStorage.removeItem('pendingOutline');
 
         // 跳转到课程页面
         router.push(`/course/${blueprint.courseId}`);

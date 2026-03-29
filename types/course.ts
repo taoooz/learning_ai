@@ -148,6 +148,28 @@ export interface CourseTreeView {
   }>;
 }
 
+// Outline API 返回的纲要类型（不包含章节结构，章节由 TOC API 生成）
+export interface OutlineLearnerPositioning {
+  estimatedLevel: 'novice' | 'beginner' | 'intermediate' | 'advanced';
+  difficultySummary: string;
+  backgroundSummary: string;
+  skipBasics: string[];
+  whyThisCourseFits: string;
+}
+
+export interface OutlineBlueprint {
+  learningDirection: string;
+  learningGoal: string;
+  learnerPositioning: OutlineLearnerPositioning;
+}
+
+export interface OutlineResponse {
+  type: 'confirmation' | 'questions' | 'reconsider';
+  blueprint?: OutlineBlueprint;
+  questions?: ClarificationQuestion[];
+  message?: string;
+}
+
 export interface NodeLessonCard extends LearningCard {
   coveredConceptIds: string[];
 }
