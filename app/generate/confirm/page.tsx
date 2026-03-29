@@ -23,6 +23,8 @@ function ConfirmPageContent() {
 
   useEffect(() => {
     if (topic) {
+      // 清除之前的 session，开始新的生成
+      sessionStorage.removeItem('outlineSessionId');
       fetchInitialOutline();
     }
   }, [topic]);

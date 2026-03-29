@@ -113,7 +113,10 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     setGenerationStatus('generating');
     setGenerationError(null);
     try {
-      const response = await fetch('/api/generate/outline', {
+      // 获取已有的 sessionId（如果存在）
+      const existingSessionId = sessionStorage.getItem('outlineSessionId');
+
+      const response = await fetch('/api/agents/outline', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -121,6 +124,7 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
           userProfile: getUserProfile(),
           userMemory: getUserMemoryStoreSnapshot(),
           userMessage,
+          sessionId: existingSessionId,
         }),
       });
 
@@ -128,6 +132,11 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
 
       if (!response.ok) {
         throw new Error(getGenerationErrorMessage(data, '大纲生成失败，请稍后再试。'));
+      }
+
+      // 如果返回了新的 sessionId，保存到 sessionStorage
+      if (data.sessionId) {
+        sessionStorage.setItem('outlineSessionId', data.sessionId);
       }
 
       setGenerationStatus('success');
