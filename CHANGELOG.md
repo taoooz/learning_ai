@@ -1,5 +1,18 @@
 # 项目迭代日志
 
+## 2026-03-31
+
+### 测试修复
+
+**问题**：
+- `deriveCourseTreeViewFromBlueprint` 测试期望与实际类型定义不一致
+- 测试期望缺少 `courseGoal` 字段
+- 测试期望包含不属于 `CourseTreeView` 类型的 `cardCount` 字段
+
+**解决方案**：
+- `tests/course-blueprint-memory-v3.test.ts`：修正测试期望，添加 `courseGoal`，移除 `cardCount`
+- 所有 51 个测试现在通过
+
 ## 2026-03-30
 
 ### 学习页内容生成链路修复
