@@ -2,6 +2,30 @@
 
 ## 2026-03-31
 
+### 重复请求修复
+
+**问题**：
+- React Strict Mode 导致 confirm/toc/学习页 useEffect 执行两次
+- 两次 API 请求都会到达服务器，返回不同结果导致页面内容跳变
+- 用户体验差，浪费 API 调用
+
+**解决方案**：
+- `app/generate/confirm/page.tsx`：添加 AbortController cleanup，组件卸载时取消请求
+- `app/generate/toc/page.tsx`：调整 AbortController 创建顺序，先取消再创建
+- `app/course/[courseId]/learn/[nodeIndex]/page.tsx`：添加 `loadingVersionRef` 版本号跟踪，只处理最新版本的响应
+
+### 节点生成上下文优化
+
+**问题**：
+- 节点生成 API 传入很多上下文字段，但大部分是空的
+- prompt 中包含空的段落（如 `## 可用类比\n\n## 偏好解释方式\n\n`）
+- 增加 token 消耗，降低 prompt 清晰度
+
+**解决方案**：
+- `lib/prompt.ts`：优化 `buildNodeLessonPrompt`，只在有内容时才添加上下文段落
+- `app/api/generate/node/route.ts`：提前过滤空数据，简化上下文处理逻辑
+- 减少不必要的字段传递，提升生成质量
+
 ### 测试修复
 
 **问题**：
