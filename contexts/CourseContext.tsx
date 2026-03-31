@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { CourseTree, GenerationStatus, NodeLesson, CourseBlueprint, StoredCourseBundle, OutlineLearnerPositioning } from '@/types/course';
+import { CourseTree, GenerationStatus, NodeLesson, CourseBlueprint, StoredCourseBundle, OutlineLearnerPositioning, OutlineResponse } from '@/types/course';
 import {
   activateSystemCourse,
   addCourseBundle,
@@ -30,15 +30,7 @@ interface CourseContextType {
   updateNodeContent: (courseId: string, nodeIndex: number, lesson: NodeLesson) => void;
   deleteCourse: (courseId: string) => void;
   addCourse: (bundle: StoredCourseBundle) => void;
-  submitOutlineMessage: (topic: string, userMessage?: string) => Promise<{
-    type: string;
-    blueprint?: {
-      learningDirection: string;
-      learningGoal: string;
-      learnerPositioning: OutlineLearnerPositioning;
-    };
-    questions?: Array<{ id: string; question: string }>;
-  }>;
+  submitOutlineMessage: (topic: string, userMessage?: string) => Promise<OutlineResponse>;
   generateToc: (outline: {
     topic: string;
     learningDirection: string;
@@ -81,6 +73,13 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
   const [generationStatus, setGenerationStatus] = useState<GenerationStatus>('idle');
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [systemCourseRecommendations] = useState<SystemCourseRecommendation[]>(() => getSystemCourseRecommendations());
+  const [agentSessionId, setAgentSessionId] = useState<string | null>(null);
+
+  // 使用 ref 来跟踪最新的 sessionId，避免 useCallback 依赖问题
+  const agentSessionIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    agentSessionIdRef.current = agentSessionId;
+  }, [agentSessionId]);
 
   // 使用 ref 来跟踪最新的 courses，避免依赖变化
   const coursesRef = useRef<CourseTree[]>([]);
@@ -113,13 +112,15 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     setGenerationStatus('generating');
     setGenerationError(null);
     try {
-      const response = await fetch('/api/generate/outline', {
+      // 调用 Python Agent（/api/agents/outline）而非旧系统（/api/generate/outline）
+      const response = await fetch('/api/agents/outline', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           topic,
           userProfile: getUserProfile(),
           userMemory: getUserMemoryStoreSnapshot(),
+          sessionId: agentSessionIdRef.current,
           userMessage,
         }),
       });
@@ -128,6 +129,11 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
 
       if (!response.ok) {
         throw new Error(getGenerationErrorMessage(data, '大纲生成失败，请稍后再试。'));
+      }
+
+      // 保存 sessionId 用于后续对话
+      if (data.sessionId) {
+        setAgentSessionId(data.sessionId);
       }
 
       setGenerationStatus('success');

@@ -4,12 +4,20 @@ import { callMiniMax, parseJSONResponse } from '@/lib/minimax';
 import type { LearningCard } from '@/types/course';
 
 export async function POST(request: NextRequest) {
-  const { topic, nodeInfo, learnerBackground, prevNodeSummary, nextNodeSummary } = await request.json();
+  try {
+    const { topic, nodeInfo, learnerBackground, prevNodeSummary, nextNodeSummary } = await request.json();
 
-  const prompt = buildCardsPrompt(topic, nodeInfo, learnerBackground, prevNodeSummary, nextNodeSummary);
-  const content = await callMiniMax(prompt);
+    const prompt = buildCardsPrompt(topic, nodeInfo, learnerBackground, prevNodeSummary, nextNodeSummary);
+    const content = await callMiniMax(prompt);
 
-  const result = parseJSONResponse<{ cards: LearningCard[] }>(content);
+    const result = parseJSONResponse<{ cards: LearningCard[] }>(content);
 
-  return NextResponse.json(result);
+    return NextResponse.json(result);
+  } catch (error) {
+    console.error('[Cards API] Error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Cards generation failed' },
+      { status: 500 }
+    );
+  }
 }

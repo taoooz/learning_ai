@@ -24,67 +24,78 @@ export function ConfirmationCard({ blueprint, onConfirm, onEdit }: ConfirmationC
   };
 
   return (
-    <div className="bg-card border rounded-xl p-6 shadow-lg">
-      <h3 className="text-lg font-semibold mb-4">课程纲要确认</h3>
+    <div className="bg-surface border border-[rgba(0,0,0,0.06)] rounded-2xl p-5 shadow-[0_8px_32px_rgba(255,138,0,0.08)]">
+      {/* 状态标签 */}
+      <div className="mb-4">
+        <span className="inline-flex h-7 items-center rounded-full bg-success/12 px-3 text-xs font-medium text-success">
+          课程纲要已生成
+        </span>
+      </div>
 
-      <div className="space-y-4">
+      <div className="space-y-5">
         {/* 学习方向 */}
-        <div className="bg-muted/50 rounded-lg p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-medium text-primary uppercase tracking-wide">学习方向</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-accent uppercase tracking-wide">学习方向</span>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-accent/12 text-accent font-medium">
               {levelLabels[estimatedLevel] || estimatedLevel}
             </span>
           </div>
-          <p className="text-foreground leading-relaxed">{learningDirection}</p>
+          <p className="text-[15px] text-primary leading-relaxed pl-4 border-l-2 border-accent/20">
+            {learningDirection}
+          </p>
         </div>
 
         {/* 学习目标 */}
-        <div className="bg-muted/50 rounded-lg p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-medium text-primary uppercase tracking-wide">学习目标</span>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-accent uppercase tracking-wide">学习目标</span>
           </div>
-          <p className="text-foreground leading-relaxed">{learningGoal}</p>
+          <p className="text-[15px] text-primary leading-relaxed pl-4 border-l-2 border-accent/20">
+            {learningGoal}
+          </p>
         </div>
 
         {/* 个人基础 */}
-        <div className="bg-muted/50 rounded-lg p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-medium text-primary uppercase tracking-wide">个人基础</span>
+        <div className="bg-[rgba(255,138,0,0.04)] rounded-xl p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-accent uppercase tracking-wide">个人基础</span>
           </div>
-          <div className="space-y-3">
-            <div>
-              <span className="text-sm text-muted">难度定位：</span>
-              <span className="text-sm text-foreground">{difficultySummary}</span>
+
+          <div className="space-y-2.5 pl-4 border-l-2 border-accent/20">
+            <div className="flex items-start gap-2">
+              <span className="text-sm text-tertiary shrink-0 w-16">难度定位</span>
+              <span className="text-sm text-secondary flex-1">{difficultySummary}</span>
             </div>
-            <div>
-              <span className="text-sm text-muted">背景知识：</span>
-              <span className="text-sm text-foreground">{backgroundSummary}</span>
+            <div className="flex items-start gap-2">
+              <span className="text-sm text-tertiary shrink-0 w-16">背景知识</span>
+              <span className="text-sm text-secondary flex-1">{backgroundSummary}</span>
             </div>
             {skipBasics && skipBasics.length > 0 && (
-              <div>
-                <span className="text-sm text-muted">已跳过：</span>
-                <span className="text-sm text-foreground">{skipBasics.join('、')}</span>
+              <div className="flex items-start gap-2">
+                <span className="text-sm text-tertiary shrink-0 w-16">已跳过</span>
+                <span className="text-sm text-secondary flex-1">{skipBasics.join('、')}</span>
               </div>
             )}
-            <div className="pt-2 border-t">
-              <span className="text-sm text-muted">为什么适合你：</span>
-              <p className="text-sm text-foreground mt-1">{whyThisCourseFits}</p>
+            <div className="flex items-start gap-2 pt-2 border-t border-accent/10">
+              <span className="text-sm text-tertiary shrink-0 w-16">为什么适合</span>
+              <span className="text-sm text-secondary flex-1 leading-relaxed">{whyThisCourseFits}</span>
             </div>
           </div>
         </div>
       </div>
 
+      {/* 操作按钮 */}
       <div className="flex gap-3 mt-6">
         <button
           onClick={onEdit}
-          className="flex-1 px-4 py-3 border border-border rounded-lg text-foreground hover:bg-muted/50 transition-colors"
+          className="flex-1 h-12 px-5 py-3 border border-[rgba(0,0,0,0.08)] rounded-full text-sm font-medium text-secondary bg-surface hover:bg-[rgba(0,0,0,0.03)] active:scale-[0.98] transition-all duration-150"
         >
-          修改
+          重新调整
         </button>
         <button
           onClick={handleConfirm}
-          className="flex-1 px-4 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+          className="flex-1 h-12 px-5 py-3 bg-[var(--color-cta)] text-[var(--color-cta-text)] rounded-full text-sm font-semibold shadow-[0_8px_24px_rgba(255,138,0,0.25)] hover:shadow-[0_12px_28px_rgba(255,138,0,0.32)] active:scale-[0.98] transition-all duration-150"
         >
           确认，开始生成课程目录
         </button>

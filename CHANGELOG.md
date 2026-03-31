@@ -1,5 +1,164 @@
 # 项目迭代日志
 
+## 2026-03-30
+
+### 学习页内容生成链路修复
+
+**问题**：
+- 学习页 `loadNodeContent` 使用分步生成（先 cards 再 questions），导致 questions 加载后步骤重置
+- `retryCount` 在闭包中捕获后不更新，失败时可能无限递归
+- 用户可能在 questions 未加载时直接完成节点
+
+**解决方案**：
+- `app/course/[courseId]/learn/[nodeIndex]/page.tsx`：改为使用 `generateNodeContent` 单一 API 同时生成卡片和题目，避免分步生成导致的步骤重置和无限递归问题
+- 移除不再需要的 `retryCount` 状态和 `generateNodeCards` / `generateNodeQuestions` / `updateNodeContent` 引用
+
+### Cards API 添加错误处理
+
+**问题**：
+- `/api/generate/node/cards` 没有任何错误处理
+- API 调用失败时直接抛出 500 错误，无日志
+
+**解决方案**：
+- `app/api/generate/node/cards/route.ts`：添加 try-catch 和 console.error 日志
+
+### callMiniMax 空内容防护
+
+**问题**：
+- MiniMax API 使用 `reasoning_split: true` 时，`message.content` 可能为 null
+- 旧代码直接使用 content 导致后续 JSON 解析失败
+
+**解决方案**：
+- `lib/minimax.ts`：在 `callMiniMax` 中添加 content 非空和类型检查，null 时抛出明确错误
+
+### Questions API 添加错误处理
+
+**问题**：
+- `/api/generate/node/questions` 没有任何错误处理
+- API 调用失败时直接抛出 500 错误，无日志
+
+**解决方案**：
+- `app/api/generate/node/questions/route.ts`：添加 try-catch 和 console.log 日志
+
+### keyPoints 可视化数据结构修复
+
+**问题现象**：
+- AI 返回 keyPoints 类型：`{ type: "keyPoints", data: { title: "...", points: [...] } }`
+- 组件期望：`{ type: "keyPoints", items: [...] }`
+- 导致 keyPoints 类型显示为"暂不支持的可视化类型"
+
+**解决方案**：
+- `components/ui/CardVisualization.tsx`：修改 keyPoints 处理逻辑，同时支持两种格式
+- 优先读取 `visualization.data.points`，回退到 `visualization.items`
+
+### CourseContext 类型签名修复
+
+**问题**：
+- `submitOutlineMessage` 返回类型定义为 `type: string`
+- 与 `OutlineResponse` 类型 `type: 'confirmation' | 'questions' | 'reconsider'` 不兼容
+- 导致 `confirm/page.tsx` 调用 `handleResponse(result)` 时类型错误
+
+**解决方案**：
+- `contexts/CourseContext.tsx`：
+  - 添加 `OutlineResponse` 到 import
+  - 修正 `submitOutlineMessage` 返回类型为 `Promise<OutlineResponse>`
+
+## 2026-03-29
+
+### 确认页 React Strict Mode 问题修复
+
+**问题现象**：
+- 确认页面一直卡在"加载中"或问题内容会变化（3个选项→4个选项）
+- 两次 API 调用返回不同结果，AI 非确定性导致
+
+**根本原因**：
+- React Strict Mode 在开发模式下会故意挂载→卸载→再挂载组件，导致 useEffect 执行两次
+- 两次 effect 各发起一次 API 请求，由于 AI 非确定性，返回不同问题
+
+**解决方案**：
+- 使用 `requestVersionRef` 版本号追踪最新请求
+- 收到响应时检查版本号，过时响应直接忽略
+- 忽略响应时必须调用 `setIsLoading(false)` 重置状态，否则页面永远卡在 loading
+
+**遗留问题**：
+- 两次请求都会发到服务器并被处理（无法在前端避免 Strict Mode 行为）
+- 第一次请求（被丢弃）返回约 8s，第二次约 18s（Python Agent 初始化开销）
+
+**文件改动**：
+- `app/generate/confirm/page.tsx`：添加版本号方案忽略过时响应
+- `contexts/CourseContext.tsx`：submitOutlineMessage 类型签名调整
+
+### Python Agent 响应格式修复
+
+**问题**：
+- Python Agent 返回 `status: "asking"` / `status: "confirming"`，但前端期望 `type: "questions"` / `type: "confirmation"`
+- 响应中用 `question` 单对象，前端期望 `questions` 数组
+
+**解决方案**：
+- `agents/outline/nodes.py`：状态值从 `asking`/`confirming` 改为 `questions`/`confirmation`
+- `main.py`：响应格式改为 `{ type, questions: [...] }` 而非 `{ status, question }`
+
+### confirm_node status 值拼写错误
+
+**问题**：
+- 模型返回 blueprint 后，`confirm_node` 返回 `status: "confirming"`
+- 前端判断 `result.type === 'confirmation'`（多了个 i），导致页面不显示课程纲要
+
+**解决方案**：
+- `agents/outline/nodes.py`：修正 `confirm_node` 返回 `"status": "confirmation"`
+
+### Blueprint 结构不完整
+
+**问题**：
+- AI 模型返回的 blueprint 缺少 `learnerPositioning` 字段或其子字段
+- 前端 `ConfirmationCard` 组件直接解构 `learnerPositioning` 导致 undefined 报错
+
+**解决方案**：
+- `agents/outline/nodes.py`：在 prompt 中添加完整的 blueprint 结构说明，明确要求返回 `learningDirection`、`learningGoal`、`learnerPositioning`（包含 `estimatedLevel`、`difficultySummary`、`backgroundSummary`、`skipBasics`、`whyThisCourseFits`）
+
+### TOC 页面 React Strict Mode 重复请求
+
+**问题**：
+- React Strict Mode 导致 TOC 页面 useEffect 执行两次
+- 两次 AI 调用返回不同结果，页面显示从 A 版本跳到 B 版本
+
+**解决方案**：
+- `app/generate/toc/page.tsx`：添加 `requestVersionRef` 版本号模式，忽略过时的响应
+
+### 知识卡片 Visualization 不显示问题修复
+
+**问题**：
+- AI 生成的知识卡片包含 visualization 字段，但前端不显示
+- `CardVisualization` 组件只处理 `flowchart` 类型，缺少对其他 Mermaid 类型（sequence、class、state、er、gantt、mindmap）和 table 类型的支持
+
+**解决方案**：
+- `components/ui/CardVisualization.tsx`：
+  - 扩展 Mermaid 类型处理：添加 sequence、class、state、er、gantt、mindmap 支持
+  - 添加 table 类型支持
+  - 将不支持类型的 fallback 从 `return null` 改为显示警告消息，便于调试
+  - 添加调试日志输出 visualization 数据
+
+### 学习页返回后题目直接显示问题修复
+
+**问题**：
+- 从节点返回后再进入，题目直接显示而不是从卡片重新开始
+
+**解决方案**：
+- `app/course/[courseId]/learn/[nodeIndex]/page.tsx`：
+  - 在 useEffect dependencies 中添加 `node?.cards` 和 `node?.questions`
+  - 当卡片或题目数据变化时，重置 `currentStepIndex` 到 0
+
+### 学习页先生成卡片再生成题目的逻辑修复
+
+**问题**：
+- 从目录页点击节点进入时，有时直接显示题目而不是卡片
+- 原因：Step 2 中 `courses.find()` 读取的是闭包中的旧值（React 状态更新是异步的）
+
+**解决方案**：
+- `app/course/[courseId]/learn/[nodeIndex]/page.tsx`：
+  - Step 2 改用 `getStoredCourseBundle` 直接从 localStorage 读取最新保存的数据
+  - 确保 cards 生成完成后才读取最新数据来生成 questions
+
 ## 2026-03-27
 
 ### 课程目录排布与标题截断修复

@@ -3,24 +3,29 @@
 
 const API_BASE = 'http://localhost:3000';
 
-async function testCourseGeneration() {
+async function testTocGeneration() {
   console.log('='.repeat(60));
-  console.log('测试 1: 课程目录生成');
+  console.log('测试 1: 课程目录生成 (TOC)');
   console.log('='.repeat(60));
 
   const startTime = Date.now();
 
-  const response = await fetch(`${API_BASE}/api/generate`, {
+  // TOC API 需要完整的 blueprint 结构
+  const blueprint = {
+    topic: 'TypeScript 类型系统入门',
+    learnerPositioning: {
+      estimatedLevel: 'beginner' as const,
+      difficultySummary: '面向零基础学员，从类型基础讲起',
+      backgroundSummary: '有一些编程基础，了解 JavaScript',
+      skipBasics: [] as string[],
+      whyThisCourseFits: '系统学习 TypeScript 类型系统',
+    },
+  };
+
+  const response = await fetch(`${API_BASE}/api/generate/toc`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      topic: 'TypeScript 类型系统入门',
-      userProfile: {
-        targetJob: '前端开发',
-        workExperience: [],
-        education: [],
-      },
-    }),
+    body: JSON.stringify({ blueprint }),
   });
 
   const data = await response.json();
@@ -30,33 +35,26 @@ async function testCourseGeneration() {
   console.log('HTTP Status:', response.status);
   console.log('总耗时:', elapsed, 'ms');
 
-  console.log('\n--- generationMeta ---');
-  console.log(JSON.stringify(data.generationMeta, null, 2));
+  if (data.generationMeta) {
+    console.log('\n--- generationMeta ---');
+    console.log(JSON.stringify(data.generationMeta, null, 2));
+  }
 
   console.log('\n--- 课程目录预览 ---');
-  if (data.blueprint) {
-    console.log('courseId:', data.blueprint.courseId);
-    console.log('topic:', data.blueprint.topic);
-    console.log('difficultySummary:', data.blueprint.learnerPositioning?.difficultySummary);
-    console.log('节点数量:', data.blueprint.nodes?.length);
-    data.blueprint.nodes?.slice(0, 3).forEach((node: any, i: number) => {
-      console.log(`  节点 ${i}: ${node.title} (${node.status})`);
+  if (data.courseName) {
+    console.log('courseName:', data.courseName);
+  }
+  if (data.nodes) {
+    console.log('节点数量:', data.nodes.length);
+    data.nodes.slice(0, 3).forEach((node: any, i: number) => {
+      console.log(`  节点 ${i}: ${node.title}`);
     });
   }
-
-  if (data.treeView) {
-    console.log('\n--- treeView ---');
-    console.log(JSON.stringify(data.treeView, null, 2));
-  }
-
-  // 检查是否有第一节内容自动生成
-  console.log('\n--- 检查第一节内容 ---');
-  // 注意：自动触发是在前端 CourseContext 完成的，这里只测试 API
 
   return data;
 }
 
-async function testNodeGeneration(blueprint: any, nodeIndex: number = 0) {
+async function testNodeGeneration(topic: string, blueprint: any, nodeIndex: number = 0) {
   console.log('\n' + '='.repeat(60));
   console.log(`测试 2: 节点 ${nodeIndex} 内容生成`);
   console.log('='.repeat(60));
@@ -67,9 +65,9 @@ async function testNodeGeneration(blueprint: any, nodeIndex: number = 0) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      topic: blueprint.topic,
-      blueprint: blueprint,
-      nodeIndex: nodeIndex,
+      topic,
+      blueprint,
+      nodeIndex,
       userProfile: {
         targetJob: '前端开发',
         workExperience: [],
@@ -85,8 +83,10 @@ async function testNodeGeneration(blueprint: any, nodeIndex: number = 0) {
   console.log('HTTP Status:', response.status);
   console.log('总耗时:', elapsed, 'ms');
 
-  console.log('\n--- generationMeta ---');
-  console.log(JSON.stringify(data.generationMeta, null, 2));
+  if (data.generationMeta) {
+    console.log('\n--- generationMeta ---');
+    console.log(JSON.stringify(data.generationMeta, null, 2));
+  }
 
   console.log('\n--- 节点内容预览 ---');
   console.log('title:', data.title);
@@ -113,14 +113,85 @@ async function testNodeGeneration(blueprint: any, nodeIndex: number = 0) {
   return data;
 }
 
+async function testCardsGeneration(topic: string, nodeInfo: any) {
+  console.log('\n' + '='.repeat(60));
+  console.log('测试 3: 知识卡片生成');
+  console.log('='.repeat(60));
+
+  const startTime = Date.now();
+
+  const response = await fetch(`${API_BASE}/api/generate/node/cards`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      topic,
+      nodeInfo,
+      learnerBackground: {
+        backgroundSummary: '有一些编程基础，了解 JavaScript',
+        skipBasics: [],
+      },
+    }),
+  });
+
+  const data = await response.json();
+  const elapsed = Date.now() - startTime;
+
+  console.log('\n--- 响应状态 ---');
+  console.log('HTTP Status:', response.status);
+  console.log('总耗时:', elapsed, 'ms');
+
+  console.log('\n--- 卡片预览 ---');
+  console.log('cards 数量:', data.cards?.length);
+
+  if (data.cards?.length > 0) {
+    data.cards.slice(0, 2).forEach((card: any, i: number) => {
+      console.log(`  卡片 ${i + 1}: ${card.title}`);
+      if (card.visualization) {
+        console.log(`    可视化类型: ${card.visualization.type}`);
+      }
+    });
+  }
+
+  return data;
+}
+
 async function main() {
   try {
-    // 测试课程目录生成
-    const courseData = await testCourseGeneration();
+    // 测试 TOC 生成
+    const tocData = await testTocGeneration();
 
-    if (courseData.blueprint) {
+    if (tocData.nodes && tocData.nodes.length > 0) {
+      // 构建完整的 blueprint 用于节点生成
+      const blueprint = {
+        courseId: `test-${Date.now()}`,
+        topic: tocData.courseName || '测试课程',
+        learnerPositioning: {
+          estimatedLevel: 'beginner' as const,
+          difficultySummary: '面向零基础学员',
+          backgroundSummary: '有一些编程基础',
+          skipBasics: [] as string[],
+          whyThisCourseFits: '系统学习',
+        },
+        nodes: tocData.nodes.map((n: any, i: number) => ({
+          index: i,
+          title: n.title,
+          teachingGoal: n.teachingGoal,
+          status: 'available' as const,
+          teachConceptIds: [],
+          prerequisiteConceptIds: [],
+          bridgeFromPreviousNode: '',
+        })),
+      };
+
       // 测试节点内容生成
-      await testNodeGeneration(courseData.blueprint, 0);
+      await testNodeGeneration(blueprint.topic, blueprint, 0);
+
+      // 测试单独的知识卡片生成
+      await testCardsGeneration(blueprint.topic, {
+        teachingGoal: tocData.nodes[0].teachingGoal,
+        teachConceptIds: [],
+        prerequisiteConceptIds: [],
+      });
     }
 
     console.log('\n' + '='.repeat(60));

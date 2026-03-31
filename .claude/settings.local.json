@@ -1,4 +1,12 @@
 {
+  "hooks": {
+    "SessionStart": [{
+      "hooks": [{
+        "type": "command",
+        "command": "test -f ${path}/CLAUDE.md && cat ${path}/CLAUDE.md || true"
+      }]
+    }]
+  },
   "permissions": {
     "allow": [
       "Skill(superpowers:brainstorming)",
@@ -91,7 +99,15 @@
       "Bash(git push)",
       "Bash(du -sh .claude/*)",
       "Bash(du -sh .next/cache/webpack/*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Skill(superpowers:using-git-worktrees)",
+      "Bash(pip install:*)",
+      "Bash(pytest:*)",
+      "Bash(pip3 install pytest pytest-asyncio -q)",
+      "Bash(/usr/local/bin/python3:*)",
+      "Bash(pip3 install -r requirements.txt -q)",
+      "Bash(./venv/bin/pip:*)",
+      "Bash(pip3 install:*)"
     ]
   }
 }

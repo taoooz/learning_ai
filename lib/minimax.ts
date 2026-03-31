@@ -166,13 +166,12 @@ export async function callMiniMax(prompt: string, options: MiniMaxCallOptions = 
     throw new Error('No response from MiniMax');
   }
 
-  // 打印完整响应（包含思考内容）到文件
-  const fs = await import('fs');
-  const logPath = '/tmp/minimax_raw_response.json';
-  fs.writeFileSync(logPath, JSON.stringify(data, null, 2));
-  console.log('[MiniMax] Raw response saved to:', logPath);
+  const content = data.choices[0].message.content;
+  if (!content || typeof content !== 'string') {
+    throw new Error('MiniMax returned empty or non-string content');
+  }
 
-  return data.choices[0].message.content;
+  return content;
 }
 
 export function parseJSONResponse<T>(content: string): T {

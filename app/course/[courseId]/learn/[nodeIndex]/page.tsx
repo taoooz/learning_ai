@@ -170,7 +170,7 @@ function LastLineMarker({
 export default function LearnPage() {
   const params = useParams();
   const router = useRouter();
-  const { courses, generateNodeCards, generateNodeQuestions, updateNodeContent, preloadNextNode } = useCourse();
+  const { courses, generateNodeContent, preloadNextNode } = useCourse();
   const { markCompleted } = useProgress();
   const userMemory = useUserMemory();
 
@@ -179,7 +179,6 @@ export default function LearnPage() {
 
   const [phase, setPhase] = useState<LearningPhase>('loading');
   const [showRetry, setShowRetry] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string[]>([]);
   const [sortOptions, setSortOptions] = useState<string[]>([]);
@@ -216,13 +215,14 @@ export default function LearnPage() {
     preloadNextNode(courseId, nodeIndex);
   }, [course, node, courseId, nodeIndex, preloadNextNode, phase]);
 
+  // 当节点内容变化时（卡片或题目更新），重置到第一步
   useEffect(() => {
     setCurrentStepIndex(0);
     setSelectedAnswer([]);
     setSortOptions([]);
     setIsAnswered(false);
     setIsCorrect(false);
-  }, [courseId, nodeIndex, steps.length]);
+  }, [courseId, nodeIndex, steps.length, node?.cards, node?.questions]);
 
   // 当步骤变化时，如果是排序题，初始化 sortOptions
   useEffect(() => {
@@ -236,72 +236,12 @@ export default function LearnPage() {
 
   const loadNodeContent = async () => {
     if (!course) return;
-
-    const node = course.nodes[nodeIndex];
-    if (!node) return;
-
     try {
-      // Step 1: Generate cards if not exist
-      if (!node.cards || node.cards.length === 0) {
-        const prevNode = nodeIndex > 0 ? course.nodes[nodeIndex - 1] : undefined;
-        const nextNode = nodeIndex < course.nodes.length - 1 ? course.nodes[nodeIndex + 1] : undefined;
-
-        // Get bundle to access blueprint info
-        const { getStoredCourseBundle } = await import('@/lib/storage');
-        const bundle = getStoredCourseBundle(courseId);
-
-        const cardsResult = await generateNodeCards(courseId, nodeIndex, {
-          learnerBackground: {
-            backgroundSummary: bundle?.blueprint.learnerPositioning?.difficultySummary || '一般学习者',
-            skipBasics: [],
-          },
-          prevNodeSummary: prevNode ? { title: prevNode.title, concepts: [] } : undefined,
-          nextNodeSummary: nextNode ? { title: nextNode.title, concepts: [] } : undefined,
-        });
-
-        // Update with cards
-        const lesson = {
-          courseId,
-          nodeIndex,
-          title: node.title,
-          teachingGoal: node.title,
-          teachConceptIds: [],
-          assessmentTargetIds: [],
-          cards: cardsResult.cards.map(c => ({ ...c, coveredConceptIds: [] })),
-          questions: [],
-        };
-        updateNodeContent(courseId, nodeIndex, lesson);
-      }
-
-      // Step 2: Generate questions after cards
-      // Re-fetch the node to get updated cards
-      const currentCourse = courses.find(c => c.courseId === courseId);
-      const updatedNode = currentCourse?.nodes[nodeIndex];
-      if (updatedNode && (!updatedNode.questions || updatedNode.questions.length === 0)) {
-        const questionsResult = await generateNodeQuestions(courseId, nodeIndex);
-        const existingLesson = {
-          courseId,
-          nodeIndex,
-          title: updatedNode.title,
-          teachingGoal: updatedNode.title,
-          teachConceptIds: [],
-          assessmentTargetIds: [],
-          cards: (updatedNode.cards || []).map(c => ({ ...c, coveredConceptIds: [] })),
-          questions: questionsResult.questions,
-        };
-        updateNodeContent(courseId, nodeIndex, existingLesson);
-      }
-
+      // 使用单一 API 同时生成卡片和题目，避免分步生成导致的无限递归和步骤重置问题
+      await generateNodeContent(courseId, nodeIndex);
       setPhase('learning');
-      setRetryCount(0);
     } catch {
-      if (retryCount < 2) {
-        setRetryCount(prev => prev + 1);
-        // 自动重试
-        await loadNodeContent();
-      } else {
-        setShowRetry(true);
-      }
+      setShowRetry(true);
     }
   };
 
@@ -372,7 +312,6 @@ export default function LearnPage() {
 
   const handleRetry = async () => {
     setShowRetry(false);
-    setRetryCount(0);
     await loadNodeContent();
   };
 
@@ -402,7 +341,7 @@ export default function LearnPage() {
   }
 
   return (
-    <main className="min-h-[100svh] overflow-x-hidden bg-background">
+    <main className="min-h-[100svh] overflow-y-auto overflow-x-hidden bg-background">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-24 right-[-7rem] h-64 w-64 rounded-full bg-gradient-to-br from-accent/12 to-transparent blur-3xl" />
         <div className="absolute left-[-5rem] top-28 h-48 w-48 rounded-full bg-gradient-to-br from-sky-400/8 to-transparent blur-3xl" />

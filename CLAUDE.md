@@ -1,7 +1,6 @@
-# Agent 工作守则
-
-**前提：每次对话先读此文件，再执行其他操作。**                                                                           
-                                                                                                                           
+# Agent 工作守则                                                                                           
+你可自主更新此文件，但要严格控制全文长度
+                                                                                               
 ## 对话语言                                                                                                              
 - 必须使用中文与用户对话
 
@@ -9,6 +8,7 @@
 - **项目：** AI Learning（Duolingo 风格 AI 学习产品）
 - **用户：** 中文用户
 - **技术栈：** Next.js, MiniMax API, Tailwind CSS v4, Framer Motion, localStorage
+- **已关联Github、Vercel 项目**
 
 ---
 
@@ -16,7 +16,6 @@
 
 ### 1. 界面文本
 - 所有用户可见文本使用中文，考虑真实使用场景
-- "Learning AI"标题和首页Logo除外
 
 ### 2. 代码质量
 - 提交信息用中文，描述改动目的
@@ -37,7 +36,6 @@
 ### MiniMax API
 - 端点：`https://api.minimaxi.com/v1/chat/completions`
 - 模型：`MiniMax-M2.7`
-- 答案校验考虑AI返回格式（如 "A" vs "A. 选项"）
 
 ### Tailwind CSS v4
 - 使用 `@import "tailwindcss"`，不支持 `@apply`
