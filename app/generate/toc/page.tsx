@@ -42,14 +42,14 @@ function TocPageContent() {
 
     const outline: PendingOutline = JSON.parse(outlineData);
 
-    // 递增版本号，标记这是一个新的请求
-    const currentVersion = requestVersionRef.current + 1;
-    requestVersionRef.current = currentVersion;
-
     // 取消之前的请求
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
+
+    // 递增版本号，标记这是一个新的请求
+    const currentVersion = requestVersionRef.current + 1;
+    requestVersionRef.current = currentVersion;
     abortControllerRef.current = new AbortController();
 
     console.log('[TOC Page] Starting TOC generation, version:', currentVersion);

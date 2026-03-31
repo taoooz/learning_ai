@@ -186,6 +186,9 @@ export default function LearnPage() {
   const [isCorrect, setIsCorrect] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
 
+  // 用于跟踪当前有效的加载请求
+  const loadingVersionRef = useRef(0);
+
   const course = courses.find(c => c.courseId === courseId);
   const node = course?.nodes[nodeIndex];
   const steps = useMemo(() => {
@@ -206,13 +209,21 @@ export default function LearnPage() {
 
     // 如果节点内容还没生成，触发生成
     if (!node.cards || !node.questions) {
-      loadNodeContent();
+      const currentVersion = loadingVersionRef.current + 1;
+      loadingVersionRef.current = currentVersion;
+      
+      loadNodeContent(currentVersion);
     } else if (phase === 'loading') {
       setPhase('learning');
     }
 
     // 预加载下一个节点内容
     preloadNextNode(courseId, nodeIndex);
+
+    return () => {
+      // 组件卸载时递增版本号，使正在进行的请求失效
+      loadingVersionRef.current += 1;
+    };
   }, [course, node, courseId, nodeIndex, preloadNextNode, phase]);
 
   // 当节点内容变化时（卡片或题目更新），重置到第一步
@@ -234,14 +245,18 @@ export default function LearnPage() {
     setIsCorrect(false);
   }, [currentStepIndex, currentStep]);
 
-  const loadNodeContent = async () => {
+  const loadNodeContent = async (expectedVersion: number) => {
     if (!course) return;
     try {
-      // 使用单一 API 同时生成卡片和题目，避免分步生成导致的无限递归和步骤重置问题
       await generateNodeContent(courseId, nodeIndex);
-      setPhase('learning');
+      // 只有版本号匹配时才更新状态
+      if (loadingVersionRef.current === expectedVersion) {
+        setPhase('learning');
+      }
     } catch {
-      setShowRetry(true);
+      if (loadingVersionRef.current === expectedVersion) {
+        setShowRetry(true);
+      }
     }
   };
 
@@ -312,7 +327,9 @@ export default function LearnPage() {
 
   const handleRetry = async () => {
     setShowRetry(false);
-    await loadNodeContent();
+    const currentVersion = loadingVersionRef.current + 1;
+    loadingVersionRef.current = currentVersion;
+    await loadNodeContent(currentVersion);
   };
 
   const handleSkip = () => {

@@ -262,23 +262,29 @@ export function buildCompactCourseBlueprintPrompt(topic: string, payload: Course
 }
 
 export function buildNodeLessonPrompt(topic: string, payload: NodeLessonPromptPayload): string {
-  const analogySection = payload.analogyFacts.length
-    ? `## 可用类比\n${payload.analogyFacts.map((item) => `- ${item.text}`).join('\n')}\n\n`
-    : '';
-  const stylesSection = payload.preferredExplanationStyles.length
-    ? `## 偏好解释方式\n${payload.preferredExplanationStyles.map((item) => `- ${item}`).join('\n')}\n\n`
-    : '';
-  const questionsSection = payload.recentRelevantQuestions.length
-    ? `## 最近相关提问\n${payload.recentRelevantQuestions.map((item) => `- ${item}`).join('\n')}\n\n`
-    : '';
+  const sections: string[] = [];
+
+  if (payload.analogyFacts.length) {
+    sections.push(`## 可用类比\n${payload.analogyFacts.map((item) => `- ${item.text}`).join('\n')}`);
+  }
+
+  if (payload.preferredExplanationStyles.length) {
+    sections.push(`## 偏好解释方式\n${payload.preferredExplanationStyles.map((item) => `- ${item}`).join('\n')}`);
+  }
+
+  if (payload.recentRelevantQuestions.length) {
+    sections.push(`## 最近相关提问\n${payload.recentRelevantQuestions.map((item) => `- ${item}`).join('\n')}`);
+  }
+
+  const contextSection = sections.length ? `\n${sections.join('\n\n')}\n` : '';
 
   return `你是 AI 导师，请生成一节 NodeLesson。
 
 主题：${topic}
 当前节点：${payload.nodeTitle}
 节点目标：${payload.teachingGoal}
-
-${analogySection}${stylesSection}${questionsSection}## 内容要求
+${contextSection}
+## 内容要求
 - 根据提供的课程、用户信息生成该节点课程内容
 - 优先判断该节课需要的知识及问题卡片数量。知识建议在 5~8 条，问题 2~5 个。
 - 知识卡片内容应循序渐进，尽量避免重复内容

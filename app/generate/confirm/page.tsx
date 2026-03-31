@@ -31,13 +31,20 @@ function ConfirmPageContent() {
 
   // 用于标记当前最新的请求版本
   const requestVersionRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!topic) return;
 
+    // 取消之前的请求
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
     // 递增版本号，标记这是一个新的请求
     const currentVersion = requestVersionRef.current + 1;
     requestVersionRef.current = currentVersion;
+    abortControllerRef.current = new AbortController();
 
     const fetchData = async () => {
       setIsLoading(true);
@@ -59,6 +66,12 @@ function ConfirmPageContent() {
     };
 
     fetchData();
+
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [topic, retryKey]);
 
   const handleResponse = (result: OutlineResponse) => {

@@ -80,9 +80,8 @@ export async function POST(request: NextRequest) {
       initialMemory: userMemory,
       getProfile: () => userProfile || null,
     });
-    const insights = userProfile?.insights || null;
+
     const prompt = await withGenerationStage(trace, 'prompt_build', async () => {
-      // 由于课程目录已简化，概念映射为空，memory 查询只基于 topic 和 nodeTitle
       const teachingPayload = memoryRepository.getTeachingPayload({
         topic,
         nodeTitle: node.title,
@@ -90,11 +89,16 @@ export async function POST(request: NextRequest) {
         prerequisiteConcepts: [],
       });
 
+      const insights = userProfile?.insights;
+      const analogyFacts = insights?.analogyExperiences
+        ? insights.analogyExperiences.slice(0, 3).map((text, index) => ({ id: `fact-${index + 1}`, text }))
+        : [];
+
       return buildNodeLessonPrompt(topic, {
         nodeTopic: topic,
         nodeTitle: node.title,
         teachingGoal: node.teachingGoal,
-        analogyFacts: (insights?.analogyExperiences || []).slice(0, 3).map((text, index) => ({ id: `fact-${index + 1}`, text })),
+        analogyFacts,
         preferredExplanationStyles: teachingPayload.preferredExplanationStyles,
         recentRelevantQuestions: teachingPayload.recentQuestionSummaries,
       });
