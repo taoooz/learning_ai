@@ -82,11 +82,12 @@ test('deriveCourseTreeViewFromBlueprint maps blueprint nodes into lightweight co
   assert.deepEqual(treeView, {
     courseId: 'course-agent',
     topic: 'Agent',
+    courseGoal: '能独立理解并设计基础 Agent 学习路径',
     difficultySummary: '适合有基础认知、想系统学习 Agent 的用户',
     totalNodes: 2,
     nodes: [
-      { index: 0, title: '先建立 Agent 基本框架', cardCount: 8, status: 'available' },
-      { index: 1, title: '搞清工具调用为什么必要', cardCount: 9, status: 'locked' },
+      { index: 0, title: '先建立 Agent 基本框架', status: 'available' },
+      { index: 1, title: '搞清工具调用为什么必要', status: 'locked' },
     ],
   });
 });
