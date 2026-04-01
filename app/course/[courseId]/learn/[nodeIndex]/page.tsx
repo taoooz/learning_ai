@@ -188,9 +188,22 @@ export default function LearnPage() {
 
   // 用于跟踪当前有效的加载请求
   const loadingVersionRef = useRef(0);
+  // 用于防止重复请求（key 是 courseId-nodeIndex）
+  const hasRequestedRef = useRef<string>('');
 
   const course = courses.find(c => c.courseId === courseId);
   const node = course?.nodes[nodeIndex];
+  
+  // 用 ref 存储最新的 course 和 node，避免依赖对象引用
+  const courseRef = useRef(course);
+  const nodeRef = useRef(node);
+  
+  // 更新 ref
+  useEffect(() => {
+    courseRef.current = course;
+    nodeRef.current = node;
+  }, [course, node]);
+
   const steps = useMemo(() => {
     if (!node?.cards || !node.questions) return [];
     return buildLearningSteps(node.cards, node.questions);
@@ -202,38 +215,60 @@ export default function LearnPage() {
   const isLastStep = currentStepIndex === steps.length - 1;
 
   useEffect(() => {
+    const requestKey = `${courseId}-${nodeIndex}`;
+    console.log('[LearnPage] Main useEffect triggered', {
+      courseId,
+      nodeIndex,
+      phase,
+      requestKey,
+      hasRequested: hasRequestedRef.current === requestKey,
+      hasCards: !!nodeRef.current?.cards,
+      hasQuestions: !!nodeRef.current?.questions,
+    });
+    
     // 如果已完成学习，不做任何操作
     if (phase === 'complete') return;
 
-    if (!course || !node) return;
+    const currentCourse = courseRef.current;
+    const currentNode = nodeRef.current;
+    
+    if (!currentCourse || !currentNode) return;
 
     // 如果节点内容还没生成，触发生成
-    if (!node.cards || !node.questions) {
+    if (!currentNode.cards || !currentNode.questions) {
+      // 如果已经发起过请求，直接返回
+      if (hasRequestedRef.current === requestKey) {
+        console.log('[LearnPage] Request already in progress, skipping');
+        return;
+      }
+      hasRequestedRef.current = requestKey;
+      console.log('[LearnPage] Starting node content generation');
+
       const currentVersion = loadingVersionRef.current + 1;
       loadingVersionRef.current = currentVersion;
       
       loadNodeContent(currentVersion);
     } else if (phase === 'loading') {
+      console.log('[LearnPage] Content ready, switching to learning phase');
       setPhase('learning');
     }
-
-    // 预加载下一个节点内容
+  }, [courseId, nodeIndex]); // 移除 phase 依赖，避免循环
+  
+  // 单独处理预加载
+  useEffect(() => {
+    if (phase === 'complete') return;
     preloadNextNode(courseId, nodeIndex);
-
-    return () => {
-      // 组件卸载时递增版本号，使正在进行的请求失效
-      loadingVersionRef.current += 1;
-    };
-  }, [course, node, courseId, nodeIndex, preloadNextNode, phase]);
+  }, [courseId, nodeIndex, preloadNextNode]);
 
   // 当节点内容变化时（卡片或题目更新），重置到第一步
   useEffect(() => {
+    // 不要重置 hasRequestedRef，避免重复请求
     setCurrentStepIndex(0);
     setSelectedAnswer([]);
     setSortOptions([]);
     setIsAnswered(false);
     setIsCorrect(false);
-  }, [courseId, nodeIndex, steps.length, node?.cards, node?.questions]);
+  }, [courseId, nodeIndex, steps.length]);
 
   // 当步骤变化时，如果是排序题，初始化 sortOptions
   useEffect(() => {
@@ -263,17 +298,7 @@ export default function LearnPage() {
   const handleNodeComplete = () => {
     markCompleted(courseId, nodeIndex);
 
-    // 更新用户记忆
-    if (course && node) {
-      userMemory.addLearningRecord({
-        courseId,
-        topic: course.topic,
-        nodesCompleted: nodeIndex + 1,
-        totalNodes: course.totalNodes,
-      });
-      userMemory.updateInterests(course.topic, 'course', courseId);
-    }
-
+    // 节点完成事件已在 ProgressContext 中记录，无需额外操作
     setPhase('complete');
   };
 

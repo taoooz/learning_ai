@@ -548,28 +548,40 @@ ${searchSection}`;
 export function buildProfileInsightPrompt(profile: UserProfile): string {
   return `你是学习规划专家，从用户信息中提取与课程相关的洞察。
 
-要求：只提取事实不推测，清晰总结不遗漏关键信息，不延伸推理。
+**严格要求**：
+1. 只提取事实，不推测、不延伸
+2. 每条总结必须具体、可操作
+3. 过滤空泛描述（如"有丰富经验"）
+4. 不重复相似内容
 
 目标岗位：${profile.targetJob || '未填写'}
 
 工作经历：
-${profile.workExperience?.length ? profile.workExperience.map(w => `- ${w.company}，${w.position}${w.description ? '，内容：' + w.description : ''}`).join('\n') : '暂无'}
+${profile.workExperience?.length ? profile.workExperience.map(w => `- ${w.company}，${w.position}${w.description ? '，' + w.description : ''}`).join('\n') : '暂无'}
 
 教育背景：
 ${profile.education?.length ? profile.education.map(e => `- ${e.school}，${e.major}`).join('\n') : '暂无'}
 
-用中文总结：
+提取以下内容（中文）：
 
-1. knowledgeBackground：基于工作和教育背景的关键事实（做什么产品、有什么技能、什么领域），保持事实性不推理"是否有用"
+1. **knowledgeBackground**（知识背景）：
+   - 具体做过什么产品/系统（如"HR SaaS"、"Agent工作台"）
+   - 掌握什么技术/领域（如"ToB产品设计"、"AI基础设施"）
+   - 每条 15-30 字，最多 5 条
 
-2. analogyExperiences：用户真实经历（具体做过的事），不加引申
+2. **analogyExperiences**（类比经历）：
+   - 具体做过的事（如"负责B2B AI基建"、"带领团队打造企业级AI工具"）
+   - 可用于类比教学的真实场景
+   - 每条 20-40 字，最多 3 条
 
-3. summary：一句话总结用户背景
+3. **summary**（一句话总结）：
+   - 核心背景 + 目标方向
+   - 30-50 字
 
-输出JSON：
+**输出JSON**（不要任何其他文字）：
 {
-  "knowledgeBackground": ["总结1", "总结2"],
-  "analogyExperiences": ["经历1", "经历2"],
+  "knowledgeBackground": ["具体知识1", "具体知识2"],
+  "analogyExperiences": ["具体经历1", "具体经历2"],
   "summary": "一句话总结"
 }`;
 }
@@ -670,25 +682,27 @@ export function buildOutlinePrompt(
   planningPayload: PlanningMemoryPayload,
   options?: { clarificationAnswers?: ClarificationAnswer[]; userMessage?: string }
 ): string {
-  const memorySection = buildPlanningMemorySection(planningPayload);
+  const sections: string[] = [];
+
+  // 只在有内容时添加段落
   const profileSection = buildProfileSection(userProfile);
+  if (profileSection.trim()) sections.push(profileSection);
 
-  let clarificationSection = '';
+  const memorySection = buildPlanningMemorySection(planningPayload);
+  if (memorySection.trim()) sections.push(memorySection);
+
   if (options?.clarificationAnswers?.length) {
-    clarificationSection = `## 用户回答\n${options.clarificationAnswers.map(a => `Q: ${a.question}\nA: ${a.answer}`).join('\n')}\n`;
+    sections.push(`## 用户回答\n${options.clarificationAnswers.map(a => `Q: ${a.question}\nA: ${a.answer}`).join('\n')}`);
   }
 
-  let messageSection = '';
   if (options?.userMessage) {
-    messageSection = `## 用户补充信息\n${options.userMessage}\n`;
+    sections.push(`## 用户补充信息\n${options.userMessage}`);
   }
+
+  const contextSection = sections.length ? `\n${sections.join('\n\n')}\n` : '';
 
   return `你是 AI 导师，请基于用户背景生成课程纲要。
-
-${profileSection}
-${memorySection}
-${clarificationSection}
-${messageSection}
+${contextSection}
 主题：${topic}
 
 ## 课程纲要结构（只需要这三项，不需要章节结构）
@@ -728,21 +742,22 @@ ${messageSection}
 }
 
 export function buildTocPrompt(blueprint: TocCourseBlueprint): string {
+  const skipBasics = blueprint.learnerPositioning.skipBasics?.filter(Boolean).join('、') || '无';
+  
   return `你是 AI 导师，请基于课程纲要生成课程目录。
 
 课程纲要：
 - 学习方向：${blueprint.learningDirection}
 - 学习目标：${blueprint.learningGoal}
-- 用户背景：${blueprint.learnerPositioning.backgroundSummary}
+- 用户背景：${blueprint.learnerPositioning.backgroundSummary || '未提供'}
 - 难度定位：${blueprint.learnerPositioning.estimatedLevel}
-- 已跳过基础：${blueprint.learnerPositioning.skipBasics.join('、') || '无'}
+- 已跳过基础：${skipBasics}
 
 ## 任务
-1. 根据学习方向和学习目标，设计课程章节结构（5-12个章节，取决于主题复杂度）
-2. 每个章节要有具体的学习目标
-3. 生成课程名称（简洁有吸引力，10-20字）
-4. 生成课程描述（一句话，20-40字）
-5. 为每个节点生成详细描述（1-2句话，说明这节要学什么）
+1. 生成课程名称（简洁有吸引力，8-15字，不要包含"课程"二字）
+2. 生成课程描述（一句话，15-30字，说明学完能做什么）
+3. 设计课程章节结构（5-12个章节，取决于主题复杂度）
+4. 每个章节要有具体的学习目标和详细描述
 
 ## 章节设计原则
 - 由浅入深，循序渐进

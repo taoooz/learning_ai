@@ -11,12 +11,9 @@ import { ChatLauncher, ChatWidget } from '@/components/ui/ChatWidget';
 export default function CoursePage() {
   const params = useParams();
   const router = useRouter();
-  const { courses, currentCourse, generateNodeContent } = useCourse();
+  const { courses, currentCourse } = useCourse();
   const [isLoading, setIsLoading] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [isFirstNodeLoading, setIsFirstNodeLoading] = useState(false);
-  const [firstNodeLoadingProgress, setFirstNodeLoadingProgress] = useState('');
-  const initialContentGeneratedRef = useRef(false);
 
   const courseId = params.courseId as string;
 
@@ -28,30 +25,9 @@ export default function CoursePage() {
 
   // 生成第一个节点的内容（如果尚未生成）
   useEffect(() => {
-    const foundCourse = courses.find(c => c.courseId === courseId) || currentCourse;
-    if (!foundCourse || initialContentGeneratedRef.current) return;
-
-    const firstNode = foundCourse.nodes[0];
-    if (!firstNode || firstNode.cards) return;
-
-    initialContentGeneratedRef.current = true;
-    setIsFirstNodeLoading(true);
-    setFirstNodeLoadingProgress('正在生成学习内容...');
-
-    // 调用 generateNodeContent 生成第一节内容
-    generateNodeContent(courseId, 0)
-      .then(() => {
-        setFirstNodeLoadingProgress('内容生成完成');
-        // 短暂显示完成状态后隐藏
-        setTimeout(() => setIsFirstNodeLoading(false), 500);
-      })
-      .catch((err) => {
-        console.error('Failed to generate first node content:', err);
-        setFirstNodeLoadingProgress('内容生成失败，请刷新重试');
-        setIsFirstNodeLoading(false);
-        initialContentGeneratedRef.current = false;
-      });
-  }, [courses, currentCourse, courseId, generateNodeContent]);
+    // 移除自动生成第一节内容的逻辑
+    // 让 Learn 页面负责生成内容
+  }, []);
 
   if (isLoading) {
     return (
@@ -136,19 +112,6 @@ export default function CoursePage() {
               </p>
             )}
           </div>
-
-          {/* 第一节内容加载指示器 */}
-          {isFirstNodeLoading && (
-            <div className="mb-4 px-1">
-              <div className="flex items-center gap-2 text-sm text-secondary">
-                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                <span>{firstNodeLoadingProgress}</span>
-              </div>
-            </div>
-          )}
 
           <CourseTree course={course} />
         </section>

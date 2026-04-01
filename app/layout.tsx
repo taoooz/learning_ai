@@ -2,6 +2,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { CombinedProvider } from '@/contexts';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 export const metadata: Metadata = {
   title: 'AI Learning',
@@ -22,9 +23,11 @@ export default function RootLayout({
         />
       </head>
       <body>
-        <CombinedProvider>
-          {children}
-        </CombinedProvider>
+        <ErrorBoundary>
+          <CombinedProvider>
+            {children}
+          </CombinedProvider>
+        </ErrorBoundary>
       </body>
     </html>
   );

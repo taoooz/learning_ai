@@ -701,6 +701,19 @@ function determineProjectionStatus(masteryScore: number, recentErrors: number): 
   return 'unknown';
 }
 
+/** 验证 conceptId 是否有效 */
+function isValidConceptId(conceptId: string): boolean {
+  if (!conceptId || conceptId.length < 2) return false;
+  // 过滤标点符号
+  if (/[，。！？、：；""''（）【】《》\[\]{}]/.test(conceptId)) return false;
+  // 过滤纯数字
+  if (/^\d+$/.test(conceptId)) return false;
+  // 过滤常见垃圾词
+  const junkWords = ['以下', '请将', '在企业级', '场景中', '如下', '示例'];
+  if (junkWords.some(word => conceptId.includes(word))) return false;
+  return true;
+}
+
 function upsertConceptProjection(
   memoryStore: MemoryStoreV3,
   topic: string,
@@ -709,6 +722,12 @@ function upsertConceptProjection(
   updater: (current: MemoryStoreV3['projections']['conceptProjections'][number]) => void,
   occurredAt: number,
 ): void {
+  // 验证 conceptId
+  if (!isValidConceptId(conceptId)) {
+    console.warn(`[Memory] Invalid conceptId filtered: "${conceptId}"`);
+    return;
+  }
+  
   const list = memoryStore.projections.conceptProjections;
   const existing = list.find((item) => item.topic === topic && item.conceptId === conceptId);
   const base = existing || {
@@ -865,6 +884,9 @@ export function appendEventToMemoryStoreV3(memoryStore: MemoryStoreV3, event: Me
   if (event.type === 'node_completed') {
     const teachConceptIds = getEventPayloadValue<string[]>(event.payload, 'teachConceptIds', []);
     const teachConceptNames = getEventPayloadValue<string[]>(event.payload, 'teachConceptNames', []);
+    const nodeTitle = getEventPayloadValue<string>(event.payload, 'nodeTitle', '');
+    const teachingGoal = getEventPayloadValue<string>(event.payload, 'teachingGoal', '');
+    
     teachConceptIds.forEach((conceptId, index) => {
       upsertConceptProjection(next, event.topic, conceptId, teachConceptNames[index] || conceptId, (current) => {
         current.masteryScore = Number(Math.max(current.masteryScore, 0.62).toFixed(2));
@@ -874,12 +896,17 @@ export function appendEventToMemoryStoreV3(memoryStore: MemoryStoreV3, event: Me
     });
     recomputeTopicProjection(next, event.topic, event.occurredAt);
     if (event.courseId) {
+      // 使用有意义的 summary
+      const summary = nodeTitle && teachingGoal
+        ? `完成了「${nodeTitle}」：${teachingGoal}`
+        : `完成了 ${event.topic} 的第 ${typeof event.nodeIndex === 'number' ? event.nodeIndex + 1 : '?'} 节`;
+      
       upsertEpisodicProjection(next, {
         id: createMemoryId('episode', 'course', event.courseId),
         topic: event.topic,
         courseId: event.courseId,
         kind: 'course',
-        summary: `最近完成了 ${event.topic} 的第 ${typeof event.nodeIndex === 'number' ? event.nodeIndex + 1 : '?'} 节`,
+        summary,
         conceptIds: teachConceptIds,
         explanationStyles: [],
         updatedAt: event.occurredAt,
@@ -991,7 +1018,7 @@ function buildCourseSummariesFromV3(memoryStore: MemoryStoreV3): CourseSummary[]
     }));
 }
 
-function convertMemoryStoreV3ToV2(memoryStore: MemoryStoreV3): MemoryStoreV2 {
+export function convertMemoryStoreV3ToV2(memoryStore: MemoryStoreV3): MemoryStoreV2 {
   const conceptStates: ConceptState[] = memoryStore.projections.conceptProjections.map((item) => ({
     topic: item.topic,
     concept: item.conceptName,

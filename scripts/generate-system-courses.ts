@@ -408,7 +408,6 @@ function createNodePromptPayload(
 ): NodeLessonPromptPayload {
   const node = blueprint.nodes[lessonIndex];
   return {
-    nodeTopic: blueprint.topic,
     nodeTitle: node.title,
     teachingGoal: node.teachingGoal,
     analogyFacts: entry.generation.analogyFacts,

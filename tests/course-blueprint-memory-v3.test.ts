@@ -619,7 +619,6 @@ test('new blueprint and node lesson prompts inject structured planning and teach
   });
 
   const lessonPrompt = buildNodeLessonPrompt('Agent', {
-    nodeTopic: 'Agent',
     nodeTitle: '搞清工具调用为什么必要',
     teachingGoal: '理解工具调用边界',
     analogyFacts: [{ id: 'fact-1', text: '负责过埋点分析和实验设计' }],

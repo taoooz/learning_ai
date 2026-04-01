@@ -1,8 +1,218 @@
 # 项目迭代日志
 
+## 2026-04-01
+
+### 🧠 Memory Agent 决策层 + 数据质量优化 + 架构清理 + V2 废弃
+
+**核心优化**：
+1. **数据限制**：MAX_CONCEPTS=200, MAX_TOPICS=50, MAX_COURSES=30, MAX_EVENTS=300
+2. **遗忘曲线**：掌握度按 30 天半衰期衰减，模拟真实记忆遗忘
+3. **智能清理**：自动删除 90 天未更新且掌握度 <0.3 的概念
+4. **Top-K 检索**：Planning 返回 3 门课程，Teaching 返回 20 个概念，Chat 返回 3 个概念
+5. **概念别名**：统一 "React Hooks" / "react hooks" / "React Hook" 为同一概念
+
+**数据质量优化**：
+6. **过滤垃圾概念**：
+   - 读取时：过滤标点符号、长度<2
+   - 写入时：在 `upsertConceptProjection` 中验证 conceptId
+   - 过滤常见垃圾词（"以下"、"请将"、"场景中"）
+7. **改进课程 summary**：
+   - 从 `"最近完成了 xx 的第 1 节"` 
+   - 改为 `"完成了「节点标题」：教学目标"`
+   - 在 `node_completed` 事件中传入 nodeTitle 和 teachingGoal
+8. **精简 userProfile**：只传 name/targetJob/insights，不传 education/workExperience
+9. **改进 insights prompt**：更明确的提取规则，要求具体、可操作的内容
+
+**架构清理**：
+10. **移除 V1 双写逻辑**：
+    - 删除 `updateInterests()` - 已被 `course_generated` 事件替代
+    - 删除 `addKnowledgeGap()` - 已被 `chat_confusion` 事件替代
+    - 删除 `addQuestionPattern()` - 已被 `chat_question` 事件替代
+    - 删除 `addLearningRecord()` - 已被 `node_completed` 事件替代
+    - 保留 `recordQuestionAttempt()`，但只写入 V3 事件
+11. **统一数据写入**：所有记忆更新统一使用 V3 事件系统
+12. **废弃 V2 中间层**：
+    - Memory Agent 直接读取 V3 projections
+    - 移除 V3 → V2 → 处理的转换开销
+    - V2 仅用于兼容旧测试（自动迁移到 V3）
+13. **减少代码冗余**：删除 ~150 行废弃代码
+
+**用户数据迁移**：
+14. **提供重建脚本**：
+    - 创建浏览器端重建脚本（`scripts/rebuild-memory-v3.js`）
+    - 创建重建指南（`docs/rebuild-memory-guide.md`）
+    - 支持数据备份和恢复
+    - 自动应用清理规则和数据限制
+
+**文件变更**：
+- 重写 `lib/memory/memory-agent.ts`：
+  - 直接读取 V3 projections（~450 行）
+  - 移除 V2 依赖，减少转换层级
+  - 保留 V2 兼容性（自动迁移）
+- 修改 `lib/memory/repository.ts`：切换到 Memory Agent 的 payload 函数
+- 修改 `lib/memory/aggregator.ts`：
+  - 导出 `convertMemoryStoreV3ToV2`（仅用于兼容）
+  - 添加 `isValidConceptId` 验证函数
+  - 改进 `node_completed` 事件的 summary 格式
+- 修改 `hooks/useUserMemory.ts`：
+  - 导入 Memory Agent 函数
+  - 删除废弃的 V1 写入方法（~100 行）
+  - 简化 `recordQuestionAttempt`，只写入 V3
+- 修改 `contexts/CourseContext.tsx`：
+  - 纲要生成调用 `getPlanningPayload(topic)` 替代完整 memory store
+  - 节点生成调用 `getTeachingPayload({topic, nodeTitle, concepts})` 替代完整 memory store
+  - 精简 userProfile，只传 name/targetJob/insights
+- 修改 `contexts/ProgressContext.tsx`：在 `node_completed` 事件中传入 nodeTitle 和 teachingGoal
+- 修改 `components/ui/ChatWidget.tsx`：删除 V1 写入，保留 V3 事件
+- 修改 `app/course/[courseId]/learn/[nodeIndex]/page.tsx`：删除 V1 写入
+- 修改 `lib/prompt.ts`：改进 `buildProfileInsightPrompt`
+- 修复 `tests/course-blueprint-memory-v3.test.ts`：移除已废弃的 `nodeTopic` 字段
+- 新增 `scripts/rebuild-memory-v3.js`：浏览器端重建脚本
+- 新增 `docs/rebuild-memory-guide.md`：重建指南
+- 新增 `docs/memory-data-flow-optimization.md`：数据流优化方案文档
+- 新增 `docs/memory-cleanup-plan.md`：架构清理方案文档
+
+**效果**：
+- 纲要生成 prompt 从 MB 级降至 KB 级（仅传递 3 门相关课程 + 3 个风险概念）
+- 节点生成 prompt 从 500+ 概念降至 20 个相关概念
+- 聊天 prompt 从全量记忆降至 3 个焦点概念
+- 自动清理过期数据，防止 localStorage 5-10MB 限制溢出
+- 概念别名统一，避免 "React Hooks" 碎片化
+- **垃圾数据在写入时就被过滤，不再污染记忆系统**
+- **课程 summary 包含有意义的内容，AI 可以参考学习历史**
+- **insights 提取更准确，类比教学更有效**
+- **消除双写，数据一致性提升，代码减少 ~150 行**
+- **统一使用 V3 事件系统，架构更清晰**
+- **废弃 V2 中间层，减少转换开销，性能提升**
+- **提供用户数据重建工具，平滑迁移到新架构**
+
+### 🔧 代码重构
+
+**A. 前端 chat 页面拆分**
+- 新增 `app/generate/chat/utils/sseParser.ts`：SSE 解析工具，支持 async generator
+- 新增 `app/generate/chat/hooks/useChatMessages.ts`：消息状态管理 hook
+- 新增 `app/generate/chat/hooks/useStreamChat.ts`：流式聊天逻辑 hook
+- `page.tsx` 从 500+ 行精简至 90 行，只保留 UI 渲染
+
+**B. Python Agent 重构**
+- 新增 `services/outline_service.py`：提取 prompt 构建、流式调用、状态管理
+- `main.py` 从 300+ 行精简至 100 行，只保留路由定义
+- 移除重复的 prompt 构建代码
+
+**C. 统一错误处理**
+- 新增 `components/ErrorBoundary.tsx`：全局 React 错误边界
+- `app/layout.tsx` 包裹 ErrorBoundary
+- Python Agent 添加全局异常处理中间件
+
 ## 2026-03-31
 
-### 重复请求修复
+### 🎉 本次迭代总结
+
+**核心问题**：
+1. ✅ 课程纲要/目录生成 prompt 有重复/冗余内容
+2. ✅ 节点生成传入重复字段（`nodeTopic`）
+3. ✅ React Strict Mode 导致多次重复请求
+4. ✅ 用户澄清流程慢，未使用流式输出
+
+**解决方案**：
+1. 优化 prompt 构建逻辑，只在有内容时添加段落
+2. 移除 `NodeLessonPromptPayload.nodeTopic` 字段
+3. 使用 `hasRequestedRef` 防止重复请求
+4. 实现 SSE 流式输出支持（前端完成，兼容非流式）
+
+**验收清单**：见 `VERIFICATION.md`
+
+---
+
+### Agent 流式输出支持
+
+**问题**：
+- 用户澄清流程慢，每次回答都是独立请求
+- 没有使用流式输出，用户体验不够流畅
+
+**解决方案**：
+- ✅ **前端**：修改 `/api/agents/outline/route.ts` 支持流式响应转发
+  - 检测 Python Agent 返回的 `Content-Type`
+  - 如果是 `text/event-stream`，直接转发流式响应
+  - 否则正常返回 JSON（向后兼容）
+- ✅ **前端**：修改 `CourseContext.submitOutlineMessage` 支持流式接收
+  - 使用 `ReadableStream` + `TextDecoder` 解析 SSE 数据
+  - 逐行解析 `data:` 开头的事件
+  - 兼容非流式响应
+- ✅ **后端**：修改 Python Agent 返回 SSE 流式响应
+  - `/api/agents/outline/generate` 返回 `EventSourceResponse`
+  - `/api/agents/outline/answer` 返回 `EventSourceResponse`
+  - 发送中间状态（`thinking`）和最终结果
+
+**SSE 数据格式**：
+```
+data: {"type": "thinking", "message": "正在分析..."}
+
+data: {"sessionId": "xxx", "type": "confirmation", "blueprint": {...}}
+
+data: [DONE]
+```
+
+### 课程生成进一步优化
+
+**问题1：课程纲要生成 prompt 有重复内容**
+- `buildOutlinePrompt` 中即使没有内容也会添加空段落
+- 增加不必要的 token 消耗
+
+**问题2：用户澄清流程慢**
+- 当前使用 Python Agent，每次回答都是独立请求
+- 未使用流式输出，用户体验不够流畅
+- 详见 `AGENT_OPTIMIZATION.md` 优化建议
+
+**问题3：学习页预加载触发三次请求**
+- `preloadNextNode` 依赖 `generateNodeContent`
+- `generateNodeContent` 每次都是新的函数引用
+- 导致 `preloadNextNode` 也每次都是新引用，触发 useEffect 重复执行
+
+**解决方案**：
+1. 优化 `buildOutlinePrompt`：只在有内容时添加段落，减少空白内容
+2. 创建 `AGENT_OPTIMIZATION.md` 记录优化方案（需要 Python Agent 支持）
+3. 重构 `preloadNextNode`：移除对 `generateNodeContent` 的依赖，直接内联 fetch 调用
+
+### 课程生成优化
+
+**问题1：课程名称直接使用用户输入**
+- TOC 生成时应该生成一个精炼的课程名称，而不是直接用用户输入
+
+**问题2：节点生成传入重复字段**
+- `NodeLessonPromptPayload` 包含 `nodeTopic` 字段，与外层 `topic` 重复
+- 增加不必要的 token 消耗
+
+**问题3：学习页发出三次重复请求**
+- `learn/[nodeIndex]/page.tsx` 的 useEffect 没有防重复机制
+- React Strict Mode + 依赖变化导致多次请求
+
+**解决方案**：
+1. 优化 `buildTocPrompt`：
+   - 明确要求生成课程名称（8-15字，不含"课程"二字）
+   - 优化课程描述要求（15-30字，说明学完能做什么）
+   - 调整任务顺序，先生成名称和描述
+2. 移除 `NodeLessonPromptPayload.nodeTopic` 字段，减少冗余
+3. 学习页添加 `hasRequestedRef` 防止重复请求
+
+### React Strict Mode 重复请求修复
+
+**问题**：
+- `confirm/page.tsx` 和 `toc/page.tsx` 在 Strict Mode 下 useEffect 执行两次
+- 之前使用 AbortController + 版本号方案，但**无法阻止 HTTP 请求发出**
+- 两次请求都会到达服务器，第二次请求可能失败导致页面崩溃
+
+**根本原因**：
+- AbortController 只能取消前端的响应处理，无法取消已发出的 HTTP 请求
+- 两次 useEffect 执行会发出两次真实的 API 请求
+
+**解决方案**：
+- 使用 `hasRequestedRef` 标记是否已发起请求
+- 在 useEffect 开始时检查标记，如果已请求则直接返回
+- 重试时重置标记
+- **确保只发出一次 HTTP 请求**
+
+### 重复请求修复（已废弃方案）
 
 **问题**：
 - React Strict Mode 导致 confirm/toc/学习页 useEffect 执行两次

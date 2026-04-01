@@ -45,6 +45,8 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
         nodeIndex,
         occurredAt: Date.now(),
         payload: {
+          nodeTitle: node.title,
+          teachingGoal: node.teachingGoal,
           teachConceptIds: node.teachConceptIds,
           teachConceptNames: node.teachConceptIds.map((conceptId) => bundle.blueprint.globalConcepts.find((item) => item.id === conceptId)?.name || conceptId),
         },

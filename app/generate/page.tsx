@@ -11,7 +11,7 @@ export default function GeneratePage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (topic.trim()) {
-      router.push(`/generate/confirm?topic=${encodeURIComponent(topic)}`);
+      router.push(`/generate/chat?topic=${encodeURIComponent(topic)}`);
     }
   };
 

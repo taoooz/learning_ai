@@ -95,7 +95,6 @@ export async function POST(request: NextRequest) {
         : [];
 
       return buildNodeLessonPrompt(topic, {
-        nodeTopic: topic,
         nodeTitle: node.title,
         teachingGoal: node.teachingGoal,
         analogyFacts,
@@ -129,18 +128,52 @@ export async function POST(request: NextRequest) {
     const data = patchedLesson;
 
     console.log(`[NodeContent] Total: ${Date.now() - startTime}ms`);
-    const meta = finalizeGenerationSuccess(trace, {
-      extra: {
-        nodeIndex,
-        questionCount: data.questions.length,
-        cardCount: data.cards.length,
+
+    // 流式返回：逐个发送 cards 和 questions
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          // 发送基础信息
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+            type: 'meta',
+            courseId: data.courseId,
+            nodeIndex: data.nodeIndex,
+            title: data.title,
+            teachingGoal: data.teachingGoal,
+          })}\n\n`));
+
+          // 逐个发送 cards
+          for (const card of data.cards) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              type: 'card',
+              data: card,
+            })}\n\n`));
+          }
+
+          // 逐个发送 questions
+          for (const question of data.questions) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              type: 'question',
+              data: question,
+            })}\n\n`));
+          }
+
+          // 发送完成信号
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          controller.close();
+        } catch (error) {
+          controller.error(error);
+        }
       },
     });
-    logGenerationMeta('NodeContent', meta);
 
-    return NextResponse.json({
-      ...data,
-      generationMeta: meta,
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
     });
   } catch (error) {
     console.error(`[NodeContent] Error after ${Date.now() - startTime}ms:`, error);

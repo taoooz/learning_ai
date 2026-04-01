@@ -20,7 +20,7 @@ function ConfirmPageContent() {
   const [currentQuestion, setCurrentQuestion] = useState<{ id: string; question: string; options?: string[] } | null>(null);
   const [currentAnswer, setCurrentAnswer] = useState<string>('');
   const [answers, setAnswers] = useState<string[]>([]);
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0); // 从0开始，显示时+1
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,50 +29,30 @@ function ConfirmPageContent() {
   const [isEditing, setIsEditing] = useState(false);
   const [editedBlueprint, setEditedBlueprint] = useState<OutlineBlueprint | null>(null);
 
-  // 用于标记当前最新的请求版本
-  const requestVersionRef = useRef(0);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  // 用于标记是否已经发起过请求（防止 Strict Mode 重复请求）
+  const hasRequestedRef = useRef(false);
 
   useEffect(() => {
     if (!topic) return;
 
-    // 取消之前的请求
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    // 递增版本号，标记这是一个新的请求
-    const currentVersion = requestVersionRef.current + 1;
-    requestVersionRef.current = currentVersion;
-    abortControllerRef.current = new AbortController();
+    // 如果已经发起过请求，直接返回
+    if (hasRequestedRef.current) return;
+    hasRequestedRef.current = true;
 
     const fetchData = async () => {
       setIsLoading(true);
       try {
         const result = await submitOutlineMessage(topic);
-        // 检查是否是最新版本的请求
-        if (currentVersion !== requestVersionRef.current) {
-          return;
-        }
         handleResponse(result);
         setIsLoading(false);
       } catch (err) {
-        if (currentVersion !== requestVersionRef.current) {
-          return;
-        }
         setError('生成失败，请稍后重试');
         setIsLoading(false);
       }
     };
 
     fetchData();
-
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, [topic, retryKey]);
+  }, [topic, retryKey, submitOutlineMessage]);
 
   const handleResponse = (result: OutlineResponse) => {
     console.log('[DEBUG] handleResponse:', JSON.stringify(result));
@@ -84,8 +64,7 @@ function ConfirmPageContent() {
     } else if (result.type === 'questions' && result.questions && result.questions.length > 0) {
       console.log('[DEBUG] type=questions, showing question:', result.questions[0]);
       setCurrentQuestion(result.questions[0]);
-      setCurrentQuestionIndex(prev => prev + 1);
-      setAnswers([]);
+      // 不在这里 +1，保持 index 为实际问题数量
     } else if (result.type === 'reconsider') {
       console.log('[DEBUG] type=reconsider');
       setCurrentQuestion(null);
@@ -103,6 +82,7 @@ function ConfirmPageContent() {
     const newAnswers = [...answers, currentAnswer];
     setAnswers(newAnswers);
     setCurrentAnswer('');
+    setCurrentQuestionIndex(prev => prev + 1); // 提交后才 +1
 
     try {
       const answerText = newAnswers.join('; ');
@@ -125,6 +105,7 @@ function ConfirmPageContent() {
   };
 
   const handleRetry = () => {
+    hasRequestedRef.current = false; // 重置请求标记
     setRetryKey(k => k + 1);
   };
 

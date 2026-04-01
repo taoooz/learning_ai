@@ -53,7 +53,7 @@ export default function HomePage() {
     e.preventDefault();
     if (!topic.trim()) return;
 
-    router.push(`/generate/confirm?topic=${encodeURIComponent(topic.trim())}`);
+    router.push(`/generate/chat?topic=${encodeURIComponent(topic.trim())}`);
   };
 
   const handleCourseClick = (courseId: string) => {

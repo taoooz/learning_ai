@@ -23,14 +23,12 @@ function TocPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const topic = searchParams.get('topic') || '';
-  const { generateToc, addCourse } = useCourse();
+  const { generateToc, addCourse, generateNodeContent } = useCourse();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 用于标记当前最新的请求版本
-  const requestVersionRef = useRef(0);
-  // 用于取消正在进行的请求
-  const abortControllerRef = useRef<AbortController | null>(null);
+  // 用于标记是否已经发起过请求（防止 Strict Mode 重复请求）
+  const hasRequestedRef = useRef(false);
 
   useEffect(() => {
     const outlineData = sessionStorage.getItem('pendingOutline');
@@ -40,28 +38,16 @@ function TocPageContent() {
       return;
     }
 
+    // 如果已经发起过请求，直接返回
+    if (hasRequestedRef.current) return;
+    hasRequestedRef.current = true;
+
     const outline: PendingOutline = JSON.parse(outlineData);
 
-    // 取消之前的请求
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    // 递增版本号，标记这是一个新的请求
-    const currentVersion = requestVersionRef.current + 1;
-    requestVersionRef.current = currentVersion;
-    abortControllerRef.current = new AbortController();
-
-    console.log('[TOC Page] Starting TOC generation, version:', currentVersion);
+    console.log('[TOC Page] Starting TOC generation');
 
     // 调用 toc API 生成课程名称、描述、节点详情
     generateToc(outline).then(async (result) => {
-      // 检查是否是最新版本的请求
-      if (currentVersion !== requestVersionRef.current) {
-        console.log('[TOC Page] Ignoring stale response, version:', currentVersion);
-        return;
-      }
-
       try {
         const tocResult = result as TocResponse;
 
@@ -93,6 +79,11 @@ function TocPageContent() {
         // 保存 bundle 并更新上下文状态
         addCourse(bundle);
 
+        // 后台预生成第一个节点内容（不阻塞跳转）
+        generateNodeContent(blueprint.courseId, 0).catch(err => {
+          console.warn('[TOC Page] Preload node 0 failed:', err);
+        });
+
         // 清理 sessionStorage
         sessionStorage.removeItem('pendingOutline');
 
@@ -112,14 +103,7 @@ function TocPageContent() {
       setError('生成目录失败，请稍后再试');
       setIsLoading(false);
     });
-
-    // 清理函数
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, [topic, generateToc, addCourse, router]);
+  }, [generateToc, addCourse, router]);
 
   if (isLoading) {
     return (

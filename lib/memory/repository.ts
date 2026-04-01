@@ -2,15 +2,17 @@ import {
   appendEventToMemoryStoreV3,
   createDefaultUserMemory,
   decayUserMemory,
-  getChatMemoryPayload,
-  getPlanningMemoryPayload,
-  getTeachingMemoryPayload,
   isMemoryStoreV3,
   isMemoryStoreV2,
   mergeProfileIntoMemory,
   migrateMemoryToV3,
   migrateUserMemoryToV2,
 } from '@/lib/memory/aggregator';
+import {
+  getChatMemoryPayload,
+  getPlanningMemoryPayload,
+  getTeachingMemoryPayload,
+} from '@/lib/memory/memory-agent';
 import { getUserProfile } from '@/lib/storage';
 import type {
   ChatMemoryPayload,

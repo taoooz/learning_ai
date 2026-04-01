@@ -8,9 +8,6 @@ import {
   detectAssistantExplanationStyle,
   detectChatLearningPreferences,
   detectExplicitMasteredConcept,
-  getChatMemoryPayload,
-  getPlanningMemoryPayload,
-  getTeachingMemoryPayload,
   isMemoryStoreV2,
   migrateUserMemoryToV2,
   normalizeConceptKey,
@@ -21,6 +18,11 @@ import {
   type ChatSignalInput,
   type QuestionAttemptPayload,
 } from '@/lib/memory/aggregator';
+import {
+  getChatMemoryPayload,
+  getPlanningMemoryPayload,
+  getTeachingMemoryPayload,
+} from '@/lib/memory/memory-agent';
 import { createMemoryRepository } from '@/lib/memory/repository';
 import { getUserProfile } from '@/lib/storage';
 import type { ConversationSummary, MemoryStoreV3, UserMemory } from '@/types/course';
@@ -64,38 +66,8 @@ export function useUserMemory() {
   const memory = repository.getLegacyMemory();
   const memoryStore = repository.getMemoryStoreV3();
 
-  const updateInterests = useCallback((topic: string, source: 'course' | 'chat', courseId?: string): void => {
-    const now = Date.now();
-    decayUserMemory(memory, now);
-
-    for (const interest of memory.extractedInsights.interests) {
-      if (interest.topic !== topic) continue;
-      interest.weight = Math.min(5, interest.weight + (source === 'course' ? 2 : 1));
-      interest.lastInteraction = now;
-      interest.confidence = source === 'course' ? 0.95 : Math.max(interest.confidence || 0.4, 0.6);
-      repository.saveLegacyMemory(memory);
-      return;
-    }
-
-    memory.extractedInsights.interests.push({
-      topic,
-      weight: 1,
-      source,
-      courseId,
-      lastInteraction: now,
-      confidence: source === 'course' ? 0.95 : 0.6,
-    });
-    repository.saveLegacyMemory(memory);
-  }, [memory, repository]);
-
-  const addKnowledgeGap = useCallback((concept: string, topic: string, evidence: string, confidence: number = 0.65): void => {
-    recordChatInsightInMemory(memory, { concept, topic, evidence, confidence });
-    repository.saveLegacyMemory(memory);
-  }, [memory, repository]);
-
   const recordQuestionAttempt = useCallback((payload: QuestionAttemptPayload): void => {
-    recordQuestionAttemptInMemory(memory, payload);
-    repository.saveLegacyMemory(memory);
+    // 只写入 V3 事件
     repository.appendMemoryEvent({
       type: 'question_answered',
       topic: payload.topic,
@@ -110,39 +82,7 @@ export function useUserMemory() {
         dimension: payload.dimension,
       },
     });
-  }, [memory, repository]);
-
-  const addQuestionPattern = useCallback((question: string, topic: string): void => {
-    memory.extractedInsights.questionPatterns.push({
-      question,
-      topic,
-      timestamp: Date.now(),
-      confidence: 0.6,
-      source: 'chat',
-    });
-
-    if (memory.extractedInsights.questionPatterns.length > MAX_QUESTION_PATTERNS) {
-      memory.extractedInsights.questionPatterns.sort((a, b) => b.timestamp - a.timestamp);
-      memory.extractedInsights.questionPatterns = memory.extractedInsights.questionPatterns.slice(0, MAX_QUESTION_PATTERNS);
-    }
-
-    repository.saveLegacyMemory(memory);
-  }, [memory, repository]);
-
-  const addLearningRecord = useCallback((record: Omit<UserMemory['learningHistory'][number], 'completedAt'>): void => {
-    const existing = memory.learningHistory.find((item) => item.courseId === record.courseId);
-    if (existing) {
-      existing.nodesCompleted = record.nodesCompleted;
-      existing.completedAt = Date.now();
-    } else {
-      memory.learningHistory.push({
-        ...record,
-        completedAt: Date.now(),
-      });
-    }
-
-    repository.saveLegacyMemory(memory);
-  }, [memory, repository]);
+  }, [repository]);
 
   const markNodeCompleted = useCallback((courseId: string): void => {
     const record = memory.learningHistory.find((item) => item.courseId === courseId);
@@ -220,10 +160,8 @@ export function useUserMemory() {
   return {
     userMemory: memory,
     memoryStore,
-    updateInterests,
-    addKnowledgeGap,
-    addQuestionPattern,
-    addLearningRecord,
+    // V1 写入方法已废弃，统一使用 V3 事件
+    // updateInterests, addKnowledgeGap, addQuestionPattern, addLearningRecord 已删除
     markNodeCompleted,
     recordQuestionAttempt,
     addConversationSummary,

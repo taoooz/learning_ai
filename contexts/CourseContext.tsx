@@ -30,7 +30,7 @@ interface CourseContextType {
   updateNodeContent: (courseId: string, nodeIndex: number, lesson: NodeLesson) => void;
   deleteCourse: (courseId: string) => void;
   addCourse: (bundle: StoredCourseBundle) => void;
-  submitOutlineMessage: (topic: string, userMessage?: string) => Promise<OutlineResponse>;
+  submitOutlineMessage: (topic: string, userMessage?: string, sessionId?: string) => Promise<OutlineResponse>;
   generateToc: (outline: {
     topic: string;
     learningDirection: string;
@@ -108,30 +108,50 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('node-completed', handleNodeCompleted);
   }, []);
 
-  const submitOutlineMessage = useCallback(async (topic: string, userMessage?: string) => {
+  const submitOutlineMessage = useCallback(async (topic: string, userMessage?: string, sessionId?: string) => {
     setGenerationStatus('generating');
     setGenerationError(null);
     try {
-      // 调用 Python Agent（/api/agents/outline）而非旧系统（/api/generate/outline）
+      // 使用 Memory Agent 获取精简的 planning payload
+      const memoryRepository = createMemoryRepository();
+      const planningPayload = memoryRepository.getPlanningPayload(topic);
+      
+      // 精简 userProfile，只传递关键字段
+      const fullProfile = getUserProfile();
+      const slimProfile = fullProfile ? {
+        name: fullProfile.name,
+        targetJob: fullProfile.targetJob,
+        insights: fullProfile.insights, // insights 已经提炼了背景知识
+        // 不传 education 和 workExperience，避免冗余
+      } : null;
+      
       const response = await fetch('/api/agents/outline', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           topic,
-          userProfile: getUserProfile(),
-          userMemory: getUserMemoryStoreSnapshot(),
-          sessionId: agentSessionIdRef.current,
+          userProfile: slimProfile,
+          userMemory: planningPayload, // 只传递精简的 payload
+          sessionId: sessionId || agentSessionIdRef.current,
           userMessage,
         }),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
+        const data = await response.json();
         throw new Error(getGenerationErrorMessage(data, '大纲生成失败，请稍后再试。'));
       }
 
-      // 保存 sessionId 用于后续对话
+      // 检查是否是流式响应
+      const contentType = response.headers.get('content-type');
+      if (contentType?.includes('text/event-stream')) {
+        // 返回 response 对象，让调用方处理流式数据
+        setGenerationStatus('success');
+        return response;
+      }
+
+      // 非流式响应
+      const data = await response.json();
       if (data.sessionId) {
         setAgentSessionId(data.sessionId);
       }
@@ -271,40 +291,143 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     setCurrentCourse(course);
   }, []);
 
+  // 用于缓存正在进行的请求 Promise
+  const generatingNodesRef = useRef<Map<string, Promise<void>>>(new Map());
+
   const generateNodeContent = useCallback(async (courseId: string, nodeIndex: number) => {
+    const requestKey = `${courseId}-${nodeIndex}`;
+    
+    // 打印调用栈
+    console.log('[generateNodeContent] Called from:', new Error().stack?.split('\n').slice(2, 5).join('\n'));
+    
+    // 如果正在生成，返回现有的 Promise
+    const existingPromise = generatingNodesRef.current.get(requestKey);
+    if (existingPromise) {
+      console.log('[generateNodeContent] Reusing existing promise:', requestKey);
+      return existingPromise;
+    }
+    
     const course = coursesRef.current.find(c => c.courseId === courseId);
     if (!course || course.nodes[nodeIndex].cards) return;
     const bundle = getStoredCourseBundle(courseId);
     if (!bundle) throw new Error('Course bundle not found');
 
-    try {
-      const response = await fetch('/api/generate/node', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+    console.log('[generateNodeContent] Starting generation:', requestKey);
+
+    // 创建新的 Promise 并缓存
+    const promise = (async () => {
+      try {
+        // 使用 Memory Agent 获取精简的 teaching payload
+        const memoryRepository = createMemoryRepository();
+        const node = bundle.blueprint.nodes[nodeIndex];
+        const teachingPayload = memoryRepository.getTeachingPayload({
+          topic: course.topic,
+          nodeTitle: node.title,
+          nodeConcepts: node.teachConceptIds || [],
+          prerequisiteConcepts: node.prerequisiteConceptIds || [],
+        });
+        
+        const response = await fetch('/api/generate/node', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
           topic: course.topic,
           blueprint: bundle.blueprint,
           nodeIndex,
           userProfile: getUserProfile(),
-          userMemory: getUserMemoryStoreSnapshot(),
+          userMemory: teachingPayload, // 只传递精简的 payload
         }),
       });
 
-      const data = await response.json();
       if (!response.ok) {
+        const data = await response.json();
         throw new Error(getGenerationErrorMessage(data, '这一节内容生成失败，请稍后再试。'));
       }
 
-      const { generationMeta: _generationMeta, ...lessonPayload } = data;
-      const lesson: NodeLesson = lessonPayload;
-      updateNodeContent(courseId, nodeIndex, lesson);
+      // 检查是否是流式响应
+      const contentType = response.headers.get('content-type');
+      if (contentType?.includes('text/event-stream')) {
+        // 流式处理
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        
+        const lesson: Partial<NodeLesson> = {
+          courseId,
+          nodeIndex,
+          cards: [],
+          questions: [],
+        };
+
+        if (!reader) throw new Error('无法读取流式响应');
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            
+            let data = line.trim();
+            while (data.startsWith('data:')) {
+              data = data.slice(5).trim();
+            }
+            
+            if (data === '[DONE]' || !data) continue;
+            
+            try {
+              const parsed = JSON.parse(data);
+              
+              if (parsed.type === 'meta') {
+                lesson.title = parsed.title;
+                lesson.teachingGoal = parsed.teachingGoal;
+              } else if (parsed.type === 'card') {
+                lesson.cards!.push(parsed.data);
+                // 实时更新（创建新对象触发 React 更新）
+                updateNodeContent(courseId, nodeIndex, { ...lesson } as NodeLesson);
+              } else if (parsed.type === 'question') {
+                lesson.questions!.push(parsed.data);
+                // 实时更新（创建新对象触发 React 更新）
+                updateNodeContent(courseId, nodeIndex, { ...lesson } as NodeLesson);
+              }
+            } catch (e) {
+              console.warn('Failed to parse SSE:', e);
+            }
+          }
+        }
+
+        // 最终更新
+        updateNodeContent(courseId, nodeIndex, lesson as NodeLesson);
+      } else {
+        // 非流式响应（兼容旧版）
+        const data = await response.json();
+        const lesson: NodeLesson = data;
+        updateNodeContent(courseId, nodeIndex, lesson);
+      }
+      
+      console.log('[generateNodeContent] Generation completed:', requestKey);
     } catch (error) {
+      console.error('[generateNodeContent] Generation failed:', requestKey, error);
       throw (error instanceof Error ? error : new Error('这一节内容生成失败，请稍后再试。'));
+    } finally {
+      // 移除缓存
+      generatingNodesRef.current.delete(requestKey);
     }
+    })();
+
+    // 缓存 Promise
+    generatingNodesRef.current.set(requestKey, promise);
+    return promise;
   }, []); // 移除 courses 依赖，使用 ref
 
   // 预加载下一个节点内容（不阻塞主流程）
   const preloadNextNode = useCallback((courseId: string, currentNodeIndex: number) => {
+    console.log('[preloadNextNode] Called for:', courseId, currentNodeIndex);
+    
     const course = coursesRef.current.find(c => c.courseId === courseId);
     if (!course) return;
 
@@ -312,11 +435,13 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     if (nextIndex >= course.nodes.length) return;
     if (course.nodes[nextIndex].cards) return;
 
-    // 不等待，直接在后台触发生成
+    console.log('[preloadNextNode] Preloading node:', nextIndex);
+    
+    // 使用 generateNodeContent，复用防重复机制
     generateNodeContent(courseId, nextIndex).catch(() => {
       // 静默失败，不影响主流程
     });
-  }, [generateNodeContent]); // 移除 courses 依赖，使用 ref
+  }, [generateNodeContent]);
 
   const updateNodeContent = useCallback((
     courseId: string,

@@ -254,17 +254,17 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
       setStreamingContent('');
       setIsThinking(false);
 
-      // 对话完成后更新记忆（使用未限制的全部消息）
+      // 对话完成后更新记忆（V3 事件）
       const recentMessagesForMemory = [...messages, { role: 'user' as const, content: userMessage }];
       const lastUserMessage = recentMessagesForMemory.filter((m) => m.role === 'user').pop();
       const topicForMemory = memoryTopic || courseTitle;
       if (lastUserMessage) {
-        userMemory.addQuestionPattern(lastUserMessage.content, topicForMemory);
-
+        // 记录学习偏好
         for (const preference of detectChatLearningPreferences(lastUserMessage.content)) {
           userMemory.addLearningPreference(preference);
         }
 
+        // 记录掌握的概念
         const masteredConcept = detectExplicitMasteredConcept(lastUserMessage.content);
         if (masteredConcept) {
           userMemory.addMasteredConcept({
@@ -273,11 +273,8 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
           });
         }
 
+        // 记录聊天信号（V3 事件，包含 question、confusion 等）
         const memorySignal = analyzeChatMessageForMemory(lastUserMessage.content);
-        if (memorySignal.shouldAddKnowledgeGap && memorySignal.extractedConcept) {
-          userMemory.addKnowledgeGap(memorySignal.extractedConcept, topicForMemory, lastUserMessage.content, memorySignal.confidence);
-        }
-
         userMemory.recordChatSignals({
           topic: topicForMemory,
           question: lastUserMessage.content,
@@ -286,8 +283,6 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
           confidence: memorySignal.confidence,
           courseId,
         });
-
-        userMemory.updateInterests(topicForMemory, 'chat', courseId);
       }
     } catch (error) {
       console.error('Chat error:', error);

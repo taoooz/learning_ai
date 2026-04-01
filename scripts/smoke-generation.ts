@@ -103,7 +103,6 @@ function getCoursePromptPayload(): CourseBlueprintPromptPayload {
 function getNodePromptPayload(blueprint: CourseBlueprint): NodeLessonPromptPayload {
   const targetNode = blueprint.nodes[0];
   return {
-    nodeTopic: blueprint.topic,
     nodeTitle: targetNode.title,
     teachingGoal: targetNode.teachingGoal,
     analogyFacts: [{ id: 'fact-1', text: '负责过埋点分析和实验设计' }],

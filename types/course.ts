@@ -481,7 +481,6 @@ export interface TeachingMemoryPayload {
 }
 
 export interface NodeLessonPromptPayload {
-  nodeTopic: string;
   nodeTitle: string;
   teachingGoal: string;
   analogyFacts: Array<{
