@@ -84,9 +84,9 @@ export function CourseNode({ node, isCurrent, offset, onClick }: CourseNodeProps
                 <path d="M12 3.6c.25 0 .48.14.6.36l2.2 4.48c.09.18.26.31.46.34l4.95.72c.58.08.81.8.39 1.21l-3.58 3.49c-.15.15-.22.36-.19.57l.85 4.93c.1.58-.51 1.03-1.03.76l-4.42-2.32a.77.77 0 0 0-.72 0l-4.42 2.32c-.52.27-1.13-.18-1.03-.76l.85-4.93a.76.76 0 0 0-.19-.57L3.4 10.71c-.42-.41-.19-1.13.39-1.21l4.95-.72a.76.76 0 0 0 .46-.34l2.2-4.48c.12-.22.35-.36.6-.36z" />
               </svg>
             ) : (
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white/40 text-[13px] font-bold text-[#8B8A87]">
+              <span className="text-[13px] font-bold text-[#8B8A87]">
                 {node.index + 1}
-              </div>
+              </span>
             )}
           </div>
         </motion.button>
@@ -106,18 +106,18 @@ export function CourseNode({ node, isCurrent, offset, onClick }: CourseNodeProps
                 ? 'border-[#3FA577]/30 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(247,252,249,0.96))] text-primary shadow-[0_2px_8px_rgba(63,165,119,0.08)]'
                 : isCurrent
                   ? 'border-[#FF8A00] bg-[linear-gradient(135deg,rgba(255,255,255,1),rgba(255,247,239,0.98))] text-primary shadow-[0_4px_16px_rgba(255,138,0,0.15)]'
-                  : 'border-accent/20 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(255,249,244,0.96))] text-primary hover:border-accent/40 hover:shadow-[0_2px_12px_rgba(255,138,0,0.1)]'
+                  : 'border-[#D4D3D0] bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(255,249,244,0.96))] text-secondary hover:border-[#C4C3C0] hover:shadow-[0_2px_12px_rgba(0,0,0,0.04)]'
           }`}
         >
           <div
             className={`text-[11px] font-semibold ${
-              isLocked ? 'text-[#A4A29F]' : isCurrent ? 'text-accent' : isCompleted ? 'text-[#3FA577]' : 'text-accent/80'
+              isLocked ? 'text-[#A4A29F]' : isCurrent ? 'text-accent' : isCompleted ? 'text-[#3FA577]' : 'text-[#A4A29F]'
             }`}
           >
             {badgeText}
           </div>
           <div
-            className={`mt-1.5 break-words ${titleLineHeightClassName} ${isCurrent ? 'text-[16px] font-semibold' : 'text-[15px] font-semibold'}`}
+            className={`mt-1.5 break-words ${titleLineHeightClassName} ${isCurrent ? 'text-[16px] font-semibold' : 'text-[15px] font-semibold'} ${!isLocked && !isCurrent && !isCompleted ? 'text-secondary' : ''}`}
             style={titleClampStyle}
           >
             {node.title}

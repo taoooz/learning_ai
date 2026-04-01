@@ -116,7 +116,7 @@ export default function CoursePage() {
         />
 
         <section className="pb-2 pt-[78px]">
-          <div className="mb-6 px-1">
+          <div className="mb-4 px-1">
             <h1 data-course-title className="mb-2 text-[28px] font-bold leading-tight tracking-tight text-primary">
               {course.topic}
             </h1>
