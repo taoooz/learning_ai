@@ -56,7 +56,7 @@ function ChatPageContent() {
         <div className="absolute -bottom-32 -left-32 h-80 w-80 rounded-full bg-gradient-to-tr from-accent/6 to-transparent blur-3xl" />
       </div>
 
-      <CourseHeaderBar title="创建课程" backLabel="返回" onBack={() => router.push('/')} />
+      <CourseHeaderBar title="" backLabel="首页" onBack={() => router.push('/')} />
 
       <div className="relative flex-1 overflow-y-auto px-5 pt-20 pb-6">
         <div className="mx-auto max-w-2xl space-y-4">
@@ -93,7 +93,7 @@ function ChatPageContent() {
       </div>
 
       {currentBlueprint && (
-        <div className="relative border-t border-[rgba(0,0,0,0.06)] bg-surface px-5 py-4">
+        <div className="relative border-t border-black/[0.06] bg-white px-5 py-4 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
           <div className="mx-auto max-w-2xl flex gap-3">
             <input
               type="text"
@@ -102,15 +102,15 @@ function ChatPageContent() {
               onKeyDown={(e) => e.key === 'Enter' && handleAdjustOutline()}
               placeholder="有什么想调整的吗？"
               disabled={isWaitingResponse}
-              className="flex-1 rounded-full border border-[rgba(0,0,0,0.1)] bg-background px-5 py-3 text-sm text-primary placeholder:text-tertiary focus:border-accent/40 focus:outline-none disabled:opacity-50"
+              className="flex-1 rounded-full border-2 border-black/[0.08] bg-white px-5 py-3.5 text-[15px] text-primary placeholder:text-tertiary focus:border-accent focus:outline-none disabled:opacity-50 transition-colors"
             />
             <button
               onClick={handleAdjustOutline}
               disabled={!adjustmentInput.trim() || isWaitingResponse}
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-accent text-white transition-all hover:shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-accent text-white shadow-[0_4px_16px_rgba(255,138,0,0.20)] transition-all hover:shadow-[0_6px_20px_rgba(255,138,0,0.25)] active:scale-[0.95] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
               </svg>
             </button>
           </div>
