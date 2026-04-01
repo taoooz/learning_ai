@@ -425,14 +425,90 @@ export default function LearnPage() {
         }}
       >
         {phase === 'loading' && (
-          <div className="flex min-h-[60vh] flex-1 flex-col items-center justify-center text-center">
-            <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-accent/20 to-accent/5 animate-bounce">
-              <svg className="w-8 h-8 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="flex min-h-[60vh] flex-1 flex-col items-center justify-center text-center px-6">
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.4 }}
+              className="mb-8 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-accent/20 via-accent/10 to-accent/5 shadow-[0_8px_24px_rgba(255,138,0,0.12)]"
+            >
+              <motion.svg 
+                className="w-10 h-10 text-accent" 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+                animate={{ rotate: [0, 5, -5, 0] }}
+                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-              </svg>
-            </div>
-            <p className="mb-2 text-sm text-secondary">正在准备这一小节</p>
-            <p className="text-xs text-tertiary">马上进入下一步学习</p>
+              </motion.svg>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.2 }}
+            >
+              <h3 className="mb-3 text-[22px] font-bold text-primary">正在为你准备内容</h3>
+              <p className="mb-6 text-[15px] leading-relaxed text-secondary">
+                AI 正在生成这一节的学习材料和练习题
+              </p>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.4, delay: 0.4 }}
+              className="w-full max-w-xs space-y-3"
+            >
+              <motion.div
+                className="flex items-center gap-3 rounded-2xl bg-white/60 px-4 py-3 shadow-sm"
+                animate={{ opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10">
+                  <svg className="h-4 w-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <span className="text-sm text-secondary">生成知识卡片...</span>
+              </motion.div>
+
+              <motion.div
+                className="flex items-center gap-3 rounded-2xl bg-white/60 px-4 py-3 shadow-sm"
+                animate={{ opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 2, delay: 0.3, repeat: Infinity, ease: "easeInOut" }}
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10">
+                  <svg className="h-4 w-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                </div>
+                <span className="text-sm text-secondary">设计练习题...</span>
+              </motion.div>
+
+              <motion.div
+                className="flex items-center gap-3 rounded-2xl bg-white/60 px-4 py-3 shadow-sm"
+                animate={{ opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 2, delay: 0.6, repeat: Infinity, ease: "easeInOut" }}
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10">
+                  <svg className="h-4 w-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <span className="text-sm text-secondary">优化学习体验...</span>
+              </motion.div>
+            </motion.div>
+
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.4, delay: 0.8 }}
+              className="mt-8 text-xs text-tertiary"
+            >
+              通常需要 10-20 秒
+            </motion.p>
           </div>
         )}
 
