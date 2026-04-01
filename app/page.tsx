@@ -156,15 +156,17 @@ export default function HomePage() {
 
         <section className="pt-4">
           <div className="relative max-w-xl">
-            <h1 className="text-[36px] font-bold leading-tight tracking-tight text-primary sm:text-[42px]">
-              想学什么，
-              <br />
-              <span className="relative inline-block">
+            <div className="pointer-events-none absolute -left-6 top-8 h-28 w-28 rounded-full bg-gradient-to-br from-sky-400/12 via-transparent to-transparent blur-2xl" />
+            <h1 className="text-3xl font-semibold tracking-tight text-primary sm:text-5xl">
+              <span className="block">想学什么，</span>
+              <span className="relative inline-block text-slate-950 [text-shadow:0_10px_28px_rgba(56,189,248,0.12)]">
                 <span
-                  className="pointer-events-none absolute -left-1 -right-2 bottom-1 h-[0.65em] -rotate-[1.8deg] rounded-full bg-gradient-to-r from-accent/30 via-accent/20 to-accent/10"
+                  className="pointer-events-none absolute -left-1 -right-2 bottom-0 h-[0.72em] -rotate-[2.4deg] rounded-[999px] bg-gradient-to-r from-sky-400/34 via-sky-300/24 to-accent/18 blur-[0.7px]"
                   aria-hidden="true"
                 />
-                <span className="relative">就从这里开始</span>
+                <span className="relative">
+                就从这里开始
+                </span>
               </span>
             </h1>
             <p className="mt-4 text-[15px] leading-relaxed text-secondary">
@@ -209,10 +211,7 @@ export default function HomePage() {
 
         {hasCourses && (
           <section>
-            <div className="mb-5">
-              <h2 className="text-[20px] font-bold text-primary">最近学习</h2>
-              <p className="mt-1.5 text-[15px] text-secondary">继续你的学习进度</p>
-            </div>
+            <h2 className="mb-5 text-[18px] font-bold text-primary">最近学习</h2>
 
             <div className="grid grid-cols-1 gap-4">
               {sortedCourses.map((course, index) => {
