@@ -566,12 +566,7 @@ export default function LearnPage() {
                         <div className="space-y-3">
                           {currentStep.question.options.map((option, optionIndex) => {
                             const isSelected = selectedAnswer.includes(option);
-                            const answer = currentStep.question.answer;
-                            const isCorrectOption = Array.isArray(answer)
-                              ? answer.includes(extractAnswerKey(option))
-                              : extractAnswerKey(option) === answer;
-                            const showCorrect = isAnswered && isCorrectOption;
-                            const showIncorrect = isAnswered && isSelected && !isCorrectOption;
+                            const showUserAnswer = isAnswered && isSelected;
 
                             return (
                               <button
@@ -581,18 +576,19 @@ export default function LearnPage() {
                                 className={`
                                   w-full rounded-[22px] border px-4 py-4 text-left text-[15px] transition-all duration-150
                                   ${isSelected && !isAnswered ? 'border-accent/30 bg-[linear-gradient(135deg,rgba(255,138,0,0.10),rgba(255,248,240,1))] text-primary shadow-[0_6px_14px_rgba(255,138,0,0.08)]' : ''}
-                                  ${showCorrect ? 'border-success/40 bg-[linear-gradient(135deg,rgba(52,199,89,0.14),rgba(247,252,248,1))] text-primary' : ''}
-                                  ${showIncorrect ? 'border-error/34 bg-[linear-gradient(135deg,rgba(239,71,111,0.12),rgba(255,248,249,1))] text-primary' : ''}
+                                  ${showUserAnswer && isCorrect ? 'border-success/40 bg-[linear-gradient(135deg,rgba(52,199,89,0.14),rgba(247,252,248,1))] text-primary' : ''}
+                                  ${showUserAnswer && !isCorrect ? 'border-error/34 bg-[linear-gradient(135deg,rgba(239,71,111,0.12),rgba(255,248,249,1))] text-primary' : ''}
                                   ${!isAnswered && !isSelected ? 'border-black/6 bg-white hover:border-accent/20 hover:bg-accent/[0.025]' : ''}
+                                  ${isAnswered && !isSelected ? 'border-black/6 bg-white opacity-50' : ''}
                                 `}
                               >
                                 <div className="flex items-start gap-3">
                                   <div className={`
                                     flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-all duration-150
-                                    ${showCorrect ? 'bg-success/22 text-success' : ''}
-                                    ${showIncorrect ? 'bg-error/20 text-error' : ''}
+                                    ${showUserAnswer && isCorrect ? 'bg-success/22 text-success' : ''}
+                                    ${showUserAnswer && !isCorrect ? 'bg-error/20 text-error' : ''}
                                     ${isSelected && !isAnswered ? 'bg-accent text-white' : ''}
-                                    ${!showCorrect && !showIncorrect && !(isSelected && !isAnswered) ? 'bg-subtle text-secondary' : ''}
+                                    ${!showUserAnswer && !(isSelected && !isAnswered) ? 'bg-subtle text-secondary' : ''}
                                   `}>
                                     {getOptionBadgeLabel(option, optionIndex)}
                                   </div>
@@ -631,21 +627,19 @@ export default function LearnPage() {
                   initial={{ y: 100, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-                  className="rounded-t-[32px] border border-b-0 border-white/80 bg-white px-5 py-5 shadow-[0_-10px_40px_rgba(15,23,42,0.08)]"
+                  className={`
+                    rounded-t-[32px] border border-b-0 px-5 py-5 shadow-[0_-10px_40px_rgba(15,23,42,0.08)]
+                    ${isCorrect ? 'border-success/30 bg-success/[0.08]' : 'border-error/30 bg-error/[0.08]'}
+                  `}
                 >
-                  <div className={`
-                    mb-4 rounded-[20px] border px-4 py-3 text-sm
-                    ${isCorrect ? 'border-success/24 bg-success/[0.10]' : 'border-error/20 bg-error/[0.08]'}
-                  `}>
-                    <p className="font-semibold text-primary">
-                      {isCorrect ? '答对了 🎉' : '答错了 😢'}
+                  <p className={`mb-1 text-lg font-semibold ${isCorrect ? 'text-success' : 'text-error'}`}>
+                    {isCorrect ? '答对了 🎉' : '答错了 😢'}
+                  </p>
+                  {!isCorrect && (
+                    <p className="mb-4 text-sm text-secondary">
+                      正确答案：{currentStep.question.answer}
                     </p>
-                    {!isCorrect && (
-                      <p className="mt-1 text-secondary">
-                        正确答案：{currentStep.question.answer}
-                      </p>
-                    )}
-                  </div>
+                  )}
                   
                   <button
                     onClick={() => {
@@ -660,14 +654,23 @@ export default function LearnPage() {
                       setChatInitialMessage(initialMessage);
                       setIsChatOpen(true);
                     }}
-                    className="mb-2 w-full rounded-full border border-primary/20 bg-white px-6 py-3 text-sm font-semibold text-primary hover:bg-primary/5 transition-colors"
+                    className={`
+                      mb-2 w-full rounded-full border px-6 py-3 text-sm font-semibold transition-colors
+                      ${isCorrect 
+                        ? 'border-success/30 bg-white text-success hover:bg-success/5' 
+                        : 'border-error/30 bg-white text-error hover:bg-error/5'
+                      }
+                    `}
                   >
                     {isCorrect ? '答疑解惑' : '讲解一下我错在哪'}
                   </button>
 
                   <button
                     onClick={goToNextStep}
-                    className="w-full rounded-full bg-cta px-6 py-3 text-sm font-semibold text-cta shadow-[0_10px_24px_rgba(17,24,39,0.10)] transition-all duration-150 active:scale-[0.985]"
+                    className={`
+                      w-full rounded-full px-6 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(17,24,39,0.10)] transition-all duration-150 active:scale-[0.985]
+                      ${isCorrect ? 'bg-success hover:bg-success/90' : 'bg-error hover:bg-error/90'}
+                    `}
                   >
                     继续
                   </button>
