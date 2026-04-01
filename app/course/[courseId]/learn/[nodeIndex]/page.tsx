@@ -620,58 +620,10 @@ export default function LearnPage() {
                   )}
                 </motion.div>
               </AnimatePresence>
-
-              {currentStep.type === 'question' && isAnswered && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.18 }}
-                  className={`
-                  mt-3 rounded-[24px] border px-4 py-3 text-sm leading-6
-                  ${isCorrect ? 'border-success/24 bg-success/[0.10] text-primary' : 'border-error/20 bg-error/[0.08] text-primary'}
-                `}>
-                  <p className="font-semibold">
-                    {isCorrect ? '答对了 🎉' : '答错了 😢'}
-                  </p>
-                  <p className="mt-1 text-secondary">
-                    {isCorrect
-                      ? '你已经跟上当前这个知识点了。'
-                      : `正确答案是：${currentStep.question.answer}`}
-                  </p>
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      onClick={() => {
-                        const initialMessage = JSON.stringify({
-                          type: isCorrect ? 'correct' : 'incorrect',
-                          question: currentStep.question.question,
-                          correctAnswer: currentStep.question.answer,
-                          userAnswer: isCorrect ? undefined : selectedAnswer[0],
-                          answer: currentStep.question.answer,
-                          options: currentStep.question.options
-                        });
-                        setChatInitialMessage(initialMessage);
-                        setIsChatOpen(true);
-                      }}
-                      className="flex items-center gap-2 rounded-full border border-primary/20 bg-white px-4 py-2 text-sm font-medium text-primary hover:bg-primary/5 transition-colors"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                      </svg>
-                      答疑解惑
-                    </button>
-                    <button
-                      onClick={goToNextStep}
-                      className="flex-1 rounded-full bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors"
-                    >
-                      {isLastStep ? '完成这一节' : '下一题'}
-                    </button>
-                  </div>
-                </motion.div>
-              )}
             </div>
 
-            {currentStep.type === 'question' && !isAnswered && (
-              <div className="mt-auto pt-3">
+            <div className="mt-auto pt-3">
+              {currentStep.type === 'question' && !isAnswered && (
                 <button
                   onClick={handleCheckAnswer}
                   disabled={
@@ -683,19 +635,65 @@ export default function LearnPage() {
                 >
                   提交这一题
                 </button>
-              </div>
-            )}
+              )}
 
-            {currentStep.type === 'card' && (
-              <div className="mt-auto pt-3">
+              {currentStep.type === 'question' && isAnswered && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.18 }}
+                  className="space-y-2"
+                >
+                  <div className={`
+                    rounded-[24px] border px-4 py-3 text-sm
+                    ${isCorrect ? 'border-success/24 bg-success/[0.10]' : 'border-error/20 bg-error/[0.08]'}
+                  `}>
+                    <p className="font-semibold text-primary">
+                      {isCorrect ? '答对了 🎉' : '答错了 😢'}
+                    </p>
+                    {!isCorrect && (
+                      <p className="mt-1 text-secondary">
+                        正确答案：{currentStep.question.answer}
+                      </p>
+                    )}
+                  </div>
+                  
+                  <button
+                    onClick={() => {
+                      const initialMessage = JSON.stringify({
+                        type: isCorrect ? 'correct' : 'incorrect',
+                        question: currentStep.question.question,
+                        correctAnswer: currentStep.question.answer,
+                        userAnswer: isCorrect ? undefined : selectedAnswer[0],
+                        answer: currentStep.question.answer,
+                        options: currentStep.question.options
+                      });
+                      setChatInitialMessage(initialMessage);
+                      setIsChatOpen(true);
+                    }}
+                    className="w-full rounded-full border border-primary/20 bg-white px-6 py-3 text-sm font-semibold text-primary hover:bg-primary/5 transition-colors"
+                  >
+                    {isCorrect ? '答疑解惑' : '讲解一下我错在哪'}
+                  </button>
+
+                  <button
+                    onClick={goToNextStep}
+                    className="w-full rounded-full bg-cta px-6 py-3 text-sm font-semibold text-cta shadow-[0_10px_24px_rgba(17,24,39,0.10)] transition-all duration-150 active:scale-[0.985]"
+                  >
+                    继续
+                  </button>
+                </motion.div>
+              )}
+
+              {currentStep.type === 'card' && (
                 <button
                   onClick={goToNextStep}
                   className="inline-flex min-h-13 w-full items-center justify-center rounded-full bg-cta px-6 py-3 text-sm font-semibold text-cta shadow-[0_10px_24px_rgba(17,24,39,0.10)] transition-all duration-150 active:scale-[0.985]"
                 >
-                  {isLastStep ? '完成这一节' : '我知道了'}
+                  继续
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
 
