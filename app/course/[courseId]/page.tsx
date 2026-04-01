@@ -14,6 +14,7 @@ export default function CoursePage() {
   const { courses, currentCourse } = useCourse();
   const [isLoading, setIsLoading] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [showTitleInBar, setShowTitleInBar] = useState(false);
 
   const courseId = params.courseId as string;
 
@@ -22,6 +23,19 @@ export default function CoursePage() {
       setIsLoading(false);
     }
   }, [courses, currentCourse]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const titleElement = document.querySelector('[data-course-title]');
+      if (titleElement) {
+        const rect = titleElement.getBoundingClientRect();
+        setShowTitleInBar(rect.bottom < 60);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // 生成第一个节点的内容（如果尚未生成）
   useEffect(() => {
@@ -90,7 +104,7 @@ export default function CoursePage() {
         }}
       >
         <CourseHeaderBar
-          title=""
+          title={showTitleInBar ? course.topic : ""}
           backLabel="首页"
           onBack={() => router.push('/')}
           trailing={(
@@ -103,7 +117,7 @@ export default function CoursePage() {
 
         <section className="pb-2 pt-[78px]">
           <div className="mb-6 px-1">
-            <h1 className="mb-2 text-[28px] font-bold leading-tight tracking-tight text-primary">
+            <h1 data-course-title className="mb-2 text-[28px] font-bold leading-tight tracking-tight text-primary">
               {course.topic}
             </h1>
             {(course.courseGoal || course.difficultySummary) && (
@@ -111,19 +125,6 @@ export default function CoursePage() {
                 {course.courseGoal || course.difficultySummary}
               </p>
             )}
-            <div className="mt-4 flex items-center gap-3">
-              <div className="flex-1">
-                <div className="h-2 overflow-hidden rounded-full bg-black/[0.06]">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-accent to-[#FF9F1C] transition-all duration-500"
-                    style={{ width: `${progressPercent}%` }}
-                  />
-                </div>
-              </div>
-              <span className="text-sm font-semibold text-accent">
-                {completedCount}/{course.totalNodes}
-              </span>
-            </div>
           </div>
 
           <CourseTree course={course} />

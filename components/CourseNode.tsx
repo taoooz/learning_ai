@@ -13,8 +13,7 @@ interface CourseNodeProps {
 export function CourseNode({ node, isCurrent, offset, onClick }: CourseNodeProps) {
   const isLocked = node.status === 'locked';
   const isCompleted = node.status === 'completed';
-  const isAvailable = !isLocked && !isCompleted && !isCurrent;
-  const badgeText = isCompleted ? '✓ 已完成' : isLocked ? '🔒 待解锁' : isCurrent ? '▶ 开始学习' : '准备好了';
+  const badgeText = isCompleted ? '✓ 已完成' : isCurrent ? '▶ 开始学习' : '待学习';
   const nodeScaleWhileTap = isLocked ? 1 : 0.965;
   const cardScaleWhileTap = isLocked ? 1 : 0.985;
   const titleLineHeightClassName = isCurrent ? 'leading-[22px]' : 'leading-[21px]';
@@ -50,9 +49,7 @@ export function CourseNode({ node, isCurrent, offset, onClick }: CourseNodeProps
               ? 'bg-[linear-gradient(180deg,#FFFFFF,#F7FBF8)]'
               : isCurrent
                 ? 'bg-[linear-gradient(180deg,#FFFDFB,#FFF5EC)] ring-[6px] ring-[rgba(255,138,0,0.12)]'
-                : isAvailable
-                  ? 'bg-[linear-gradient(180deg,#FFFFFF,#FFF9F4)]'
-                  : 'bg-[linear-gradient(180deg,#F0F0EE,#E4E3E0)]'
+                : 'bg-[linear-gradient(180deg,#F0F0EE,#E4E3E0)]'
           }`}
         >
           {isCurrent && (
@@ -65,13 +62,13 @@ export function CourseNode({ node, isCurrent, offset, onClick }: CourseNodeProps
           )}
           <div
             className={`flex h-full w-full items-center justify-center rounded-full border-[4px] ${
-              isLocked ? 'border-white/72' : 'border-white/92'
+              isLocked ? 'border-white/60' : 'border-white/92'
             } ${
               isCompleted ? 'bg-[linear-gradient(180deg,#FFFFFF,#F5FBF8)]' : ''
             } ${
               isCurrent ? 'bg-[linear-gradient(180deg,#FFFFFF,#FFF7F0)]' : ''
             } ${
-              isAvailable ? 'bg-[linear-gradient(180deg,#FFFFFF,#FFF9F4)]' : ''
+              !isCompleted && !isCurrent ? 'bg-[linear-gradient(180deg,#F8F8F7,#ECECEA)]' : ''
             }`}
           >
             {isCompleted ? (
@@ -87,13 +84,7 @@ export function CourseNode({ node, isCurrent, offset, onClick }: CourseNodeProps
                 <path d="M12 3.6c.25 0 .48.14.6.36l2.2 4.48c.09.18.26.31.46.34l4.95.72c.58.08.81.8.39 1.21l-3.58 3.49c-.15.15-.22.36-.19.57l.85 4.93c.1.58-.51 1.03-1.03.76l-4.42-2.32a.77.77 0 0 0-.72 0l-4.42 2.32c-.52.27-1.13-.18-1.03-.76l.85-4.93a.76.76 0 0 0-.19-.57L3.4 10.71c-.42-.41-.19-1.13.39-1.21l4.95-.72a.76.76 0 0 0 .46-.34l2.2-4.48c.12-.22.35-.36.6-.36z" />
               </svg>
             ) : (
-              <div
-                className={`flex h-7 w-7 items-center justify-center rounded-full text-[12px] font-bold ${
-                  isAvailable
-                    ? 'bg-[linear-gradient(135deg,rgba(255,138,0,0.10),rgba(255,255,255,1))] text-accent'
-                    : 'bg-white/12 text-white'
-                }`}
-              >
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white/40 text-[13px] font-bold text-[#8B8A87]">
                 {node.index + 1}
               </div>
             )}
@@ -110,17 +101,17 @@ export function CourseNode({ node, isCurrent, offset, onClick }: CourseNodeProps
             isLocked ? 'cursor-default' : 'cursor-pointer'
           } ${
             isLocked
-              ? 'border-black/[0.08] bg-[#F4F3EF] text-tertiary opacity-60'
+              ? 'border-[#D4D3D0] bg-[#F4F3EF] text-tertiary opacity-70'
               : isCompleted
                 ? 'border-[#3FA577]/30 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(247,252,249,0.96))] text-primary shadow-[0_2px_8px_rgba(63,165,119,0.08)]'
                 : isCurrent
-                  ? 'border-accent bg-[linear-gradient(135deg,rgba(255,255,255,1),rgba(255,247,239,0.98))] text-primary shadow-[0_4px_16px_rgba(255,138,0,0.15)]'
+                  ? 'border-[#FF8A00] bg-[linear-gradient(135deg,rgba(255,255,255,1),rgba(255,247,239,0.98))] text-primary shadow-[0_4px_16px_rgba(255,138,0,0.15)]'
                   : 'border-accent/20 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(255,249,244,0.96))] text-primary hover:border-accent/40 hover:shadow-[0_2px_12px_rgba(255,138,0,0.1)]'
           }`}
         >
           <div
             className={`text-[11px] font-semibold ${
-              isLocked ? 'text-tertiary' : isCurrent ? 'text-accent' : isCompleted ? 'text-[#3FA577]' : 'text-accent/80'
+              isLocked ? 'text-[#A4A29F]' : isCurrent ? 'text-accent' : isCompleted ? 'text-[#3FA577]' : 'text-accent/80'
             }`}
           >
             {badgeText}
