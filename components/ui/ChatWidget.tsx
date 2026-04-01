@@ -97,10 +97,12 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
         const parsed = JSON.parse(initialMessage);
         if (parsed.type === 'correct' || parsed.type === 'incorrect') {
           questionContextRef.current = parsed;
+          console.log('[ChatWidget] questionContext updated:', parsed);
         }
       } catch {
         // 不是 JSON，清空题目上下文（可能是课程目录页）
         questionContextRef.current = null;
+        console.log('[ChatWidget] questionContext cleared (not JSON)');
       }
     }
   }, [initialMessage]);
@@ -109,6 +111,8 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
   useEffect(() => {
     if (isOpen && initialMessage && !initialMessageSentRef.current) {
       initialMessageSentRef.current = true;
+      
+      console.log('[ChatWidget] Auto-sending initial message, questionContext:', questionContextRef.current);
       
       setInput('讲解一下这道题');
       // 自动发送
@@ -237,6 +241,8 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
           conversationSummary: userMemory.getConversationSummary(courseId),
         }),
       });
+
+      console.log('[ChatWidget] Sent request with questionContext:', questionContextRef.current);
 
       if (!response.ok) throw new Error('Failed to get response');
 

@@ -34,6 +34,8 @@ export async function POST(request: NextRequest) {
       return new Response('Missing required fields', { status: 400 });
     }
 
+    console.log('[Chat API] Received questionContext:', contextInfo?.questionContext);
+
     // 构建上下文时传入摘要
     const memoryRepository = createMemoryRepository();
     const chatMemoryPayload = memoryRepository.getChatPayload({
@@ -42,6 +44,9 @@ export async function POST(request: NextRequest) {
     });
 
     const context = buildChatContext(course, messages, contextInfo, conversationSummary, chatMemoryPayload);
+
+    console.log('[Chat API] Built context with questionContext:', contextInfo?.questionContext ? 'YES' : 'NO');
+    console.log('[Chat API] Context preview:', context.substring(0, 500));
 
     // 构建 AI 消息
     const aiMessages = [
