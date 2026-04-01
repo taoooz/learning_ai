@@ -9,7 +9,7 @@ interface ContextInfo {
   questionContext?: {
     type: 'correct' | 'incorrect';
     question: string;
-    correctAnswer: string;
+    correctAnswer: string | string[];
     userAnswer?: string;
     options?: string[];
   };
@@ -42,19 +42,25 @@ export function buildChatContext(
     let questionContextSection = '';
     if (contextInfo?.questionContext) {
       const qc = contextInfo.questionContext;
+      const correctAnswerText = Array.isArray(qc.correctAnswer) 
+        ? qc.correctAnswer.join('、') 
+        : qc.correctAnswer;
+      
       if (qc.type === 'correct') {
         questionContextSection = `\n## 题目上下文（用户答对）
 题目：${qc.question}
-正确答案：${qc.correctAnswer}
-选项：${qc.options?.join(', ') || '无'}
+正确答案：${correctAnswerText}
+选项：
+${qc.options?.map((opt, idx) => `${String.fromCharCode(65 + idx)}. ${opt}`).join('\n') || '无'}
 
 回答原则：讲解知识点、补充进阶内容、引导深层思考`;
       } else {
         questionContextSection = `\n## 题目上下文（用户答错）
 题目：${qc.question}
-正确答案：${qc.correctAnswer}
+正确答案：${correctAnswerText}
 用户答案：${qc.userAnswer}
-选项：${qc.options?.join(', ') || '无'}
+选项：
+${qc.options?.map((opt, idx) => `${String.fromCharCode(65 + idx)}. ${opt}`).join('\n') || '无'}
 
 回答原则：分析误区、讲解原理、给出记忆技巧`;
       }
