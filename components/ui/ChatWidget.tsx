@@ -90,20 +90,25 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
     userMemory.addConversationSummary(targetCourseId, summary);
   }, [userMemory]);
 
-  // 发送初始消息（答疑解惑）
+  // 监听 initialMessage 变化，更新 questionContext
   useEffect(() => {
-    if (isOpen && initialMessage && !initialMessageSentRef.current) {
-      initialMessageSentRef.current = true;
-      
-      // 解析并保存结构化消息
+    if (initialMessage) {
       try {
         const parsed = JSON.parse(initialMessage);
         if (parsed.type === 'correct' || parsed.type === 'incorrect') {
           questionContextRef.current = parsed;
         }
       } catch {
-        // 不是 JSON，忽略
+        // 不是 JSON，清空题目上下文（可能是课程目录页）
+        questionContextRef.current = null;
       }
+    }
+  }, [initialMessage]);
+
+  // 发送初始消息（答疑解惑）
+  useEffect(() => {
+    if (isOpen && initialMessage && !initialMessageSentRef.current) {
+      initialMessageSentRef.current = true;
       
       setInput('讲解一下这道题');
       // 自动发送
@@ -119,9 +124,8 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
       // 打开窗口时立即滚动到底部（instant 而非 smooth）
       messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
     } else {
-      // 关闭时重置
+      // 关闭时只重置自动发送标记
       initialMessageSentRef.current = false;
-      questionContextRef.current = null;
     }
   }, [isOpen]);
 
