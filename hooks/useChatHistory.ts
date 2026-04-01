@@ -102,12 +102,15 @@ function inferResolutionStatus(messages: ChatMessage[]): ConversationSummary['re
 export function generateConversationSummary(messages: ChatMessage[]): Omit<ConversationSummary, 'courseId' | 'timestamp'> {
   const userMessages = messages.filter((message) => message.role === 'user');
   const assistantMessages = messages.filter((message) => message.role === 'assistant');
+  
+  // 提取最近3个问题（简化版）
   const mainQuestions = userMessages
     .map((message) => message.content.trim())
     .filter(Boolean)
     .slice(-3)
-    .map((item) => truncateText(item, 32));
+    .map((item) => truncateText(item, 40));
 
+  // 提取未解决的概念
   const unresolvedConcepts = Array.from(new Set(
     userMessages
       .map((message) => analyzeChatMessageForMemory(message.content))
@@ -115,39 +118,38 @@ export function generateConversationSummary(messages: ChatMessage[]): Omit<Conve
       .map((result) => result.extractedConcept as string),
   )).slice(0, 3);
 
+  // 提取偏好的解释方式
   const preferredExplanationStyles = Array.from(new Set(
     userMessages.flatMap((message) => detectChatLearningPreferences(message.content).map((item) => item.value)),
-  )).slice(0, 3);
+  )).slice(0, 2);
 
+  // 提取最近使用的解释路径
   const explanationPath = [...assistantMessages]
     .reverse()
     .map((message) => detectAssistantExplanationStyle(message.content))
     .find(Boolean);
 
   const resolutionStatus = inferResolutionStatus(messages);
-  const followUp = unresolvedConcepts[0]
-    ? `下次优先跟进 ${unresolvedConcepts[0]}`
-    : mainQuestions[mainQuestions.length - 1]
-      ? `下次可继续跟进 ${mainQuestions[mainQuestions.length - 1]}`
-      : undefined;
 
-  const summaryParts = [
-    mainQuestions.length ? `主要问题：${mainQuestions.join('；')}` : '',
-    unresolvedConcepts.length ? `未解概念：${unresolvedConcepts.join('、')}` : '',
-    preferredExplanationStyles.length ? `偏好：${preferredExplanationStyles.join('、')}` : '',
-    explanationPath ? `已用解释路径：${explanationPath}` : '',
-    `状态：${resolutionStatus === 'open' ? '仍有未解决点' : resolutionStatus === 'resolved' ? '已解决' : '部分解决'}`,
-    followUp ? `待跟进：${followUp}` : '',
-  ].filter(Boolean);
+  // 生成简洁的摘要文本
+  const summaryParts: string[] = [];
+  
+  if (mainQuestions.length > 0) {
+    summaryParts.push(`讨论了：${mainQuestions.join('、')}`);
+  }
+  
+  if (unresolvedConcepts.length > 0) {
+    summaryParts.push(`待深入：${unresolvedConcepts.join('、')}`);
+  }
 
   return {
-    summary: summaryParts.join('；') || '用户询问了课程相关问题',
+    summary: summaryParts.join('。') || '进行了课程相关讨论',
     mainQuestions,
     unresolvedConcepts,
     preferredExplanationStyles,
     explanationPath,
     resolutionStatus,
-    followUp,
+    followUp: unresolvedConcepts[0] ? `可继续探讨 ${unresolvedConcepts[0]}` : undefined,
   };
 }
 

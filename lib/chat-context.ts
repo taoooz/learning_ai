@@ -66,12 +66,19 @@ export function buildChatContext(
 
     const activeMessages = chatHistory.filter((m) => !m.isExpired);
     const expiredSummary = conversationSummary?.summary;
-    const historySection = activeMessages.length > 0
-      ? activeMessages.map((m) => `${m.role === 'user' ? '用户' : '助理'}：${m.content}`).join('\n')
-      : '暂无';
+    
+    let historySection = '';
+    if (activeMessages.length > 0) {
+      // 只显示最近3轮对话
+      const recentMessages = activeMessages.slice(-6);
+      historySection = recentMessages
+        .map((m) => `${m.role === 'user' ? '用户' : '助理'}：${m.content}`)
+        .join('\n');
+    }
+    
     const summarySection = expiredSummary
-      ? `【之前对话摘要】${expiredSummary}\n\n${historySection}`
-      : historySection;
+      ? `${expiredSummary}\n\n最近对话：\n${historySection || '暂无'}`
+      : historySection || '暂无';
 
     return `你是课程学习助理，基于以下信息帮助用户解答问题。
 回答要求：简洁有力（100字以内）、亲切自然、启发式回应。
