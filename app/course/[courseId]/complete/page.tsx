@@ -32,8 +32,8 @@ function CompleteContent() {
       </div>
 
       <CourseHeaderBar
-        title="学习完成"
-        backLabel="返回课程"
+        title=""
+        backLabel="课程目录"
         onBack={handleBackToToc}
       />
 
@@ -45,43 +45,58 @@ function CompleteContent() {
           paddingBottom: 'max(20px, env(safe-area-inset-bottom))',
         }}
       >
-        <div className="flex flex-1 flex-col pt-1.5">
+        <div className="flex flex-1 flex-col items-center justify-center">
           <motion.div
-            initial={{ opacity: 0, y: 16, scale: 0.985 }}
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
-            className="rounded-[32px] border border-white/80 bg-surface/96 px-6 py-10 text-center shadow-[0_10px_24px_rgba(15,23,42,0.05)]"
+            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            className="w-full text-center"
           >
             <motion.div
-              initial={{ scale: 0.88, rotate: -6 }}
+              initial={{ scale: 0.8, rotate: -8 }}
               animate={{ scale: 1, rotate: 0 }}
-              transition={{ duration: 0.34, delay: 0.05, type: 'spring', stiffness: 260, damping: 18 }}
-              className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-[linear-gradient(135deg,rgba(255,138,0,0.20),rgba(56,189,248,0.14),rgba(255,255,255,0.98))] text-accent shadow-[0_10px_22px_rgba(255,138,0,0.10)]"
+              transition={{ duration: 0.5, delay: 0.1, type: 'spring', stiffness: 200, damping: 15 }}
+              className="mb-8 inline-flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-[#FFE5CC] via-[#FFF5EC] to-white shadow-[0_12px_32px_rgba(255,138,0,0.15)]"
             >
-              <span className="text-4xl">🎉</span>
+              <span className="text-5xl">🎉</span>
             </motion.div>
 
-            <p className="text-sm font-medium text-accent">太棒了！</p>
-            <h2 className="mt-2 text-[28px] font-semibold tracking-tight text-primary">你已经完成了这一节的学习</h2>
-            <p className="mt-3 text-sm leading-6 text-secondary">
-              继续加油，下一节内容已经准备好了。
-            </p>
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.2 }}
+            >
+              <h2 className="mb-3 text-[32px] font-bold leading-tight tracking-tight text-primary">
+                太棒了！
+              </h2>
+              <p className="text-[17px] leading-relaxed text-secondary">
+                你已经完成了这一节的学习
+              </p>
+            </motion.div>
           </motion.div>
 
-          <div className="mt-auto flex flex-col gap-3 pt-3">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.3 }}
+            className="mt-12 w-full space-y-3"
+          >
             <button
               onClick={handleNext}
-              className="inline-flex min-h-13 w-full items-center justify-center rounded-full bg-cta px-6 py-3 text-sm font-semibold text-cta shadow-[0_10px_24px_rgba(17,24,39,0.10)] transition-all duration-150 active:scale-[0.985]"
+              className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-cta px-6 py-4 text-[15px] font-semibold text-cta shadow-[0_8px_24px_rgba(255,138,0,0.20)] transition-all duration-150 hover:shadow-[0_12px_32px_rgba(255,138,0,0.25)] active:scale-[0.985]"
             >
-              进入下一节
+              继续下一节
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
             </button>
             <button
               onClick={handleBackToToc}
-              className="inline-flex min-h-12 w-full items-center justify-center rounded-full border border-black/10 bg-white px-6 py-3 text-sm font-medium text-secondary transition-all duration-150 active:scale-[0.985]"
+              className="inline-flex min-h-13 w-full items-center justify-center rounded-full border-2 border-black/[0.08] bg-white px-6 py-3.5 text-[15px] font-medium text-secondary transition-all duration-150 hover:border-black/[0.12] hover:bg-black/[0.02] active:scale-[0.985]"
             >
               返回课程目录
             </button>
-          </div>
+          </motion.div>
         </div>
       </div>
     </main>
