@@ -429,45 +429,34 @@ export default function LearnPage() {
         )}
 
         {phase === 'learning' && currentStep && (
-          <div className="flex flex-1 flex-col">
-            <div className="flex flex-1 flex-col pt-1.5">
-              <AnimatePresence mode="wait" initial={false}>
-                <motion.div
-                  key={currentStep.id}
-                  initial={{ opacity: 0, y: 12, scale: 0.985 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -10, scale: 0.99 }}
-                  transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                  className="relative rounded-[30px] border border-white/80 bg-surface/96 px-5 py-5 shadow-[0_10px_22px_rgba(15,23,42,0.05)] sm:px-6 sm:py-6"
-                >
-                  <div
-                    className="pointer-events-none absolute left-0 top-0 h-28 w-36 opacity-32"
-                    style={{
-                      backgroundImage:
-                        'linear-gradient(to right, rgba(56,189,248,0.12) 1px, transparent 1px), linear-gradient(to bottom, rgba(56,189,248,0.10) 1px, transparent 1px)',
-                      backgroundSize: '18px 18px',
-                      maskImage: 'radial-gradient(circle at 24% 18%, black 0%, rgba(0,0,0,0.82) 28%, transparent 78%)',
-                      WebkitMaskImage: 'radial-gradient(circle at 24% 18%, black 0%, rgba(0,0,0,0.82) 28%, transparent 78%)',
-                    }}
-                  />
-                  {currentStep.type === 'card' ? (
-                    <>
-                      <div className="mb-5 flex items-center gap-2">
-                        <p className="text-sm font-medium text-accent">第 {currentStepIndex + 1} 步</p>
-                        <div className="rounded-full bg-tag px-3 py-1 text-xs font-medium text-secondary">
-                          理解一下
-                        </div>
+          <div className="flex flex-1 flex-col pb-24">
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={currentStep.id}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                className="flex-1 px-5 pt-6 sm:px-6"
+              >
+                {currentStep.type === 'card' ? (
+                  <>
+                    <div className="mb-5 flex items-center gap-2">
+                      <p className="text-sm font-medium text-accent">第 {currentStepIndex + 1} 步</p>
+                      <div className="rounded-full bg-tag px-3 py-1 text-xs font-medium text-secondary">
+                        理解一下
                       </div>
-                      <div className="mb-5">
-                        <LastLineMarker
-                          contentClassName="text-[28px] font-semibold leading-[1.2] tracking-tight text-primary"
-                          markerClassName="bg-gradient-to-r from-sky-300/18 via-sky-200/14 to-accent/12 blur-[0.7px]"
-                        >
-                          {currentStep.card.title}
-                        </LastLineMarker>
-                      </div>
+                    </div>
+                    <div className="mb-5">
+                      <LastLineMarker
+                        contentClassName="text-[28px] font-semibold leading-[1.2] tracking-tight text-primary"
+                        markerClassName="bg-gradient-to-r from-sky-300/18 via-sky-200/14 to-accent/12 blur-[0.7px]"
+                      >
+                        {currentStep.card.title}
+                      </LastLineMarker>
+                    </div>
 
-                      <div className="prose prose-p:mb-4 prose-strong:text-primary max-w-none text-[15px] leading-7 text-[rgba(31,31,31,0.82)]">
+                    <div className="prose prose-p:mb-4 prose-strong:text-primary max-w-none text-[15px] leading-7 text-[rgba(31,31,31,0.82)]">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{currentStep.card.content}</ReactMarkdown>
                       </div>
 
@@ -618,11 +607,11 @@ export default function LearnPage() {
                       )}
                     </>
                   )}
-                </motion.div>
-              </AnimatePresence>
-            </div>
+              </motion.div>
+            </AnimatePresence>
 
-            <div className="mt-auto pt-3">
+            {/* 固定底部按钮区域 */}
+            <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-white via-white to-white/0 px-5 pb-6 pt-8 sm:px-6">
               {currentStep.type === 'question' && !isAnswered && (
                 <button
                   onClick={handleCheckAnswer}
