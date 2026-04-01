@@ -44,7 +44,7 @@ export function useStreamChat(topic: string) {
       addMessage({ type: 'user', content: message, timestamp: Date.now() });
       addMessage({ type: 'loading', message: '正在处理你的回答...', timestamp: Date.now() });
     } else {
-      addMessage({ type: 'system', content: `好的，让我们开始创建「${topic}」课程`, timestamp: Date.now() });
+      addMessage({ type: 'system', content: `收到，让我来帮你规划学习路径`, timestamp: Date.now() });
       addMessage({ type: 'loading', message: '正在分析你的需求...', timestamp: Date.now() });
     }
 

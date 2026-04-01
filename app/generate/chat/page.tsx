@@ -56,7 +56,7 @@ function ChatPageContent() {
         <div className="absolute -bottom-32 -left-32 h-80 w-80 rounded-full bg-gradient-to-tr from-accent/6 to-transparent blur-3xl" />
       </div>
 
-      <CourseHeaderBar title="" backLabel="首页" onBack={() => router.push('/')} />
+      <CourseHeaderBar title="创建课程" backLabel="首页" onBack={() => router.push('/')} />
 
       <div className="relative flex-1 overflow-y-auto px-5 pt-20 pb-6">
         <div className="mx-auto max-w-2xl space-y-4">
