@@ -14,7 +14,7 @@ export function CourseNode({ node, isCurrent, offset, onClick }: CourseNodeProps
   const isLocked = node.status === 'locked';
   const isCompleted = node.status === 'completed';
   const isAvailable = !isLocked && !isCompleted && !isCurrent;
-  const badgeText = isCompleted ? '已完成' : isLocked ? '待解锁' : isCurrent ? '现在学习' : '下一节';
+  const badgeText = isCompleted ? '✓ 已完成' : isLocked ? '🔒 待解锁' : isCurrent ? '▶ 开始学习' : '准备好了';
   const nodeScaleWhileTap = isLocked ? 1 : 0.965;
   const cardScaleWhileTap = isLocked ? 1 : 0.985;
   const titleLineHeightClassName = isCurrent ? 'leading-[22px]' : 'leading-[21px]';
@@ -106,27 +106,27 @@ export function CourseNode({ node, isCurrent, offset, onClick }: CourseNodeProps
           disabled={isLocked}
           whileHover={isLocked ? undefined : { y: -2, scale: isCurrent ? 1.01 : 1.012 }}
           whileTap={isLocked ? undefined : { y: 1, scale: cardScaleWhileTap }}
-          className={`ml-[44px] mt-2 flex min-h-[78px] w-[204px] flex-col rounded-[18px] border px-4 py-2.5 text-left transition-all duration-200 ${
+          className={`ml-[44px] mt-2 flex min-h-[78px] w-[204px] flex-col rounded-[20px] border-2 px-4 py-3 text-left transition-all duration-200 ${
             isLocked ? 'cursor-default' : 'cursor-pointer'
           } ${
             isLocked
-              ? 'border-black/5 bg-[#F4F3EF] text-tertiary'
+              ? 'border-black/[0.08] bg-[#F4F3EF] text-tertiary opacity-60'
               : isCompleted
-                ? 'border-completed bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(247,252,249,0.96))] text-primary'
+                ? 'border-[#3FA577]/30 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(247,252,249,0.96))] text-primary shadow-[0_2px_8px_rgba(63,165,119,0.08)]'
                 : isCurrent
-                  ? 'border-[rgba(255,138,0,0.20)] bg-[linear-gradient(135deg,rgba(255,255,255,1),rgba(255,247,239,0.98))] text-primary'
-                  : 'border-[rgba(255,138,0,0.08)] bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(255,249,244,0.96))] text-primary hover:border-[rgba(255,138,0,0.14)]'
+                  ? 'border-accent bg-[linear-gradient(135deg,rgba(255,255,255,1),rgba(255,247,239,0.98))] text-primary shadow-[0_4px_16px_rgba(255,138,0,0.15)]'
+                  : 'border-accent/20 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(255,249,244,0.96))] text-primary hover:border-accent/40 hover:shadow-[0_2px_12px_rgba(255,138,0,0.1)]'
           }`}
         >
           <div
-            className={`text-[10px] font-medium tracking-[0.1em] ${
-              isLocked ? 'text-tertiary' : isCurrent ? 'text-accent' : isCompleted ? 'text-[#4AA67B]' : 'text-accent/72'
+            className={`text-[11px] font-semibold ${
+              isLocked ? 'text-tertiary' : isCurrent ? 'text-accent' : isCompleted ? 'text-[#3FA577]' : 'text-accent/80'
             }`}
           >
             {badgeText}
           </div>
           <div
-            className={`mt-1 break-words ${titleLineHeightClassName} ${isCurrent ? 'text-[16px] font-semibold' : 'text-[15px] font-semibold'}`}
+            className={`mt-1.5 break-words ${titleLineHeightClassName} ${isCurrent ? 'text-[16px] font-semibold' : 'text-[15px] font-semibold'}`}
             style={titleClampStyle}
           >
             {node.title}

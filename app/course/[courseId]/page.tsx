@@ -90,27 +90,40 @@ export default function CoursePage() {
         }}
       >
         <CourseHeaderBar
-          title={course.topic}
-          backLabel="返回首页"
+          title=""
+          backLabel="首页"
           onBack={() => router.push('/')}
           trailing={(
-            <div className="rounded-full bg-black/[0.04] px-2.5 py-1 text-[11px] font-semibold text-secondary">
-              {progressPercent}%
+            <div className="rounded-full bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent">
+              {progressPercent}% 完成
             </div>
           )}
           maxWidthClassName="max-w-2xl"
         />
 
         <section className="pb-2 pt-[78px]">
-          <div className="mb-3 px-1">
-            <p className="text-[12px] font-medium uppercase tracking-[0.18em] text-secondary/78">
-              课程目录
-            </p>
+          <div className="mb-6 px-1">
+            <h1 className="mb-2 text-[28px] font-bold leading-tight tracking-tight text-primary">
+              {course.topic}
+            </h1>
             {(course.courseGoal || course.difficultySummary) && (
-              <p className="mt-2 text-[15px] leading-relaxed text-secondary">
+              <p className="text-[15px] leading-relaxed text-secondary">
                 {course.courseGoal || course.difficultySummary}
               </p>
             )}
+            <div className="mt-4 flex items-center gap-3">
+              <div className="flex-1">
+                <div className="h-2 overflow-hidden rounded-full bg-black/[0.06]">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-accent to-[#FF9F1C] transition-all duration-500"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+              </div>
+              <span className="text-sm font-semibold text-accent">
+                {completedCount}/{course.totalNodes}
+              </span>
+            </div>
           </div>
 
           <CourseTree course={course} />
