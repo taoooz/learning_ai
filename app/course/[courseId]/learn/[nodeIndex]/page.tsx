@@ -366,15 +366,6 @@ export default function LearnPage() {
     await loadNodeContent(currentVersion);
   };
 
-  const handleSkip = () => {
-    setShowRetry(false);
-    if (course && nodeIndex + 1 < course.nodes.length) {
-      router.push(`/course/${courseId}/learn/${nodeIndex + 1}`);
-    } else {
-      router.push(`/course/${courseId}`);
-    }
-  };
-
   if (!course || !node) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-background">
@@ -458,13 +449,14 @@ export default function LearnPage() {
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ duration: 0.4, delay: 0.4 }}
+              transition={{ duration: 0.4, delay: 0.6 }}
               className="w-full max-w-xs space-y-3"
             >
               <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.5, delay: 1 }}
                 className="flex items-center gap-3 rounded-2xl bg-white/60 px-4 py-3 shadow-sm"
-                animate={{ opacity: [0.5, 1, 0.5] }}
-                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
               >
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10">
                   <svg className="h-4 w-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -475,9 +467,10 @@ export default function LearnPage() {
               </motion.div>
 
               <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.5, delay: 1.5 }}
                 className="flex items-center gap-3 rounded-2xl bg-white/60 px-4 py-3 shadow-sm"
-                animate={{ opacity: [0.5, 1, 0.5] }}
-                transition={{ duration: 2, delay: 0.3, repeat: Infinity, ease: "easeInOut" }}
               >
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10">
                   <svg className="h-4 w-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -488,9 +481,10 @@ export default function LearnPage() {
               </motion.div>
 
               <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.5, delay: 2 }}
                 className="flex items-center gap-3 rounded-2xl bg-white/60 px-4 py-3 shadow-sm"
-                animate={{ opacity: [0.5, 1, 0.5] }}
-                transition={{ duration: 2, delay: 0.6, repeat: Infinity, ease: "easeInOut" }}
               >
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10">
                   <svg className="h-4 w-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -504,7 +498,7 @@ export default function LearnPage() {
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ duration: 0.4, delay: 0.8 }}
+              transition={{ duration: 0.4, delay: 2.5 }}
               className="mt-8 text-xs text-tertiary"
             >
               通常需要 10-20 秒
@@ -817,8 +811,7 @@ export default function LearnPage() {
       <RetryModal
         isOpen={showRetry}
         onRetry={handleRetry}
-        onSkip={handleSkip}
-        message="这一节内容还没准备好，我们可以再试一次，或者先去下一节。"
+        message="AI 生成内容时遇到了问题，让我们再试一次"
       />
 
       <ChatLauncher onClick={() => setIsChatOpen(true)} />
