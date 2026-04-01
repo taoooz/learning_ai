@@ -628,13 +628,13 @@ export default function LearnPage() {
 
               {currentStep.type === 'question' && isAnswered && (
                 <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.18 }}
-                  className="space-y-2"
+                  initial={{ y: 100, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                  className="rounded-t-[32px] border border-b-0 border-white/80 bg-white px-5 py-5 shadow-[0_-10px_40px_rgba(15,23,42,0.08)]"
                 >
                   <div className={`
-                    rounded-[24px] border px-4 py-3 text-sm
+                    mb-4 rounded-[20px] border px-4 py-3 text-sm
                     ${isCorrect ? 'border-success/24 bg-success/[0.10]' : 'border-error/20 bg-error/[0.08]'}
                   `}>
                     <p className="font-semibold text-primary">
@@ -660,7 +660,7 @@ export default function LearnPage() {
                       setChatInitialMessage(initialMessage);
                       setIsChatOpen(true);
                     }}
-                    className="w-full rounded-full border border-primary/20 bg-white px-6 py-3 text-sm font-semibold text-primary hover:bg-primary/5 transition-colors"
+                    className="mb-2 w-full rounded-full border border-primary/20 bg-white px-6 py-3 text-sm font-semibold text-primary hover:bg-primary/5 transition-colors"
                   >
                     {isCorrect ? '答疑解惑' : '讲解一下我错在哪'}
                   </button>
