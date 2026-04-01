@@ -622,51 +622,58 @@ export default function LearnPage() {
                     animate={{ y: 0, opacity: 1 }}
                     transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
                     className={`
-                      rounded-t-[32px] border-t-2 px-5 py-5 shadow-[0_-10px_40px_rgba(15,23,42,0.08)]
+                      rounded-t-[32px] border-t-[3px] px-5 py-6 shadow-[0_-10px_40px_rgba(15,23,42,0.08)]
                       ${isCorrect ? 'border-[#2E7D32] bg-[#E8F5E9]' : 'border-error bg-[#FFEBEE]'}
                     `}
                   >
-                  <p className={`mb-1 text-lg font-semibold ${isCorrect ? 'text-[#2E7D32]' : 'text-error'}`}>
-                    {isCorrect ? '答对了 🎉' : '答错了 😢'}
-                  </p>
+                  <div className="mb-4 flex items-center gap-2">
+                    <span className={`text-2xl ${isCorrect ? 'text-[#2E7D32]' : 'text-error'}`}>
+                      {isCorrect ? '🎉' : '💡'}
+                    </span>
+                    <p className={`text-lg font-semibold ${isCorrect ? 'text-[#2E7D32]' : 'text-error'}`}>
+                      {isCorrect ? '答对了！' : '再想想'}
+                    </p>
+                  </div>
                   {!isCorrect && (
-                    <p className="mb-4 text-sm text-secondary">
-                      正确答案：{currentStep.question.answer}
+                    <p className="mb-5 text-[15px] leading-relaxed text-secondary">
+                      正确答案是：<span className="font-medium text-primary">{currentStep.question.answer}</span>
                     </p>
                   )}
                   
-                  <button
-                    onClick={() => {
-                      const initialMessage = JSON.stringify({
-                        type: isCorrect ? 'correct' : 'incorrect',
-                        question: currentStep.question.question,
-                        correctAnswer: currentStep.question.answer,
-                        userAnswer: isCorrect ? undefined : selectedAnswer[0],
-                        options: currentStep.question.options
-                      });
-                      setChatInitialMessage(initialMessage);
-                      setIsChatOpen(true);
-                    }}
-                    className={`
-                      mb-2 w-full rounded-full border-2 px-6 py-3 text-sm font-semibold transition-colors
-                      ${isCorrect 
-                        ? 'border-[#2E7D32]/40 bg-white text-[#2E7D32] hover:bg-[#2E7D32]/5' 
-                        : 'border-error/40 bg-white text-error hover:bg-error/5'
-                      }
-                    `}
-                  >
-                    {isCorrect ? '答疑解惑' : '讲解一下我错在哪'}
-                  </button>
+                  <div className="space-y-2.5">
+                    <button
+                      onClick={() => {
+                        const initialMessage = JSON.stringify({
+                          type: isCorrect ? 'correct' : 'incorrect',
+                          question: currentStep.question.question,
+                          correctAnswer: currentStep.question.answer,
+                          userAnswer: isCorrect ? undefined : selectedAnswer[0],
+                          options: currentStep.question.options
+                        });
+                        setChatInitialMessage(initialMessage);
+                        setIsChatOpen(true);
+                      }}
+                      className={`
+                        w-full rounded-full border-2 px-6 py-3.5 text-[15px] font-semibold transition-all duration-150 active:scale-[0.985]
+                        ${isCorrect 
+                          ? 'border-[#2E7D32] bg-white text-[#2E7D32] hover:bg-[#2E7D32]/8 shadow-[0_4px_12px_rgba(46,125,50,0.12)]' 
+                          : 'border-error bg-white text-error hover:bg-error/8 shadow-[0_4px_12px_rgba(239,71,111,0.12)]'
+                        }
+                      `}
+                    >
+                      {isCorrect ? '💬 深入理解' : '🤔 为什么错了？'}
+                    </button>
 
-                  <button
-                    onClick={goToNextStep}
-                    className={`
-                      w-full rounded-full px-6 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(17,24,39,0.10)] transition-all duration-150 active:scale-[0.985]
-                      ${isCorrect ? 'bg-[#2E7D32] hover:bg-[#1B5E20]' : 'bg-error hover:bg-error/90'}
-                    `}
-                  >
-                    继续
-                  </button>
+                    <button
+                      onClick={goToNextStep}
+                      className={`
+                        w-full rounded-full px-6 py-3.5 text-[15px] font-semibold text-white shadow-[0_8px_20px_rgba(17,24,39,0.15)] transition-all duration-150 active:scale-[0.985]
+                        ${isCorrect ? 'bg-[#2E7D32] hover:bg-[#1B5E20]' : 'bg-error hover:bg-[#D93F64]'}
+                      `}
+                    >
+                      继续 →
+                    </button>
+                  </div>
                 </motion.div>
               )}
 
