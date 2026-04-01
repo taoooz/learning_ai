@@ -18,6 +18,7 @@ interface ChatWidgetProps {
   memoryTopic?: string;
   isOpen: boolean;
   onClose: () => void;
+  initialMessage?: string; // 初始消息（用于答疑解惑）
   // 额外上下文信息
   contextInfo?: {
     // 当前节点信息（学习页使用）
@@ -74,7 +75,7 @@ export function ChatLauncher({ onClick, label = '问助理' }: ChatLauncherProps
   );
 }
 
-export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose, contextInfo }: ChatWidgetProps) {
+export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose, initialMessage, contextInfo }: ChatWidgetProps) {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
@@ -84,10 +85,24 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const wasOpenRef = useRef(isOpen);
+  const initialMessageSentRef = useRef(false);
 
   const persistConversationSummary = useCallback((targetCourseId: string, summary: Parameters<typeof userMemory.addConversationSummary>[1]) => {
     userMemory.addConversationSummary(targetCourseId, summary);
   }, [userMemory]);
+
+  // 发送初始消息（答疑解惑）
+  useEffect(() => {
+    if (isOpen && initialMessage && !initialMessageSentRef.current) {
+      initialMessageSentRef.current = true;
+      setInput(initialMessage);
+      // 自动发送
+      setTimeout(() => {
+        const form = document.querySelector('[data-chat-form]') as HTMLFormElement;
+        form?.requestSubmit();
+      }, 300);
+    }
+  }, [isOpen, initialMessage]);
 
   useEffect(() => {
     if (isOpen) {
@@ -401,7 +416,7 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
               <div ref={messagesEndRef} />
             </div>
 
-            <form onSubmit={handleSubmit} className="border-t border-black/6 bg-white/62 px-4 pb-4 pt-3 sm:px-5">
+            <form data-chat-form onSubmit={handleSubmit} className="border-t border-black/6 bg-white/62 px-4 pb-4 pt-3 sm:px-5">
               <div className="flex gap-2 rounded-[22px] border border-black/6 bg-white/88 p-2 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
                 <input
                   ref={inputRef}

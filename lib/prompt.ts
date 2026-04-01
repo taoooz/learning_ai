@@ -883,6 +883,7 @@ ${cardsSection}
 - 问题必须与知识强相关
 - 3-5 道题，覆盖核心知识点
 - 问题类型：single（单选）、multiple（多选）、sorting（排序）
+- **不需要生成 explanation**（答错后会引导用户使用 AI 助理）
 
 ## 输出格式
 {
@@ -891,8 +892,7 @@ ${cardsSection}
     "type": "single|multiple|sorting",
     "question": "题干",
     "options": ["A", "B", "C", "D"],
-    "answer": "答案",
-    "explanation": "解析"
+    "answer": "答案"
   }]
 }
 

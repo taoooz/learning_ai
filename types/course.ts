@@ -39,7 +39,7 @@ export interface Question {
   question: string;
   options?: string[];      // 单选/多选/排序题
   answer: string | string[];  // sorting 时为排列后的数组
-  explanation: string;
+  explanation?: string;    // 可选：答错后引导用户使用 AI 助理
   concept?: string;
   dimension?: 'memory' | 'understanding' | 'application' | 'analysis';
   difficulty?: 1 | 2 | 3;

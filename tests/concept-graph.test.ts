@@ -32,7 +32,7 @@ test('buildConceptGraph constructs prerequisite relationships from blueprint nod
           canCompressKnownConceptIds: [],
           analogyFactIds: [],
         },
-        cardCount: 5,
+        
         status: 'available',
       },
       {
@@ -48,7 +48,7 @@ test('buildConceptGraph constructs prerequisite relationships from blueprint nod
           canCompressKnownConceptIds: [],
           analogyFactIds: [],
         },
-        cardCount: 6,
+        
         status: 'locked',
       },
       {
@@ -64,7 +64,7 @@ test('buildConceptGraph constructs prerequisite relationships from blueprint nod
           canCompressKnownConceptIds: [],
           analogyFactIds: [],
         },
-        cardCount: 7,
+        
         status: 'locked',
       },
     ],
@@ -118,7 +118,7 @@ test('getPrerequisites recursively finds all prerequisite concepts', () => {
           canCompressKnownConceptIds: [],
           analogyFactIds: [],
         },
-        cardCount: 5,
+        
         status: 'available',
       },
       {
@@ -134,7 +134,7 @@ test('getPrerequisites recursively finds all prerequisite concepts', () => {
           canCompressKnownConceptIds: [],
           analogyFactIds: [],
         },
-        cardCount: 6,
+        
         status: 'locked',
       },
       {
@@ -150,7 +150,7 @@ test('getPrerequisites recursively finds all prerequisite concepts', () => {
           canCompressKnownConceptIds: [],
           analogyFactIds: [],
         },
-        cardCount: 7,
+        
         status: 'locked',
       },
     ],

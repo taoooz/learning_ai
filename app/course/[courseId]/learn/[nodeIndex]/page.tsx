@@ -185,6 +185,7 @@ export default function LearnPage() {
   const [isAnswered, setIsAnswered] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatInitialMessage, setChatInitialMessage] = useState<string | undefined>();
 
   // 用于跟踪当前有效的加载请求
   const loadingVersionRef = useRef(0);
@@ -623,13 +624,28 @@ export default function LearnPage() {
                   ${isCorrect ? 'border-success/24 bg-success/[0.10] text-primary' : 'border-error/20 bg-error/[0.08] text-primary'}
                 `}>
                   <p className="font-semibold">
-                    {isCorrect ? '答对了。' : '先看一下这个点。'}
+                    {isCorrect ? '答对了。' : '答错了'}
                   </p>
                   <p className="mt-1 text-secondary">
                     {isCorrect
                       ? '你已经跟上当前这个知识点了。'
-                      : currentStep.question.explanation}
+                      : '没关系，继续学习吧。'}
                   </p>
+                  {!isCorrect && (
+                    <button
+                      onClick={() => {
+                        const initialMessage = `我在「${currentStep.question.question}」这道题上答错了，能帮我解释一下吗？`;
+                        setChatInitialMessage(initialMessage);
+                        setIsChatOpen(true);
+                      }}
+                      className="mt-3 flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                      </svg>
+                      答疑解惑
+                    </button>
+                  )}
                 </motion.div>
               )}
             </div>
@@ -729,7 +745,11 @@ export default function LearnPage() {
           courseTitle={node.title}
           memoryTopic={course.topic}
           isOpen={isChatOpen}
-          onClose={() => setIsChatOpen(false)}
+          onClose={() => {
+            setIsChatOpen(false);
+            setChatInitialMessage(undefined);
+          }}
+          initialMessage={chatInitialMessage}
           contextInfo={{
             currentNodeTitle: node.title,
             currentNodeCards: node.cards?.map(c => `${c.title}: ${c.content.slice(0, 100)}`),
