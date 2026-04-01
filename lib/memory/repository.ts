@@ -13,13 +13,15 @@ import {
   getPlanningMemoryPayload,
   getTeachingMemoryPayload,
 } from '@/lib/memory/memory-agent';
-import { getUserProfile } from '@/lib/storage';
+import { getUserProfile, getStoredDataV2 } from '@/lib/storage';
 import type {
   ChatMemoryPayload,
+  CourseBlueprint,
   MemoryEvent,
   MemoryStoreV3,
   MemoryStoreV2,
   PlanningMemoryPayload,
+  StoredCourseBundle,
   TeachingMemoryPayload,
   UserMemory,
   UserProfile,
@@ -159,8 +161,13 @@ export function createMemoryRepository(options: CreateMemoryRepositoryOptions = 
     nodeConcepts: string[];
     prerequisiteConcepts?: string[];
   }): TeachingMemoryPayload {
+    // 获取所有课程的 blueprints
+    const storedData = getStoredDataV2();
+    const blueprints: CourseBlueprint[] = storedData.courses.map((b: StoredCourseBundle) => b.blueprint);
+
     return getTeachingMemoryPayload({
       ...input,
+      blueprints,
       userMemory: getMemoryStoreV3(),
     });
   }

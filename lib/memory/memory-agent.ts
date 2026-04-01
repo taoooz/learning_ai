@@ -2,6 +2,7 @@
 import type {
   ChatMemoryPayload,
   ConceptProjection,
+  CourseBlueprint,
   MemoryStoreV2,
   MemoryStoreV3,
   PlanningMemoryPayload,
@@ -10,6 +11,7 @@ import type {
 } from '@/types/course';
 import { migrateMemoryToV3 } from './aggregator';
 import { CHAT_CONCEPT_ALIASES } from './aliases';
+import { getConceptGraph, getPrerequisites } from './concept-graph';
 
 // ============ 配置常量 ============
 const MAX_CONCEPTS = 200;
@@ -294,9 +296,10 @@ export function getTeachingMemoryPayload(input: {
   nodeTitle: string;
   nodeConcepts: string[];
   prerequisiteConcepts?: string[];
+  blueprints?: CourseBlueprint[]; // 新增：用于构建图谱
   userMemory?: UserMemory | MemoryStoreV2 | MemoryStoreV3 | null;
 }): TeachingMemoryPayload {
-  const { topic, nodeTitle, nodeConcepts, prerequisiteConcepts = [], userMemory } = input;
+  const { topic, nodeTitle, nodeConcepts, prerequisiteConcepts = [], blueprints = [], userMemory } = input;
   const now = Date.now();
   
   // 兼容 V2：自动迁移到 V3
@@ -325,6 +328,14 @@ export function getTeachingMemoryPayload(input: {
   const normalizedNodeConcepts = nodeConcepts.map(normalizeConceptKey);
   const normalizedPrerequisiteConcepts = prerequisiteConcepts.map(normalizeConceptKey);
 
+  // 使用图谱查询额外的前置概念
+  let allPrerequisites = [...normalizedPrerequisiteConcepts];
+  if (blueprints.length > 0) {
+    const graph = getConceptGraph(blueprints);
+    const graphPrerequisites = getPrerequisites(normalizedNodeConcepts, graph, 2);
+    allPrerequisites = [...new Set([...allPrerequisites, ...graphPrerequisites])];
+  }
+
   const targetConceptStates = normalizedNodeConcepts
     .map(concept => {
       const matched = topicConcepts
@@ -347,7 +358,7 @@ export function getTeachingMemoryPayload(input: {
     })
     .slice(0, 3);
 
-  const prerequisiteConceptStates = normalizedPrerequisiteConcepts
+  const prerequisiteConceptStates = allPrerequisites
     .map(concept => {
       const matched = topicConcepts
         .filter(item => getTopicRelevanceScore(concept, item.concept) >= 0.55)
@@ -365,7 +376,8 @@ export function getTeachingMemoryPayload(input: {
             masteryScore: 0,
           };
     })
-    .slice(0, 2);
+    .filter(p => p.masteryScore < 0.6) // 只返回薄弱的前置
+    .slice(0, 3);
 
   // 从事件中提取最近的问题
   const recentQuestionSummaries = memoryStore.events
