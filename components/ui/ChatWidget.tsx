@@ -119,6 +119,9 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
     if (isOpen) {
       // 打开窗口时立即滚动到底部（instant 而非 smooth）
       messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
+    } else {
+      // 关闭时重置 initialMessageSentRef
+      initialMessageSentRef.current = false;
     }
   }, [isOpen]);
 

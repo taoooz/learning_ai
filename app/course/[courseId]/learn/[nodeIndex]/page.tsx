@@ -456,7 +456,7 @@ export default function LearnPage() {
                       </LastLineMarker>
                     </div>
 
-                    <div className="prose prose-p:mb-4 prose-strong:text-primary max-w-none text-[15px] leading-7 text-[rgba(31,31,31,0.82)]">
+                    <div className="prose prose-sm prose-p:my-3 prose-p:leading-relaxed prose-strong:font-semibold prose-strong:text-primary prose-code:rounded prose-code:bg-subtle prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[0.9em] prose-code:font-normal prose-code:text-primary prose-code:before:content-[''] prose-code:after:content-[''] prose-ul:my-3 prose-ul:space-y-2 prose-li:my-0 prose-li:leading-relaxed max-w-none text-[15px] text-[rgba(31,31,31,0.82)]">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{currentStep.card.content}</ReactMarkdown>
                       </div>
 
@@ -629,7 +629,7 @@ export default function LearnPage() {
                   transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
                   className={`
                     rounded-t-[32px] border border-b-0 px-5 py-5 shadow-[0_-10px_40px_rgba(15,23,42,0.08)]
-                    ${isCorrect ? 'border-success/40 bg-[#E8F5E9]' : 'border-error/40 bg-[#FFEBEE]'}
+                    ${isCorrect ? 'border-[#2E7D32]/20 bg-[#E8F5E9]' : 'border-error/20 bg-[#FFEBEE]'}
                   `}
                 >
                   <p className={`mb-1 text-lg font-semibold ${isCorrect ? 'text-[#2E7D32]' : 'text-error'}`}>
@@ -655,10 +655,10 @@ export default function LearnPage() {
                       setIsChatOpen(true);
                     }}
                     className={`
-                      mb-2 w-full rounded-full border px-6 py-3 text-sm font-semibold transition-colors
+                      mb-2 w-full rounded-full border-2 px-6 py-3 text-sm font-semibold transition-colors
                       ${isCorrect 
-                        ? 'border-[#2E7D32]/30 bg-white text-[#2E7D32] hover:bg-[#2E7D32]/5' 
-                        : 'border-error/30 bg-white text-error hover:bg-error/5'
+                        ? 'border-[#2E7D32] bg-white text-[#2E7D32] hover:bg-[#2E7D32]/5' 
+                        : 'border-error bg-white text-error hover:bg-error/5'
                       }
                     `}
                   >
