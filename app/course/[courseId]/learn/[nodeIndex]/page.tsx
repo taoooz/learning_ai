@@ -325,6 +325,7 @@ export default function LearnPage() {
 
     setCurrentStepIndex(prev => prev + 1);
     resetQuestionState();
+    window.scrollTo({ top: 0, behavior: 'instant' });
   };
 
   const handleSingleSelect = (option: string) => {
@@ -448,12 +449,6 @@ export default function LearnPage() {
               >
                 {currentStep.type === 'card' ? (
                   <>
-                    <div className="mb-5 flex items-center gap-2">
-                      <p className="text-sm font-medium text-accent">第 {currentStepIndex + 1} 步</p>
-                      <div className="rounded-full bg-tag px-3 py-1 text-xs font-medium text-secondary">
-                        理解一下
-                      </div>
-                    </div>
                     <div className="mb-5">
                       <LastLineMarker
                         contentClassName="text-[28px] font-semibold leading-[1.2] tracking-tight text-primary"
@@ -479,29 +474,17 @@ export default function LearnPage() {
                     </>
                   ) : (
                     <>
-                      <div className="mb-5 flex items-center gap-2">
-                        <p className="text-sm font-medium text-accent">第 {currentStepIndex + 1} 步</p>
-                        <div className="rounded-full bg-tag px-3 py-1 text-xs font-medium text-secondary">
-                          试一试
-                        </div>
-                        {currentStep.question.dimension && (
-                          <div className="rounded-full bg-subtle px-3 py-1 text-xs font-medium text-secondary">
-                            {currentStep.question.dimension === 'memory'
-                              ? '记忆'
-                              : currentStep.question.dimension === 'understanding'
-                                ? '理解'
-                                : currentStep.question.dimension === 'application'
-                                  ? '应用'
-                                  : '分析'}
-                          </div>
-                        )}
-                      </div>
                       <div className="mb-5">
                         <LastLineMarker
                           contentClassName="text-[26px] font-semibold leading-[1.24] tracking-tight text-primary [&_p]:m-0"
                           markerClassName="bg-gradient-to-r from-sky-300/18 via-sky-200/14 to-accent/12 blur-[0.7px]"
                         >
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{currentStep.question.question}</ReactMarkdown>
+                          <div className="flex items-baseline gap-2 flex-wrap">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{currentStep.question.question}</ReactMarkdown>
+                            <div className="inline-flex rounded-full bg-tag px-3 py-1 text-xs font-medium text-secondary">
+                              {currentStep.question.type === 'single' ? '单选' : currentStep.question.type === 'multiple' ? '多选' : '排序'}
+                            </div>
+                          </div>
                         </LastLineMarker>
                       </div>
 
@@ -521,10 +504,10 @@ export default function LearnPage() {
                                 </span>
                                 <div
                                   className={`
-                                    flex-1 rounded-[22px] border px-4 py-4 text-[15px] text-primary
-                                    ${isAnswered && isCorrectPosition ? 'border-success/40 bg-success/10' : ''}
-                                    ${isAnswered && !isCorrectPosition ? 'border-error/30' : ''}
-                                    ${!isAnswered ? 'border-black/6 bg-white' : ''}
+                                    flex-1 rounded-[22px] border-2 px-4 py-4 text-[15px] text-primary
+                                    ${isAnswered && isCorrectPosition ? 'border-[#2E7D32] bg-success/10' : ''}
+                                    ${isAnswered && !isCorrectPosition ? 'border-error' : ''}
+                                    ${!isAnswered ? 'border-black/8 bg-white' : ''}
                                   `}
                                 >
                                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{option}</ReactMarkdown>
