@@ -1,16 +1,33 @@
+// app/api/generate/node/cards/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { buildCardsPrompt } from '@/lib/prompt';
 import { callMiniMax, parseJSONResponse } from '@/lib/minimax';
-import type { LearningCard } from '@/types/course';
+import { buildCardsPrompt } from '@/lib/prompt';
+import { createMemoryRepository } from '@/lib/memory/repository';
 
 export async function POST(request: NextRequest) {
   try {
-    const { topic, nodeInfo, learnerBackground, prevNodeSummary, nextNodeSummary } = await request.json();
+    const { topic, nodeInfo, userMemory } = await request.json();
 
-    const prompt = buildCardsPrompt(topic, nodeInfo, learnerBackground, prevNodeSummary, nextNodeSummary);
-    const content = await callMiniMax(prompt);
+    console.log('[Cards API] Generating cards for:', nodeInfo.teachingGoal);
 
-    const result = parseJSONResponse<{ cards: LearningCard[] }>(content);
+    // 获取教学记忆
+    const memoryRepository = createMemoryRepository({ initialMemory: userMemory });
+    const teachingPayload = memoryRepository.getTeachingPayload({
+      topic,
+      nodeTitle: nodeInfo.title || '',
+      nodeConcepts: nodeInfo.teachConceptIds || [],
+      prerequisiteConcepts: nodeInfo.prerequisiteConceptIds || [],
+    });
+
+    const prompt = buildCardsPrompt(
+      topic, 
+      nodeInfo, 
+      { backgroundSummary: '', skipBasics: [] }
+    );
+    const content = await callMiniMax(prompt, { maxTokens: 4000 });
+    const result = parseJSONResponse<{ cards: any[] }>(content);
+
+    console.log('[Cards API] Generated', result.cards?.length || 0, 'cards');
 
     return NextResponse.json(result);
   } catch (error) {

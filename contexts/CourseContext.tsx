@@ -174,10 +174,17 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     setGenerationStatus('generating');
     setGenerationError(null);
     try {
+      // 获取用户记忆用于个性化
+      const memoryRepository = createMemoryRepository();
+      const userMemory = memoryRepository.getMemoryStoreV3();
+      
       const response = await fetch('/api/generate/toc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ blueprint: outline }),
+        body: JSON.stringify({ 
+          blueprint: outline,
+          userMemory, // 传递用户记忆
+        }),
       });
 
       const data = await response.json();
@@ -297,7 +304,6 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
   const generateNodeContent = useCallback(async (courseId: string, nodeIndex: number) => {
     const requestKey = `${courseId}-${nodeIndex}`;
     
-    // 打印调用栈
     console.log('[generateNodeContent] Called from:', new Error().stack?.split('\n').slice(2, 5).join('\n'));
     
     // 如果正在生成，返回现有的 Promise
@@ -312,117 +318,111 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     const bundle = getStoredCourseBundle(courseId);
     if (!bundle) throw new Error('Course bundle not found');
 
-    console.log('[generateNodeContent] Starting generation:', requestKey);
+    console.log('[generateNodeContent] Starting segmented generation:', requestKey);
 
     // 创建新的 Promise 并缓存
     const promise = (async () => {
       try {
-        // 使用 Memory Agent 获取精简的 teaching payload
         const memoryRepository = createMemoryRepository();
         const node = bundle.blueprint.nodes[nodeIndex];
-        const teachingPayload = memoryRepository.getTeachingPayload({
-          topic: course.topic,
-          nodeTitle: node.title,
-          nodeConcepts: node.teachConceptIds || [],
-          prerequisiteConcepts: node.prerequisiteConceptIds || [],
-        });
+        const userMemory = memoryRepository.getMemoryStoreV3();
         
-        const response = await fetch('/api/generate/node', {
+        // 第一步：生成 Cards（快速返回）
+        console.log('[generateNodeContent] Step 1: Generating cards...');
+        const cardsResponse = await fetch('/api/generate/node/cards', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-          topic: course.topic,
-          blueprint: bundle.blueprint,
-          nodeIndex,
-          userProfile: getUserProfile(),
-          userMemory: teachingPayload, // 只传递精简的 payload
-        }),
-      });
+            topic: course.topic,
+            nodeInfo: {
+              title: node.title,
+              teachingGoal: node.teachingGoal,
+              teachConceptIds: node.teachConceptIds || [],
+              prerequisiteConceptIds: node.prerequisiteConceptIds || [],
+            },
+            userMemory,
+          }),
+        });
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(getGenerationErrorMessage(data, '这一节内容生成失败，请稍后再试。'));
-      }
-
-      // 检查是否是流式响应
-      const contentType = response.headers.get('content-type');
-      if (contentType?.includes('text/event-stream')) {
-        // 流式处理
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        
-        const lesson: Partial<NodeLesson> = {
-          courseId,
-          nodeIndex,
-          cards: [],
-          questions: [],
-        };
-
-        if (!reader) throw new Error('无法读取流式响应');
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            
-            let data = line.trim();
-            while (data.startsWith('data:')) {
-              data = data.slice(5).trim();
-            }
-            
-            if (data === '[DONE]' || !data) continue;
-            
-            try {
-              const parsed = JSON.parse(data);
-              
-              if (parsed.type === 'meta') {
-                lesson.title = parsed.title;
-                lesson.teachingGoal = parsed.teachingGoal;
-              } else if (parsed.type === 'card') {
-                lesson.cards!.push(parsed.data);
-                // 实时更新（创建新对象触发 React 更新）
-                updateNodeContent(courseId, nodeIndex, { ...lesson } as NodeLesson);
-              } else if (parsed.type === 'question') {
-                lesson.questions!.push(parsed.data);
-                // 实时更新（创建新对象触发 React 更新）
-                updateNodeContent(courseId, nodeIndex, { ...lesson } as NodeLesson);
-              }
-            } catch (e) {
-              console.warn('Failed to parse SSE:', e);
-            }
-          }
+        if (!cardsResponse.ok) {
+          const data = await cardsResponse.json();
+          throw new Error(getGenerationErrorMessage(data, 'Cards 生成失败'));
         }
 
-        // 最终更新
-        updateNodeContent(courseId, nodeIndex, lesson as NodeLesson);
-      } else {
-        // 非流式响应（兼容旧版）
-        const data = await response.json();
-        const lesson: NodeLesson = data;
-        updateNodeContent(courseId, nodeIndex, lesson);
+        const cardsData = await cardsResponse.json();
+        console.log('[generateNodeContent] Cards generated:', cardsData.cards?.length);
+
+        // 立即保存 Cards，让用户可以开始学习
+        const partialLesson: Partial<NodeLesson> = {
+          courseId,
+          nodeIndex,
+          cards: cardsData.cards || [],
+          questions: [], // 暂时为空
+        };
+        saveNodeLesson(courseId, nodeIndex, partialLesson as NodeLesson);
+        
+        // 更新状态，触发 UI 刷新
+        const updatedCourse = { ...course };
+        updatedCourse.nodes[nodeIndex] = {
+          ...updatedCourse.nodes[nodeIndex],
+          cards: cardsData.cards || [],
+        };
+        setCourses(prev => prev.map(c => c.courseId === courseId ? updatedCourse : c));
+
+        // 第二步：后台生成 Questions（不阻塞用户）
+        console.log('[generateNodeContent] Step 2: Generating questions in background...');
+        const questionsResponse = await fetch('/api/generate/node/questions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            topic: course.topic,
+            nodeInfo: {
+              title: node.title,
+              teachingGoal: node.teachingGoal,
+              teachConceptIds: node.teachConceptIds || [],
+              prerequisiteConceptIds: node.prerequisiteConceptIds || [],
+            },
+            cards: cardsData.cards,
+            userMemory,
+          }),
+        });
+
+        if (!questionsResponse.ok) {
+          console.warn('[generateNodeContent] Questions generation failed, using empty array');
+        } else {
+          const questionsData = await questionsResponse.json();
+          console.log('[generateNodeContent] Questions generated:', questionsData.questions?.length);
+
+          // 保存完整的 Lesson
+          const fullLesson: Partial<NodeLesson> = {
+            courseId,
+            nodeIndex,
+            cards: cardsData.cards || [],
+            questions: questionsData.questions || [],
+          };
+          saveNodeLesson(courseId, nodeIndex, fullLesson as NodeLesson);
+
+          // 更新状态
+          updatedCourse.nodes[nodeIndex] = {
+            ...updatedCourse.nodes[nodeIndex],
+            cards: cardsData.cards || [],
+            questions: questionsData.questions || [],
+          };
+          setCourses(prev => prev.map(c => c.courseId === courseId ? updatedCourse : c));
+        }
+
+        console.log('[generateNodeContent] Completed:', requestKey);
+      } catch (error) {
+        console.error('[generateNodeContent] Error:', error);
+        throw error;
+      } finally {
+        generatingNodesRef.current.delete(requestKey);
       }
-      
-      console.log('[generateNodeContent] Generation completed:', requestKey);
-    } catch (error) {
-      console.error('[generateNodeContent] Generation failed:', requestKey, error);
-      throw (error instanceof Error ? error : new Error('这一节内容生成失败，请稍后再试。'));
-    } finally {
-      // 移除缓存
-      generatingNodesRef.current.delete(requestKey);
-    }
     })();
 
-    // 缓存 Promise
     generatingNodesRef.current.set(requestKey, promise);
     return promise;
-  }, []); // 移除 courses 依赖，使用 ref
+  }, []);
 
   // 预加载下一个节点内容（不阻塞主流程）
   const preloadNextNode = useCallback((courseId: string, currentNodeIndex: number) => {
