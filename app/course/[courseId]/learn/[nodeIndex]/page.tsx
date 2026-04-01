@@ -657,8 +657,8 @@ export default function LearnPage() {
                     className={`
                       mb-2 w-full rounded-full border-2 px-6 py-3 text-sm font-semibold transition-colors
                       ${isCorrect 
-                        ? 'border-[#2E7D32] bg-white text-[#2E7D32] hover:bg-[#2E7D32]/5' 
-                        : 'border-error bg-white text-error hover:bg-error/5'
+                        ? 'border-[#2E7D32]/40 bg-white text-[#2E7D32] hover:bg-[#2E7D32]/5' 
+                        : 'border-error/40 bg-white text-error hover:bg-error/5'
                       }
                     `}
                   >

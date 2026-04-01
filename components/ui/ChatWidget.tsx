@@ -84,6 +84,7 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
   const inputRef = useRef<HTMLInputElement>(null);
   const wasOpenRef = useRef(isOpen);
   const initialMessageSentRef = useRef(false);
+  const questionContextRef = useRef<any>(null);
 
   const persistConversationSummary = useCallback((targetCourseId: string, summary: Parameters<typeof userMemory.addConversationSummary>[1]) => {
     userMemory.addConversationSummary(targetCourseId, summary);
@@ -94,19 +95,17 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
     if (isOpen && initialMessage && !initialMessageSentRef.current) {
       initialMessageSentRef.current = true;
       
-      // 解析结构化消息
-      let displayMessage = '讲解一下这道题';
+      // 解析并保存结构化消息
       try {
         const parsed = JSON.parse(initialMessage);
         if (parsed.type === 'correct' || parsed.type === 'incorrect') {
-          displayMessage = '讲解一下这道题';
+          questionContextRef.current = parsed;
         }
       } catch {
-        // 如果不是 JSON，使用原始消息
-        displayMessage = initialMessage;
+        // 不是 JSON，忽略
       }
       
-      setInput(displayMessage);
+      setInput('讲解一下这道题');
       // 自动发送
       setTimeout(() => {
         const form = document.querySelector('[data-chat-form]') as HTMLFormElement;
@@ -120,8 +119,9 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
       // 打开窗口时立即滚动到底部（instant 而非 smooth）
       messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
     } else {
-      // 关闭时重置 initialMessageSentRef
+      // 关闭时重置
       initialMessageSentRef.current = false;
+      questionContextRef.current = null;
     }
   }, [isOpen]);
 
@@ -177,15 +177,8 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
 
     const userMessage = input.trim();
     
-    // 解析初始消息中的结构化上下文
-    let questionContext: any = null;
-    if (initialMessage && !initialMessageSentRef.current) {
-      try {
-        questionContext = JSON.parse(initialMessage);
-      } catch {
-        // 不是 JSON，忽略
-      }
-    }
+    // 使用保存的 questionContext
+    const questionContext = questionContextRef.current;
     
     setInput('');
     setIsLoading(true);
