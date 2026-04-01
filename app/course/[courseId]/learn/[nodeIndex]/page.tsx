@@ -581,11 +581,11 @@ export default function LearnPage() {
                                 onClick={() => currentStep.question.type === 'single' ? handleSingleSelect(option) : handleMultiSelect(option)}
                                 disabled={isAnswered}
                                 className={`
-                                  w-full rounded-[22px] border px-4 py-4 text-left text-[15px] transition-all duration-150
-                                  ${isSelected && !isAnswered ? 'border-accent/30 bg-[linear-gradient(135deg,rgba(255,138,0,0.10),rgba(255,248,240,1))] text-primary shadow-[0_6px_14px_rgba(255,138,0,0.08)]' : ''}
-                                  ${showUserAnswer && isCorrect ? 'border-success/40 bg-[linear-gradient(135deg,rgba(52,199,89,0.14),rgba(247,252,248,1))] text-primary' : ''}
-                                  ${showUserAnswer && !isCorrect ? 'border-error/34 bg-[linear-gradient(135deg,rgba(239,71,111,0.12),rgba(255,248,249,1))] text-primary' : ''}
-                                  ${!isAnswered && !isSelected ? 'border-black/6 bg-white hover:border-accent/20 hover:bg-accent/[0.025]' : ''}
+                                  w-full rounded-[22px] border-2 px-4 py-4 text-left text-[15px] transition-all duration-150
+                                  ${isSelected && !isAnswered ? 'border-accent bg-[linear-gradient(135deg,rgba(255,138,0,0.10),rgba(255,248,240,1))] text-primary shadow-[0_6px_14px_rgba(255,138,0,0.08)]' : ''}
+                                  ${showUserAnswer && isCorrect ? 'border-[#2E7D32] bg-[linear-gradient(135deg,rgba(52,199,89,0.14),rgba(247,252,248,1))] text-primary' : ''}
+                                  ${showUserAnswer && !isCorrect ? 'border-error bg-[linear-gradient(135deg,rgba(239,71,111,0.12),rgba(255,248,249,1))] text-primary' : ''}
+                                  ${!isAnswered && !isSelected ? 'border-black/8 bg-white hover:border-accent/40 hover:bg-accent/[0.025]' : ''}
                                   ${isAnswered && !isSelected ? 'border-black/6 bg-white opacity-50' : ''}
                                 `}
                               >
@@ -614,32 +614,34 @@ export default function LearnPage() {
             </AnimatePresence>
 
             {/* 固定底部按钮区域 */}
-            <div className="fixed bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-white via-white/98 to-transparent px-5 pb-6 pt-8 sm:px-6">
+            <div className="fixed bottom-0 left-0 right-0 z-10">
               <div className="mx-auto max-w-md">
-              {currentStep.type === 'question' && !isAnswered && (
-                <button
-                  onClick={handleCheckAnswer}
-                  disabled={
-                    currentStep.question.type === 'sorting'
-                      ? sortOptions.length < (currentStep.question.options?.length || 0)
-                      : selectedAnswer.length === 0
-                  }
-                  className="inline-flex min-h-13 w-full items-center justify-center rounded-full bg-cta px-6 py-3 text-sm font-semibold text-cta shadow-[0_10px_24px_rgba(17,24,39,0.10)] transition-all duration-150 active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  提交这一题
-                </button>
-              )}
+                {currentStep.type === 'question' && !isAnswered && (
+                  <div className="bg-gradient-to-t from-white via-white/98 to-transparent px-5 pb-6 pt-8 sm:px-6">
+                    <button
+                      onClick={handleCheckAnswer}
+                      disabled={
+                        currentStep.question.type === 'sorting'
+                          ? sortOptions.length < (currentStep.question.options?.length || 0)
+                          : selectedAnswer.length === 0
+                      }
+                      className="inline-flex min-h-13 w-full items-center justify-center rounded-full bg-cta px-6 py-3 text-sm font-semibold text-cta shadow-[0_10px_24px_rgba(17,24,39,0.10)] transition-all duration-150 active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      提交这一题
+                    </button>
+                  </div>
+                )}
 
-              {currentStep.type === 'question' && isAnswered && (
-                <motion.div
-                  initial={{ y: 100, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-                  className={`
-                    rounded-t-[32px] border border-b-0 px-5 py-5 shadow-[0_-10px_40px_rgba(15,23,42,0.08)]
-                    ${isCorrect ? 'border-[#2E7D32]/20 bg-[#E8F5E9]' : 'border-error/20 bg-[#FFEBEE]'}
-                  `}
-                >
+                {currentStep.type === 'question' && isAnswered && (
+                  <motion.div
+                    initial={{ y: 100, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                    className={`
+                      rounded-t-[32px] border-t-2 px-5 py-5 shadow-[0_-10px_40px_rgba(15,23,42,0.08)]
+                      ${isCorrect ? 'border-[#2E7D32] bg-[#E8F5E9]' : 'border-error bg-[#FFEBEE]'}
+                    `}
+                  >
                   <p className={`mb-1 text-lg font-semibold ${isCorrect ? 'text-[#2E7D32]' : 'text-error'}`}>
                     {isCorrect ? '答对了 🎉' : '答错了 😢'}
                   </p>
@@ -685,12 +687,14 @@ export default function LearnPage() {
               )}
 
               {currentStep.type === 'card' && (
-                <button
-                  onClick={goToNextStep}
-                  className="inline-flex min-h-13 w-full items-center justify-center rounded-full bg-cta px-6 py-3 text-sm font-semibold text-cta shadow-[0_10px_24px_rgba(17,24,39,0.10)] transition-all duration-150 active:scale-[0.985]"
-                >
-                  继续
-                </button>
+                <div className="bg-gradient-to-t from-white via-white/98 to-transparent px-5 pb-6 pt-8 sm:px-6">
+                  <button
+                    onClick={goToNextStep}
+                    className="inline-flex min-h-13 w-full items-center justify-center rounded-full bg-cta px-6 py-3 text-sm font-semibold text-cta shadow-[0_10px_24px_rgba(17,24,39,0.10)] transition-all duration-150 active:scale-[0.985]"
+                  >
+                    继续
+                  </button>
+                </div>
               )}
               </div>
             </div>
