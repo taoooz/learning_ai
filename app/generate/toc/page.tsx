@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useCourse } from '@/contexts/CourseContext';
+import { CourseHeaderBar } from '@/components/CourseHeaderBar';
 import { createStoredCourseBundleFromBlueprint } from '@/lib/course-blueprint';
 import type { CourseBlueprint, StoredCourseBundle, OutlineLearnerPositioning } from '@/types/course';
 
@@ -108,16 +109,19 @@ function TocPageContent() {
 
   if (isLoading) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-background px-6">
-        <div className="text-center">
-          <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.4 }}
-            className="mb-8 mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-accent/20 via-accent/10 to-accent/5 shadow-[0_8px_24px_rgba(255,138,0,0.12)]"
-          >
-            <motion.svg 
-              className="w-10 h-10 text-accent" 
+      <main className="min-h-screen flex flex-col bg-background">
+        <CourseHeaderBar title="生成课程" backLabel="返回" onBack={() => router.push('/generate/chat?topic=' + encodeURIComponent(topic))} />
+        
+        <div className="flex-1 flex items-center justify-center px-6">
+          <div className="text-center">
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.4 }}
+              className="mb-8 mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-accent/20 via-accent/10 to-accent/5 shadow-[0_8px_24px_rgba(255,138,0,0.12)]"
+            >
+              <motion.svg 
+                className="w-10 h-10 text-accent" 
               fill="none" 
               stroke="currentColor" 
               viewBox="0 0 24 24"
@@ -197,14 +201,18 @@ function TocPageContent() {
             通常需要 5-10 秒
           </motion.p>
         </div>
+        </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-background px-6">
-      <div className="text-center">
-        <div className="mb-6 mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-error/20 to-error/5 shadow-[0_8px_24px_rgba(239,71,111,0.12)]">
+    <main className="min-h-screen flex flex-col bg-background">
+      <CourseHeaderBar title="生成课程" backLabel="返回" onBack={() => router.push('/generate/chat?topic=' + encodeURIComponent(topic))} />
+      
+      <div className="flex-1 flex items-center justify-center px-6">
+        <div className="text-center">
+          <div className="mb-6 mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-error/20 to-error/5 shadow-[0_8px_24px_rgba(239,71,111,0.12)]">
           <svg className="h-8 w-8 text-error" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
@@ -217,6 +225,7 @@ function TocPageContent() {
         >
           重新开始
         </button>
+      </div>
       </div>
     </main>
   );
