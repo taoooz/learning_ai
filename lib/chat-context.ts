@@ -5,8 +5,15 @@ import type { ChatMemoryPayload, ConversationSummary, CourseTree, MemoryStoreV2,
 
 interface ContextInfo {
   currentNodeTitle?: string;
-  currentNodeCards?: string[];
-  currentQuestion?: string;
+  currentNodeGoal?: string;
+  questionContext?: {
+    type: 'correct' | 'incorrect';
+    question: string;
+    correctAnswer?: string;
+    userAnswer?: string;
+    answer?: string;
+    options?: string[];
+  };
 }
 
 function buildStructuredMemorySection(payload?: ChatMemoryPayload): string {
@@ -27,19 +34,42 @@ ${payload.focusConceptStates.length
 
 export function buildChatContext(
   course: CourseTree,
-  userMemory: UserMemory | MemoryStoreV2 | MemoryStoreV3,
   chatHistory: ChatMessage[],
   contextInfo?: ContextInfo,
   conversationSummary?: ConversationSummary,
   chatMemoryPayload?: ChatMemoryPayload,
 ): string {
   if (chatMemoryPayload) {
-    const courseStructure = course.nodes?.map((n) =>
-      `${n.index + 1}. ${n.title} [${n.status === 'completed' ? '已完成' : n.status === 'available' ? '进行中' : '未解锁'}]`,
-    ).join('\n') || '';
+    let questionContextSection = '';
+    if (contextInfo?.questionContext) {
+      const qc = contextInfo.questionContext;
+      if (qc.type === 'correct') {
+        questionContextSection = `\n## 题目上下文（用户答对）
+题目：${qc.question}
+正确答案：${qc.answer || qc.correctAnswer}
+选项：${qc.options?.join(', ') || '无'}
+
+**回答策略**：用户答对了，说明基础理解没问题。请：
+1. 整体讲解这道题考察的知识点和应用场景
+2. 补充相关的进阶知识或常见误区
+3. 引导用户思考更深层次的问题`;
+      } else {
+        questionContextSection = `\n## 题目上下文（用户答错）
+题目：${qc.question}
+正确答案：${qc.correctAnswer}
+用户答案：${qc.userAnswer}
+选项：${qc.options?.join(', ') || '无'}
+
+**回答策略**：用户答错了，需要针对性讲解。请：
+1. 分析用户为什么会选择「${qc.userAnswer}」（常见误区）
+2. 讲解正确答案「${qc.correctAnswer}」的原理
+3. 用简单类比帮助用户理解
+4. 给出记忆技巧或判断方法`;
+      }
+    }
 
     const currentNodeContent = contextInfo?.currentNodeTitle
-      ? `\n## 当前学习节点\n主题：${contextInfo.currentNodeTitle}${contextInfo.currentNodeCards?.length ? `\n学习内容：\n${contextInfo.currentNodeCards.join('\n')}` : ''}${contextInfo.currentQuestion ? `\n当前问题：${contextInfo.currentQuestion}` : ''}`
+      ? `\n## 当前学习节点\n节点：${contextInfo.currentNodeTitle}${contextInfo.currentNodeGoal ? `\n目标：${contextInfo.currentNodeGoal}` : ''}`
       : '';
 
     const activeMessages = chatHistory.filter((m) => !m.isExpired);
@@ -52,93 +82,22 @@ export function buildChatContext(
       : historySection;
 
     return `你是课程学习助理，基于以下信息帮助用户解答问题。
-回答要求：简洁有力（50字以内）、亲切自然。
+回答要求：简洁有力（100字以内）、亲切自然、启发式回应。
+回答结束：用启发式的延续话语结束（如"你觉得呢？""试试看？"），而不是直接抛出新问题。
 优先策略：先处理“用户记忆重点”里的高风险概念和误区；如果历史问题与当前问题相近，沿用原有解释路径，不要从零开始。
 
 ## 当前课程信息
-主题：${course.topic}
-课程结构：
-${courseStructure || '暂无'}
 难度：${course.difficultySummary || '未知'}
 
-## 当前学习场景${currentNodeContent}
+## 当前学习场景${currentNodeContent}${questionContextSection}
 
 ${buildStructuredMemorySection(chatMemoryPayload)}
 
 ## 对话历史
 ${summarySection}
 
-请基于以上信息，简洁回答用户当前问题。
-回答完毕后，用一句简短的引导性问题结束，启发用户继续探索。`.trim();
+请基于以上信息，简洁回答用户当前问题。`.trim();
   }
 
-  // 1. 提取当前课程相关的兴趣和薄弱点
-  const legacyMemory = userMemory as UserMemory;
-  const relevantGaps = legacyMemory.extractedInsights.knowledgeGaps
-    .filter(g => g.topic === course.topic || g.severity === 'high')
-    .slice(0, 3);
-
-  const relevantInterests = legacyMemory.extractedInsights.interests
-    .filter(i => i.topic === course.topic)
-    .sort((a, b) => b.weight - a.weight)
-    .slice(0, 3);
-
-  // 2. 构建高频问题与 mastery
-  const topQuestions = legacyMemory.extractedInsights.questionPatterns
-    .filter(q => q.topic === course.topic)
-    .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, 5);
-
-  const masterySignals = legacyMemory.extractedInsights.conceptMastery
-    .filter(item => item.topic === course.topic)
-    .sort((a, b) => a.accuracy - b.accuracy)
-    .slice(0, 5);
-
-  // 3. 构建课程结构概览
-  const courseStructure = course.nodes?.map(n =>
-    `${n.index + 1}. ${n.title} [${n.status === 'completed' ? '已完成' : n.status === 'available' ? '进行中' : '未解锁'}]`
-  ).join('\n') || '';
-
-  // 4. 当前节点内容（如果有）
-  const currentNodeContent = contextInfo?.currentNodeTitle
-    ? `\n## 当前学习节点\n主题：${contextInfo.currentNodeTitle}${contextInfo.currentNodeCards?.length ? `\n学习内容：\n${contextInfo.currentNodeCards.join('\n')}` : ''}${contextInfo.currentQuestion ? `\n当前问题：${contextInfo.currentQuestion}` : ''}`
-    : '';
-
-  // 5. 过滤未过期的消息
-  const activeMessages = chatHistory.filter(m => !m.isExpired);
-  const expiredSummary = conversationSummary?.summary;
-
-  // 6. 构建对话历史
-  const historySection = activeMessages.length > 0
-    ? activeMessages.map(m => `${m.role === 'user' ? '用户' : '助理'}：${m.content}`).join('\n')
-    : '暂无';
-
-  // 如果有过期摘要，添加到历史中
-  const summarySection = expiredSummary
-    ? `【之前对话摘要】${expiredSummary}\n\n${historySection}`
-    : historySection;
-
-  return `你是课程学习助理，基于以下信息帮助用户解答问题。
-回答要求：简洁有力（50字以内）、亲切自然。
-优先策略：如果用户当前问题和“最近常问”或“待强化概念”有关，优先顺着这些历史难点解释；如果之前已有对话摘要，先延续原有解释脉络，不要重复从零开始。
-
-## 当前课程信息
-主题：${course.topic}
-课程结构：
-${courseStructure || '暂无'}
-难度：${course.difficultySummary || '未知'}
-
-## 当前学习场景${currentNodeContent}
-
-## 用户历史记录
-兴趣：${relevantInterests.map(i => i.topic).join('、') || '暂无记录'}
-薄弱点：${relevantGaps.map(g => g.concept).join('、') || '暂无记录'}
-最近常问：${topQuestions.map(q => q.question).join('；') || '暂无记录'}
-待强化概念：${masterySignals.filter(item => item.needsReview).map(item => item.concept).join('、') || '暂无记录'}
-
-## 对话历史
-${summarySection}
-
-请基于以上信息，简洁回答用户当前问题。
-回答完毕后，用一句简短的引导性问题结束，启发用户继续探索。`.trim();
+  return `你是课程学习助理。请简洁回答用户问题。`;
 }

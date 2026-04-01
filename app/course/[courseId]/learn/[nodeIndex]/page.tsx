@@ -195,6 +195,13 @@ export default function LearnPage() {
   const course = courses.find(c => c.courseId === courseId);
   const node = course?.nodes[nodeIndex];
   
+  // 获取 blueprint
+  const blueprint = useMemo(() => {
+    if (!courseId || nodeIndex === undefined) return undefined;
+    const stored = localStorage.getItem(`blueprint_${courseId}_${nodeIndex}`);
+    return stored ? JSON.parse(stored) : undefined;
+  }, [courseId, nodeIndex]);
+  
   // 用 ref 存储最新的 course 和 node，避免依赖对象引用
   const courseRef = useRef(course);
   const nodeRef = useRef(node);
@@ -752,8 +759,7 @@ export default function LearnPage() {
           initialMessage={chatInitialMessage}
           contextInfo={{
             currentNodeTitle: node.title,
-            currentNodeCards: node.cards?.map(c => `${c.title}: ${c.content.slice(0, 100)}`),
-            currentQuestion: currentStep?.type === 'question' ? currentStep.question.question : undefined,
+            currentNodeGoal: blueprint?.teachingGoal,
           }}
         />
       )}

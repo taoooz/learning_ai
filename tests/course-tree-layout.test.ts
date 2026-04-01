@@ -785,11 +785,10 @@ test('buildChatContext prefers structured v2 payload over legacy chat memory noi
         { index: 2, title: '工作流编排', status: 'locked' },
       ],
     },
-    migrateUserMemoryToV2(createDefaultUserMemory()),
     [{ id: 'msg-1', role: 'user', content: '工具调用到底什么时候需要？', timestamp: Date.now() }],
     {
       currentNodeTitle: '工具调用',
-      currentQuestion: '什么时候必须调用工具？',
+      currentNodeGoal: '理解工具调用时机',
     },
     undefined,
     {

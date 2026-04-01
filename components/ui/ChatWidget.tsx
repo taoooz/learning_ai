@@ -21,10 +21,8 @@ interface ChatWidgetProps {
   initialMessage?: string; // 初始消息（用于答疑解惑）
   // 额外上下文信息
   contextInfo?: {
-    // 当前节点信息（学习页使用）
     currentNodeTitle?: string;
-    currentNodeCards?: string[];
-    currentQuestion?: string;
+    currentNodeGoal?: string;
   };
 }
 
@@ -95,7 +93,20 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
   useEffect(() => {
     if (isOpen && initialMessage && !initialMessageSentRef.current) {
       initialMessageSentRef.current = true;
-      setInput(initialMessage);
+      
+      // 解析结构化消息
+      let displayMessage = '讲解一下这道题';
+      try {
+        const parsed = JSON.parse(initialMessage);
+        if (parsed.type === 'correct' || parsed.type === 'incorrect') {
+          displayMessage = '讲解一下这道题';
+        }
+      } catch {
+        // 如果不是 JSON，使用原始消息
+        displayMessage = initialMessage;
+      }
+      
+      setInput(displayMessage);
       // 自动发送
       setTimeout(() => {
         const form = document.querySelector('[data-chat-form]') as HTMLFormElement;
@@ -162,6 +173,17 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
     if (!input.trim() || isLoading) return;
 
     const userMessage = input.trim();
+    
+    // 解析初始消息中的结构化上下文
+    let questionContext: any = null;
+    if (initialMessage && !initialMessageSentRef.current) {
+      try {
+        questionContext = JSON.parse(initialMessage);
+      } catch {
+        // 不是 JSON，忽略
+      }
+    }
+    
     setInput('');
     setIsLoading(true);
     setIsThinking(true);
@@ -208,8 +230,10 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
         body: JSON.stringify({
           course,
           messages: limitedMessages,
-          userMemory: userMemory.memoryStore,
-          contextInfo,
+          contextInfo: {
+            ...contextInfo,
+            questionContext, // 附加题目上下文
+          },
           conversationSummary: userMemory.getConversationSummary(courseId),
         }),
       });

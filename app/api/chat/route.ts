@@ -10,34 +10,36 @@ export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
-    const { course, messages, userMemory, contextInfo, conversationSummary } = await request.json() as {
+    const { course, messages, contextInfo, conversationSummary } = await request.json() as {
       course: CourseTree;
       messages: ChatMessage[];
-      userMemory: UserMemory | MemoryStoreV2 | MemoryStoreV3;
       contextInfo?: {
         currentNodeTitle?: string;
-        currentNodeCards?: string[];
-        currentQuestion?: string;
+        currentNodeGoal?: string;
+        questionContext?: {
+          type: 'correct' | 'incorrect';
+          question: string;
+          correctAnswer?: string;
+          userAnswer?: string;
+          answer?: string;
+          options?: string[];
+        };
       };
       conversationSummary?: ConversationSummary;
     };
 
-    if (!course || !messages || !userMemory) {
+    if (!course || !messages) {
       return new Response('Missing required fields', { status: 400 });
     }
 
     // 构建上下文时传入摘要
-    const memoryRepository = createMemoryRepository({
-      initialMemory: userMemory,
-      getProfile: () => null,
-    });
+    const memoryRepository = createMemoryRepository();
     const chatMemoryPayload = memoryRepository.getChatPayload({
       topic: course.topic,
       currentNodeTitle: contextInfo?.currentNodeTitle,
-      currentQuestion: contextInfo?.currentQuestion,
     });
 
-    const context = buildChatContext(course, userMemory, messages, contextInfo, conversationSummary, chatMemoryPayload);
+    const context = buildChatContext(course, messages, contextInfo, conversationSummary, chatMemoryPayload);
 
     // 构建 AI 消息
     const aiMessages = [
