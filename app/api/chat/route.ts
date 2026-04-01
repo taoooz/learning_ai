@@ -11,7 +11,10 @@ export const runtime = 'nodejs';
 export async function POST(request: NextRequest) {
   try {
     const { course, messages, contextInfo, conversationSummary } = await request.json() as {
-      course: CourseTree;
+      course: {
+        topic: string;
+        difficultySummary?: string;
+      };
       messages: ChatMessage[];
       contextInfo?: {
         currentNodeTitle?: string;
@@ -19,9 +22,8 @@ export async function POST(request: NextRequest) {
         questionContext?: {
           type: 'correct' | 'incorrect';
           question: string;
-          correctAnswer?: string;
+          correctAnswer: string;
           userAnswer?: string;
-          answer?: string;
           options?: string[];
         };
       };

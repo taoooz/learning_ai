@@ -774,16 +774,8 @@ test.skip('getChatMemoryPayload keeps chat context focused on current topic and 
 test('buildChatContext prefers structured v2 payload over legacy chat memory noise', () => {
   const context = buildChatContext(
     {
-      courseId: 'course-agent',
       topic: 'Agent',
-      courseGoal: '学习 Agent 开发',
       difficultySummary: '适合初学者',
-      totalNodes: 3,
-      nodes: [
-        { index: 0, title: '什么是 Agent', status: 'completed' },
-        { index: 1, title: '工具调用', status: 'available' },
-        { index: 2, title: '工作流编排', status: 'locked' },
-      ],
     },
     [{ id: 'msg-1', role: 'user', content: '工具调用到底什么时候需要？', timestamp: Date.now() }],
     {

@@ -648,7 +648,6 @@ export default function LearnPage() {
                         question: currentStep.question.question,
                         correctAnswer: currentStep.question.answer,
                         userAnswer: isCorrect ? undefined : selectedAnswer[0],
-                        answer: currentStep.question.answer,
                         options: currentStep.question.options
                       });
                       setChatInitialMessage(initialMessage);

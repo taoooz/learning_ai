@@ -225,11 +225,14 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          course,
+          course: {
+            topic: course.topic,
+            difficultySummary: course.difficultySummary,
+          },
           messages: limitedMessages,
           contextInfo: {
             ...contextInfo,
-            questionContext: questionContextRef.current, // 始终使用 ref 中的上下文
+            questionContext: questionContextRef.current,
           },
           conversationSummary: userMemory.getConversationSummary(courseId),
         }),

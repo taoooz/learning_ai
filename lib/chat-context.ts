@@ -9,9 +9,8 @@ interface ContextInfo {
   questionContext?: {
     type: 'correct' | 'incorrect';
     question: string;
-    correctAnswer?: string;
+    correctAnswer: string;
     userAnswer?: string;
-    answer?: string;
     options?: string[];
   };
 }
@@ -33,7 +32,7 @@ ${payload.focusConceptStates.length
 }
 
 export function buildChatContext(
-  course: CourseTree,
+  course: { topic: string; difficultySummary?: string },
   chatHistory: ChatMessage[],
   contextInfo?: ContextInfo,
   conversationSummary?: ConversationSummary,
@@ -46,7 +45,7 @@ export function buildChatContext(
       if (qc.type === 'correct') {
         questionContextSection = `\n## 题目上下文（用户答对）
 题目：${qc.question}
-正确答案：${qc.answer || qc.correctAnswer}
+正确答案：${qc.correctAnswer}
 选项：${qc.options?.join(', ') || '无'}
 
 回答原则：讲解知识点、补充进阶内容、引导深层思考`;
