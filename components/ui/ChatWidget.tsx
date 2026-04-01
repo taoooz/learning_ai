@@ -177,9 +177,6 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
 
     const userMessage = input.trim();
     
-    // 使用保存的 questionContext
-    const questionContext = questionContextRef.current;
-    
     setInput('');
     setIsLoading(true);
     setIsThinking(true);
@@ -228,7 +225,7 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
           messages: limitedMessages,
           contextInfo: {
             ...contextInfo,
-            questionContext, // 附加题目上下文
+            questionContext: questionContextRef.current, // 始终使用 ref 中的上下文
           },
           conversationSummary: userMemory.getConversationSummary(courseId),
         }),
