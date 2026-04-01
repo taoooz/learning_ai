@@ -49,10 +49,7 @@ export function buildChatContext(
 正确答案：${qc.answer || qc.correctAnswer}
 选项：${qc.options?.join(', ') || '无'}
 
-**回答策略**：用户答对了，说明基础理解没问题。请：
-1. 整体讲解这道题考察的知识点和应用场景
-2. 补充相关的进阶知识或常见误区
-3. 引导用户思考更深层次的问题`;
+回答原则：讲解知识点、补充进阶内容、引导深层思考`;
       } else {
         questionContextSection = `\n## 题目上下文（用户答错）
 题目：${qc.question}
@@ -60,11 +57,7 @@ export function buildChatContext(
 用户答案：${qc.userAnswer}
 选项：${qc.options?.join(', ') || '无'}
 
-**回答策略**：用户答错了，需要针对性讲解。请：
-1. 分析用户为什么会选择「${qc.userAnswer}」（常见误区）
-2. 讲解正确答案「${qc.correctAnswer}」的原理
-3. 用简单类比帮助用户理解
-4. 给出记忆技巧或判断方法`;
+回答原则：分析误区、讲解原理、给出记忆技巧`;
       }
     }
 
@@ -87,6 +80,7 @@ export function buildChatContext(
 优先策略：先处理“用户记忆重点”里的高风险概念和误区；如果历史问题与当前问题相近，沿用原有解释路径，不要从零开始。
 
 ## 当前课程信息
+主题：${course.topic}
 难度：${course.difficultySummary || '未知'}
 
 ## 当前学习场景${currentNodeContent}${questionContextSection}
