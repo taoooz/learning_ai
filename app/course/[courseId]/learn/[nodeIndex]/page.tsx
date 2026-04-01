@@ -393,8 +393,7 @@ export default function LearnPage() {
   return (
     <main className="min-h-[100svh] overflow-y-auto overflow-x-hidden bg-background">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-24 right-[-7rem] h-64 w-64 rounded-full bg-gradient-to-br from-accent/12 to-transparent blur-3xl" />
-        <div className="absolute left-[-5rem] top-28 h-48 w-48 rounded-full bg-gradient-to-br from-sky-400/8 to-transparent blur-3xl" />
+        <div className="absolute -top-24 right-[-7rem] h-64 w-64 rounded-full bg-gradient-to-br from-accent/8 to-transparent blur-3xl" />
       </div>
 
       <CourseHeaderBar
@@ -402,8 +401,16 @@ export default function LearnPage() {
         backLabel="返回课程"
         onBack={() => router.push(`/course/${courseId}`)}
         trailing={(
-          <div className="rounded-full bg-black/[0.04] px-2.5 py-1 text-[11px] font-semibold text-secondary">
-            {Math.min(currentStepIndex + 1, Math.max(steps.length, 1))}/{Math.max(steps.length, 1)}
+          <div className="flex items-center gap-2">
+            <div className="h-1.5 w-14 rounded-full bg-black/[0.06] overflow-hidden">
+              <div 
+                className="h-full bg-accent rounded-full transition-all duration-300"
+                style={{ width: `${((currentStepIndex + 1) / Math.max(steps.length, 1)) * 100}%` }}
+              />
+            </div>
+            <span className="text-xs font-medium text-secondary">
+              {currentStepIndex + 1}/{Math.max(steps.length, 1)}
+            </span>
           </div>
         )}
       />
@@ -412,7 +419,7 @@ export default function LearnPage() {
         className="relative mx-auto flex max-w-md flex-col box-border px-5 sm:px-6"
         style={{
           minHeight: '100svh',
-          paddingTop: '88px',
+          paddingTop: '80px',
           paddingBottom: 'max(20px, env(safe-area-inset-bottom))',
         }}
       >
@@ -429,7 +436,7 @@ export default function LearnPage() {
         )}
 
         {phase === 'learning' && currentStep && (
-          <div className="flex flex-1 flex-col pb-24">
+          <div className="flex flex-1 flex-col pb-28">
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
                 key={currentStep.id}
@@ -607,7 +614,8 @@ export default function LearnPage() {
             </AnimatePresence>
 
             {/* 固定底部按钮区域 */}
-            <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-white via-white to-white/0 px-5 pb-6 pt-8 sm:px-6">
+            <div className="fixed bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-white via-white/98 to-transparent px-5 pb-6 pt-8 sm:px-6">
+              <div className="mx-auto max-w-md">
               {currentStep.type === 'question' && !isAnswered && (
                 <button
                   onClick={handleCheckAnswer}
@@ -684,6 +692,7 @@ export default function LearnPage() {
                   继续
                 </button>
               )}
+              </div>
             </div>
           </div>
         )}
