@@ -476,14 +476,15 @@ export default function LearnPage() {
                     <>
                       <div className="mb-5">
                         <LastLineMarker
-                          contentClassName="text-[26px] font-semibold leading-[1.24] tracking-tight text-primary [&_p]:m-0"
+                          contentClassName="text-[26px] font-semibold leading-[1.24] tracking-tight text-primary [&_p]:m-0 [&_p]:inline"
                           markerClassName="bg-gradient-to-r from-sky-300/18 via-sky-200/14 to-accent/12 blur-[0.7px]"
                         >
-                          <div className="flex items-baseline gap-2 flex-wrap">
+                          <div className="inline">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>{currentStep.question.question}</ReactMarkdown>
-                            <div className="inline-flex rounded-full bg-tag px-3 py-1 text-xs font-medium text-secondary">
+                            {' '}
+                            <span className="inline-flex rounded-full bg-tag px-3 py-1 text-xs font-medium text-secondary align-middle">
                               {currentStep.question.type === 'single' ? '单选' : currentStep.question.type === 'multiple' ? '多选' : '排序'}
-                            </div>
+                            </span>
                           </div>
                         </LastLineMarker>
                       </div>

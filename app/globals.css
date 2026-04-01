@@ -120,6 +120,7 @@ select {
 
 /* Border Colors */
 .border-completed { border-color: var(--color-completed-border); }
+.border-error { border-color: var(--color-error); }
 
 /* Border Radius */
 .rounded-sm { border-radius: var(--radius-sm); }
