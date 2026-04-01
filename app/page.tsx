@@ -152,39 +152,36 @@ export default function HomePage() {
         </div>
       </div>
 
-      <div className="relative mx-auto flex w-full max-w-2xl flex-col gap-8 px-5 pb-10 pt-[92px] sm:px-6">
+      <div className="relative mx-auto flex w-full max-w-2xl flex-col gap-8 px-5 pb-10 pt-[88px] sm:px-6">
 
-        <section className="pt-2">
+        <section className="pt-4">
           <div className="relative max-w-xl">
-            <div className="pointer-events-none absolute -left-6 top-8 h-28 w-28 rounded-full bg-gradient-to-br from-sky-400/12 via-transparent to-transparent blur-2xl" />
-            <h1 className="text-3xl font-semibold tracking-tight text-primary sm:text-5xl">
-              <span className="block">想学什么，</span>
-              <span className="relative inline-block text-slate-950 [text-shadow:0_10px_28px_rgba(56,189,248,0.12)]">
+            <h1 className="text-[36px] font-bold leading-tight tracking-tight text-primary sm:text-[42px]">
+              想学什么，
+              <br />
+              <span className="relative inline-block">
                 <span
-                  className="pointer-events-none absolute -left-1 -right-2 bottom-0 h-[0.72em] -rotate-[2.4deg] rounded-[999px] bg-gradient-to-r from-sky-400/34 via-sky-300/24 to-accent/18 blur-[0.7px]"
+                  className="pointer-events-none absolute -left-1 -right-2 bottom-1 h-[0.65em] -rotate-[1.8deg] rounded-full bg-gradient-to-r from-accent/30 via-accent/20 to-accent/10"
                   aria-hidden="true"
                 />
-                <span className="relative">
-                就从这里开始
-                </span>
+                <span className="relative">就从这里开始</span>
               </span>
             </h1>
-            <p className="mt-3 text-sm leading-6 text-secondary sm:text-base">
+            <p className="mt-4 text-[15px] leading-relaxed text-secondary">
               告诉我你想学什么，以及为什么要学它
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-6">
-            <div className="flex flex-col gap-2.5">
-              <div className="relative flex-1 overflow-hidden rounded-[30px] border border-white/75 bg-surface shadow-[0_16px_38px_rgba(148,163,184,0.08)] transition-all duration-200 focus-within:border-accent/25 focus-within:shadow-[0_18px_42px_rgba(148,163,184,0.12)]">
-                <div className="pointer-events-none absolute inset-0 rounded-[30px] ring-1 ring-white/55" />
-                <div className="pointer-events-none absolute right-5 top-5 h-16 w-16 rounded-full bg-gradient-to-br from-sky-400/8 to-transparent blur-2xl" />
+          <form onSubmit={handleSubmit} className="mt-8">
+            <div className="flex flex-col gap-3">
+              <div className="relative overflow-hidden rounded-[24px] border-2 border-black/[0.08] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.04)] transition-all duration-200 focus-within:border-accent focus-within:shadow-[0_8px_24px_rgba(255,138,0,0.12)]">
                 <textarea
                   id="topic-input"
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
-                  placeholder={`示例：${examplePrompt}`}
-                  className="relative min-h-[152px] w-full resize-none bg-transparent px-5 py-5 text-[15px] leading-7 text-primary outline-none transition-all duration-200 placeholder:text-secondary/80 focus:outline-none"
+                  placeholder={`例如：${examplePrompt}`}
+                  className="w-full resize-none bg-transparent px-5 py-4 text-[15px] leading-relaxed text-primary outline-none placeholder:text-tertiary"
+                  rows={4}
                   disabled={false}
                 />
               </div>
@@ -192,10 +189,13 @@ export default function HomePage() {
               <button
                 type="submit"
                 disabled={!topic.trim()}
-                aria-label="生成专属学习计划"
-                className="inline-flex min-h-14 items-center justify-center rounded-[28px] bg-cta px-7 py-4 text-sm font-semibold text-cta shadow-[0_18px_34px_rgba(17,24,39,0.22)] transition-all duration-200 hover:translate-y-[-1px] hover:shadow-[0_20px_38px_rgba(17,24,39,0.26)] active:scale-[0.98] disabled:opacity-40 disabled:shadow-none sm:self-end"
+                aria-label="生成学习计划"
+                className="inline-flex min-h-14 items-center justify-center gap-2 rounded-full bg-cta px-7 py-4 text-[15px] font-semibold text-cta shadow-[0_8px_24px_rgba(255,138,0,0.20)] transition-all duration-150 hover:shadow-[0_12px_32px_rgba(255,138,0,0.25)] active:scale-[0.985] disabled:opacity-40 disabled:shadow-none sm:self-end"
               >
-                生成专属学习计划
+                生成学习计划
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
               </button>
             </div>
           </form>
@@ -209,45 +209,44 @@ export default function HomePage() {
 
         {hasCourses && (
           <section>
-            <div className="mb-4 flex items-center justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-semibold text-primary">最近学习</h2>
-                <p className="mt-1 text-sm text-secondary">保留你已经开始过的主题，随时接着学。</p>
-              </div>
-              <span className="text-xs text-tertiary">{sortedCourses.length} 个主题</span>
+            <div className="mb-5">
+              <h2 className="text-[20px] font-bold text-primary">最近学习</h2>
+              <p className="mt-1.5 text-[15px] text-secondary">继续你的学习进度</p>
             </div>
 
-            <div className="grid grid-cols-1 gap-3">
+            <div className="grid grid-cols-1 gap-4">
               {sortedCourses.map((course, index) => {
                 const progress = getCourseProgress(course.courseId);
                 const nextNodeTitle = getNextNodeTitle(course.courseId);
                 const palette = coursePalettes[index % coursePalettes.length];
-                const isFeaturedCourse = index === 0;
 
                 return (
                   <article
                     key={course.courseId}
-                    className={`rounded-[28px] shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sheet ${palette} ${isFeaturedCourse ? 'p-6' : 'p-5'}`}
+                    className={`rounded-[24px] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.06)] transition-all duration-200 hover:shadow-[0_4px_20px_rgba(0,0,0,0.08)] ${palette}`}
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0 flex-1">
-                        <h3 className={`truncate font-semibold text-primary ${isFeaturedCourse ? 'text-2xl' : 'text-xl'}`}>{course.topic}</h3>
-                        <p className="mt-2 text-sm leading-6 text-secondary">
+                        <h3 className="text-[20px] font-bold text-primary line-clamp-2">{course.topic}</h3>
+                        <p className="mt-2 text-[15px] text-secondary line-clamp-1">
                           下一节：{nextNodeTitle}
                         </p>
                       </div>
-                      <div className="rounded-2xl bg-white/72 px-3 py-2 text-right shadow-sm">
-                        <div className={`font-semibold text-primary ${isFeaturedCourse ? 'text-3xl' : 'text-2xl'}`}>{progress.percent}%</div>
-                        <div className="text-xs text-secondary">当前进度</div>
+                      <div className="rounded-2xl bg-white/80 px-3.5 py-2.5 text-right shadow-sm">
+                        <div className="text-[24px] font-bold text-accent">{progress.percent}%</div>
+                        <div className="text-xs text-secondary">进度</div>
                       </div>
                     </div>
 
-                    <div className="mt-5 flex items-center gap-3">
+                    <div className="mt-4 flex items-center gap-3">
                       <button
                         onClick={() => handleCourseClick(course.courseId)}
-                        className={`inline-flex flex-1 items-center justify-center rounded-2xl bg-cta px-5 text-sm font-semibold text-cta shadow-[0_10px_22px_rgba(17,24,39,0.12)] transition-all duration-150 hover:shadow-[0_14px_26px_rgba(17,24,39,0.16)] active:scale-[0.98] ${isFeaturedCourse ? 'min-h-12 py-3.5' : 'min-h-11 py-3'}`}
+                        className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-cta px-5 py-3 text-[15px] font-semibold text-cta shadow-[0_4px_16px_rgba(255,138,0,0.15)] transition-all duration-150 hover:shadow-[0_6px_20px_rgba(255,138,0,0.20)] active:scale-[0.985]"
                       >
                         继续学习
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                        </svg>
                       </button>
 
                       <div className="relative">
@@ -257,7 +256,7 @@ export default function HomePage() {
                             setShowDeleteMenu(showDeleteMenu === course.courseId ? null : course.courseId);
                           }}
                           aria-label={`管理 ${course.topic}`}
-                          className="flex h-11 w-11 items-center justify-center rounded-2xl text-tertiary transition-all duration-150 hover:bg-white/55 hover:text-primary"
+                          className="flex h-12 w-12 items-center justify-center rounded-full text-tertiary transition-all duration-150 hover:bg-white/60 hover:text-primary"
                         >
                           <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
                             <circle cx="12" cy="6" r="2" />
@@ -269,14 +268,14 @@ export default function HomePage() {
                         {showDeleteMenu === course.courseId && (
                           <div
                             ref={deleteMenuRef}
-                            className="absolute bottom-[3.75rem] right-0 z-10 min-w-[132px] rounded-2xl border border-white/80 bg-surface/96 p-1 shadow-sheet backdrop-blur-sm"
+                            className="absolute bottom-[3.75rem] right-0 z-10 min-w-[132px] rounded-2xl border border-white/80 bg-white p-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.12)] backdrop-blur-sm"
                           >
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleDelete(course.courseId);
                               }}
-                              className="flex w-full items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2 text-sm text-error transition-colors hover:bg-error/10"
+                              className="flex w-full items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium text-error transition-colors hover:bg-error/10"
                             >
                               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
