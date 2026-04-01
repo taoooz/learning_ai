@@ -110,7 +110,18 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
     if (isOpen && initialMessage && !initialMessageSentRef.current) {
       initialMessageSentRef.current = true;
       
-      setInput('讲解一下这道题');
+      // 解析题目名称
+      let displayMessage = '讲解一下这道题';
+      try {
+        const parsed = JSON.parse(initialMessage);
+        if (parsed.question) {
+          displayMessage = `讲解一下《${parsed.question}》`;
+        }
+      } catch {
+        // 不是 JSON，使用默认消息
+      }
+      
+      setInput(displayMessage);
       // 自动发送
       setTimeout(() => {
         const form = document.querySelector('[data-chat-form]') as HTMLFormElement;
