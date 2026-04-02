@@ -30,8 +30,13 @@ export function RecommendationsModal({ isOpen, onClose, userProfile, existingCou
     const cacheKey = getCacheKey(userProfile, existingCourses);
     const cached = localStorage.getItem(`recs_${cacheKey}`);
     
-    if (cached) {
-      setRecommendations(JSON.parse(cached));
+    if (cached && cached !== 'undefined') {
+      try {
+        setRecommendations(JSON.parse(cached));
+      } catch (error) {
+        console.error('Failed to parse cached recommendations:', error);
+        generateRecommendations();
+      }
     } else {
       generateRecommendations();
     }
