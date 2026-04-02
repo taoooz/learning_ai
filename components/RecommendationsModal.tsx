@@ -24,45 +24,11 @@ export function RecommendationsModal({ isOpen, onClose, userProfile, existingCou
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (!isOpen) return;
-
-    // 尝试从缓存加载
-    const cacheKey = getCacheKey(userProfile, existingCourses, recommendations.map(r => r.title));
-    const cached = localStorage.getItem(`recs_${cacheKey}`);
+    if (!isOpen || recommendations.length > 0) return;
     
-    if (cached && cached !== 'undefined') {
-      try {
-        const cachedRecs = JSON.parse(cached);
-        if (cachedRecs.length > 0) {
-          setRecommendations(cachedRecs);
-          return;
-        }
-      } catch (error) {
-        console.error('Failed to parse cached recommendations:', error);
-      }
-    }
-    
-    // 只有没有缓存或缓存为空时才生成
-    if (recommendations.length === 0) {
-      generateRecommendations();
-    }
+    // 首次打开时生成推荐
+    generateRecommendations();
   }, [isOpen]);
-
-  const getCacheKey = (profile: any, courses: string[], previousRecs: string[] = []) => {
-    const data = JSON.stringify({
-      targetJob: profile?.targetJob || '',
-      coursesCount: courses.length,
-      previousCount: previousRecs.length, // 加入已推荐数量，避免缓存冲突
-    });
-    // 使用简单的 hash 函数替代 btoa
-    let hash = 0;
-    for (let i = 0; i < data.length; i++) {
-      const char = data.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash;
-    }
-    return Math.abs(hash).toString(36);
-  };
 
   const generateRecommendations = async () => {
     setIsLoading(true);
@@ -115,10 +81,6 @@ export function RecommendationsModal({ isOpen, onClose, userProfile, existingCou
       console.log('Received recommendations:', data);
       
       setRecommendations(data.recommendations || []);
-
-      // 缓存结果（包含已推荐数量，避免冲突）
-      const cacheKey = getCacheKey(userProfile, existingCourses, previousRecommendations);
-      localStorage.setItem(`recs_${cacheKey}`, JSON.stringify(data.recommendations));
     } catch (error) {
       console.error('Failed to generate recommendations:', error);
       // 降级：使用默认推荐
