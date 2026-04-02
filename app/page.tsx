@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCourse } from '@/contexts/CourseContext';
 import { useUserProfile } from '@/contexts/UserProfileContext';
+import { RecommendationsModal } from '@/components/RecommendationsModal';
 
 export default function HomePage() {
   const [topic, setTopic] = useState('');
@@ -11,6 +12,7 @@ export default function HomePage() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [showDeleteMenu, setShowDeleteMenu] = useState<string | null>(null);
   const [startingSystemCourseId, setStartingSystemCourseId] = useState<string | null>(null);
+  const [showRecommendations, setShowRecommendations] = useState(false);
   const router = useRouter();
   const { courses, deleteCourse, systemCourseRecommendations, startSystemCourse } = useCourse();
   const { userProfile } = useUserProfile();
@@ -188,17 +190,27 @@ export default function HomePage() {
                 />
               </div>
 
-              <button
-                type="submit"
-                disabled={!topic.trim()}
-                aria-label="生成学习计划"
-                className="inline-flex min-h-14 items-center justify-center gap-2 rounded-full bg-cta px-7 py-4 text-[15px] font-semibold text-cta shadow-[0_8px_24px_rgba(255,138,0,0.20)] transition-all duration-150 hover:shadow-[0_12px_32px_rgba(255,138,0,0.25)] active:scale-[0.985] disabled:opacity-40 disabled:shadow-none sm:self-end"
-              >
-                生成学习计划
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
-              </button>
+              <div className="flex gap-3 sm:self-end">
+                <button
+                  type="button"
+                  onClick={() => setShowRecommendations(true)}
+                  aria-label="为我推荐"
+                  className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-2 border-black/[0.08] bg-white text-2xl transition-all duration-150 hover:border-accent/40 hover:bg-accent/5 active:scale-[0.95]"
+                >
+                  🎲
+                </button>
+                <button
+                  type="submit"
+                  disabled={!topic.trim()}
+                  aria-label="生成学习计划"
+                  className="inline-flex min-h-14 flex-1 items-center justify-center gap-2 rounded-full bg-cta px-7 py-4 text-[15px] font-semibold text-cta shadow-[0_8px_24px_rgba(255,138,0,0.20)] transition-all duration-150 hover:shadow-[0_12px_32px_rgba(255,138,0,0.25)] active:scale-[0.985] disabled:opacity-40 disabled:shadow-none"
+                >
+                  生成学习计划
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </form>
 
@@ -382,6 +394,13 @@ export default function HomePage() {
           </div>
         </div>
       )}
+
+      <RecommendationsModal
+        isOpen={showRecommendations}
+        onClose={() => setShowRecommendations(false)}
+        userProfile={userProfile}
+        existingCourses={courses.map(c => c.topic)}
+      />
     </main>
   );
 }
