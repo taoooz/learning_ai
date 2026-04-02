@@ -27,7 +27,7 @@ export function RecommendationsModal({ isOpen, onClose, userProfile, existingCou
     if (!isOpen) return;
 
     // 尝试从缓存加载
-    const cacheKey = getCacheKey(userProfile, existingCourses);
+    const cacheKey = getCacheKey(userProfile, existingCourses, recommendations.map(r => r.title));
     const cached = localStorage.getItem(`recs_${cacheKey}`);
     
     if (cached && cached !== 'undefined') {
@@ -48,10 +48,11 @@ export function RecommendationsModal({ isOpen, onClose, userProfile, existingCou
     }
   }, [isOpen]);
 
-  const getCacheKey = (profile: any, courses: string[]) => {
+  const getCacheKey = (profile: any, courses: string[], previousRecs: string[] = []) => {
     const data = JSON.stringify({
       targetJob: profile?.targetJob || '',
       coursesCount: courses.length,
+      previousCount: previousRecs.length, // 加入已推荐数量，避免缓存冲突
     });
     // 使用简单的 hash 函数替代 btoa
     let hash = 0;
@@ -115,8 +116,8 @@ export function RecommendationsModal({ isOpen, onClose, userProfile, existingCou
       
       setRecommendations(data.recommendations || []);
 
-      // 缓存结果
-      const cacheKey = getCacheKey(userProfile, existingCourses);
+      // 缓存结果（包含已推荐数量，避免冲突）
+      const cacheKey = getCacheKey(userProfile, existingCourses, previousRecommendations);
       localStorage.setItem(`recs_${cacheKey}`, JSON.stringify(data.recommendations));
     } catch (error) {
       console.error('Failed to generate recommendations:', error);
