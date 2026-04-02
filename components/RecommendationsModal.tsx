@@ -32,6 +32,7 @@ export function RecommendationsModal({ isOpen, onClose, userProfile, existingCou
 
   const generateRecommendations = async () => {
     setIsLoading(true);
+    setRecommendations([]);
     try {
       // 获取 memory 数据
       const memoryStore = userMemory.memoryStore;

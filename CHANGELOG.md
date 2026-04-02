@@ -1,5 +1,18 @@
 # 项目迭代日志
 
+## 2026-04-02
+
+### 🐛 修复"换一批"按钮不生成新推荐的问题
+
+**问题**：点击"换一批"时视觉上无变化，感觉用了缓存
+**原因**：
+1. 未在请求前清空旧推荐，loading 期间仍显示旧内容
+2. API 端使用了错误的端点和模型名（`abab6.5s-chat`）
+
+**修复**：
+1. `generateRecommendations` 开始时立即 `setRecommendations([])`，触发 loading 骨架屏
+2. 修正 API 端点为 `https://api.minimaxi.com/v1/chat/completions`，模型改为 `MiniMax-M2.7`
+
 ## 2026-04-01
 
 ### 💬 完善答疑解惑交互和上下文

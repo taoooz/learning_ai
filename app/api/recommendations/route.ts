@@ -51,14 +51,14 @@ ${contextParts.join('\n')}
   ]
 }`;
 
-    const response = await fetch('https://api.minimaxi.com/v1/text/chatcompletion_v2', {
+    const response = await fetch('https://api.minimaxi.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${MINIMAX_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'abab6.5s-chat',
+        model: 'MiniMax-M2.7',
         messages: [
           {
             role: 'user',
@@ -67,10 +67,6 @@ ${contextParts.join('\n')}
         ],
         temperature: 0.9,
         max_tokens: 2000,
-        reply_constraints: {
-          sender_type: 'BOT',
-          sender_name: '学习规划师',
-        },
       }),
     });
 
