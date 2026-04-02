@@ -83,12 +83,16 @@ export function RecommendationsModal({ isOpen, onClose, userProfile, existingCou
         ...profileInsights.knowledgeBackground.slice(0, 2),
       ].filter(Boolean) : [];
 
+      // 提取当前已有的推荐标题，避免重复
+      const previousRecommendations = recommendations.map(r => r.title);
+
       // 构建上下文
       const context = {
         targetJob: userProfile?.targetJob || '',
         existingTopics: existingCourses.slice(0, 5), // 最近5个课程
         insights: insights, // 用户个人信息的 insights
         recentTopics: recentTopics, // 最近关注主题
+        previousRecommendations: previousRecommendations, // 已推荐的课程
       };
 
       console.log('Sending context:', context);
