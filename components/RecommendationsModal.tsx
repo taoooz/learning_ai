@@ -58,28 +58,25 @@ export function RecommendationsModal({ isOpen, onClose, userProfile, existingCou
       // 获取 memory 数据
       const memoryStore = userMemory.memoryStore;
       
-      // 从 projections 中提取有价值的信息
+      // 从 projections 中提取最近关注的主题
       const topicProjections = memoryStore.projections?.topicProjections || [];
-      const conceptProjections = memoryStore.projections?.conceptProjections || [];
-      
-      // 提取最近关注的主题
       const recentTopics = topicProjections
         .slice(0, 3)
         .map(p => p.topic)
         .filter(Boolean);
       
-      // 提取薄弱概念作为洞察
-      const weakConcepts = conceptProjections
-        .filter(c => c.masteryScore < 0.5 && c.status !== 'mastered')
-        .slice(0, 3)
-        .map(c => `${c.conceptName}需要加强`)
-        .filter(Boolean);
+      // 使用用户个人信息中预生成的 insights
+      const profileInsights = userProfile?.insights;
+      const insights = profileInsights ? [
+        profileInsights.summary,
+        ...profileInsights.knowledgeBackground.slice(0, 2),
+      ].filter(Boolean) : [];
 
       // 构建上下文
       const context = {
         targetJob: userProfile?.targetJob || '',
         existingTopics: existingCourses.slice(0, 5), // 最近5个课程
-        insights: weakConcepts, // 薄弱概念
+        insights: insights, // 用户个人信息的 insights
         recentTopics: recentTopics, // 最近关注主题
       };
 
