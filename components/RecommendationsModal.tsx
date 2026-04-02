@@ -32,12 +32,18 @@ export function RecommendationsModal({ isOpen, onClose, userProfile, existingCou
     
     if (cached && cached !== 'undefined') {
       try {
-        setRecommendations(JSON.parse(cached));
+        const cachedRecs = JSON.parse(cached);
+        if (cachedRecs.length > 0) {
+          setRecommendations(cachedRecs);
+          return;
+        }
       } catch (error) {
         console.error('Failed to parse cached recommendations:', error);
-        generateRecommendations();
       }
-    } else {
+    }
+    
+    // 只有没有缓存或缓存为空时才生成
+    if (recommendations.length === 0) {
       generateRecommendations();
     }
   }, [isOpen]);
