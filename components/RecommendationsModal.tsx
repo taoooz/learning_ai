@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { useUserMemory } from '@/hooks/useUserMemory';
 
 interface RecommendedCourse {
   title: string;
@@ -18,6 +19,7 @@ interface RecommendationsModalProps {
 
 export function RecommendationsModal({ isOpen, onClose, userProfile, existingCourses }: RecommendationsModalProps) {
   const router = useRouter();
+  const userMemory = useUserMemory();
   const [recommendations, setRecommendations] = useState<RecommendedCourse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -53,11 +55,35 @@ export function RecommendationsModal({ isOpen, onClose, userProfile, existingCou
   const generateRecommendations = async () => {
     setIsLoading(true);
     try {
-      // 构建精简的上下文
+      // 获取 memory 数据
+      const memoryStore = userMemory.memoryStore;
+      
+      // 从 projections 中提取有价值的信息
+      const topicProjections = memoryStore.projections?.topicProjections || [];
+      const conceptProjections = memoryStore.projections?.conceptProjections || [];
+      
+      // 提取最近关注的主题
+      const recentTopics = topicProjections
+        .slice(0, 3)
+        .map(p => p.topic)
+        .filter(Boolean);
+      
+      // 提取薄弱概念作为洞察
+      const weakConcepts = conceptProjections
+        .filter(c => c.masteryScore < 0.5 && c.status !== 'mastered')
+        .slice(0, 3)
+        .map(c => `${c.conceptName}需要加强`)
+        .filter(Boolean);
+
+      // 构建上下文
       const context = {
-        targetJob: userProfile?.targetJob || '技术岗位',
-        existingTopics: existingCourses.slice(0, 3), // 只传最近3个
+        targetJob: userProfile?.targetJob || '',
+        existingTopics: existingCourses.slice(0, 5), // 最近5个课程
+        insights: weakConcepts, // 薄弱概念
+        recentTopics: recentTopics, // 最近关注主题
       };
+
+      console.log('Sending context:', context);
 
       // 调用 API 生成推荐
       const response = await fetch('/api/recommendations', {
@@ -66,9 +92,15 @@ export function RecommendationsModal({ isOpen, onClose, userProfile, existingCou
         body: JSON.stringify(context),
       });
 
-      if (!response.ok) throw new Error('Failed to generate');
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API error:', errorText);
+        throw new Error('Failed to generate');
+      }
 
       const data = await response.json();
+      console.log('Received recommendations:', data);
+      
       setRecommendations(data.recommendations || []);
 
       // 缓存结果
