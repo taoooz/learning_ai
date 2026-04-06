@@ -8,8 +8,6 @@ export async function POST(request: NextRequest) {
   try {
     const { topic, nodeInfo, cards, userMemory } = await request.json();
 
-    console.log('[Questions API] Generating questions for:', nodeInfo.teachingGoal);
-
     // 获取教学记忆
     const memoryRepository = createMemoryRepository({ initialMemory: userMemory });
     const teachingPayload = memoryRepository.getTeachingPayload({
@@ -22,8 +20,6 @@ export async function POST(request: NextRequest) {
     const prompt = buildQuestionsPrompt(topic, nodeInfo, cards);
     const content = await callMiniMax(prompt, { maxTokens: 3000 });
     const result = parseJSONResponse<{ questions: any[] }>(content);
-
-    console.log('[Questions API] Generated', result.questions?.length || 0, 'questions');
 
     return NextResponse.json(result);
   } catch (error) {

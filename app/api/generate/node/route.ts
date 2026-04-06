@@ -50,7 +50,6 @@ async function callNodePrimaryModel(prompt: string): Promise<string> {
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  console.log('[NodeContent] Starting at', new Date().toISOString());
   const trace = createGenerationTrace('node-lesson');
 
   try {
@@ -102,14 +101,10 @@ export async function POST(request: NextRequest) {
         recentRelevantQuestions: teachingPayload.recentQuestionSummaries,
       });
     });
-    console.log(`[NodeContent] Prompt built: ${Date.now() - startTime}ms`);
 
-    console.log('[NodeContent] Calling MiniMax API...');
     const content = await withGenerationStage(trace, 'primary_model', async () => {
       return callNodePrimaryModel(prompt);
     });
-    console.log('[NodeContent] Raw response length:', content.length);
-    console.log('[NodeContent] Raw response preview:', content.substring(0, 500));
 
     const draftLesson = await withGenerationStage(trace, 'parse_primary', async () => {
       return parseJSONResponse<NodeLesson>(content);
@@ -126,8 +121,6 @@ export async function POST(request: NextRequest) {
 
     // 简化流程：不再验证 concept 覆盖，直接返回
     const data = patchedLesson;
-
-    console.log(`[NodeContent] Total: ${Date.now() - startTime}ms`);
 
     // 流式返回：逐个发送 cards 和 questions
     const encoder = new TextEncoder();

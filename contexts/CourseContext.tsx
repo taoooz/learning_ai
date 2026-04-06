@@ -304,12 +304,8 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
   const generateNodeContent = useCallback(async (courseId: string, nodeIndex: number) => {
     const requestKey = `${courseId}-${nodeIndex}`;
     
-    console.log('[generateNodeContent] Called from:', new Error().stack?.split('\n').slice(2, 5).join('\n'));
-    
-    // 如果正在生成，返回现有的 Promise
     const existingPromise = generatingNodesRef.current.get(requestKey);
     if (existingPromise) {
-      console.log('[generateNodeContent] Reusing existing promise:', requestKey);
       return existingPromise;
     }
     
@@ -318,7 +314,6 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     const bundle = getStoredCourseBundle(courseId);
     if (!bundle) throw new Error('Course bundle not found');
 
-    console.log('[generateNodeContent] Starting segmented generation:', requestKey);
 
     // 创建新的 Promise 并缓存
     const promise = (async () => {
@@ -328,7 +323,6 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
         const userMemory = memoryRepository.getMemoryStoreV3();
         
         // 第一步：生成 Cards（快速返回）
-        console.log('[generateNodeContent] Step 1: Generating cards...');
         const cardsResponse = await fetch('/api/generate/node/cards', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -350,7 +344,6 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
         }
 
         const cardsData = await cardsResponse.json();
-        console.log('[generateNodeContent] Cards generated:', cardsData.cards?.length);
 
         // 立即保存 Cards，让用户可以开始学习
         const partialLesson: Partial<NodeLesson> = {
@@ -370,7 +363,6 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
         setCourses(prev => prev.map(c => c.courseId === courseId ? updatedCourse : c));
 
         // 第二步：后台生成 Questions（不阻塞用户）
-        console.log('[generateNodeContent] Step 2: Generating questions in background...');
         const questionsResponse = await fetch('/api/generate/node/questions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -391,7 +383,6 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
           console.warn('[generateNodeContent] Questions generation failed, using empty array');
         } else {
           const questionsData = await questionsResponse.json();
-          console.log('[generateNodeContent] Questions generated:', questionsData.questions?.length);
 
           // 保存完整的 Lesson
           const fullLesson: Partial<NodeLesson> = {
@@ -411,7 +402,6 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
           setCourses(prev => prev.map(c => c.courseId === courseId ? updatedCourse : c));
         }
 
-        console.log('[generateNodeContent] Completed:', requestKey);
       } catch (error) {
         console.error('[generateNodeContent] Error:', error);
         throw error;
@@ -426,7 +416,6 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
 
   // 预加载下一个节点内容（不阻塞主流程）
   const preloadNextNode = useCallback((courseId: string, currentNodeIndex: number) => {
-    console.log('[preloadNextNode] Called for:', courseId, currentNodeIndex);
     
     const course = coursesRef.current.find(c => c.courseId === courseId);
     if (!course) return;
@@ -435,7 +424,6 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     if (nextIndex >= course.nodes.length) return;
     if (course.nodes[nextIndex].cards) return;
 
-    console.log('[preloadNextNode] Preloading node:', nextIndex);
     
     // 使用 generateNodeContent，复用防重复机制
     generateNodeContent(courseId, nextIndex).catch(() => {

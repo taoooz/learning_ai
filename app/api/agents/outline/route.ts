@@ -8,8 +8,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { topic, userProfile, userMemory, userMessage, sessionId } = body;
 
-    console.log('[Outline API] Request:', { topic, sessionId, hasUserMessage: !!userMessage });
-
     // 如果有 sessionId，说明是继续对话，调用 answer 端点
     const endpoint = sessionId
       ? `${PYTHON_AGENT_URL}/api/agents/outline/answer`
@@ -28,17 +26,13 @@ export async function POST(request: NextRequest) {
     });
 
     if (!response.ok) {
-      console.error('[Outline API] Python Agent error:', response.status);
       throw new Error(`Python Agent error: ${response.status}`);
     }
 
     // 检查是否是流式响应
     const contentType = response.headers.get('content-type');
-    console.log('[Outline API] Response content-type:', contentType);
-    
+
     if (contentType?.includes('text/event-stream')) {
-      console.log('[Outline API] Forwarding SSE stream to client');
-      
       // 直接转发流式响应给前端
       return new Response(response.body, {
         headers: {
@@ -50,9 +44,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 非流式响应
-    console.log('[Outline API] Processing JSON response');
     const data = await response.json();
-    console.log('[Outline API] Returning JSON data:', data.type);
     return Response.json(data);
   } catch (error) {
     console.error('[Outline API] Error:', error);
