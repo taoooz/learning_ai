@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { buildTocPrompt } from '@/lib/prompt';
 import { callMiniMax, parseJSONResponse } from '@/lib/minimax';
 import { createMemoryRepository } from '@/lib/memory/repository';
+import { validateTocRequest } from '@/lib/validation/api-schemas';
 
 export async function POST(request: NextRequest) {
   try {
-    const { blueprint, userMemory } = await request.json();
+    const { blueprint, userMemory } = validateTocRequest(await request.json());
 
     // 获取个性化记忆
     const memoryRepository = createMemoryRepository({ initialMemory: userMemory });

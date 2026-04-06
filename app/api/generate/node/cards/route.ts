@@ -3,10 +3,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { callMiniMax, parseJSONResponse } from '@/lib/minimax';
 import { buildCardsPrompt } from '@/lib/prompt';
 import { createMemoryRepository } from '@/lib/memory/repository';
+import { validateCardsRequest } from '@/lib/validation/api-schemas';
 
 export async function POST(request: NextRequest) {
   try {
-    const { topic, nodeInfo, userMemory } = await request.json();
+    const { topic, nodeInfo, userMemory } = validateCardsRequest(await request.json());
 
     // 获取教学记忆
     const memoryRepository = createMemoryRepository({ initialMemory: userMemory });
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
     console.error('[Cards API] Error:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Cards generation failed' },
-      { status: 500 }
+      { status: error instanceof Error && error.message.startsWith('Missing') ? 400 : 500 }
     );
   }
 }

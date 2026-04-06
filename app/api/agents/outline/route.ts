@@ -1,12 +1,12 @@
 import { NextRequest } from 'next/server';
+import { validateOutlineRequest } from '@/lib/validation/api-schemas';
 
 // Python Agent 服务地址
 const PYTHON_AGENT_URL = process.env.PYTHON_AGENT_URL || 'http://localhost:8000';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { topic, userProfile, userMemory, userMessage, sessionId } = body;
+    const { topic, userProfile, userMemory, userMessage, sessionId } = validateOutlineRequest(await request.json());
 
     // 如果有 sessionId，说明是继续对话，调用 answer 端点
     const endpoint = sessionId

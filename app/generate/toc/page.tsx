@@ -98,10 +98,6 @@ function TocPageContent() {
       }
     }).catch((err) => {
       console.error('[TOC Page] Failed to generate TOC:', err);
-      if (currentVersion !== requestVersionRef.current) {
-        console.log('[TOC Page] Ignoring stale error, version:', currentVersion);
-        return;
-      }
       setError('生成目录失败，请稍后再试');
       setIsLoading(false);
     });
