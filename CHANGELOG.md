@@ -1,5 +1,36 @@
 # 项目迭代日志
 
+## 2026-04-06
+
+### 🏗️ 架构重构：P0+P1 代码清理
+
+**目标**：拆分大文件、清理废弃代码、提升可维护性
+
+**prompt 模块化**（`lib/prompt.ts` → `lib/prompt/`）：
+- 拆分为 11 个职责单一的模块文件（shared / blueprint / node-lesson / outline / toc / cards / questions / profile 等）
+- `lib/prompt.ts` 保留为兼容性 re-export，现有 import 路径无需修改
+- `buildCourseTreePrompt` / `buildNodeContentPrompt` 标记 `@deprecated`
+
+**系统课程数据提取**：
+- 新建 `lib/data/system-courses.ts`，将约 430 行系统课程数据从 `lib/storage.ts` 中分离
+- 避免循环依赖：`system-courses.ts` 只依赖 `course-blueprint` 和 `types/course`
+
+**废弃文件清理**：
+- 删除 `app/api/generate/route.ts`（只返回 404 的空壳）
+- 删除 `lib/prisma.ts`（预留未使用）
+- 保留 `lib/redis.ts`（被 auth API 引用）
+
+**调试日志清理**：
+- 清除 6 个 API route 和 `CourseContext.tsx` 中的调试 `console.log`
+- 保留所有 `console.error` / `console.warn`
+
+**API 请求体验证**：
+- 新建 `lib/validation/api-schemas.ts`，为 outline / toc / cards / questions 4 个 API 添加入参校验
+- 缺少必填字段时返回 400，不引入新依赖
+
+**Bug 修复**：
+- 修复 `app/generate/toc/page.tsx` 中引用了未定义变量 `currentVersion` / `requestVersionRef` 的残留代码
+
 ## 2026-04-02
 
 ### 🐛 修复"换一批"按钮不生成新推荐的问题
