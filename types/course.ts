@@ -217,6 +217,13 @@ export interface StoredDataV2 {
   currentCourseId: string | null;
   courseProgress: CourseProgress;
   userProfile: UserProfile | null;
+  recommendations: StoredRecommendation[];
+}
+
+export interface StoredRecommendation {
+  title: string;
+  reason: string;
+  createdAt: number;
 }
 
 export type GenerationStatus = 'idle' | 'generating' | 'success' | 'error';

@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useUserMemory } from '@/hooks/useUserMemory';
+import { getRecommendations, saveRecommendations } from '@/lib/storage';
 
 interface RecommendedCourse {
   title: string;
@@ -23,32 +24,40 @@ export function RecommendationsModal({ isOpen, onClose, userProfile, existingCou
   const [recommendations, setRecommendations] = useState<RecommendedCourse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  // 从 localStorage 加载推荐
   useEffect(() => {
-    if (!isOpen || recommendations.length > 0) return;
-    
-    // 首次打开时生成推荐
+    const stored = getRecommendations();
+    if (stored.length > 0) {
+      setRecommendations(stored);
+    }
+  }, []);
+
+  // 首次打开且没有推荐时生成
+  useEffect(() => {
+    if (!isOpen) return;
+    if (recommendations.length > 0) return;
+
     generateRecommendations();
   }, [isOpen]);
 
-  const generateRecommendations = async () => {
+  const generateRecommendations = useCallback(async () => {
     setIsLoading(true);
-    setRecommendations([]);
     try {
       // 获取 memory 数据
       const memoryStore = userMemory.memoryStore;
-      
+
       // 从 projections 中提取最近关注的主题
       const topicProjections = memoryStore.projections?.topicProjections || [];
       const recentTopics = topicProjections
         .slice(0, 3)
         .map(p => p.topic)
         .filter(Boolean);
-      
+
       // 使用用户个人信息中预生成的 insights
       const profileInsights = userProfile?.insights;
       const insights = profileInsights ? [
         profileInsights.summary,
-        ...profileInsights.knowledgeBackground.slice(0, 2),
+        ...(profileInsights.knowledgeBackground || []).slice(0, 2),
       ].filter(Boolean) : [];
 
       // 提取当前已有的推荐标题，避免重复
@@ -57,13 +66,11 @@ export function RecommendationsModal({ isOpen, onClose, userProfile, existingCou
       // 构建上下文
       const context = {
         targetJob: userProfile?.targetJob || '',
-        existingTopics: existingCourses.slice(0, 5), // 最近5个课程
-        insights: insights, // 用户个人信息的 insights
-        recentTopics: recentTopics, // 最近关注主题
-        previousRecommendations: previousRecommendations, // 已推荐的课程
+        existingTopics: existingCourses.slice(0, 5),
+        insights: insights,
+        recentTopics: recentTopics,
+        previousRecommendations: previousRecommendations,
       };
-
-      console.log('Sending context:', context);
 
       // 调用 API 生成推荐
       const response = await fetch('/api/recommendations', {
@@ -73,18 +80,18 @@ export function RecommendationsModal({ isOpen, onClose, userProfile, existingCou
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('API error:', errorText);
         throw new Error('Failed to generate');
       }
 
       const data = await response.json();
-      console.log('Received recommendations:', data);
-      
-      setRecommendations(data.recommendations || []);
+      const newRecommendations = data.recommendations || [];
+
+      setRecommendations(newRecommendations);
+      // 持久化到 localStorage
+      saveRecommendations(newRecommendations);
     } catch (error) {
       console.error('Failed to generate recommendations:', error);
-      // 降级：使用默认推荐
+      // 降级：使用默认推荐（不持久化）
       setRecommendations([
         { title: 'AI 产品经理入门', reason: '适合想转型 AI 领域的产品经理' },
         { title: 'Python 数据分析基础', reason: '掌握数据分析的基本技能' },
@@ -95,7 +102,7 @@ export function RecommendationsModal({ isOpen, onClose, userProfile, existingCou
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [userMemory, userProfile, existingCourses, recommendations]);
 
   const handleSelectCourse = (course: RecommendedCourse) => {
     const topic = `${course.title}。${course.reason}`;

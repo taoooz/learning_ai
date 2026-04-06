@@ -12,6 +12,7 @@ import type {
   StoredCourseBundle,
   StoredData,
   StoredDataV2,
+  StoredRecommendation,
   UserProfile,
 } from '../types/course';
 import { cloneStoredCourseBundle, SYSTEM_COURSE_LIBRARY } from '@/lib/data/system-courses';
@@ -47,6 +48,7 @@ const defaultDataV2: StoredDataV2 = {
   currentCourseId: null,
   courseProgress: {},
   userProfile: null,
+  recommendations: [],
 };
 
 type StorageCleaner = Pick<Storage, 'removeItem'>;
@@ -195,6 +197,7 @@ export function saveStoredData(data: StoredData): void {
     currentCourseId: data.currentCourseId,
     courseProgress: data.courseProgress,
     userProfile: data.userProfile,
+    recommendations: current.recommendations || [],
   };
   saveStoredDataV2(next);
 }
@@ -297,5 +300,19 @@ export function saveCourseBlueprint(blueprint: CourseBlueprint): void {
   }
 
   data.currentCourseId = normalizedBlueprint.courseId;
+  saveStoredDataV2(data);
+}
+
+export function getRecommendations(): StoredRecommendation[] {
+  const data = getStoredDataV2();
+  return data.recommendations || [];
+}
+
+export function saveRecommendations(recommendations: Omit<StoredRecommendation, 'createdAt'>[]): void {
+  const data = getStoredDataV2();
+  data.recommendations = recommendations.map((r) => ({
+    ...r,
+    createdAt: Date.now(),
+  }));
   saveStoredDataV2(data);
 }
