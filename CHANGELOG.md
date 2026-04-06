@@ -2,6 +2,30 @@
 
 ## 2026-04-06
 
+### ✨ prompt 和类型优化
+
+**prompt 角色升级**：
+- outline/toc/cards/questions 的 prompt 使用更专业的教学角色描述
+- 统一使用 `CardsPromptPayload` / `QuestionsPromptPayload` 接口传递参数
+
+**字段精简**：
+- 移除 `difficultySummary` / `whyThisCourseFits` / `teachingGoal` 等冗余字段
+- 确认卡片 `ConfirmationCard` 支持条件渲染（无内容时不显示）
+
+**用户洞察增强**：
+- cards 和 questions 生成时传入 `userInsights`（从 `userMemory.profile.insights` 提取）
+- 包含 `knowledgeBackground` / `analogyExperiences` / `summary`
+
+**问题生成调整**：
+- 输出格式移除 `explanation` 字段
+- 选项格式要求不包含 A/B/C 或 1/2/3 序号
+
+**UI 改进**：
+- 移除 input focus 时的橙色 box-shadow
+- 添加 SVG favicon
+
+## 2026-04-06
+
 ### 🏗️ 架构重构：P0+P1 代码清理
 
 **目标**：拆分大文件、清理废弃代码、提升可维护性
