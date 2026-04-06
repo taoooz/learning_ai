@@ -63,24 +63,30 @@ export function ConfirmationCard({ blueprint, onConfirm, onEdit }: ConfirmationC
           </div>
 
           <div className="space-y-2.5 pl-4 border-l-2 border-accent/20">
-            <div className="flex items-start gap-2">
-              <span className="text-sm text-tertiary shrink-0 w-16">难度定位</span>
-              <span className="text-sm text-secondary flex-1">{difficultySummary}</span>
-            </div>
-            <div className="flex items-start gap-2">
-              <span className="text-sm text-tertiary shrink-0 w-16">背景知识</span>
-              <span className="text-sm text-secondary flex-1">{backgroundSummary}</span>
-            </div>
+            {difficultySummary && (
+              <div className="flex items-start gap-2">
+                <span className="text-sm text-tertiary shrink-0 w-16">难度定位</span>
+                <span className="text-sm text-secondary flex-1">{difficultySummary}</span>
+              </div>
+            )}
+            {backgroundSummary && (
+              <div className="flex items-start gap-2">
+                <span className="text-sm text-tertiary shrink-0 w-16">背景知识</span>
+                <span className="text-sm text-secondary flex-1">{backgroundSummary}</span>
+              </div>
+            )}
             {skipBasics && skipBasics.length > 0 && (
               <div className="flex items-start gap-2">
                 <span className="text-sm text-tertiary shrink-0 w-16">已跳过</span>
                 <span className="text-sm text-secondary flex-1">{skipBasics.join('、')}</span>
               </div>
             )}
-            <div className="flex items-start gap-2 pt-2 border-t border-accent/10">
-              <span className="text-sm text-tertiary shrink-0 w-16">为什么适合</span>
-              <span className="text-sm text-secondary flex-1 leading-relaxed">{whyThisCourseFits}</span>
-            </div>
+            {whyThisCourseFits && (
+              <div className="flex items-start gap-2 pt-2 border-t border-accent/10">
+                <span className="text-sm text-tertiary shrink-0 w-16">为什么适合</span>
+                <span className="text-sm text-secondary flex-1 leading-relaxed">{whyThisCourseFits}</span>
+              </div>
+            )}
           </div>
         </div>
       </div>

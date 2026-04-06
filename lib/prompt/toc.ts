@@ -6,13 +6,14 @@ interface TocCourseBlueprint {
   learningGoal: string;
   learnerPositioning: {
     estimatedLevel: 'novice' | 'beginner' | 'intermediate' | 'advanced';
-    backgroundSummary: string;
-    skipBasics: string[];
+    backgroundSummary?: string;
+    skipBasics?: string[];
   };
 }
 
 export function buildTocPrompt(blueprint: TocCourseBlueprint, planningPayload?: PlanningMemoryPayload | null): string {
   const skipBasics = blueprint.learnerPositioning.skipBasics?.filter(Boolean).join('、') || '无';
+  const backgroundSummary = blueprint.learnerPositioning.backgroundSummary || '未提供';
 
   let memorySection = '';
   if (planningPayload) {
@@ -22,54 +23,46 @@ export function buildTocPrompt(blueprint: TocCourseBlueprint, planningPayload?: 
 
 ## 用户学习记忆
 
-**学习水平**：${learnerSnapshot.estimatedLevel}（置信度 ${Math.round(learnerSnapshot.confidence * 100)}%）
-
-**必须覆盖的概念**：${mustCoverConcepts.length > 0 ? mustCoverConcepts.join('、') : '无特别要求'}
+**建议覆盖的概念**：${mustCoverConcepts.length > 0 ? mustCoverConcepts.join('、') : '无特别要求'}
 
 **可以跳过的基础**：${skippableBasics.length > 0 ? skippableBasics.join('、') : '无'}
 
-**需要重点讲解的风险概念**：${riskConcepts.length > 0 ? riskConcepts.join('、') : '无'}
+**建议重点讲解的概念**：${riskConcepts.length > 0 ? riskConcepts.join('、') : '无'}
 
 **最近学习的相关课程**：
-${recentRelevantCourses.length > 0 ? recentRelevantCourses.map(c => `- ${c.topic}：${c.summary}`).join('\n') : '无相关历史'}
-
-**个性化要求**：
-- 根据学习水平调整章节难度和深度
-- 优先覆盖必须讲解的概念
-- 跳过用户已掌握的基础内容
-- 对风险概念增加章节或加强讲解
-- 避免与最近课程重复内容`;
+${recentRelevantCourses.length > 0 ? recentRelevantCourses.map(c => `- ${c.topic}：${c.summary}`).join('\n') : '无相关历史'}`;
   }
 
-  return `你是 AI 导师，请基于课程纲要生成个性化课程目录。
+  return `你是一名专业的 AI 老师，擅长根据 学习计划 与 用户学习记忆 生成个性化课程章节结构。用于指导后续章节内容创作。
 
-课程纲要：
-- 学习方向：${blueprint.learningDirection}
-- 学习目标：${blueprint.learningGoal}
-- 用户背景：${blueprint.learnerPositioning.backgroundSummary || '未提供'}
-- 难度定位：${blueprint.learnerPositioning.estimatedLevel}
-- 已跳过基础：${skipBasics}${memorySection}
+## 学习计划
+1. 课程名称：${blueprint.learningDirection}
+2. 学习方向：${blueprint.learningDirection}
+3. 学习目标：${blueprint.learningGoal}
+4. 个人情况：用户在该学习方向上的情况
+   - 当前水平: ${blueprint.learnerPositioning.estimatedLevel}
+   - 相关背景: ${backgroundSummary}
+   - 已掌握知识: ${skipBasics}${memorySection}
 
 ## 任务
-1. 生成课程名称（简洁有吸引力，8-15字，不要包含"课程"二字）
-2. 生成课程描述（一句话，15-30字，说明学完能做什么）
+1. 根据学习计划，进行课程目录设计
+2. 生成课程描述（建议30字内，概述该课程）
 3. 设计个性化课程章节结构（5-12个章节，取决于主题复杂度和用户水平）
-4. 每个章节要有具体的学习目标和详细描述
 
-## 章节设计原则
-- 由浅入深，循序渐进
-- 每个章节有明确的学习目标
-- 章节之间有清晰的逻辑衔接
-- **根据用户学习记忆调整章节顺序和难度**
-- **跳过用户已掌握的基础内容**
-- **对风险概念增加讲解深度或独立章节**
-- **避免与用户最近学习的课程重复**
+## 课程设计原则
+- 章节间循序渐进，有清晰的逻辑衔接
+- 每个章节自己有明确的定位
+- 尽量避免与用户最近学习的课程重复
+
+## 节点内容设计原则
+- 节点标题：避免过度概括，建议25字内
+- 节点描述：讲述该章节的学习内容与目标。内容清晰、干练，可用于指导后续具体内容生成
 
 ## 输出格式
 {
   "courseName": "课程名称",
   "courseDescription": "课程描述",
-  "nodes": [{ "index": 0, "title": "节点标题", "teachingGoal": "节点学习目标", "description": "节点详细描述" }]
+  "nodes": [{ "index": 1, "title": "节点标题", "description": "节点描述" }]
 }
 
 只返回 JSON。`;

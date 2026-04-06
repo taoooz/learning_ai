@@ -116,9 +116,9 @@ export interface CourseBlueprint {
   courseId: string;
   topic: string;
   learnerPositioning: {
-    estimatedLevel: 'novice' | 'beginner' | 'intermediate' | 'advanced';
-    difficultySummary: string;
-    whyThisCourseFits: string;
+    estimatedLevel: 'novice' | 'beginner' | 'intermediate' | 'advanced' | '初级' | '中级' | '高级';
+    difficultySummary?: string;
+    whyThisCourseFits?: string;
   };
   courseGoal: string;
   globalConcepts: CanonicalConcept[];
@@ -150,11 +150,11 @@ export interface CourseTreeView {
 
 // Outline API 返回的纲要类型（不包含章节结构，章节由 TOC API 生成）
 export interface OutlineLearnerPositioning {
-  estimatedLevel: 'novice' | 'beginner' | 'intermediate' | 'advanced';
-  difficultySummary: string;
-  backgroundSummary: string;
-  skipBasics: string[];
-  whyThisCourseFits: string;
+  estimatedLevel: 'novice' | 'beginner' | 'intermediate' | 'advanced' | '初级' | '中级' | '高级';
+  difficultySummary?: string;
+  backgroundSummary?: string;
+  skipBasics?: string[];
+  whyThisCourseFits?: string;
 }
 
 export interface OutlineBlueprint {

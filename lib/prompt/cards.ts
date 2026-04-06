@@ -1,49 +1,72 @@
-export function buildCardsPrompt(
-  topic: string,
-  nodeInfo: {
-    teachingGoal: string;
-    teachConceptIds: string[];
-    prerequisiteConceptIds: string[];
-  },
-  learnerBackground: {
-    backgroundSummary: string;
-    skipBasics: string[];
-  },
-  prevNodeSummary?: { title: string; concepts: string[] },
-  nextNodeSummary?: { title: string; concepts: string[] },
-): string {
-  let prevSection = '';
-  if (prevNodeSummary) {
-    prevSection = `## 前一节点（避免重复）\n${prevNodeSummary.title}：${prevNodeSummary.concepts.join('、')}\n`;
-  }
+export interface CardsPromptPayload {
+  nodeTitle: string;
+  teachingGoal: string;
+  courseName?: string;
+  courseDescription?: string;
+  userInsights?: string;
+  estimatedLevel?: string;
+  backgroundSummary?: string;
+  prevNode?: { title: string; concepts: string };
+  nextNode?: { title: string; concepts: string };
+}
 
-  let nextSection = '';
-  if (nextNodeSummary) {
-    nextSection = `## 后一节点（衔接顺畅）\n${nextNodeSummary.title}：${nextNodeSummary.concepts.join('、')}\n`;
-  }
+export function buildCardsPrompt(topic: string, payload: CardsPromptPayload): string {
+  const {
+    nodeTitle,
+    teachingGoal,
+    courseName,
+    courseDescription,
+    userInsights,
+    estimatedLevel,
+    backgroundSummary,
+    prevNode,
+    nextNode,
+  } = payload;
 
-  return `你是 AI 导师，请生成学习内容。
+  const prevSection = prevNode
+    ? `### 前一章节（避免重复）\n${prevNode.title}：${prevNode.concepts}\n`
+    : '### 前一章节（避免重复）\n无前一章节\n';
 
-主题：${topic}
-节点目标：${nodeInfo.teachingGoal}
-前置概念：${nodeInfo.prerequisiteConceptIds.join('、') || '无'}
+  const nextSection = nextNode
+    ? `### 后一章节（衔接顺畅，若为空则无后续章节）\n${nextNode.title}：${nextNode.concepts}\n`
+    : '';
 
-## 个人基础（用熟悉的术语和例子）
-${learnerBackground.backgroundSummary}
-跳过的内容：${learnerBackground.skipBasics.join('、') || '无'}
+  return `你是一名专业的 AI 老师。基于当前章节信息，设计该章节个性化教学内容。
+
+## 当前章节信息
+章节名称：${nodeTitle}
+章节目标：${teachingGoal}
+
+## 课程相关信息
+### 课程
+课程名称：${courseName || topic}
+课程描述：${courseDescription || ''}
+
 ${prevSection}${nextSection}
-## 内容要求
-- 生成 5-8 张学习卡片
-- 每张卡片包含 title、content（Markdown，150-400字）
-- 可添加 visualization 字段辅助理解
-- 内容循序渐进，避免与前后节点重复
-- 使用用户熟悉的术语和例子
+## 用户情况
+- 个人信息：${userInsights || '暂无'}
+- 课程当前水平：${estimatedLevel || '未知'}
+- 课程相关背景：${backgroundSummary || '暂无'}
 
-## 可视化类型
+## 章节内容要求
+- 根据当前章节信息，生成5-8个学习页，单页建议 200 字以内，每页可包含md文本和可视化组件
+- 教学内容清晰准确，不传播错误或未知信息
+- 按照认知规律逐步讲解该章节内容，避免与前后节点重复
+- 每页独立完整，按需在内容中使用可视化组件
+- 举例时，优先使用用户背景熟悉的例子
+
+## 可视化组件类型
 - flowchart: 流程图
 - timeline: 时间线
 - comparison: 对比表
 - keyPoints: 核心要点
+
+## 知识风格
+- 采用启发式教学，突出重点
+- 语言亲切，激发用户学习动力，避免冗长
+- 使用自然语言，避免生硬术语，让用户容易理解
+- 使用数字编号或项目分点呈现内容，避免大段文字堆砌
+- 对重点内容、结论使用加粗或特殊标记强调
 
 ## 输出格式
 {

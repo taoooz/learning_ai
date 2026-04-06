@@ -24,7 +24,7 @@ export function deriveCourseTreeViewFromBlueprint(blueprint: CourseBlueprint): C
     courseId: blueprint.courseId,
     topic: blueprint.topic,
     courseGoal: blueprint.courseGoal,
-    difficultySummary: blueprint.learnerPositioning.difficultySummary,
+    difficultySummary: blueprint.learnerPositioning.difficultySummary || '',
     totalNodes: blueprint.nodes.length,
     nodes: blueprint.nodes.map((node) => ({
       index: node.index,

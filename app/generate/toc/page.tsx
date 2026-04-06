@@ -11,7 +11,7 @@ import type { CourseBlueprint, StoredCourseBundle, OutlineLearnerPositioning } f
 interface TocResponse {
   courseName: string;
   courseDescription: string;
-  nodes: { index: number; title: string; teachingGoal: string; description: string }[];
+  nodes: { index: number; title: string; description: string }[];
 }
 
 interface PendingOutline {
@@ -67,7 +67,7 @@ function TocPageContent() {
           nodes: tocResult.nodes.map((n, i) => ({
             index: n.index,
             title: n.title,
-            teachingGoal: n.teachingGoal,
+            teachingGoal: n.description,
             teachConceptIds: [],
             prerequisiteConceptIds: [],
             bridgeFromPreviousNode: '',
