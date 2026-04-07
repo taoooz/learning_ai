@@ -2,62 +2,57 @@
 
 ## 2026-04-07
 
-### 🔄 Prompt 迁移：TypeScript → Python Agent
+### 🚀 Markdown 协议流式对话系统（完整版）
 
-**迁移内容**：
-- ✅ Outline prompt：完整业务逻辑 + Markdown 协议
-- ✅ 包含用户信息、记忆信息、学习计划结构
-- ✅ 支持问题提问和纲要生成两种模式
-- ✅ 适配新的 OUTLINE 格式（学习方向、学习目标、当前水平、相关背景、已掌握知识）
+**协议升级：HTML 标签格式**
+- 从 `---QUESTION---` 改为 `<quiz id="x">` 标签
+- 从 `---OUTLINE---` 改为 `<outline>` 标签
+- 使用 `<div slot="xxx">` 定义字段
+- 更易解析、更规范、更易扩展
 
-**前端适配**：
-- ✅ 解析器支持新的 OUTLINE 字段
-- ✅ `RichStreamingMessage` 组件适配新数据结构
-- ✅ 保持向后兼容
+**Prompt 优化**
+- 重构 outline prompt：更清晰的结构和约束
+- 用户信息分模块：用户画像（insights）、其他信息（求职目标、近期课程）
+- 回答 prompt 在初始 prompt 基础上增加问答记录模块
+- 强化格式约束：禁止表格、禁止自由发挥
 
-**待迁移**（暂时保留在 Next.js）：
-- TOC prompt（`lib/prompt/toc.ts`）
-- Cards prompt（`lib/prompt/cards.ts`）
-- Questions prompt（`lib/prompt/questions.ts`）
+**前端实现**
+- `RichStreamingMessage`：支持思考折叠、流式内容、结构化组件解析
+- `contentParser`：HTML 标签解析器（quiz、outline）
+- 自动映射中文等级到英文（初级→beginner）
+- 修复问题卡片交互（disabled 状态）
 
-### 🔧 后端适配：Markdown 协议
+**后端实现**
+- Python Agent `outline_service.py`：完整的 prompt 构建逻辑
+- 支持 `<think>` 标签提取
+- 流式输出 `content_delta` 事件
 
-**Python Agent 改动**：
-- `build_initial_prompt()`：输出 Markdown 格式而非 JSON
-- `build_answer_prompt()`：输出 Markdown 格式而非 JSON
-- `stream_llm_and_parse()`：支持 `<think>` 标签提取
-- 简化路由逻辑：移除 JSON 解析，直接流式输出
+### 🎨 节点内容页样式优化
 
-**协议变化**：
-- 移除 `questions`、`confirmation` 事件
-- 只保留 `thinking`、`content_delta` 事件
-- 结构化内容嵌入在 Markdown 中
+**Markdown 展示增强**
+- 优化标题层级样式（h1-h4）
+- 代码块语法高亮（react-syntax-highlighter + oneLight 主题）
+- 优化引用块、链接、列表样式
+- 响应式优化：移动端减小内边距、防止溢出
 
-**测试要点**：
-- 确保 AI 输出符合 Markdown 协议格式
-- `---QUESTION:id---` 和 `---END---` 标记完整
-- 选项格式为 `- [ ] 选项内容`
+**可视化组件优化**
+- 对比表格：边框容器、hover 效果、横向滚动
+- 时间线：背景、时间标签 badge 样式
+- 关键点列表：实心橙色序号、背景容器
+- Mermaid 图表：背景容器、居中对齐、放大按钮
+- 图例：背景容器、阴影效果
+- 全部组件响应式适配（sm: 断点）
 
-### 🚀 Markdown 协议：流式结构化内容
+### 📦 技术栈
+- 前端：Next.js 15, React, TypeScript, Tailwind CSS v4, Framer Motion
+- 后端：Python FastAPI, MiniMax API
+- 协议：SSE 流式传输 + HTML 标签格式
 
-**协议设计**：
-- 在流式内容中嵌入结构化组件（问题、纲要）
-- 使用特殊标记分隔：`---QUESTION:id---`、`---OUTLINE---`、`---END---`
-- 完全流式，无需等待完整 JSON
+---
 
-**解析器实现**：
-- `parseStreamContent()`：解析带标记的 Markdown
-- `hasIncompleteBlock()`：检测未完成的块
-- 支持文本、问题、纲要三种块类型
+## 2026-04-06
 
-**组件升级**：
-- `RichStreamingMessage`：支持解析和渲染结构化内容
-- 问题和纲要作为独立卡片渲染在主卡片下方
-- 保持思考折叠功能
-
-**协议规范**：
-- 问题格式：问题文本 + `- [ ]` 选项列表
-- 纲要格式：`字段名: 字段值` 键值对
+### ✨ 推荐课程持久化
 - 详见 `docs/markdown-protocol.md`
 
 **优势**：
