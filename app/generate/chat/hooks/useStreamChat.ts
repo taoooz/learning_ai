@@ -189,6 +189,13 @@ export function useStreamChat(topic: string) {
               addMessage({ type: 'outline', blueprint: event.blueprint, editable: true, timestamp: Date.now() });
             }
             break;
+
+          case 'session_created':
+            if (event.sessionId) {
+              setSessionId(event.sessionId);
+              sessionIdRef.current = event.sessionId;
+            }
+            break;
         }
       }
     } catch (err) {

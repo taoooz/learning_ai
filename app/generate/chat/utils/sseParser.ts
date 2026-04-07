@@ -9,7 +9,8 @@ export type SSEEvent =
   | { type: 'questions'; sessionId?: string; questions: Array<{ id: string; question: string; options: string[] }> }
   | { type: 'blueprint_start' }
   | { type: 'blueprint_field'; field: string; value: any }
-  | { type: 'confirmation'; sessionId?: string; blueprint: any };
+  | { type: 'confirmation'; sessionId?: string; blueprint: any }
+  | { type: 'session_created'; sessionId: string };
 
 /**
  * 解析 SSE 数据行
