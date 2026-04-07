@@ -19,33 +19,40 @@ export function useStreamChat(topic: string) {
   const [currentBlueprint, setCurrentBlueprint] = useState<OutlineBlueprint | null>(null);
   const [generatedCourseName, setGeneratedCourseName] = useState('');
 
-  // 用 ref 避免 useCallback 闭包过期问题
   const sessionIdRef = useRef<string | null>(null);
   const questionCountRef = useRef(0);
 
-  // 流式处理中间状态（不需要触发渲染）
   const streamState = useRef({
     questionText: '',
     questionOptions: [] as string[],
     questionIndex: -1,
     questionNumber: 0,
     blueprint: {} as any,
+    streamingIndex: -1,
+    streamingContent: '',
+    thinkingContent: '',
   });
 
   const sendMessage = useCallback(async (message?: string) => {
     if (isWaitingResponse) return;
     setIsWaitingResponse(true);
 
-    // 重置流式状态
-    streamState.current = { questionText: '', questionOptions: [], questionIndex: -1, questionNumber: 0, blueprint: {} };
+    streamState.current = { 
+      questionText: '', 
+      questionOptions: [], 
+      questionIndex: -1, 
+      questionNumber: 0, 
+      blueprint: {},
+      streamingIndex: -1,
+      streamingContent: '',
+      thinkingContent: '',
+    };
 
     if (message) {
       disableQuestions();
       addMessage({ type: 'user', content: message, timestamp: Date.now() });
-      addMessage({ type: 'loading', message: '正在处理你的回答...', timestamp: Date.now() });
     } else {
       addMessage({ type: 'system', content: `收到，让我来帮你规划学习路径`, timestamp: Date.now() });
-      addMessage({ type: 'loading', message: '正在分析你的需求...', timestamp: Date.now() });
     }
 
     try {
@@ -57,42 +64,62 @@ export function useStreamChat(topic: string) {
       }
 
       for await (const event of parseSSEStream(result)) {
-        removeLoadingMessages();
+        const s = streamState.current;
 
         switch (event.type) {
           case 'thinking':
-            addMessage({ type: 'loading', message: event.message || '正在思考...', timestamp: Date.now() });
-            break;
-
-          case 'content_delta': {
-            const s = streamState.current;
-            s.questionText += event.content;
-
-            if (s.questionIndex < 0) {
-              s.questionNumber = questionCountRef.current + 1;
-              const idx = addMessage({
-                type: 'question',
-                question: s.questionText,
-                options: [],
-                questionNumber: s.questionNumber,
-                timestamp: Date.now(),
-                disabled: false,
+            // 累积思考内容
+            s.thinkingContent += (event.message || '') + '\n';
+            if (s.streamingIndex < 0) {
+              const idx = addMessage({ 
+                type: 'streaming', 
+                content: '', 
+                thinkingContent: s.thinkingContent,
+                isThinking: true,
+                timestamp: Date.now() 
               });
-              s.questionIndex = idx;
+              s.streamingIndex = idx;
             } else {
-              updateMessageAt(s.questionIndex, msg =>
-                msg.type === 'question' ? { ...msg, question: s.questionText } : msg
+              updateMessageAt(s.streamingIndex, msg =>
+                msg.type === 'streaming' ? { ...msg, thinkingContent: s.thinkingContent, isThinking: true } : msg
               );
             }
             break;
-          }
+
+          case 'content_delta':
+            // 流式追加正式内容
+            s.streamingContent += event.content;
+            
+            if (s.streamingIndex < 0) {
+              const idx = addMessage({
+                type: 'streaming',
+                content: s.streamingContent,
+                isThinking: true,
+                timestamp: Date.now(),
+              });
+              s.streamingIndex = idx;
+            } else {
+              updateMessageAt(s.streamingIndex, msg =>
+                msg.type === 'streaming' ? { ...msg, content: s.streamingContent, isThinking: true } : msg
+              );
+            }
+            break;
 
           case 'question_start':
+            // 结束流式内容，标记思考完成
+            if (s.streamingIndex >= 0) {
+              updateMessageAt(s.streamingIndex, msg =>
+                msg.type === 'streaming' ? { ...msg, isThinking: false } : msg
+              );
+              s.streamingIndex = -1;
+              s.streamingContent = '';
+              s.thinkingContent = '';
+            }
             streamState.current.questionNumber = event.questionNumber;
             questionCountRef.current = event.questionNumber;
             break;
 
-          case 'questions': {
+          case 'questions':
             if (event.sessionId) {
               setSessionId(event.sessionId);
               sessionIdRef.current = event.sessionId;
@@ -100,7 +127,6 @@ export function useStreamChat(topic: string) {
             const q = event.questions?.[0];
             if (!q) break;
 
-            const s = streamState.current;
             s.questionOptions = q.options || [];
 
             if (s.questionIndex < 0) {
@@ -119,7 +145,6 @@ export function useStreamChat(topic: string) {
               );
             }
 
-            // 延迟逐个显示选项
             for (let i = 0; i < s.questionOptions.length; i++) {
               await new Promise(r => setTimeout(r, 200));
               updateMessageAt(s.questionIndex, msg =>
@@ -127,20 +152,28 @@ export function useStreamChat(topic: string) {
               );
             }
             break;
-          }
 
           case 'blueprint_start':
+            // 结束流式内容，标记思考完成
+            if (s.streamingIndex >= 0) {
+              updateMessageAt(s.streamingIndex, msg =>
+                msg.type === 'streaming' ? { ...msg, isThinking: false } : msg
+              );
+              s.streamingIndex = -1;
+              s.streamingContent = '';
+              s.thinkingContent = '';
+            }
             streamState.current.blueprint = {};
             addMessage({ type: 'system', content: '根据你的情况，我为你设计了这个学习路径', timestamp: Date.now() });
             addMessage({ type: 'loading', message: '正在生成学习路径...', timestamp: Date.now() });
             break;
 
-          case 'blueprint_field': {
+          case 'blueprint_field':
             streamState.current.blueprint[event.field] = event.value;
             const names: Record<string, string> = { learningDirection: '学习方向', learningGoal: '学习目标', learnerPositioning: '学习者定位' };
+            removeLoadingMessages();
             addMessage({ type: 'loading', message: `正在生成${names[event.field] || event.field}...`, timestamp: Date.now() });
             break;
-          }
 
           case 'confirmation':
             if (event.sessionId) {

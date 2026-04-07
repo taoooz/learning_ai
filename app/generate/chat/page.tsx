@@ -7,6 +7,7 @@ import { MessageBubble } from '@/components/chat/MessageBubble';
 import { QuestionCard } from '@/components/chat/QuestionCard';
 import { OutlineCard } from '@/components/chat/OutlineCard';
 import { LoadingMessage } from '@/components/chat/LoadingMessage';
+import { RichStreamingMessage } from '@/components/chat/RichStreamingMessage';
 import { useStreamChat } from './hooks/useStreamChat';
 
 function ChatPageContent() {
@@ -63,6 +64,17 @@ function ChatPageContent() {
           {messages.map((msg, idx) => {
             if (msg.type === 'system' || msg.type === 'user') {
               return <MessageBubble key={idx} message={msg} />;
+            } else if (msg.type === 'streaming') {
+              return (
+                <RichStreamingMessage
+                  key={idx}
+                  content={msg.content}
+                  thinkingContent={msg.thinkingContent}
+                  isThinking={msg.isThinking}
+                  onQuestionAnswer={(id, answer) => sendMessage(answer)}
+                  onOutlineConfirm={handleConfirmOutline}
+                />
+              );
             } else if (msg.type === 'question') {
               return (
                 <QuestionCard

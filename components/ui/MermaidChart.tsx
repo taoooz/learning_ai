@@ -59,19 +59,22 @@ export function MermaidChart({ mermaidCode, complex, className = '' }: MermaidCh
   }, [isFullscreen, mermaidCode]);
 
   return (
-    <div className={`relative ${className}`}>
-      <div
-        ref={containerRef}
-        className="mermaid-container overflow-x-auto"
-      />
-      {error && <p className="text-red-500 text-sm">{error}</p>}
+    <div className={`relative my-6 ${className}`}>
+      <div className="p-4 bg-subtle/30 rounded-lg border border-subtle/50 overflow-x-auto">
+        <div
+          ref={containerRef}
+          className="mermaid-container flex justify-center min-w-0"
+          style={{ maxWidth: '100%' }}
+        />
+      </div>
+      {error && <p className="text-error text-sm mt-2 px-4">{error}</p>}
       {complex && !isFullscreen && (
         <button
           onClick={() => setIsFullscreen(true)}
-          className="absolute top-2 right-2 p-2 bg-surface/80 rounded-lg hover:bg-surface"
+          className="absolute top-6 right-6 p-2 bg-surface/90 rounded-lg hover:bg-surface shadow-sm border border-subtle/50 transition-all"
           aria-label="放大查看"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-5 h-5 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" />
           </svg>
         </button>
@@ -82,10 +85,10 @@ export function MermaidChart({ mermaidCode, complex, className = '' }: MermaidCh
           onClick={() => setIsFullscreen(false)}
         >
           <div
-            className="max-w-full max-h-full overflow-auto bg-surface rounded-xl p-4"
+            className="max-w-full max-h-full overflow-auto bg-surface rounded-xl p-6 shadow-float border border-subtle"
             onClick={(e) => e.stopPropagation()}
           >
-            <div ref={fullscreenRef} />
+            <div ref={fullscreenRef} className="min-w-0" />
           </div>
         </div>
       )}

@@ -1,12 +1,12 @@
 'use client';
 
-import ReactMarkdown from 'react-markdown';
 import { LearningCard as LearningCardType } from '@/types/course';
 import { MermaidChart } from './ui/MermaidChart';
 import { ComparisonTable } from './ui/ComparisonTable';
 import { Timeline } from './ui/Timeline';
 import { Legend } from './ui/Legend';
 import { KeyPointsList } from './ui/KeyPointsList';
+import { MarkdownContent } from './ui/MarkdownContent';
 
 interface LearningCardProps {
   card: LearningCardType;
@@ -76,8 +76,8 @@ export function LearningCard({ card }: LearningCardProps) {
   return (
     <div className="w-full h-full flex flex-col p-6 bg-surface rounded-2xl border border-subtle">
       <h2 className="text-xl font-bold text-primary mb-4">{card.title}</h2>
-      <div className="flex-1 text-secondary text-sm leading-relaxed">
-        <ReactMarkdown>{card.content}</ReactMarkdown>
+      <div className="flex-1 prose text-sm">
+        <MarkdownContent content={card.content} />
       </div>
       {renderVisualization()}
       {card.imageUrl && (

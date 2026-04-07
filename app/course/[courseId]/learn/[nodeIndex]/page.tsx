@@ -14,6 +14,7 @@ import { LearningCard, Question } from '@/types/course';
 import { ChatLauncher, ChatWidget } from '@/components/ui/ChatWidget';
 import { CardVisualization } from '@/components/ui/CardVisualization';
 import { useUserMemory } from '@/hooks/useUserMemory';
+import { getStoredDataV2 } from '@/lib/storage';
 
 type LearningPhase = 'loading' | 'learning' | 'complete';
 type LearnStep =
@@ -194,13 +195,14 @@ export default function LearnPage() {
 
   const course = courses.find(c => c.courseId === courseId);
   const node = course?.nodes[nodeIndex];
-  
-  // 获取 blueprint
+
+  // 从 StoredCourseBundle 中获取 blueprint（CourseTree 没有 blueprint）
   const blueprint = useMemo(() => {
-    if (!courseId || nodeIndex === undefined) return undefined;
-    const stored = localStorage.getItem(`blueprint_${courseId}_${nodeIndex}`);
-    return stored ? JSON.parse(stored) : undefined;
-  }, [courseId, nodeIndex]);
+    if (!courseId) return undefined;
+    const data = getStoredDataV2();
+    const bundle = data.courses.find(c => c.blueprint.courseId === courseId);
+    return bundle?.blueprint;
+  }, [courseId]);
   
   // 用 ref 存储最新的 course 和 node，避免依赖对象引用
   const courseRef = useRef(course);
@@ -829,7 +831,7 @@ export default function LearnPage() {
           initialMessage={chatInitialMessage}
           contextInfo={{
             currentNodeTitle: node.title,
-            currentNodeGoal: blueprint?.teachingGoal,
+            currentNodeGoal: blueprint?.nodes[nodeIndex]?.teachingGoal,
           }}
         />
       )}

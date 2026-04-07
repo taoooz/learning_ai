@@ -54,9 +54,10 @@ function TocPageContent() {
         const tocResult = result as TocResponse;
 
         // 构建完整的 CourseBlueprint
+        // 注意：courseName 由 TOC API 生成，应作为课程标题（topic）使用
         const blueprint: CourseBlueprint = {
           courseId: `course-${Date.now()}`,
-          topic: outline.topic,
+          topic: tocResult.courseName || outline.topic,
           learnerPositioning: {
             estimatedLevel: outline.learnerPositioning.estimatedLevel,
             difficultySummary: outline.learnerPositioning.difficultySummary,

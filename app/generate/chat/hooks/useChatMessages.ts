@@ -6,7 +6,8 @@ export type Message =
   | { type: 'user'; content: string; timestamp: number }
   | { type: 'question'; question: string; options: string[]; questionNumber: number; timestamp: number; disabled?: boolean }
   | { type: 'outline'; blueprint: OutlineBlueprint; editable: boolean; timestamp: number }
-  | { type: 'loading'; message: string; timestamp: number };
+  | { type: 'loading'; message: string; timestamp: number }
+  | { type: 'streaming'; content: string; thinkingContent?: string; isThinking?: boolean; timestamp: number };
 
 export function useChatMessages() {
   const [messages, setMessages] = useState<Message[]>([]);
