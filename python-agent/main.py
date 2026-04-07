@@ -74,16 +74,41 @@ async def generate_outline(req: OutlineRequest):
             if event["type"] == "__full_content__":
                 # 流式完成，解析并保存到 session
                 parsed = event.get("parsed", {})
-                
+
                 # 创建 session
                 session = session_store.create("outline", state)
                 state["session_id"] = session.session_id
                 session_id = session.session_id
-                
+
                 if parsed.get("questions"):
                     q = parsed["questions"][0]
                     state["questions_asked"].append(q["question"])
                     state["current_question"] = q
+
+                    # 发送前端期望的 question_start + questions 事件
+                    yield f"data: {json.dumps({'type': 'question_start', 'questionNumber': state['question_count'] + 1})}\n\n"
+                    yield f"data: {json.dumps({'type': 'questions', 'questions': [q], 'sessionId': session_id})}\n\n"
+
+                if parsed.get("outline"):
+                    outline = parsed["outline"]
+                    blueprint = {
+                        "learningDirection": outline.get("learningDirection", ""),
+                        "learningGoal": outline.get("learningGoal", ""),
+                        "learnerPositioning": {
+                            "estimatedLevel": outline.get("estimatedLevel", "beginner"),
+                            "difficultySummary": "",
+                            "backgroundSummary": outline.get("backgroundSummary", ""),
+                            "skipBasics": outline.get("skipBasics", []),
+                            "whyThisCourseFits": "",
+                        },
+                    }
+                    state["blueprint"] = blueprint
+
+                    # 发送前端期望的 blueprint 事件序列
+                    yield f"data: {json.dumps({'type': 'blueprint_start'})}\n\n"
+                    for field in ["learningDirection", "learningGoal", "learnerPositioning"]:
+                        yield f"data: {json.dumps({'type': 'blueprint_field', 'field': field, 'value': blueprint[field]})}\n\n"
+                    yield f"data: {json.dumps({'type': 'confirmation', 'blueprint': blueprint, 'sessionId': session_id})}\n\n"
 
                 # 保存首次 messages 到 llm_messages，后续回答时用于构建多轮对话
                 ai_reply = event.get("content", "")
@@ -95,11 +120,11 @@ async def generate_outline(req: OutlineRequest):
                 session_store.update(session.session_id, state)
             else:
                 yield f"data: {json.dumps(event)}\n\n"
-        
-        # 流式结束后发送 sessionId
+
+        # 流式结束后发送 sessionId（如果还没发过）
         if session_id:
             yield f"data: {json.dumps({'type': 'session_created', 'sessionId': session_id})}\n\n"
-        
+
         yield "data: [DONE]\n\n"
 
     return EventSourceResponse(event_generator(), media_type="text/event-stream")
@@ -131,6 +156,31 @@ async def answer_question(req: OutlineAnswerRequest):
                     q = parsed["questions"][0]
                     state["questions_asked"].append(q["question"])
                     state["current_question"] = q
+
+                    # 发送前端期望的 question_start + questions 事件
+                    yield f"data: {json.dumps({'type': 'question_start', 'questionNumber': state['question_count'] + 1})}\n\n"
+                    yield f"data: {json.dumps({'type': 'questions', 'questions': [q], 'sessionId': req.sessionId})}\n\n"
+
+                if parsed.get("outline"):
+                    outline = parsed["outline"]
+                    blueprint = {
+                        "learningDirection": outline.get("learningDirection", ""),
+                        "learningGoal": outline.get("learningGoal", ""),
+                        "learnerPositioning": {
+                            "estimatedLevel": outline.get("estimatedLevel", "beginner"),
+                            "difficultySummary": "",
+                            "backgroundSummary": outline.get("backgroundSummary", ""),
+                            "skipBasics": outline.get("skipBasics", []),
+                            "whyThisCourseFits": "",
+                        },
+                    }
+                    state["blueprint"] = blueprint
+
+                    # 发送前端期望的 blueprint 事件序列
+                    yield f"data: {json.dumps({'type': 'blueprint_start'})}\n\n"
+                    for field in ["learningDirection", "learningGoal", "learnerPositioning"]:
+                        yield f"data: {json.dumps({'type': 'blueprint_field', 'field': field, 'value': blueprint[field]})}\n\n"
+                    yield f"data: {json.dumps({'type': 'confirmation', 'blueprint': blueprint, 'sessionId': req.sessionId})}\n\n"
 
                 # 保存 AI 回复到 llm_messages
                 ai_reply = event.get("content", "")
