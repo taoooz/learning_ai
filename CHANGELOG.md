@@ -7,17 +7,21 @@
 **问题**
 - 澄清环节多轮问答时，AI 无法记住之前的问题和回答
 - 每次用户回答后，AI 都是独立请求，没有上下文
+- **根本原因**：Python Agent 创建了 session 但没有通过 SSE 发送 sessionId 给前端
 
 **修复**
-- Python Agent 现在正确解析 `<quiz>` 标签，提取问题内容
-- 每次 AI 提问时，保存问题到 session 的 `questions_asked` 列表
-- 用户回答时，从 session 读取完整的问答历史
-- `build_answer_prompt` 包含所有历史问答记录
+- Python Agent 正确解析 `<quiz>` 和 `<outline>` 标签
+- 每次 AI 提问/生成纲要时，保存到 session
+- **关键修复**：流式完成后，通过 SSE 发送 `questions` 或 `confirmation` 事件（包含 sessionId）
+- 前端接收 sessionId 后，后续请求都会携带它
 
 **技术细节**
 - 新增 `parse_content_blocks()` 函数解析 HTML 标签
 - `stream_llm_and_parse()` 返回解析后的结构化数据
-- `generate_outline` 和 `answer_question` 路由保存问题到 session
+- `generate_outline` 和 `answer_question` 路由：
+  - 解析问题/纲要
+  - 保存到 session
+  - 发送包含 sessionId 的 SSE 事件
 
 ### 🔄 统一到 Python Agent：TOC、Cards、Questions 迁移
 
