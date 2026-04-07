@@ -3,8 +3,4 @@ export * from './blueprint';
 export * from './node-lesson';
 export * from './course-tree';
 export * from './node-content';
-export * from './outline';
-export * from './toc';
-export * from './cards';
-export * from './questions';
 export * from './profile';

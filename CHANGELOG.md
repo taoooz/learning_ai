@@ -2,6 +2,25 @@
 
 ## 2026-04-07
 
+### 🔄 统一到 Python Agent：TOC、Cards、Questions 迁移
+
+**迁移完成**
+- ✅ TOC 服务：课程目录生成
+- ✅ Cards 服务：节点学习卡片生成
+- ✅ Questions 服务：节点练习题生成
+- ✅ 所有 AI 生成逻辑统一到 Python Agent
+
+**架构优化**
+- Next.js API 改为纯转发层（调用 Python Agent）
+- Python Agent 统一管理所有 prompt 和 AI 调用
+- 删除废弃的 TypeScript prompt 文件（outline.ts、toc.ts、cards.ts、questions.ts）
+- 代码更整洁、职责更清晰
+
+**优势**
+- 统一的 prompt 管理（Python Agent）
+- 为未来流式化做准备（TOC、Cards、Questions 可轻松改为流式）
+- 更易维护和扩展
+
 ### 🚀 Markdown 协议流式对话系统（完整版）
 
 **协议升级：HTML 标签格式**

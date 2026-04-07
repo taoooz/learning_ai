@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { buildTocPrompt } from '@/lib/prompt';
-import { callMiniMax, parseJSONResponse } from '@/lib/minimax';
 import { createMemoryRepository } from '@/lib/memory/repository';
 import { validateTocRequest } from '@/lib/validation/api-schemas';
+
+// Python Agent 服务地址
+const PYTHON_AGENT_URL = process.env.PYTHON_AGENT_URL || 'http://localhost:8000';
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,12 +13,19 @@ export async function POST(request: NextRequest) {
     const memoryRepository = createMemoryRepository({ initialMemory: userMemory });
     const planningPayload = memoryRepository.getPlanningPayload(blueprint.topic);
 
-    const prompt = buildTocPrompt(blueprint, planningPayload);
+    console.log('[TOC API] Calling Python Agent');
 
-    const content = await callMiniMax(prompt);
+    const response = await fetch(`${PYTHON_AGENT_URL}/api/agents/toc/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ blueprint, planningPayload }),
+    });
 
-    const result = parseJSONResponse(content);
+    if (!response.ok) {
+      throw new Error(`Python Agent error: ${response.status}`);
+    }
 
+    const result = await response.json();
     return NextResponse.json(result);
   } catch (error) {
     console.error('[TOC API] Error:', error);
