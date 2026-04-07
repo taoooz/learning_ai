@@ -2,6 +2,23 @@
 
 ## 2026-04-07
 
+### 🐛 修复：澄清环节 AI 记忆问题
+
+**问题**
+- 澄清环节多轮问答时，AI 无法记住之前的问题和回答
+- 每次用户回答后，AI 都是独立请求，没有上下文
+
+**修复**
+- Python Agent 现在正确解析 `<quiz>` 标签，提取问题内容
+- 每次 AI 提问时，保存问题到 session 的 `questions_asked` 列表
+- 用户回答时，从 session 读取完整的问答历史
+- `build_answer_prompt` 包含所有历史问答记录
+
+**技术细节**
+- 新增 `parse_content_blocks()` 函数解析 HTML 标签
+- `stream_llm_and_parse()` 返回解析后的结构化数据
+- `generate_outline` 和 `answer_question` 路由保存问题到 session
+
 ### 🔄 统一到 Python Agent：TOC、Cards、Questions 迁移
 
 **迁移完成**
