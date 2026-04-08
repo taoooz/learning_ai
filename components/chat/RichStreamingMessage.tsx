@@ -2,7 +2,9 @@
 
 import { motion } from 'framer-motion';
 import { useEffect, useRef, useState } from 'react';
-import { parseStreamContent, hasIncompleteBlock, type ContentBlock } from '@/app/generate/chat/utils/contentParser';
+import { parseStreamContent, type ContentBlock } from '@/app/generate/chat/utils/contentParser';
+import { getRichStreamingLayoutState } from './rich-streaming-layout';
+import { getThinkingPresentationMode } from './rich-streaming-presentation';
 import { QuestionCard } from './QuestionCard';
 import { OutlineCard } from './OutlineCard';
 
@@ -10,16 +12,18 @@ type RichStreamingMessageProps = {
   content: string;
   thinkingContent?: string;
   isThinking?: boolean;
-  onQuestionAnswer?: (questionId: string, answer: string) => void;
+  onQuestionAnswer?: (answer: string) => void;
   onOutlineConfirm?: () => void;
+  disableInteractions?: boolean;
 };
 
-export function RichStreamingMessage({ 
-  content, 
-  thinkingContent, 
+export function RichStreamingMessage({
+  content,
+  thinkingContent,
   isThinking,
   onQuestionAnswer,
   onOutlineConfirm,
+  disableInteractions = false,
 }: RichStreamingMessageProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const [isThinkingExpanded, setIsThinkingExpanded] = useState(true);
@@ -37,16 +41,37 @@ export function RichStreamingMessage({
     }
   }, [isThinking, thinkingContent]);
 
-  // 解析内容块
+  // 实时解析内容块（包括不完整块）
   useEffect(() => {
-    if (content && !hasIncompleteBlock(content)) {
-      const parsedBlocks = parseStreamContent(content);
-      setBlocks(parsedBlocks);
-      
-      // 如果解析出了问题或纲要块，说明流式内容已完成，设置 isThinking 为 false
-      // 这个逻辑应该在父组件处理，这里只是展示
+    if (!content) {
+      setBlocks([]);
+      return;
     }
+    const parsedBlocks = parseStreamContent(content);
+    setBlocks(parsedBlocks);
   }, [content]);
+
+  const layoutState = getRichStreamingLayoutState({ blocks, content, thinkingContent });
+  const shouldShowThinkingSection = layoutState.hasThinkingContent;
+  const shouldShowPrimarySection = layoutState.hasPrimaryContent;
+  const thinkingPresentation = getThinkingPresentationMode({
+    isThinking,
+    hasPrimaryContent: shouldShowPrimarySection,
+    isExpanded: isThinkingExpanded,
+  });
+  const thinkingShellClassName =
+    thinkingPresentation === 'secondary-collapsed'
+      ? 'mx-3 mb-0 mt-3 rounded-[18px] border border-black/[0.04] bg-[rgba(246,244,240,0.88)]'
+      : 'mx-3 mb-2 mt-3 rounded-[20px] border border-black/[0.04] bg-[linear-gradient(135deg,rgba(246,244,240,0.96),rgba(250,248,245,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]';
+  const thinkingBodyClassName =
+    'text-secondary/90';
+  const thinkingLabelClassName =
+    thinkingPresentation === 'secondary-collapsed'
+      ? 'text-[11px] font-medium tracking-[0.01em] text-secondary/75'
+      : 'text-[12px] font-medium text-secondary/80';
+  const primarySectionClassName = shouldShowThinkingSection
+    ? 'px-4 pb-4 pt-3'
+    : 'px-4 py-4';
 
   return (
     <motion.div
@@ -55,42 +80,47 @@ export function RichStreamingMessage({
       transition={{ duration: 0.3 }}
       className="flex justify-start w-full"
     >
-      <div className="w-full max-w-[90%] space-y-3">
-        {/* 主卡片 */}
-        <div className="rounded-2xl border border-[rgba(0,0,0,0.06)] bg-surface overflow-hidden">
-          {/* 思考区域 */}
-          {thinkingContent && (
-            <div className="border-b border-subtle/50">
+      <div ref={contentRef} className="w-full max-w-[90%]">
+        <div className="overflow-hidden rounded-[30px] border border-[rgba(0,0,0,0.06)] bg-[linear-gradient(180deg,rgba(255,252,248,0.98),rgba(255,255,255,0.98))] shadow-[0_14px_36px_rgba(15,23,42,0.05)]">
+          {shouldShowThinkingSection && (
+            <div className={thinkingShellClassName}>
               <button
                 onClick={() => setIsThinkingExpanded(!isThinkingExpanded)}
-                className="w-full px-4 py-2.5 flex items-center justify-between hover:bg-subtle/30 transition-colors"
+                className="flex w-full items-center justify-between px-4 py-3 transition-colors"
               >
                 <div className="flex items-center gap-2">
                   {isThinking && (
-                    <div className="flex gap-1">
+                    <div className="inline-flex items-center gap-1.5 px-1 py-1">
                       <motion.div
                         animate={{ scale: [1, 1.2, 1] }}
                         transition={{ duration: 0.6, repeat: Infinity, delay: 0 }}
-                        className="h-1.5 w-1.5 rounded-full bg-accent/60"
+                        className="h-1.5 w-1.5 rounded-full bg-accent/70"
                       />
                       <motion.div
                         animate={{ scale: [1, 1.2, 1] }}
                         transition={{ duration: 0.6, repeat: Infinity, delay: 0.2 }}
-                        className="h-1.5 w-1.5 rounded-full bg-accent/60"
+                        className="h-1.5 w-1.5 rounded-full bg-accent/70"
                       />
                       <motion.div
                         animate={{ scale: [1, 1.2, 1] }}
                         transition={{ duration: 0.6, repeat: Infinity, delay: 0.4 }}
-                        className="h-1.5 w-1.5 rounded-full bg-accent/60"
+                        className="h-1.5 w-1.5 rounded-full bg-accent/70"
                       />
                     </div>
                   )}
-                  <span className="text-xs font-medium text-tertiary">
+                  {!isThinking && (
+                    <div className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/[0.04] text-secondary/70">
+                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6l4 2" />
+                      </svg>
+                    </div>
+                  )}
+                  <span className={thinkingLabelClassName}>
                     {isThinking ? '思考中...' : '思考过程'}
                   </span>
                 </div>
                 <svg
-                  className={`w-4 h-4 text-tertiary transition-transform ${isThinkingExpanded ? 'rotate-180' : ''}`}
+                  className={`h-4 w-4 text-tertiary transition-transform duration-200 ${isThinkingExpanded ? 'rotate-180' : ''}`}
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -98,15 +128,16 @@ export function RichStreamingMessage({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
+
               {isThinkingExpanded && (
                 <motion.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
+                  transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                   className="overflow-hidden"
                 >
-                  <div className="px-4 pb-3 text-sm text-tertiary leading-relaxed whitespace-pre-wrap">
+                  <div className={`px-4 pb-4 text-[13px] leading-6 whitespace-pre-wrap ${thinkingBodyClassName}`}>
                     {thinkingContent}
                   </div>
                 </motion.div>
@@ -114,72 +145,89 @@ export function RichStreamingMessage({
             </div>
           )}
 
-          {/* 内容区域 */}
-          <div ref={contentRef} className="px-4 py-3">
-            {blocks.length > 0 ? (
+          {shouldShowPrimarySection && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+              className={primarySectionClassName}
+            >
               <div className="space-y-4">
-                {blocks.map((block, idx) => {
-                  if (block.type === 'text') {
+                {blocks.length > 0 ? (
+                  blocks.map((block, idx) => {
+                    if (block.type === 'text') {
+                      return (
+                        <div
+                          key={`t-${idx}`}
+                          className="text-[15px] leading-7 text-primary whitespace-pre-wrap"
+                        >
+                          {block.content}
+                        </div>
+                      );
+                    }
+
+                    if (block.type === 'question') {
+                      const optionsArray = Object.entries(block.options)
+                        .sort(([a], [b]) => a.localeCompare(b))
+                        .map(([, value]) => value);
+
+                      return (
+                        <QuestionCard
+                          key={`q-${idx}`}
+                          question={block.question}
+                          options={optionsArray}
+                          questionNumber={parseInt(block.id, 10) || idx + 1}
+                          onSelect={(answer) => onQuestionAnswer?.(answer)}
+                          disabled={disableInteractions}
+                          embedded
+                        />
+                      );
+                    }
+
                     return (
-                      <div key={idx} className="text-[15px] leading-relaxed text-primary whitespace-pre-wrap">
-                        {block.content}
-                      </div>
+                      <OutlineCard
+                        key={`o-${idx}`}
+                        blueprint={{
+                          learningDirection: block.learningDirection,
+                          learningGoal: block.learningGoal,
+                          learnerPositioning: {
+                            estimatedLevel: block.estimatedLevel as 'novice' | 'beginner' | 'intermediate' | 'advanced',
+                            difficultySummary: '',
+                            backgroundSummary: block.backgroundSummary || '',
+                            skipBasics: block.skipBasics || [],
+                            whyThisCourseFits: '',
+                          },
+                        }}
+                        onConfirm={() => onOutlineConfirm?.()}
+                        showActions={block.complete && !disableInteractions}
+                        embedded
+                      />
                     );
-                  }
-                  return null;
-                })}
-              </div>
-            ) : (
-              <div className="text-[15px] leading-relaxed text-primary whitespace-pre-wrap">
-                {content}
-                {isThinking && !thinkingContent && (
+                  })
+                ) : (
+                  <div className="text-[15px] leading-relaxed text-primary whitespace-pre-wrap">
+                    {content}
+                    {isThinking && !thinkingContent && (
+                      <motion.span
+                        animate={{ opacity: [1, 0.3, 1] }}
+                        transition={{ duration: 0.8, repeat: Infinity }}
+                        className="ml-0.5 inline-block h-4 w-0.5 align-middle bg-accent"
+                      />
+                    )}
+                  </div>
+                )}
+
+                {blocks.some((block) => block.type !== 'text' && !block.complete) && (
                   <motion.span
                     animate={{ opacity: [1, 0.3, 1] }}
                     transition={{ duration: 0.8, repeat: Infinity }}
-                    className="inline-block w-0.5 h-4 bg-accent ml-0.5 align-middle"
+                    className="inline-block h-4 w-0.5 align-middle bg-accent"
                   />
                 )}
               </div>
-            )}
-          </div>
+            </motion.div>
+          )}
         </div>
-
-        {/* 结构化组件 */}
-        {blocks.map((block, idx) => {
-          if (block.type === 'question') {
-            // 将 options 对象转换为数组
-            const optionsArray = Object.entries(block.options).map(([key, value]) => value);
-            return (
-              <QuestionCard
-                key={`q-${idx}`}
-                question={block.question}
-                options={optionsArray}
-                questionNumber={parseInt(block.id) || idx + 1}
-                onSelect={(answer) => onQuestionAnswer?.(block.id, answer)}
-                disabled={false}
-              />
-            );
-          }
-          if (block.type === 'outline') {
-            return (
-              <OutlineCard
-                key={`o-${idx}`}
-                blueprint={{
-                  learningDirection: block.learningDirection,
-                  learningGoal: block.learningGoal,
-                  learnerPositioning: {
-                    estimatedLevel: block.estimatedLevel as 'novice' | 'beginner' | 'intermediate' | 'advanced',
-                    backgroundSummary: block.backgroundSummary,
-                    skipBasics: block.skipBasics,
-                  },
-                }}
-                onConfirm={onOutlineConfirm}
-                showActions={true}
-              />
-            );
-          }
-          return null;
-        })}
       </div>
     </motion.div>
   );

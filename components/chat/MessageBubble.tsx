@@ -23,7 +23,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       <div
         className={`rounded-2xl px-4 py-3 text-[15px] leading-relaxed ${
           isUser
-            ? 'bg-accent text-white max-w-[80%]'
+            ? 'max-w-[80%] border border-[rgba(190,120,38,0.18)] bg-[linear-gradient(135deg,rgba(222,147,56,0.98),rgba(199,127,43,0.96))] text-white shadow-[0_10px_24px_rgba(191,123,43,0.18)]'
             : 'bg-surface border border-[rgba(0,0,0,0.06)] text-primary'
         }`}
       >

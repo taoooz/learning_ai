@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { CourseTree, GenerationStatus, NodeLesson, CourseBlueprint, StoredCourseBundle, OutlineLearnerPositioning, OutlineResponse } from '@/types/course';
+import { CourseTree, GenerationStatus, NodeLesson, CourseBlueprint, StoredCourseBundle, OutlineLearnerPositioning, OutlineResponse, LearningCard, Question } from '@/types/course';
 import {
   activateSystemCourse,
   addCourseBundle,
@@ -17,6 +17,7 @@ import {
 } from '@/lib/storage';
 import { getUserMemoryStoreSnapshot } from '@/hooks/useUserMemory';
 import { createMemoryRepository } from '@/lib/memory/repository';
+import { normalizeVisualization } from '@/lib/visualization';
 
 interface CourseContextType {
   courses: CourseTree[];
@@ -59,9 +60,104 @@ interface CourseContextType {
 
 const CourseContext = createContext<CourseContextType | null>(null);
 
+export function shouldEnterLearningPhase(node?: { cards?: Array<unknown>; questions?: Array<unknown> }): boolean {
+  return Array.isArray(node?.cards) && node.cards.length > 0;
+}
+
+export function hasResolvedQuestions(node?: { questions?: Array<unknown> }): boolean {
+  return Array.isArray(node?.questions);
+}
+
+export function buildLearningSteps(cards?: LearningCard[], questions?: Question[]) {
+  if (!Array.isArray(cards) || cards.length === 0) {
+    return [];
+  }
+
+  return [
+    ...cards.map((card) => ({
+      id: `card-${card.id}`,
+      type: 'card' as const,
+      card,
+    })),
+    ...(questions ?? []).map((question) => ({
+      id: `question-${question.id}`,
+      type: 'question' as const,
+      question,
+    })),
+  ];
+}
+
+export function getPendingNextNodeIndex(
+  nodes: Array<{ cards?: Array<unknown> }>,
+  currentNodeIndex: number,
+): number | null {
+  const nextIndex = currentNodeIndex + 1;
+  if (nextIndex >= nodes.length) {
+    return null;
+  }
+
+  return Array.isArray(nodes[nextIndex]?.cards) && nodes[nextIndex].cards.length > 0
+    ? null
+    : nextIndex;
+}
+
+export function buildNodeContentPatch(input: {
+  courseId: string;
+  nodeIndex: number;
+  cards: NodeLesson['cards'];
+  questions?: NodeLesson['questions'];
+}): Pick<NodeLesson, 'courseId' | 'nodeIndex' | 'cards' | 'questions'> {
+  return {
+    courseId: input.courseId,
+    nodeIndex: input.nodeIndex,
+    cards: input.cards,
+    questions: input.questions ?? [],
+  };
+}
+
+export function buildNodeInfoPayload(bundle: StoredCourseBundle, nodeIndex: number) {
+  const node = bundle.blueprint.nodes[nodeIndex];
+  const prevNode = nodeIndex > 0 ? bundle.blueprint.nodes[nodeIndex - 1] : undefined;
+  const nextNode = nodeIndex < bundle.blueprint.nodes.length - 1 ? bundle.blueprint.nodes[nodeIndex + 1] : undefined;
+  const learnerPositioning = bundle.blueprint.learnerPositioning as typeof bundle.blueprint.learnerPositioning & {
+    backgroundSummary?: string;
+  };
+
+  return {
+    title: node.title,
+    teachingGoal: node.teachingGoal,
+    teachConceptIds: node.teachConceptIds || [],
+    prerequisiteConceptIds: node.prerequisiteConceptIds || [],
+    courseName: bundle.blueprint.topic,
+    courseDescription: bundle.blueprint.courseGoal,
+    estimatedLevel: bundle.blueprint.learnerPositioning.estimatedLevel,
+    backgroundSummary: learnerPositioning.backgroundSummary,
+    prevNode: prevNode ? { title: prevNode.title, concepts: prevNode.teachConceptIds || [] } : undefined,
+    nextNode: nextNode ? { title: nextNode.title, concepts: nextNode.teachConceptIds || [] } : undefined,
+  };
+}
+
+function normalizeGeneratedCards<T extends { visualization?: NodeLesson['cards'][number]['visualization'] }>(cards: T[] | undefined): T[] {
+  return (cards || []).map((card) => ({
+    ...card,
+    visualization: normalizeVisualization(card.visualization),
+  }));
+}
+
+function coerceNodeLessonCards(cards: LearningCard[] | NodeLesson['cards'] | undefined): NodeLesson['cards'] {
+  return (cards || []).map((card) => ({
+    ...card,
+    coveredConceptIds: 'coveredConceptIds' in card && Array.isArray(card.coveredConceptIds)
+      ? card.coveredConceptIds
+      : [],
+    visualization: normalizeVisualization(card.visualization),
+  }));
+}
+
 function getGenerationErrorMessage(data: unknown, fallback: string): string {
   if (typeof data === 'object' && data !== null && 'error' in data && typeof data.error === 'string') {
-    return data.error;
+    const details = 'details' in data && typeof data.details === 'string' ? data.details : undefined;
+    return details ? `${data.error}\n${details}` : data.error;
   }
 
   return fallback;
@@ -216,18 +312,14 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     try {
       const bundle = getStoredCourseBundle(courseId);
       if (!bundle) throw new Error('Course bundle not found');
-      const node = bundle.blueprint.nodes[nodeIndex];
+      const nodeInfo = buildNodeInfoPayload(bundle, nodeIndex);
 
       const response = await fetch('/api/generate/node/cards', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           topic: bundle.blueprint.topic,
-          nodeInfo: {
-            teachingGoal: node.teachingGoal,
-            teachConceptIds: node.teachConceptIds,
-            prerequisiteConceptIds: node.prerequisiteConceptIds,
-          },
+          nodeInfo,
           learnerBackground: options.learnerBackground,
           prevNodeSummary: options.prevNodeSummary,
           nextNodeSummary: options.nextNodeSummary,
@@ -250,41 +342,149 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const generateNodeQuestions = useCallback(async (courseId: string, nodeIndex: number) => {
-    setGenerationStatus('generating');
-    setGenerationError(null);
-    try {
-      const bundle = getStoredCourseBundle(courseId);
-      if (!bundle) throw new Error('Course bundle not found');
-      const node = bundle.blueprint.nodes[nodeIndex];
-      const lesson = bundle.lessons[nodeIndex];
-
-      const response = await fetch('/api/generate/node/questions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          topic: bundle.blueprint.topic,
-          nodeInfo: {
-            teachingGoal: node.teachingGoal,
-            teachConceptIds: node.teachConceptIds,
-            prerequisiteConceptIds: node.prerequisiteConceptIds,
-          },
-          cards: lesson.cards,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(getGenerationErrorMessage(data, '题目生成失败，请稍后再试。'));
-      }
-
-      setGenerationStatus('success');
-      return data;
-    } catch (error) {
-      setGenerationError(error instanceof Error ? error.message : '题目生成失败，请稍后再试。');
-      setGenerationStatus('error');
-      throw error;
+    const requestKey = `${courseId}-${nodeIndex}`;
+    const existingPromise = generatingQuestionsRef.current.get(requestKey);
+    if (existingPromise) {
+      return existingPromise;
     }
+
+    const course = coursesRef.current.find((item) => item.courseId === courseId);
+    const existingNode = course?.nodes[nodeIndex];
+
+    if (!course || !existingNode || !shouldEnterLearningPhase(existingNode)) {
+      return { questions: [] };
+    }
+
+    if (hasResolvedQuestions(existingNode)) {
+      return { questions: existingNode.questions as NodeLesson['questions'] };
+    }
+
+    const promise = (async () => {
+      setGenerationStatus('generating');
+      setGenerationError(null);
+      try {
+        const bundle = getStoredCourseBundle(courseId);
+        if (!bundle) throw new Error('Course bundle not found');
+
+        const storedLesson = bundle.lessons[nodeIndex];
+        const cards = storedLesson?.cards
+          ? normalizeGeneratedCards(storedLesson.cards)
+          : coerceNodeLessonCards(existingNode.cards);
+        const nodeInfo = buildNodeInfoPayload(bundle, nodeIndex);
+        const memoryRepository = createMemoryRepository();
+        const userMemory = memoryRepository.getMemoryStoreV3();
+
+        const response = await fetch('/api/generate/node/questions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            topic: bundle.blueprint.topic,
+            nodeInfo,
+            cards,
+            userMemory,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(getGenerationErrorMessage(data, '题目生成失败，请稍后再试。'));
+        }
+
+        const questions = data.questions || [];
+        const lesson = {
+          ...(storedLesson || {
+            courseId,
+            nodeIndex,
+            title: bundle.blueprint.nodes[nodeIndex]?.title || '',
+            teachingGoal: bundle.blueprint.nodes[nodeIndex]?.teachingGoal || '',
+            teachConceptIds: bundle.blueprint.nodes[nodeIndex]?.teachConceptIds || [],
+            assessmentTargetIds: bundle.blueprint.nodes[nodeIndex]?.teachConceptIds || [],
+          }),
+          cards,
+          questions,
+        } as NodeLesson;
+
+        saveNodeLesson(courseId, nodeIndex, lesson);
+        setCourses(prev => prev.map(item => {
+          if (item.courseId !== courseId) return item;
+          const nextCourse = { ...item };
+          nextCourse.nodes[nodeIndex] = {
+            ...nextCourse.nodes[nodeIndex],
+            cards,
+            questions,
+          };
+          return nextCourse;
+        }));
+        setCurrentCourse(prev => {
+          if (!prev || prev.courseId !== courseId) return prev;
+          const nextCourse = { ...prev };
+          nextCourse.nodes[nodeIndex] = {
+            ...nextCourse.nodes[nodeIndex],
+            cards,
+            questions,
+          };
+          return nextCourse;
+        });
+
+        setGenerationStatus('success');
+        return { questions };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '题目生成失败，请稍后再试。';
+        setGenerationError(message);
+        setGenerationStatus('error');
+
+        const bundle = getStoredCourseBundle(courseId);
+        const storedLesson = bundle?.lessons[nodeIndex];
+        const fallbackCards = storedLesson?.cards
+          ? normalizeGeneratedCards(storedLesson.cards)
+          : coerceNodeLessonCards(existingNode.cards);
+
+        if (bundle) {
+          const fallbackLesson = {
+            ...(storedLesson || {
+              courseId,
+              nodeIndex,
+              title: bundle.blueprint.nodes[nodeIndex]?.title || '',
+              teachingGoal: bundle.blueprint.nodes[nodeIndex]?.teachingGoal || '',
+              teachConceptIds: bundle.blueprint.nodes[nodeIndex]?.teachConceptIds || [],
+              assessmentTargetIds: bundle.blueprint.nodes[nodeIndex]?.teachConceptIds || [],
+            }),
+            cards: fallbackCards,
+            questions: [],
+          } as NodeLesson;
+
+          saveNodeLesson(courseId, nodeIndex, fallbackLesson);
+          setCourses(prev => prev.map(item => {
+            if (item.courseId !== courseId) return item;
+            const nextCourse = { ...item };
+            nextCourse.nodes[nodeIndex] = {
+              ...nextCourse.nodes[nodeIndex],
+              cards: fallbackCards,
+              questions: [],
+            };
+            return nextCourse;
+          }));
+          setCurrentCourse(prev => {
+            if (!prev || prev.courseId !== courseId) return prev;
+            const nextCourse = { ...prev };
+            nextCourse.nodes[nodeIndex] = {
+              ...nextCourse.nodes[nodeIndex],
+              cards: fallbackCards,
+              questions: [],
+            };
+            return nextCourse;
+          });
+        }
+
+        throw error;
+      } finally {
+        generatingQuestionsRef.current.delete(requestKey);
+      }
+    })();
+
+    generatingQuestionsRef.current.set(requestKey, promise);
+    return promise;
   }, []);
 
   const startSystemCourse = useCallback((courseId: string) => {
@@ -300,6 +500,7 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
 
   // 用于缓存正在进行的请求 Promise
   const generatingNodesRef = useRef<Map<string, Promise<void>>>(new Map());
+  const generatingQuestionsRef = useRef<Map<string, Promise<{ questions: NodeLesson['questions'] }>>>(new Map());
 
   const generateNodeContent = useCallback(async (courseId: string, nodeIndex: number) => {
     const requestKey = `${courseId}-${nodeIndex}`;
@@ -310,17 +511,45 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     }
     
     const course = coursesRef.current.find(c => c.courseId === courseId);
-    if (!course || course.nodes[nodeIndex].cards) return;
     const bundle = getStoredCourseBundle(courseId);
     if (!bundle) throw new Error('Course bundle not found');
+    const storedLesson = bundle.lessons[nodeIndex];
+    const storedCards = storedLesson?.cards?.length ? normalizeGeneratedCards(storedLesson.cards) : undefined;
+    const storedQuestions = storedLesson?.questions;
+
+    if (storedCards && storedCards.length > 0) {
+      setCourses(prev => prev.map(item => {
+        if (item.courseId !== courseId) return item;
+        const nextCourse = { ...item };
+        nextCourse.nodes[nodeIndex] = {
+          ...nextCourse.nodes[nodeIndex],
+          cards: storedCards,
+          questions: Array.isArray(storedQuestions) ? storedQuestions : nextCourse.nodes[nodeIndex].questions,
+        };
+        return nextCourse;
+      }));
+      setCurrentCourse(prev => {
+        if (!prev || prev.courseId !== courseId) return prev;
+        const nextCourse = { ...prev };
+        nextCourse.nodes[nodeIndex] = {
+          ...nextCourse.nodes[nodeIndex],
+          cards: storedCards,
+          questions: Array.isArray(storedQuestions) ? storedQuestions : nextCourse.nodes[nodeIndex].questions,
+        };
+        return nextCourse;
+      });
+      return;
+    }
+
+    if (!course || course.nodes[nodeIndex].cards) return;
 
 
     // 创建新的 Promise 并缓存
     const promise = (async () => {
       try {
         const memoryRepository = createMemoryRepository();
-        const node = bundle.blueprint.nodes[nodeIndex];
         const userMemory = memoryRepository.getMemoryStoreV3();
+        const nodeInfo = buildNodeInfoPayload(bundle, nodeIndex);
         
         // 第一步：生成 Cards（快速返回）
         const cardsResponse = await fetch('/api/generate/node/cards', {
@@ -328,12 +557,7 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             topic: course.topic,
-            nodeInfo: {
-              title: node.title,
-              teachingGoal: node.teachingGoal,
-              teachConceptIds: node.teachConceptIds || [],
-              prerequisiteConceptIds: node.prerequisiteConceptIds || [],
-            },
+            nodeInfo,
             userMemory,
           }),
         });
@@ -344,13 +568,17 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
         }
 
         const cardsData = await cardsResponse.json();
+        const normalizedCards = coerceNodeLessonCards(cardsData.cards || []);
 
         // 立即保存 Cards，让用户可以开始学习
-        const partialLesson: Partial<NodeLesson> = {
+        const partialLesson = {
           courseId,
           nodeIndex,
-          cards: cardsData.cards || [],
-          questions: [], // 暂时为空
+          title: bundle.blueprint.nodes[nodeIndex]?.title || '',
+          teachingGoal: bundle.blueprint.nodes[nodeIndex]?.teachingGoal || '',
+          teachConceptIds: bundle.blueprint.nodes[nodeIndex]?.teachConceptIds || [],
+          assessmentTargetIds: bundle.blueprint.nodes[nodeIndex]?.teachConceptIds || [],
+          cards: normalizedCards,
         };
         saveNodeLesson(courseId, nodeIndex, partialLesson as NodeLesson);
         
@@ -358,49 +586,18 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
         const updatedCourse = { ...course };
         updatedCourse.nodes[nodeIndex] = {
           ...updatedCourse.nodes[nodeIndex],
-          cards: cardsData.cards || [],
+          cards: normalizedCards,
         };
         setCourses(prev => prev.map(c => c.courseId === courseId ? updatedCourse : c));
-
-        // 第二步：后台生成 Questions（不阻塞用户）
-        const questionsResponse = await fetch('/api/generate/node/questions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            topic: course.topic,
-            nodeInfo: {
-              title: node.title,
-              teachingGoal: node.teachingGoal,
-              teachConceptIds: node.teachConceptIds || [],
-              prerequisiteConceptIds: node.prerequisiteConceptIds || [],
-            },
-            cards: cardsData.cards,
-            userMemory,
-          }),
+        setCurrentCourse(prev => {
+          if (!prev || prev.courseId !== courseId) return prev;
+          const nextCourse = { ...prev };
+          nextCourse.nodes[nodeIndex] = {
+            ...nextCourse.nodes[nodeIndex],
+            cards: normalizedCards,
+          };
+          return nextCourse;
         });
-
-        if (!questionsResponse.ok) {
-          console.warn('[generateNodeContent] Questions generation failed, using empty array');
-        } else {
-          const questionsData = await questionsResponse.json();
-
-          // 保存完整的 Lesson
-          const fullLesson: Partial<NodeLesson> = {
-            courseId,
-            nodeIndex,
-            cards: cardsData.cards || [],
-            questions: questionsData.questions || [],
-          };
-          saveNodeLesson(courseId, nodeIndex, fullLesson as NodeLesson);
-
-          // 更新状态
-          updatedCourse.nodes[nodeIndex] = {
-            ...updatedCourse.nodes[nodeIndex],
-            cards: cardsData.cards || [],
-            questions: questionsData.questions || [],
-          };
-          setCourses(prev => prev.map(c => c.courseId === courseId ? updatedCourse : c));
-        }
 
       } catch (error) {
         console.error('[generateNodeContent] Error:', error);
@@ -420,9 +617,8 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     const course = coursesRef.current.find(c => c.courseId === courseId);
     if (!course) return;
 
-    const nextIndex = currentNodeIndex + 1;
-    if (nextIndex >= course.nodes.length) return;
-    if (course.nodes[nextIndex].cards) return;
+    const nextIndex = getPendingNextNodeIndex(course.nodes, currentNodeIndex);
+    if (nextIndex === null) return;
 
     
     // 使用 generateNodeContent，复用防重复机制

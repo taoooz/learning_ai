@@ -22,7 +22,17 @@ export async function POST(request: NextRequest) {
     });
 
     if (!response.ok) {
-      throw new Error(`Python Agent error: ${response.status}`);
+      const responseText = await response.text();
+      let parsedDetail = responseText;
+
+      try {
+        const parsed = JSON.parse(responseText) as { detail?: string; error?: string; message?: string };
+        parsedDetail = parsed.detail || parsed.error || parsed.message || responseText;
+      } catch {
+        // keep raw text
+      }
+
+      throw new Error(`Python Agent error: ${response.status}${parsedDetail ? ` - ${parsedDetail}` : ''}`);
     }
 
     const result = await response.json();

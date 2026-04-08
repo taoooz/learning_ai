@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { parseStreamContent } from '../app/generate/chat/utils/contentParser';
+import { parseSSELine } from '../app/generate/chat/utils/sseParser';
+import { normalizeVisualization } from '../lib/visualization';
 
 let getCourseTreeLayout: typeof import('../lib/course-tree-layout').getCourseTreeLayout;
 let getCourseTreeInitialScrollTop: typeof import('../lib/course-tree-layout').getCourseTreeInitialScrollTop;
@@ -30,6 +33,12 @@ let migrateUserMemoryToV2: typeof import('../hooks/useUserMemory').migrateUserMe
 let normalizeConceptKey: typeof import('../hooks/useUserMemory').normalizeConceptKey;
 let recordQuestionAttemptInMemory: typeof import('../hooks/useUserMemory').recordQuestionAttemptInMemory;
 let recordChatInsightInMemory: typeof import('../hooks/useUserMemory').recordChatInsightInMemory;
+let shouldEnterLearningPhase: typeof import('../contexts/CourseContext').shouldEnterLearningPhase;
+let hasResolvedQuestions: typeof import('../contexts/CourseContext').hasResolvedQuestions;
+let buildNodeContentPatch: typeof import('../contexts/CourseContext').buildNodeContentPatch;
+let buildNodeInfoPayload: typeof import('../contexts/CourseContext').buildNodeInfoPayload;
+let buildLearningSteps: typeof import('../contexts/CourseContext').buildLearningSteps;
+let getPendingNextNodeIndex: typeof import('../contexts/CourseContext').getPendingNextNodeIndex;
 
 test.before(async () => {
   const layoutModule = await import('../lib/course-tree-layout');
@@ -50,6 +59,14 @@ test.before(async () => {
 
   const repositoryModule = await import('../lib/memory/repository');
   createMemoryRepository = repositoryModule.createMemoryRepository;
+
+  const courseContextModule = await import('../contexts/CourseContext');
+  shouldEnterLearningPhase = courseContextModule.shouldEnterLearningPhase;
+  hasResolvedQuestions = courseContextModule.hasResolvedQuestions;
+  buildNodeContentPatch = courseContextModule.buildNodeContentPatch;
+  buildNodeInfoPayload = courseContextModule.buildNodeInfoPayload;
+  buildLearningSteps = courseContextModule.buildLearningSteps;
+  getPendingNextNodeIndex = courseContextModule.getPendingNextNodeIndex;
 
   const aggregatorModule = await import('../lib/memory/aggregator');
   CHAT_CONCEPT_ALIASES = aggregatorModule.CHAT_CONCEPT_ALIASES;
@@ -248,6 +265,210 @@ test('recordQuestionAttemptInMemory updates mastery and escalates repeated gaps'
   assert.equal(mastery.needsReview, true);
   assert.equal(gap.severity, 'medium');
   assert.equal(gap.evidence.length, 2);
+});
+
+test('parseStreamContent keeps text, quiz, and outline blocks in original order', () => {
+  const blocks = parseStreamContent([
+    '先确认一下你的目标。',
+    '<quiz id="1">',
+    '<div slot="question">你更想先学原理还是实战？</div>',
+    '<div slot="option_A">先学原理</div>',
+    '<div slot="option_B">先做项目</div>',
+    '</quiz>',
+    '好的，我会按这个方向继续。',
+    '<outline>',
+    '<div slot="direction">Agent 入门路径</div>',
+    '<div slot="object">两周内建立完整认知</div>',
+    '<div slot="level">初级</div>',
+    '</outline>',
+  ].join(''));
+
+  assert.deepEqual(
+    blocks.map((block) => block.type),
+    ['text', 'question', 'text', 'outline'],
+  );
+
+  assert.equal(blocks[0]?.type, 'text');
+  assert.equal(blocks[0]?.type === 'text' ? blocks[0].content : '', '先确认一下你的目标。');
+
+  assert.equal(blocks[1]?.type, 'question');
+  if (blocks[1]?.type === 'question') {
+    assert.equal(blocks[1].question, '你更想先学原理还是实战？');
+    assert.deepEqual(blocks[1].options, {
+      A: '先学原理',
+      B: '先做项目',
+    });
+    assert.equal(blocks[1].complete, true);
+  }
+
+  assert.equal(blocks[2]?.type, 'text');
+  assert.equal(blocks[2]?.type === 'text' ? blocks[2].content : '', '好的，我会按这个方向继续。');
+
+  assert.equal(blocks[3]?.type, 'outline');
+  if (blocks[3]?.type === 'outline') {
+    assert.equal(blocks[3].learningDirection, 'Agent 入门路径');
+    assert.equal(blocks[3].learningGoal, '两周内建立完整认知');
+    assert.equal(blocks[3].estimatedLevel, 'beginner');
+    assert.equal(blocks[3].complete, true);
+  }
+});
+
+test('parseStreamContent yields incomplete quiz block as soon as opening tag appears', () => {
+  const blocks = parseStreamContent([
+    '我先问你一个问题：',
+    '<quiz id="2">',
+    '<div slot="question">你现在最卡的是',
+    '</div>',
+    '<div slot="option_A">概念太多记不住</div>',
+    '<div slot="option_B">知道概念但不会用',
+  ].join(''));
+
+  assert.deepEqual(
+    blocks.map((block) => block.type),
+    ['text', 'question'],
+  );
+
+  assert.equal(blocks[1]?.type, 'question');
+  if (blocks[1]?.type === 'question') {
+    assert.equal(blocks[1].question, '你现在最卡的是');
+    assert.deepEqual(blocks[1].options, {
+      A: '概念太多记不住',
+      B: '知道概念但不会用',
+    });
+    assert.equal(blocks[1].complete, false);
+  }
+});
+
+test('parseSSELine ignores done sentinel without warning noise', () => {
+  assert.equal(parseSSELine('data: [DONE]'), null);
+  assert.equal(parseSSELine('[DONE]'), null);
+});
+
+test('shouldEnterLearningPhase starts once cards are ready even if questions are still empty', () => {
+  assert.equal(shouldEnterLearningPhase({ cards: [{ id: 'card-1', title: '标题', content: '内容', coveredConceptIds: [] }], questions: [] }), true);
+  assert.equal(shouldEnterLearningPhase({ cards: [{ id: 'card-1', title: '标题', content: '内容', coveredConceptIds: [] }] }), true);
+  assert.equal(shouldEnterLearningPhase({ cards: [], questions: [] }), false);
+  assert.equal(shouldEnterLearningPhase({ questions: [] }), false);
+});
+
+test('hasResolvedQuestions treats an existing questions array as resolved even when empty', () => {
+  assert.equal(hasResolvedQuestions({ questions: [] }), true);
+  assert.equal(hasResolvedQuestions({ questions: [{ id: 'q-1', type: 'single', question: '问题', options: ['A. 选项'], answer: 'A', explanation: '解释', difficulty: 1, dimension: 'understanding', targetConceptId: 'concept-1' }] }), true);
+  assert.equal(hasResolvedQuestions({}), false);
+});
+
+test('buildLearningSteps allows learning with cards before questions are generated', () => {
+  const steps = buildLearningSteps(
+    [{ id: 'card-1', title: '标题', content: '内容' }],
+    undefined,
+  );
+
+  assert.equal(steps.length, 1);
+  assert.equal(steps[0]?.type, 'card');
+});
+
+test('getPendingNextNodeIndex only targets the immediate next node instead of skipping ahead', () => {
+  assert.equal(
+    getPendingNextNodeIndex(
+      [
+        { cards: [{ id: 'card-0' }] },
+        { cards: [{ id: 'card-1' }] },
+        {},
+      ],
+      0,
+    ),
+    null,
+  );
+
+  assert.equal(
+    getPendingNextNodeIndex(
+      [
+        { cards: [{ id: 'card-0' }] },
+        {},
+        {},
+      ],
+      0,
+    ),
+    1,
+  );
+});
+
+test('buildNodeContentPatch preserves cards and falls back to empty questions when generation fails', () => {
+  const patch = buildNodeContentPatch({
+    courseId: 'course-1',
+    nodeIndex: 2,
+    cards: [{ id: 'card-1', title: '什么是 Agent', content: 'Agent 是围绕目标行动的系统。', coveredConceptIds: [] }],
+  });
+
+  assert.equal(patch.courseId, 'course-1');
+  assert.equal(patch.nodeIndex, 2);
+  assert.equal(patch.cards.length, 1);
+  assert.deepEqual(patch.questions, []);
+});
+
+test('buildNodeInfoPayload includes course and adjacent node context for generation', () => {
+  const payload = buildNodeInfoPayload({
+    blueprint: {
+      courseId: 'course-1',
+      topic: 'Agent 入门课',
+      learnerPositioning: {
+        estimatedLevel: 'beginner',
+      },
+      courseGoal: '理解 Agent 的基本结构',
+      globalConcepts: [],
+      nodes: [
+        {
+          index: 0,
+          title: '什么是 Agent',
+          teachingGoal: '建立整体概念',
+          teachConceptIds: ['agent'],
+          prerequisiteConceptIds: [],
+          bridgeFromPreviousNode: '',
+          status: 'available',
+        },
+        {
+          index: 1,
+          title: '工具调用',
+          teachingGoal: '理解工具调用边界',
+          teachConceptIds: ['tool-calling'],
+          prerequisiteConceptIds: ['agent'],
+          bridgeFromPreviousNode: '',
+          status: 'locked',
+        },
+        {
+          index: 2,
+          title: '工作流编排',
+          teachingGoal: '理解工作流的多步性',
+          teachConceptIds: ['workflow'],
+          prerequisiteConceptIds: ['tool-calling'],
+          bridgeFromPreviousNode: '',
+          status: 'locked',
+        },
+      ],
+    },
+    treeView: {} as never,
+    lessons: {},
+  }, 1);
+
+  assert.equal(payload.courseName, 'Agent 入门课');
+  assert.equal(payload.courseDescription, '理解 Agent 的基本结构');
+  assert.equal(payload.backgroundSummary, undefined);
+  assert.equal(payload.prevNode?.title, '什么是 Agent');
+  assert.equal(payload.nextNode?.title, '工作流编排');
+});
+
+test('normalizeVisualization supports legacy aliases and nested data payload', () => {
+  const visualization = normalizeVisualization({
+    type: 'key_points',
+    data: {
+      title: '核心要点',
+      points: ['先判断目标', '再决定是否调用工具'],
+    },
+  });
+
+  assert.equal(visualization?.type, 'keyPoints');
+  assert.equal(visualization?.title, '核心要点');
+  assert.deepEqual(visualization?.items, ['先判断目标', '再决定是否调用工具']);
 });
 
 test('analyzeChatMessageForMemory ignores normal questions without confusion signals', () => {

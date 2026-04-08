@@ -17,14 +17,14 @@ export type SSEEvent =
  */
 export function parseSSELine(line: string): SSEEvent | null {
   const trimmed = line.trim();
-  if (!trimmed || trimmed === 'data: [DONE]') return null;
+  if (!trimmed || trimmed === 'data: [DONE]' || trimmed === '[DONE]') return null;
 
   let data = trimmed;
   while (data.startsWith('data:')) {
     data = data.slice(5).trim();
   }
 
-  if (!data) return null;
+  if (!data || data === '[DONE]') return null;
 
   try {
     return JSON.parse(data) as SSEEvent;

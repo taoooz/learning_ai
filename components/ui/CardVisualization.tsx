@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Visualization } from '@/types/course';
+import { normalizeVisualization } from '@/lib/visualization';
 
 interface CardVisualizationProps {
   visualization: Visualization;
 }
 
 export function CardVisualization({ visualization }: CardVisualizationProps) {
+  const normalizedVisualization = normalizeVisualization(visualization) || visualization;
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isRendered, setIsRendered] = useState(false);
   const mermaidRef = useRef<HTMLDivElement>(null);
@@ -15,7 +17,7 @@ export function CardVisualization({ visualization }: CardVisualizationProps) {
   useEffect(() => {
     // 处理所有 Mermaid 图表类型
     const mermaidTypes = ['flowchart', 'sequence', 'class', 'state', 'er', 'gantt', 'mindmap'];
-    if (mermaidTypes.includes(visualization.type) && visualization.mermaidCode && mermaidRef.current) {
+    if (mermaidTypes.includes(normalizedVisualization.type) && normalizedVisualization.mermaidCode && mermaidRef.current) {
       const renderMermaid = async () => {
         try {
           const mermaid = (await import('mermaid')).default;
@@ -25,7 +27,7 @@ export function CardVisualization({ visualization }: CardVisualizationProps) {
             fontFamily: 'inherit',
           });
           const id = `mermaid-${Date.now()}`;
-          const { svg } = await mermaid.render(id, visualization.mermaidCode || '');
+          const { svg } = await mermaid.render(id, normalizedVisualization.mermaidCode || '');
           if (mermaidRef.current) {
             mermaidRef.current.innerHTML = svg;
             setIsRendered(true);
@@ -36,17 +38,17 @@ export function CardVisualization({ visualization }: CardVisualizationProps) {
       };
       renderMermaid();
     }
-  }, [visualization.type, visualization.mermaidCode]);
+  }, [normalizedVisualization.type, normalizedVisualization.mermaidCode]);
 
   // 检查是否是需要渲染 Mermaid 的类型
   const mermaidTypes = ['flowchart', 'sequence', 'class', 'state', 'er', 'gantt', 'mindmap'];
-  const isMermaidType = mermaidTypes.includes(visualization.type);
+  const isMermaidType = mermaidTypes.includes(normalizedVisualization.type);
 
   if (isMermaidType) {
     return (
       <div className="mt-4 -mx-5 sm:mx-0">
-        {visualization.title && (
-          <p className="text-sm font-medium text-secondary mb-3 px-5 sm:px-0">{visualization.title}</p>
+        {normalizedVisualization.title && (
+          <p className="text-sm font-medium text-secondary mb-3 px-5 sm:px-0">{normalizedVisualization.title}</p>
         )}
         <div className="relative rounded-2xl border border-black/[0.06] bg-white shadow-sm overflow-hidden">
           <div
@@ -54,7 +56,7 @@ export function CardVisualization({ visualization }: CardVisualizationProps) {
             className={`p-4 overflow-x-auto ${isRendered ? '' : 'animate-pulse min-h-[120px]'}`}
             style={{ maxHeight: '320px', overflowY: 'auto' }}
           />
-          {visualization.complex && (
+          {normalizedVisualization.complex && (
             <button
               onClick={() => setIsFullscreen(true)}
               className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/90 backdrop-blur-sm shadow-md flex items-center justify-center text-secondary hover:text-primary hover:scale-105 transition-all duration-150"
@@ -84,16 +86,16 @@ export function CardVisualization({ visualization }: CardVisualizationProps) {
     );
   }
 
-  if (visualization.type === 'timeline' && visualization.events) {
+  if (normalizedVisualization.type === 'timeline' && normalizedVisualization.events) {
     return (
       <div className="mt-4 -mx-5 sm:mx-0 px-5 sm:px-0">
-        {visualization.title && (
-          <p className="text-sm font-medium text-secondary mb-4">{visualization.title}</p>
+        {normalizedVisualization.title && (
+          <p className="text-sm font-medium text-secondary mb-4">{normalizedVisualization.title}</p>
         )}
         <div className="relative">
           <div className="absolute left-4 top-4 bottom-4 w-0.5 bg-gradient-to-b from-accent via-accent/60 to-accent/20 rounded-full" />
           <div className="space-y-4">
-            {visualization.events.map((event, index) => (
+            {normalizedVisualization.events.map((event, index) => (
               <div key={index} className="relative pl-12">
                 <div className="absolute left-2.5 top-1.5 w-4 h-4 rounded-full bg-accent border-4 border-background shadow-md" />
                 <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 border border-black/[0.06] shadow-sm">
@@ -111,18 +113,18 @@ export function CardVisualization({ visualization }: CardVisualizationProps) {
     );
   }
 
-  if (visualization.type === 'comparison' && visualization.columns && visualization.rows) {
+  if (normalizedVisualization.type === 'comparison' && normalizedVisualization.columns && normalizedVisualization.rows) {
     return (
       <div className="mt-4 -mx-5 sm:mx-0 px-5 sm:px-0">
-        {visualization.title && (
-          <p className="text-sm font-medium text-secondary mb-3">{visualization.title}</p>
+        {normalizedVisualization.title && (
+          <p className="text-sm font-medium text-secondary mb-3">{normalizedVisualization.title}</p>
         )}
         <div className="rounded-2xl border border-black/[0.06] bg-white shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[200%]">
               <thead>
                 <tr className="bg-gradient-to-r from-accent/8 to-transparent">
-                  {visualization.columns.map((col, index) => (
+                  {normalizedVisualization.columns.map((col, index) => (
                     <th key={index} className="px-5 py-3.5 text-left font-semibold text-primary whitespace-nowrap border-b border-black/[0.06]">
                       {col}
                     </th>
@@ -130,7 +132,7 @@ export function CardVisualization({ visualization }: CardVisualizationProps) {
                 </tr>
               </thead>
               <tbody>
-                {visualization.rows.map((row, rowIndex) => (
+                {normalizedVisualization.rows.map((row, rowIndex) => (
                   <tr key={rowIndex} className={rowIndex % 2 === 0 ? '' : 'bg-black/[0.02]'}>
                     {row.map((cell, cellIndex) => (
                       <td key={cellIndex} className="px-5 py-3.5 text-primary whitespace-nowrap border-b border-black/[0.04] last:border-b-0">
@@ -144,7 +146,7 @@ export function CardVisualization({ visualization }: CardVisualizationProps) {
           </div>
           <div className="px-5 py-2 bg-accent/5 text-xs text-accent flex items-center gap-2">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7l-5 5m0 0l5 5m-5-5h18m-5-5l5 5m0 0l-5 5" />
             </svg>
             左右滑动查看更多
           </div>
@@ -154,9 +156,9 @@ export function CardVisualization({ visualization }: CardVisualizationProps) {
   }
 
   // keyPoints 类型：支持多种格式
-  if (visualization.type === 'keyPoints') {
-    const points = (visualization as any).data?.points || visualization.items;
-    const title = (visualization as any).data?.title || visualization.title;
+  if (normalizedVisualization.type === 'keyPoints') {
+    const points = normalizedVisualization.items;
+    const title = normalizedVisualization.title;
     if (points && points.length > 0) {
       return (
         <div className="mt-4 -mx-5 sm:mx-0 px-5 sm:px-0">
@@ -190,14 +192,14 @@ export function CardVisualization({ visualization }: CardVisualizationProps) {
     }
   }
 
-  if (visualization.type === 'legend' && visualization.items) {
+  if (normalizedVisualization.type === 'legend' && normalizedVisualization.items) {
     return (
       <div className="mt-4 -mx-5 sm:mx-0 px-5 sm:px-0">
-        {visualization.title && (
-          <p className="text-sm font-medium text-secondary mb-3">{visualization.title}</p>
+        {normalizedVisualization.title && (
+          <p className="text-sm font-medium text-secondary mb-3">{normalizedVisualization.title}</p>
         )}
         <div className="flex flex-wrap gap-2.5">
-          {visualization.items.map((item, index) => (
+          {normalizedVisualization.items.map((item, index) => (
             <span
               key={index}
               className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-white/80 backdrop-blur-sm border border-black/[0.06] shadow-sm text-sm text-primary"
@@ -212,18 +214,18 @@ export function CardVisualization({ visualization }: CardVisualizationProps) {
   }
 
   // table 类型
-  if (visualization.type === 'table' && visualization.columns && visualization.rows) {
+  if (normalizedVisualization.type === 'table' && normalizedVisualization.columns && normalizedVisualization.rows) {
     return (
       <div className="mt-4 -mx-5 sm:mx-0 px-5 sm:px-0">
-        {visualization.title && (
-          <p className="text-sm font-medium text-secondary mb-3">{visualization.title}</p>
+        {normalizedVisualization.title && (
+          <p className="text-sm font-medium text-secondary mb-3">{normalizedVisualization.title}</p>
         )}
         <div className="rounded-2xl border border-black/[0.06] bg-white shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[150%]">
               <thead>
                 <tr className="bg-subtle/80">
-                  {visualization.columns.map((col, index) => (
+                  {normalizedVisualization.columns.map((col, index) => (
                     <th key={index} className="px-4 py-3 text-left font-semibold text-primary whitespace-nowrap border-b border-black/[0.06]">
                       {col}
                     </th>
@@ -231,7 +233,7 @@ export function CardVisualization({ visualization }: CardVisualizationProps) {
                 </tr>
               </thead>
               <tbody>
-                {visualization.rows.map((row, rowIndex) => (
+                {normalizedVisualization.rows.map((row, rowIndex) => (
                   <tr key={rowIndex} className={rowIndex % 2 === 0 ? '' : 'bg-black/[0.02]'}>
                     {row.map((cell, cellIndex) => (
                       <td key={cellIndex} className="px-4 py-3 text-primary whitespace-nowrap border-b border-black/[0.04] last:border-b-0">
@@ -250,8 +252,8 @@ export function CardVisualization({ visualization }: CardVisualizationProps) {
 
   // 不支持的类型，显示调试信息
   return (
-    <div className="mt-4 p-4 bg-warning/10 rounded-xl border border-warning/20">
-      <p className="text-sm text-warning">暂不支持的可视化类型: {visualization.type}</p>
+      <div className="mt-4 p-4 bg-warning/10 rounded-xl border border-warning/20">
+      <p className="text-sm text-warning">暂不支持的可视化类型: {normalizedVisualization.type}</p>
     </div>
   );
 }

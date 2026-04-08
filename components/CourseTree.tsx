@@ -45,7 +45,8 @@ export function CourseTree({ course }: CourseTreeProps) {
   }, [course.courseId, nextNodeIndex]);
 
   const handleNodeClick = (nodeIndex: number) => {
-    const node = course.nodes[nodeIndex];
+    const node = course.nodes.find((item) => item.index === nodeIndex);
+    if (!node) return;
     if (node.status === 'locked') return;
     router.push(`/course/${course.courseId}/learn/${nodeIndex}`);
   };

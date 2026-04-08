@@ -100,7 +100,7 @@ export function normalizeCourseBlueprint(blueprint: CourseBlueprint): CourseBlue
   const assessedConceptIds = new Set<string>();
   const remediatedConceptIds = new Set<string>();
 
-  const nodes = blueprint.nodes.map((node) => {
+  const nodes = blueprint.nodes.map((node, normalizedIndex) => {
     const assessmentTargetIds = getNodeAssessmentTargetIds(node);
     const personalizationHooks = getNodePersonalizationHooks(node);
 
@@ -116,6 +116,7 @@ export function normalizeCourseBlueprint(blueprint: CourseBlueprint): CourseBlue
 
     return {
       ...node,
+      index: normalizedIndex,
       assessmentTargetIds,
       personalizationHooks,
     };

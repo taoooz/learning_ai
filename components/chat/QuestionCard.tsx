@@ -9,9 +9,17 @@ type QuestionCardProps = {
   questionNumber: number;
   onSelect: (answer: string) => void;
   disabled: boolean;
+  embedded?: boolean;
 };
 
-export function QuestionCard({ question, options, questionNumber, onSelect, disabled }: QuestionCardProps) {
+export function QuestionCard({
+  question,
+  options,
+  questionNumber,
+  onSelect,
+  disabled,
+  embedded = false,
+}: QuestionCardProps) {
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
 
   const handleSelect = (option: string) => {
@@ -26,9 +34,9 @@ export function QuestionCard({ question, options, questionNumber, onSelect, disa
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex justify-start"
+        className={embedded ? '' : 'flex justify-start'}
       >
-        <div className="flex items-center gap-2 rounded-2xl border border-[rgba(0,0,0,0.06)] bg-surface px-4 py-3">
+        <div className={`flex items-center gap-2 ${embedded ? 'px-0 py-0' : 'rounded-2xl border border-[rgba(0,0,0,0.06)] bg-surface px-4 py-3'}`}>
           <div className="flex gap-1">
             <motion.div
               animate={{ scale: [1, 1.2, 1] }}
@@ -59,9 +67,9 @@ export function QuestionCard({ question, options, questionNumber, onSelect, disa
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="flex justify-start"
+        className={embedded ? '' : 'flex justify-start'}
       >
-        <div className="rounded-2xl border border-[rgba(0,0,0,0.06)] bg-surface px-4 py-3">
+        <div className={embedded ? '' : 'rounded-2xl border border-[rgba(0,0,0,0.06)] bg-surface px-4 py-3'}>
           <div className="mb-1 flex items-center gap-2">
             <span className="inline-flex h-5 items-center rounded-full bg-accent/12 px-2 text-xs font-medium text-accent">
               第 {questionNumber} 题
@@ -78,11 +86,11 @@ export function QuestionCard({ question, options, questionNumber, onSelect, disa
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="flex justify-start"
+      className={embedded ? '' : 'flex justify-start'}
     >
       <div className="space-y-3">
         {/* 问题文本 - Markdown 风格 */}
-        <div className="rounded-2xl border border-[rgba(0,0,0,0.06)] bg-surface px-4 py-3">
+        <div className={embedded ? '' : 'rounded-2xl border border-[rgba(0,0,0,0.06)] bg-surface px-4 py-3'}>
           <div className="mb-1 flex items-center gap-2">
             <span className="inline-flex h-5 items-center rounded-full bg-accent/12 px-2 text-xs font-medium text-accent">
               第 {questionNumber} 题
@@ -93,7 +101,7 @@ export function QuestionCard({ question, options, questionNumber, onSelect, disa
 
         {/* 选项列表 - 独立 cell */}
         {options.length > 0 && (
-          <div className="space-y-2 pl-2">
+          <div className={`space-y-2 ${embedded ? '' : 'pl-2'}`}>
             {options.map((option, idx) => {
               const optionLetter = String.fromCharCode(65 + idx);
 

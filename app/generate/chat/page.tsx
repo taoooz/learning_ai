@@ -4,9 +4,6 @@ import { Suspense, useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { CourseHeaderBar } from '@/components/CourseHeaderBar';
 import { MessageBubble } from '@/components/chat/MessageBubble';
-import { QuestionCard } from '@/components/chat/QuestionCard';
-import { OutlineCard } from '@/components/chat/OutlineCard';
-import { LoadingMessage } from '@/components/chat/LoadingMessage';
 import { RichStreamingMessage } from '@/components/chat/RichStreamingMessage';
 import { useStreamChat } from './hooks/useStreamChat';
 
@@ -71,32 +68,11 @@ function ChatPageContent() {
                   content={msg.content}
                   thinkingContent={msg.thinkingContent}
                   isThinking={msg.isThinking}
-                  onQuestionAnswer={(id, answer) => sendMessage(answer)}
+                  onQuestionAnswer={(answer) => sendMessage(answer)}
                   onOutlineConfirm={handleConfirmOutline}
+                  disableInteractions={isWaitingResponse}
                 />
               );
-            } else if (msg.type === 'question') {
-              return (
-                <QuestionCard
-                  key={idx}
-                  question={msg.question}
-                  options={msg.options}
-                  questionNumber={msg.questionNumber}
-                  onSelect={(answer) => sendMessage(answer)}
-                  disabled={isWaitingResponse || msg.disabled || false}
-                />
-              );
-            } else if (msg.type === 'outline') {
-              return (
-                <OutlineCard
-                  key={idx}
-                  blueprint={msg.blueprint}
-                  onConfirm={handleConfirmOutline}
-                  showActions={idx === messages.length - 1}
-                />
-              );
-            } else if (msg.type === 'loading') {
-              return <LoadingMessage key={idx} message={msg.message} />;
             }
             return null;
           })}
@@ -105,7 +81,7 @@ function ChatPageContent() {
       </div>
 
       {currentBlueprint && (
-        <div className="relative border-t border-black/[0.06] bg-white px-5 py-4 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
+        <div className="relative border-t border-black/[0.05] bg-[linear-gradient(180deg,rgba(255,252,248,0.92),rgba(255,255,255,0.98))] px-5 py-4 shadow-[0_-8px_24px_rgba(15,23,42,0.04)] backdrop-blur-sm">
           <div className="mx-auto max-w-2xl flex gap-3">
             <input
               type="text"
@@ -114,12 +90,12 @@ function ChatPageContent() {
               onKeyDown={(e) => e.key === 'Enter' && handleAdjustOutline()}
               placeholder="有什么想调整的吗？"
               disabled={isWaitingResponse}
-              className="flex-1 rounded-full border-2 border-black/[0.08] bg-white px-5 py-3.5 text-[15px] text-primary placeholder:text-tertiary focus:border-accent focus:outline-none disabled:opacity-50 transition-colors"
+              className="flex-1 rounded-full border border-[rgba(0,0,0,0.08)] bg-white/92 px-5 py-3.5 text-[15px] text-primary placeholder:text-tertiary focus:border-[rgba(190,120,38,0.34)] focus:outline-none disabled:opacity-50 transition-colors"
             />
             <button
               onClick={handleAdjustOutline}
               disabled={!adjustmentInput.trim() || isWaitingResponse}
-              className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-accent text-white shadow-[0_4px_16px_rgba(255,138,0,0.20)] transition-all hover:shadow-[0_6px_20px_rgba(255,138,0,0.25)] active:scale-[0.95] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+              className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border border-[rgba(190,120,38,0.16)] bg-[linear-gradient(135deg,rgba(224,149,58,1),rgba(198,126,42,0.98))] text-white shadow-[0_10px_24px_rgba(191,123,43,0.20)] transition-all hover:shadow-[0_14px_30px_rgba(191,123,43,0.24)] active:scale-[0.95] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />

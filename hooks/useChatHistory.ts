@@ -121,7 +121,7 @@ export function generateConversationSummary(messages: ChatMessage[]): Omit<Conve
   // 提取偏好的解释方式
   const preferredExplanationStyles = Array.from(new Set(
     userMessages.flatMap((message) => detectChatLearningPreferences(message.content).map((item) => item.value)),
-  )).slice(0, 2);
+  )).slice(0, 3);
 
   // 提取最近使用的解释路径
   const explanationPath = [...assistantMessages]

@@ -7,7 +7,7 @@ import { useParams, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CourseHeaderBar } from '@/components/CourseHeaderBar';
-import { useCourse } from '@/contexts/CourseContext';
+import { buildLearningSteps, hasResolvedQuestions, shouldEnterLearningPhase, useCourse } from '@/contexts/CourseContext';
 import { useProgress } from '@/contexts/ProgressContext';
 import { RetryModal } from '@/components/RetryModal';
 import { LearningCard, Question } from '@/types/course';
@@ -18,6 +18,7 @@ import { getStoredDataV2 } from '@/lib/storage';
 
 type LearningPhase = 'loading' | 'learning' | 'complete';
 type LearnStep =
+  | { id: string; type: 'intro'; title: string; description: string; sectionIndex: number }
   | { id: string; type: 'card'; card: LearningCard }
   | { id: string; type: 'question'; question: Question };
 
@@ -60,31 +61,6 @@ function checkIsCorrect(question: Question, selectedAnswer: string[], sortOption
   }
 
   return false;
-}
-
-function buildLearningSteps(cards: LearningCard[], questions: Question[]): LearnStep[] {
-  // 先学完所有卡片，再做所有练习
-  const steps: LearnStep[] = [];
-
-  // 先添加所有卡片
-  cards.forEach((card) => {
-    steps.push({
-      id: `card-${card.id}`,
-      type: 'card',
-      card,
-    });
-  });
-
-  // 再添加所有题目
-  questions.forEach((question) => {
-    steps.push({
-      id: `question-${question.id}`,
-      type: 'question',
-      question,
-    });
-  });
-
-  return steps;
 }
 
 function LastLineMarker({
@@ -171,7 +147,7 @@ function LastLineMarker({
 export default function LearnPage() {
   const params = useParams();
   const router = useRouter();
-  const { courses, generateNodeContent, preloadNextNode } = useCourse();
+  const { courses, generateNodeContent, generateNodeQuestions, preloadNextNode } = useCourse();
   const { markCompleted } = useProgress();
   const userMemory = useUserMemory();
 
@@ -192,9 +168,11 @@ export default function LearnPage() {
   const loadingVersionRef = useRef(0);
   // 用于防止重复请求（key 是 courseId-nodeIndex）
   const hasRequestedRef = useRef<string>('');
+  const hasRequestedQuestionsRef = useRef<string>('');
+  const hasPreloadedNextRef = useRef<string>('');
 
   const course = courses.find(c => c.courseId === courseId);
-  const node = course?.nodes[nodeIndex];
+  const node = course?.nodes.find((item) => item.index === nodeIndex);
 
   // 从 StoredCourseBundle 中获取 blueprint（CourseTree 没有 blueprint）
   const blueprint = useMemo(() => {
@@ -214,10 +192,37 @@ export default function LearnPage() {
     nodeRef.current = node;
   }, [course, node]);
 
+  useEffect(() => {
+    hasRequestedRef.current = '';
+    hasRequestedQuestionsRef.current = '';
+    hasPreloadedNextRef.current = '';
+    setShowRetry(false);
+    setPhase('loading');
+    setCurrentStepIndex(0);
+    setSelectedAnswer([]);
+    setSortOptions([]);
+    setIsAnswered(false);
+    setIsCorrect(false);
+  }, [courseId, nodeIndex]);
+
   const steps = useMemo(() => {
-    if (!node?.cards || !node.questions) return [];
-    return buildLearningSteps(node.cards, node.questions);
-  }, [node?.cards, node?.questions]);
+    const lessonSteps = buildLearningSteps(node?.cards, node?.questions) as LearnStep[];
+    const description = blueprint?.nodes.find((item) => item.index === nodeIndex)?.teachingGoal?.trim();
+    if (!node?.title || !description) {
+      return lessonSteps;
+    }
+
+    return [
+      {
+        id: `intro-${nodeIndex}`,
+        type: 'intro' as const,
+        title: node.title,
+        description,
+        sectionIndex: nodeIndex + 1,
+      },
+      ...lessonSteps,
+    ];
+  }, [blueprint?.nodes, node?.cards, node?.questions, node?.title, nodeIndex]);
   const currentStep = steps[currentStepIndex];
   const progressPercent = steps.length > 0
     ? Math.round(((currentStepIndex + 1) / steps.length) * 100)
@@ -232,8 +237,8 @@ export default function LearnPage() {
       phase,
       requestKey,
       hasRequested: hasRequestedRef.current === requestKey,
-      hasCards: !!nodeRef.current?.cards,
-      hasQuestions: !!nodeRef.current?.questions,
+      hasCards: shouldEnterLearningPhase(nodeRef.current),
+      hasQuestions: Array.isArray(nodeRef.current?.questions),
     });
     
     // 如果已完成学习，不做任何操作
@@ -245,7 +250,7 @@ export default function LearnPage() {
     if (!currentCourse || !currentNode) return;
 
     // 如果节点内容还没生成，触发生成
-    if (!currentNode.cards || !currentNode.questions) {
+    if (!shouldEnterLearningPhase(currentNode)) {
       // 如果已经发起过请求，直接返回
       if (hasRequestedRef.current === requestKey) {
         console.log('[LearnPage] Request already in progress, skipping');
@@ -262,23 +267,33 @@ export default function LearnPage() {
       console.log('[LearnPage] Content ready, switching to learning phase');
       setPhase('learning');
     }
-  }, [courseId, nodeIndex]); // 移除 phase 依赖，避免循环
+  }, [courseId, nodeIndex, course, node, phase]);
   
-  // 单独处理预加载
+  useEffect(() => {
+    const currentNode = nodeRef.current;
+    const requestKey = `${courseId}-${nodeIndex}`;
+
+    if (phase !== 'learning') return;
+    if (!currentNode || !shouldEnterLearningPhase(currentNode)) return;
+    if (hasResolvedQuestions(currentNode)) return;
+    if (hasRequestedQuestionsRef.current === requestKey) return;
+
+    hasRequestedQuestionsRef.current = requestKey;
+    generateNodeQuestions(courseId, nodeIndex).catch((error) => {
+      console.warn('[LearnPage] Questions generation failed:', error);
+    });
+  }, [courseId, nodeIndex, generateNodeQuestions, node?.cards, node?.questions, phase]);
+
+  // 当前节点可学习后，再预加载下一个节点知识
   useEffect(() => {
     if (phase === 'complete') return;
+    if (phase !== 'learning') return;
+    if (!shouldEnterLearningPhase(node)) return;
+    const requestKey = `${courseId}-${nodeIndex}`;
+    if (hasPreloadedNextRef.current === requestKey) return;
+    hasPreloadedNextRef.current = requestKey;
     preloadNextNode(courseId, nodeIndex);
-  }, [courseId, nodeIndex, preloadNextNode]);
-
-  // 当节点内容变化时（卡片或题目更新），重置到第一步
-  useEffect(() => {
-    // 不要重置 hasRequestedRef，避免重复请求
-    setCurrentStepIndex(0);
-    setSelectedAnswer([]);
-    setSortOptions([]);
-    setIsAnswered(false);
-    setIsCorrect(false);
-  }, [courseId, nodeIndex, steps.length]);
+  }, [courseId, nodeIndex, node, phase, preloadNextNode]);
 
   // 当步骤变化时，如果是排序题，初始化 sortOptions
   useEffect(() => {
@@ -519,7 +534,37 @@ export default function LearnPage() {
                 transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
                 className="flex-1 px-5 pt-6 sm:px-6"
               >
-                {currentStep.type === 'card' ? (
+                {currentStep.type === 'intro' ? (
+                  <div className="flex min-h-[68vh] flex-col justify-center">
+                    <div className="mb-5 inline-flex w-fit items-center rounded-full border border-accent/20 bg-accent/8 px-3 py-1.5 text-xs font-semibold tracking-wide text-accent">
+                      第 {currentStep.sectionIndex} 节
+                    </div>
+
+                    <div className="mb-6">
+                      <LastLineMarker
+                        contentClassName="text-[30px] font-semibold leading-[1.14] tracking-tight text-primary"
+                        markerClassName="bg-gradient-to-r from-accent/18 via-sky-200/16 to-accent/10 blur-[0.7px]"
+                      >
+                        {currentStep.title}
+                      </LastLineMarker>
+                    </div>
+
+                    <div className="rounded-[28px] border border-black/[0.06] bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(255,248,242,0.98))] px-5 py-5 shadow-[0_10px_30px_rgba(255,138,0,0.08)]">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-tertiary">
+                        本节你会学到
+                      </p>
+                      <p className="text-[16px] leading-8 text-primary">
+                        {currentStep.description}
+                      </p>
+                    </div>
+
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      <span className="rounded-full border border-black/[0.08] bg-subtle/60 px-3 py-1.5 text-xs font-medium text-secondary">
+                        先看知识，再做练习
+                      </span>
+                    </div>
+                  </div>
+                ) : currentStep.type === 'card' ? (
                   <>
                     <div className="mb-5">
                       <LastLineMarker
@@ -749,6 +794,17 @@ export default function LearnPage() {
                 </motion.div>
               )}
 
+              {currentStep.type === 'intro' && (
+                <div className="bg-gradient-to-t from-white via-white/98 to-transparent px-5 pb-6 pt-8 sm:px-6">
+                  <button
+                    onClick={goToNextStep}
+                    className="inline-flex min-h-13 w-full items-center justify-center rounded-full bg-cta px-6 py-3 text-sm font-semibold text-cta shadow-[0_10px_24px_rgba(17,24,39,0.10)] transition-all duration-150 active:scale-[0.985]"
+                  >
+                    开始学习
+                  </button>
+                </div>
+              )}
+
               {currentStep.type === 'card' && (
                 <div className="bg-gradient-to-t from-white via-white/98 to-transparent px-5 pb-6 pt-8 sm:px-6">
                   <button
@@ -831,7 +887,7 @@ export default function LearnPage() {
           initialMessage={chatInitialMessage}
           contextInfo={{
             currentNodeTitle: node.title,
-            currentNodeGoal: blueprint?.nodes[nodeIndex]?.teachingGoal,
+            currentNodeGoal: blueprint?.nodes.find((item) => item.index === nodeIndex)?.teachingGoal,
           }}
         />
       )}

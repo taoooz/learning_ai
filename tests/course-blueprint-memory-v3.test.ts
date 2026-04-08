@@ -196,6 +196,82 @@ test('stored course bundle can hydrate into runtime course tree with node lesson
   assert.equal(runtimeCourse.difficultySummary, '适合第一次系统学习 Agent 的用户');
 });
 
+test('createStoredCourseBundleFromBlueprint normalizes 1-based node indexes into 0-based internal indexes', () => {
+  const blueprint = {
+    courseId: 'course-react',
+    topic: 'React',
+    learnerPositioning: {
+      estimatedLevel: 'beginner' as const,
+      difficultySummary: '适合想系统入门 React 的用户',
+      whyThisCourseFits: '先建立 JSX 和组件的基本概念',
+    },
+    courseGoal: '完成 React 入门路径',
+    globalConcepts: [
+      { id: 'concept-jsx', name: 'JSX', aliases: [] },
+      { id: 'concept-component', name: '组件', aliases: [] },
+    ],
+    nodes: [
+      {
+        index: 1,
+        title: '认识 JSX',
+        teachingGoal: '理解 JSX 的基本作用',
+        teachConceptIds: ['concept-jsx'],
+        prerequisiteConceptIds: [],
+        assessmentTargetIds: ['concept-jsx'],
+        bridgeFromPreviousNode: '无',
+        personalizationHooks: {
+          mustRemediateConceptIds: [],
+          canCompressKnownConceptIds: [],
+          analogyFactIds: [],
+        },
+        status: 'available' as const,
+      },
+      {
+        index: 2,
+        title: '理解组件',
+        teachingGoal: '理解组件的拆分方式',
+        teachConceptIds: ['concept-component'],
+        prerequisiteConceptIds: ['concept-jsx'],
+        assessmentTargetIds: ['concept-component'],
+        bridgeFromPreviousNode: '从 JSX 过渡到组件',
+        personalizationHooks: {
+          mustRemediateConceptIds: [],
+          canCompressKnownConceptIds: [],
+          analogyFactIds: [],
+        },
+        status: 'locked' as const,
+      },
+    ],
+  };
+
+  const bundle = createStoredCourseBundleFromBlueprint(blueprint);
+  bundle.lessons[0] = {
+    courseId: 'course-react',
+    nodeIndex: 0,
+    title: '认识 JSX',
+    teachingGoal: '理解 JSX 的基本作用',
+    teachConceptIds: ['concept-jsx'],
+    assessmentTargetIds: ['concept-jsx'],
+    cards: [
+      {
+        id: 'card-jsx-1',
+        title: 'JSX 是什么',
+        content: 'JSX 是一种更接近 HTML 的 UI 描述语法。',
+        coveredConceptIds: ['concept-jsx'],
+      },
+    ],
+    questions: [],
+  };
+
+  const runtimeCourse = deriveCourseTreeFromStoredCourseBundle(bundle);
+
+  assert.deepEqual(bundle.blueprint.nodes.map((node) => node.index), [0, 1]);
+  assert.deepEqual(bundle.treeView.nodes.map((node) => node.index), [0, 1]);
+  assert.equal(runtimeCourse.nodes[0].title, '认识 JSX');
+  assert.equal(runtimeCourse.nodes[0].cards?.[0]?.title, 'JSX 是什么');
+  assert.equal(runtimeCourse.nodes[1].title, '理解组件');
+});
+
 test('clearLegacyLearningData removes old storage keys before v2 storage boots', () => {
   const data = new Map<string, string>([
     ['ai-learning-data', '{"legacy":true}'],

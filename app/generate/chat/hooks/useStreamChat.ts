@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useCourse } from '@/contexts/CourseContext';
 import { parseSSEStream } from '../utils/sseParser';
+import { extractThinkingAndVisibleContent, getStreamingThinkingState } from '../utils/contentParser';
 import { useChatMessages } from './useChatMessages';
 import type { OutlineBlueprint } from '@/types/course';
 
@@ -10,46 +11,35 @@ export function useStreamChat(topic: string) {
     messages,
     addMessage,
     updateMessageAt,
-    removeLoadingMessages,
-    disableQuestions,
   } = useChatMessages();
 
   const [isWaitingResponse, setIsWaitingResponse] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const [currentBlueprint, setCurrentBlueprint] = useState<OutlineBlueprint | null>(null);
   const [generatedCourseName, setGeneratedCourseName] = useState('');
 
   const sessionIdRef = useRef<string | null>(null);
-  const questionCountRef = useRef(0);
 
   const streamState = useRef({
-    questionText: '',
-    questionOptions: [] as string[],
-    questionIndex: -1,
-    questionNumber: 0,
-    blueprint: {} as any,
     streamingIndex: -1,
-    streamingContent: '',
+    rawContent: '',
+    visibleContent: '',
     thinkingContent: '',
+    sawThinkTag: false,
   });
 
   const sendMessage = useCallback(async (message?: string) => {
     if (isWaitingResponse) return;
     setIsWaitingResponse(true);
 
-    streamState.current = { 
-      questionText: '', 
-      questionOptions: [], 
-      questionIndex: -1, 
-      questionNumber: 0, 
-      blueprint: {},
+    streamState.current = {
       streamingIndex: -1,
-      streamingContent: '',
+      rawContent: '',
+      visibleContent: '',
       thinkingContent: '',
+      sawThinkTag: false,
     };
 
     if (message) {
-      disableQuestions();
       addMessage({ type: 'user', content: message, timestamp: Date.now() });
     } else {
       addMessage({ type: 'system', content: `收到，让我来帮你规划学习路径`, timestamp: Date.now() });
@@ -68,7 +58,10 @@ export function useStreamChat(topic: string) {
 
         switch (event.type) {
           case 'thinking':
-            // 累积思考内容
+            if (s.sawThinkTag) {
+              break;
+            }
+
             s.thinkingContent += (event.message || '') + '\n';
             if (s.streamingIndex < 0) {
               const idx = addMessage({ 
@@ -87,97 +80,59 @@ export function useStreamChat(topic: string) {
             break;
 
           case 'content_delta':
-            // 流式追加正式内容
-            s.streamingContent += event.content;
-            
+            s.rawContent += event.content;
+            const parsed = extractThinkingAndVisibleContent(s.rawContent);
+            if (parsed.thinkingContent) {
+              s.sawThinkTag = true;
+              s.thinkingContent = parsed.thinkingContent;
+            }
+            s.visibleContent = parsed.visibleContent;
+            const isThinking = getStreamingThinkingState({
+              sawThinkTag: s.sawThinkTag,
+              hasOpenThinkBlock: parsed.hasOpenThinkBlock,
+              hasThinkingContent: Boolean(s.thinkingContent.trim()),
+            });
+
             if (s.streamingIndex < 0) {
               const idx = addMessage({
                 type: 'streaming',
-                content: s.streamingContent,
-                isThinking: true,
+                content: s.visibleContent,
+                thinkingContent: s.thinkingContent || undefined,
+                isThinking,
                 timestamp: Date.now(),
               });
               s.streamingIndex = idx;
             } else {
               updateMessageAt(s.streamingIndex, msg =>
-                msg.type === 'streaming' ? { ...msg, content: s.streamingContent, isThinking: true } : msg
+                msg.type === 'streaming'
+                  ? {
+                      ...msg,
+                      content: s.visibleContent,
+                      thinkingContent: s.thinkingContent || msg.thinkingContent,
+                      isThinking,
+                    }
+                  : msg
               );
             }
             break;
 
           case 'question_start':
-            // 结束流式内容，标记思考完成
-            if (s.streamingIndex >= 0) {
-              updateMessageAt(s.streamingIndex, msg =>
-                msg.type === 'streaming' ? { ...msg, isThinking: false } : msg
-              );
-              s.streamingIndex = -1;
-              s.streamingContent = '';
-              s.thinkingContent = '';
-            }
-            streamState.current.questionNumber = event.questionNumber;
-            questionCountRef.current = event.questionNumber;
             break;
 
           case 'questions':
             if (event.sessionId) {
-              setSessionId(event.sessionId);
               sessionIdRef.current = event.sessionId;
-            }
-            const q = event.questions?.[0];
-            if (!q) break;
-
-            s.questionOptions = q.options || [];
-
-            if (s.questionIndex < 0) {
-              const idx = addMessage({
-                type: 'question',
-                question: q.question,
-                options: [],
-                questionNumber: questionCountRef.current + 1,
-                timestamp: Date.now(),
-                disabled: false,
-              });
-              s.questionIndex = idx;
-            } else {
-              updateMessageAt(s.questionIndex, msg =>
-                msg.type === 'question' ? { ...msg, question: q.question } : msg
-              );
-            }
-
-            for (let i = 0; i < s.questionOptions.length; i++) {
-              await new Promise(r => setTimeout(r, 200));
-              updateMessageAt(s.questionIndex, msg =>
-                msg.type === 'question' ? { ...msg, options: s.questionOptions.slice(0, i + 1) } : msg
-              );
             }
             break;
 
           case 'blueprint_start':
-            // 结束流式内容，标记思考完成
-            if (s.streamingIndex >= 0) {
-              updateMessageAt(s.streamingIndex, msg =>
-                msg.type === 'streaming' ? { ...msg, isThinking: false } : msg
-              );
-              s.streamingIndex = -1;
-              s.streamingContent = '';
-              s.thinkingContent = '';
-            }
-            streamState.current.blueprint = {};
-            addMessage({ type: 'system', content: '根据你的情况，我为你设计了这个学习路径', timestamp: Date.now() });
-            addMessage({ type: 'loading', message: '正在生成学习路径...', timestamp: Date.now() });
             break;
 
           case 'blueprint_field':
-            streamState.current.blueprint[event.field] = event.value;
-            const names: Record<string, string> = { learningDirection: '学习方向', learningGoal: '学习目标', learnerPositioning: '学习者定位' };
-            removeLoadingMessages();
-            addMessage({ type: 'loading', message: `正在生成${names[event.field] || event.field}...`, timestamp: Date.now() });
             break;
 
           case 'confirmation':
             if (event.sessionId) {
-              setSessionId(event.sessionId);
               sessionIdRef.current = event.sessionId;
             }
             if (event.blueprint) {
@@ -185,26 +140,28 @@ export function useStreamChat(topic: string) {
               if (event.blueprint.learningDirection) {
                 setGeneratedCourseName(event.blueprint.learningDirection.split('：')[0] || topic);
               }
-              removeLoadingMessages();
-              addMessage({ type: 'outline', blueprint: event.blueprint, editable: true, timestamp: Date.now() });
             }
             break;
 
           case 'session_created':
             if (event.sessionId) {
-              setSessionId(event.sessionId);
               sessionIdRef.current = event.sessionId;
             }
             break;
         }
       }
     } catch (err) {
-      removeLoadingMessages();
       addMessage({ type: 'system', content: '抱歉，出现了一些问题，请稍后重试', timestamp: Date.now() });
     } finally {
+      const s = streamState.current;
+      if (s.streamingIndex >= 0) {
+        updateMessageAt(s.streamingIndex, msg =>
+          msg.type === 'streaming' ? { ...msg, isThinking: false } : msg
+        );
+      }
       setIsWaitingResponse(false);
     }
-  }, [isWaitingResponse, topic, submitOutlineMessage, addMessage, updateMessageAt, removeLoadingMessages, disableQuestions]);
+  }, [isWaitingResponse, topic, submitOutlineMessage, addMessage, updateMessageAt]);
 
   return { messages, isWaitingResponse, currentBlueprint, generatedCourseName, sendMessage };
 }

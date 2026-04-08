@@ -11,7 +11,7 @@ import { ChatLauncher, ChatWidget } from '@/components/ui/ChatWidget';
 export default function CoursePage() {
   const params = useParams();
   const router = useRouter();
-  const { courses, currentCourse } = useCourse();
+  const { courses, currentCourse, generateNodeContent } = useCourse();
   const [isLoading, setIsLoading] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [showTitleInBar, setShowTitleInBar] = useState(false);
@@ -37,11 +37,14 @@ export default function CoursePage() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // 生成第一个节点的内容（如果尚未生成）
   useEffect(() => {
-    // 移除自动生成第一节内容的逻辑
-    // 让 Learn 页面负责生成内容
-  }, []);
+    const course = courses.find(c => c.courseId === courseId) || currentCourse;
+    if (!course?.nodes[0] || course.nodes[0].cards) return;
+
+    generateNodeContent(courseId, 0).catch((error) => {
+      console.warn('[CoursePage] Preload node 0 failed:', error);
+    });
+  }, [courseId, courses, currentCourse, generateNodeContent]);
 
   if (isLoading) {
     return (
