@@ -11,7 +11,7 @@ import {
 import { callMiniMax, parseJSONResponse } from '@/lib/minimax';
 import { createMemoryRepository } from '@/lib/memory/repository';
 import { buildNodeLessonPrompt } from '@/lib/prompt';
-import { CourseBlueprint, MemoryStoreV2, MemoryStoreV3, NodeLesson, UserMemory, UserProfile } from '@/types/course';
+import { CourseBlueprint, MemoryStoreV3, NodeLesson, UserMemory, UserProfile } from '@/types/course';
 
 const NODE_PRIMARY_ATTEMPTS = [
   { timeoutMs: 240_000 },
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       blueprint?: CourseBlueprint;
       nodeIndex?: number;
       userProfile?: UserProfile | null;
-      userMemory?: UserMemory | MemoryStoreV2 | MemoryStoreV3 | null;
+      userMemory?: UserMemory | MemoryStoreV3 | null;
     };
 
     if (!topic || typeof nodeIndex !== 'number' || !blueprint) {

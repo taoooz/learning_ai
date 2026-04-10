@@ -2,6 +2,19 @@
 
 ## 2026-04-10
 
+### ♻️ 清理 MemoryStoreV2，统一到 V1 + V3 双存储
+
+**修改文件：** `lib/memory/aggregator.ts`、`lib/memory/repository.ts`、`lib/memory/memory-agent.ts`、`hooks/useUserMemory.ts`、`types/course.ts`、`app/api/chat/route.ts`、`app/api/generate/node/route.ts`、`lib/chat-context.ts`、`tests/course-tree-layout.test.ts`、`tests/course-blueprint-memory-v3.test.ts`
+
+**改动内容：**
+- 删除 `MemoryStoreV2` 接口及独占类型（`LearningSignal`、`TopicSummary`、`CourseSummary`）
+- 移除 aggregator.ts 约 900 行 V2 转换代码（V1↔V2、V2↔V3 转换函数、signal/state/summary 构建逻辑）
+- 重写 `migrateMemoryToV3` 为 V1→V3 直连路径（不再经过 V2 中间格式）
+- 清理 memory-agent.ts、useUserMemory.ts、repository.ts 中的 V2 类型引用和废弃 API
+- `recordChatSignals` 改为直接写入 V3 事件（移除 V2 signal 写入）
+- 删除 9 个废弃的 V2 测试，修复全部新增类型错误
+- 净减 1132 行代码，存储模型从 V1/V2/V3 三套简化为 V1 + V3
+
 ### 🔧 修复 V3 Memory 双写链路断裂
 
 **修改文件：** `lib/memory/repository.ts`
@@ -27,6 +40,43 @@
 - 骨架屏下移至空状态区域，作为加载氛围的一部分
 - 节点出现后显示带计数器的进度提示「正在补齐剩余章节... (X)」
 - 两阶段布局：空状态 → 有节点后，条件渲染切换
+
+### 🧠 优化推荐课程 prompt，提升匹配度和多样性
+
+**修改文件：** `app/api/recommendations/route.ts`、`components/RecommendationsModal.tsx`
+
+**问题诊断：**
+- 原 prompt 缺少多样性约束，LLM 容易扎堆推荐相近主题
+- 推荐维度单一，缺少引导 LLM 从多角度发散
+- temperature 0.9 对 JSON 输出场景过高，导致格式不稳定
+
+**prompt 改动：**
+- 新增"核心原则：多样化"板块，定义"太相近"的判断标准 + 反例
+- 引入 5 个推荐维度（核心技能、互补技能、新兴趋势、通识基础、实战应用），要求至少覆盖 3 个
+- 推荐理由要求引用用户具体背景，禁止万能理由
+- 标题要求用范围限定词
+- temperature 从 0.9 降至 0.7
+- JSON 输出格式压缩为单行，减少格式出错概率
+
+**前端上下文优化：**
+- `recentTopics` 从只传 topic 改为附带 estimatedLevel（熟悉度）
+- 数量从 3 条扩展到 5 条
+
+### ✨ 课程完成页推荐接入 AI，倒数第二节预生成
+
+**修改文件：** `app/course/[courseId]/complete/page.tsx`、`app/course/[courseId]/learn/[nodeIndex]/page.tsx`
+
+**问题：** 完成页推荐是硬编码的 `{topic}进阶`、`{topic}实战项目`，与用户实际画像无关
+
+**改动内容：**
+- **完成页**：移除硬编码 `generateRecommendations`，改为调用 `/api/recommendations` AI API
+  - 优先读 sessionStorage 缓存（零延迟展示）
+  - 无缓存时走实时 API 调用 + 加载骨架屏
+  - 移除 `difficulty` 字段（AI 推荐不返回此字段）
+  - 副标题改为"基于你的目标和兴趣推荐"
+- **学习页**：倒数第二节（`nodeIndex === nodes.length - 2`）完成时，后台静默预生成推荐并写入 sessionStorage
+  - 传入 userProfile、userMemory、已有课程列表、首页推荐排除列表
+  - 预生成失败不影响用户体验（catch 静默处理）
 
 ## 2026-04-09
 

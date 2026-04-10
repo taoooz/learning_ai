@@ -1,7 +1,7 @@
 // lib/chat-context.ts
 
 import type { ChatMessage } from '@/types/chat';
-import type { ChatMemoryPayload, ConversationSummary, CourseTree, MemoryStoreV2, MemoryStoreV3, UserMemory } from '@/types/course';
+import type { ChatMemoryPayload, ConversationSummary } from '@/types/course';
 
 interface ContextInfo {
   currentNodeTitle?: string;

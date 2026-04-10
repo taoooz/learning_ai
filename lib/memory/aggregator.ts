@@ -1,16 +1,9 @@
 import type {
-  ChatMemoryPayload,
   ConceptState,
-  CourseSummary,
   EpisodicProjection,
-  LearningSignal,
   MemoryEvent,
   MemoryStoreV3,
-  MemoryStoreV2,
-  PlanningMemoryPayload,
-  TeachingMemoryPayload,
   TopicState,
-  TopicSummary,
   UserMemory,
   UserProfile,
 } from '@/types/course';
@@ -56,14 +49,14 @@ export type TeachingPayloadInput = {
   nodeTitle: string;
   nodeConcepts: string[];
   prerequisiteConcepts?: string[];
-  userMemory?: UserMemory | MemoryStoreV2 | MemoryStoreV3 | null;
+  userMemory?: UserMemory | MemoryStoreV3 | null;
 };
 
 export type ChatPayloadInput = {
   topic: string;
   currentNodeTitle?: string;
   currentQuestion?: string;
-  userMemory?: UserMemory | MemoryStoreV2 | MemoryStoreV3 | null;
+  userMemory?: UserMemory | MemoryStoreV3 | null;
 };
 
 export type ChatSignalInput = {
@@ -588,10 +581,6 @@ function getAssessmentGapConfidence(errorEvidenceCount: number, previousSource?:
   return Number(Math.min(0.78, base + errorEvidenceCount * 0.12).toFixed(2));
 }
 
-export function isMemoryStoreV2(memory: UserMemory | MemoryStoreV2 | MemoryStoreV3 | null | undefined): memory is MemoryStoreV2 {
-  return Boolean(memory && typeof memory === 'object' && 'signals' in memory && 'states' in memory && memory.version === 2);
-}
-
 function buildStableFacts(profile: UserProfile) {
   const now = Date.now();
   const facts = [];
@@ -618,12 +607,23 @@ function buildStableFacts(profile: UserProfile) {
     });
   }
 
-  for (const item of profile.insights?.knowledgeBackground || []) {
+  for (const item of profile.insights?.workSummary || []) {
     facts.push({
       id: createMemoryId('fact', 'knowledge', item),
       kind: 'knowledge_background' as const,
       text: item,
       confidence: 0.82,
+      source: 'profile' as const,
+      updatedAt: now,
+    });
+  }
+
+  for (const item of profile.insights?.educationSummary || []) {
+    facts.push({
+      id: createMemoryId('fact', 'education', item),
+      kind: 'knowledge_background' as const,
+      text: item,
+      confidence: 0.8,
       source: 'profile' as const,
       updatedAt: now,
     });
@@ -677,7 +677,7 @@ export function createEmptyMemoryStoreV3(profile?: UserProfile | null): MemorySt
   };
 }
 
-export function isMemoryStoreV3(memory: UserMemory | MemoryStoreV2 | MemoryStoreV3 | null | undefined): memory is MemoryStoreV3 {
+export function isMemoryStoreV3(memory: UserMemory | MemoryStoreV3 | null | undefined): memory is MemoryStoreV3 {
   if (!memory || typeof memory !== 'object') return false;
   return (memory as MemoryStoreV3).version === 3 && Array.isArray((memory as MemoryStoreV3).events) && !!(memory as MemoryStoreV3).projections;
 }
@@ -947,815 +947,145 @@ export function appendEventToMemoryStoreV3(memoryStore: MemoryStoreV3, event: Me
   return next;
 }
 
-function convertEventsFromV2(memoryStore: MemoryStoreV2): MemoryEvent[] {
-  return memoryStore.signals.map((signal) => {
-    if (signal.type === 'question_attempt') {
-      return {
-        type: 'question_answered' as const,
-        topic: signal.topic,
-        courseId: signal.courseId,
-        occurredAt: signal.occurredAt,
-        payload: {
-          conceptId: signal.concept || 'concept-unknown',
-          conceptName: signal.concept || '未知概念',
-          isCorrect: Number(signal.payload.accuracy || 0) >= 0.7,
-          question: String(signal.payload.question || ''),
-        },
-      };
-    }
-
-    if (signal.type === 'chat_question' || signal.type === 'chat_confusion' || signal.type === 'chat_mastery') {
-      return {
-        type: 'chat_user_message' as const,
-        topic: signal.topic,
-        courseId: signal.courseId,
-        occurredAt: signal.occurredAt,
-        payload: {
-          question: String(signal.payload.question || signal.payload.evidence || ''),
-          confusionConceptId: signal.type === 'chat_confusion' ? signal.concept : undefined,
-          confusionConceptName: signal.type === 'chat_confusion' ? signal.concept : undefined,
-        },
-      };
-    }
-
-    return {
-      type: 'node_completed' as const,
-      topic: signal.topic,
-      courseId: signal.courseId,
-      occurredAt: signal.occurredAt,
-      payload: {},
-    };
-  }).sort((a, b) => b.occurredAt - a.occurredAt);
-}
-
-function buildTopicSummariesFromV3(memoryStore: MemoryStoreV3): TopicSummary[] {
-  return memoryStore.projections.topicProjections.map((item) => {
-    const mustCover = item.mustCoverConceptIds
-      .map((conceptId) => memoryStore.projections.conceptProjections.find((projection) => projection.topic === item.topic && projection.conceptId === conceptId)?.conceptName || conceptId);
-    const strengths = item.skippableConceptIds
-      .map((conceptId) => memoryStore.projections.conceptProjections.find((projection) => projection.topic === item.topic && projection.conceptId === conceptId)?.conceptName || conceptId);
-
-    return {
-      topic: item.topic,
-      summary: mustCover.length ? `${item.topic} 当前最需要补的是 ${mustCover.join('、')}` : `${item.topic} 暂无明确薄弱点`,
-      keyGaps: mustCover,
-      keyStrengths: strengths,
-      updatedAt: item.updatedAt,
-    };
-  });
-}
-
-function buildCourseSummariesFromV3(memoryStore: MemoryStoreV3): CourseSummary[] {
-  return memoryStore.projections.episodicProjections
-    .filter((item) => item.kind === 'course' && item.courseId)
-    .map((item) => ({
-      courseId: item.courseId as string,
-      topic: item.topic,
-      summary: item.summary,
-      completedNodes: Number(getEventPayloadValue({ completedNodes: 0 }, 'completedNodes', 0)),
-      totalNodes: Number(getEventPayloadValue({ totalNodes: 0 }, 'totalNodes', 0)),
-      updatedAt: item.updatedAt,
-    }));
-}
-
-export function convertMemoryStoreV3ToV2(memoryStore: MemoryStoreV3): MemoryStoreV2 {
-  const conceptStates: ConceptState[] = memoryStore.projections.conceptProjections.map((item) => ({
-    topic: item.topic,
-    concept: item.conceptName,
-    masteryScore: item.masteryScore,
-    status: item.status,
-    evidenceCount: item.recentErrors + item.recentSuccesses,
-    recentErrors: item.recentErrors,
-    recentSuccesses: item.recentSuccesses,
-    lastSeenAt: item.lastSeenAt,
-    nextReviewAt: item.nextReviewAt,
-    misconceptionHints: item.misconceptionHints,
-    confidence: item.confidence,
-    updatedAt: item.updatedAt,
-  }));
-
-  const topicStates: TopicState[] = memoryStore.projections.topicProjections.map((item) => ({
-    topic: item.topic,
-    familiarityScore: item.familiarityScore,
-    estimatedLevel: item.estimatedLevel,
-    transferableBackground: memoryStore.profile.stableFacts
-      .filter((fact) => fact.kind === 'knowledge_background' || fact.kind === 'analogy_experience')
-      .map((fact) => fact.text)
-      .slice(0, 3),
-    mustCoverConcepts: item.mustCoverConceptIds.map((conceptId) => memoryStore.projections.conceptProjections.find((projection) => projection.topic === item.topic && projection.conceptId === conceptId)?.conceptName || conceptId),
-    skippableBasics: item.skippableConceptIds.map((conceptId) => memoryStore.projections.conceptProjections.find((projection) => projection.topic === item.topic && projection.conceptId === conceptId)?.conceptName || conceptId),
-    riskConcepts: item.riskConceptIds.map((conceptId) => memoryStore.projections.conceptProjections.find((projection) => projection.topic === item.topic && projection.conceptId === conceptId)?.conceptName || conceptId),
-    confidence: item.confidence,
-    updatedAt: item.updatedAt,
-  }));
-
-  const signals: LearningSignal[] = memoryStore.events.flatMap((event) => {
-    if (event.type === 'question_answered') {
-      const isCorrect = Boolean(getEventPayloadValue(event.payload, 'isCorrect', false));
-      return [{
-        id: createMemoryId('signal', 'v3-question', event.topic, event.occurredAt),
-        type: 'question_attempt' as const,
-        topic: event.topic,
-        concept: String(getEventPayloadValue(event.payload, 'conceptName', getEventPayloadValue(event.payload, 'conceptId', '未知概念'))),
-        courseId: event.courseId,
-        source: 'assessment' as const,
-        confidence: 0.8,
-        occurredAt: event.occurredAt,
-        payload: {
-          accuracy: isCorrect ? 1 : 0,
-          question: String(getEventPayloadValue(event.payload, 'question', '')),
-        },
-      }];
-    }
-
-    if (event.type === 'chat_user_message') {
-      const signals: LearningSignal[] = [{
-        id: createMemoryId('signal', 'v3-chat-question', event.topic, event.occurredAt),
-        type: 'chat_question',
-        topic: event.topic,
-        courseId: event.courseId,
-        source: 'chat',
-        confidence: DEFAULT_QUESTION_CONFIDENCE,
-        occurredAt: event.occurredAt,
-        payload: {
-          question: String(getEventPayloadValue(event.payload, 'question', '')),
-        },
-      }];
-
-      const confusionConceptName = getEventPayloadValue<string | undefined>(event.payload, 'confusionConceptName', undefined);
-      if (confusionConceptName) {
-        signals.push({
-          id: createMemoryId('signal', 'v3-chat-confusion', event.topic, confusionConceptName, event.occurredAt),
-          type: 'chat_confusion',
-          topic: event.topic,
-          concept: confusionConceptName,
-          courseId: event.courseId,
-          source: 'chat',
-          confidence: DEFAULT_CHAT_GAP_CONFIDENCE,
-          occurredAt: event.occurredAt,
-          payload: {
-            evidence: [String(getEventPayloadValue(event.payload, 'question', ''))],
-          },
-        });
-      }
-      return signals;
-    }
-
-    return [];
-  });
-
-  return {
-    version: 2,
-    learnerId: memoryStore.learnerId,
-    profile: memoryStore.profile,
-    signals,
-    states: {
-      topicStates,
-      conceptStates,
-    },
-    summaries: {
-      topicSummaries: buildTopicSummariesFromV3(memoryStore),
-      courseSummaries: buildCourseSummariesFromV3(memoryStore),
-    },
-    updatedAt: memoryStore.updatedAt,
-  };
-}
-
-export function migrateMemoryToV3(memory: UserMemory | MemoryStoreV2 | MemoryStoreV3 | null | undefined, profile?: UserProfile | null): MemoryStoreV3 {
+export function migrateMemoryToV3(memory: UserMemory | MemoryStoreV3 | null | undefined, profile?: UserProfile | null): MemoryStoreV3 {
   if (isMemoryStoreV3(memory)) {
     return memory;
   }
 
-  const v2 = migrateUserMemoryToV2(memory as UserMemory | MemoryStoreV2 | null | undefined, profile);
+  const legacyMemory = memory
+    ? decayUserMemory(mergeProfileIntoMemory(memory, profile || memory.profile))
+    : createDefaultUserMemory(profile);
+
+  const now = Date.now();
+  const conceptMap = new Map<string, MemoryStoreV3['projections']['conceptProjections'][number]>();
+  const topicSet = new Set<string>();
+
+  // 从 V1 conceptMastery 构建概念投影
+  for (const mastery of legacyMemory.extractedInsights.conceptMastery) {
+    const normalizedConcept = normalizeConceptKey(mastery.concept);
+    const topic = mastery.topic;
+    topicSet.add(topic);
+
+    const key = `${topic}::${normalizedConcept}`;
+    const existing = conceptMap.get(key);
+    const base = existing || {
+      topic,
+      conceptId: normalizedConcept,
+      conceptName: normalizedConcept,
+      masteryScore: 0,
+      status: 'unknown' as const,
+      recentErrors: 0,
+      recentSuccesses: 0,
+      misconceptionHints: [] as string[],
+      confidence: 0.4,
+      updatedAt: mastery.lastReviewedAt || now,
+    };
+
+    base.masteryScore = Number(mastery.accuracy.toFixed(2));
+    base.recentErrors = mastery.totalAttempts - mastery.correctAttempts;
+    base.recentSuccesses = mastery.correctAttempts;
+    base.status = determineConceptStatus(base.masteryScore, base.recentErrors, mastery.needsReview);
+    base.confidence = Math.max(base.confidence, mastery.confidence || 0.8);
+    base.updatedAt = Math.max(base.updatedAt, mastery.lastReviewedAt || now);
+
+    conceptMap.set(key, base);
+  }
+
+  // 从 V1 knowledgeGaps 合并
+  for (const gap of legacyMemory.extractedInsights.knowledgeGaps) {
+    const normalizedConcept = normalizeConceptKey(gap.concept);
+    const topic = gap.topic;
+    topicSet.add(topic);
+
+    const key = `${topic}::${normalizedConcept}`;
+    const existing = conceptMap.get(key);
+    const base = existing || {
+      topic,
+      conceptId: normalizedConcept,
+      conceptName: normalizedConcept,
+      masteryScore: 0,
+      status: 'unknown' as const,
+      recentErrors: 0,
+      recentSuccesses: 0,
+      misconceptionHints: [] as string[],
+      confidence: 0.4,
+      updatedAt: gap.lastUpdated || now,
+    };
+
+    base.recentErrors = Math.max(base.recentErrors, gap.evidence.length);
+    base.masteryScore = Number(Math.min(base.masteryScore, gap.source === 'assessment' ? 0.45 : 0.55).toFixed(2));
+    base.status = base.masteryScore >= 0.55 ? 'fragile' : 'learning';
+    base.confidence = Math.max(base.confidence, gap.confidence || 0.65);
+    base.updatedAt = Math.max(base.updatedAt, gap.lastUpdated || now);
+
+    const hints = uniqueStrings(gap.evidence.map(summarizeEvidence)).slice(0, 3);
+    base.misconceptionHints = uniqueStrings([...base.misconceptionHints, ...hints]).slice(0, 3);
+
+    conceptMap.set(key, base);
+  }
+
+  // 从 V1 masteredConcepts 提升
+  for (const mastered of legacyMemory.extractedInsights.masteredConcepts) {
+    const normalizedConcept = normalizeConceptKey(mastered.concept);
+    const topic = mastered.topic;
+    topicSet.add(topic);
+
+    const key = `${topic}::${normalizedConcept}`;
+    const existing = conceptMap.get(key);
+    const base = existing || {
+      topic,
+      conceptId: normalizedConcept,
+      conceptName: normalizedConcept,
+      masteryScore: 0,
+      status: 'unknown' as const,
+      recentErrors: 0,
+      recentSuccesses: 0,
+      misconceptionHints: [] as string[],
+      confidence: 0.4,
+      updatedAt: mastered.updatedAt,
+    };
+
+    base.masteryScore = Number(Math.max(base.masteryScore, 0.72).toFixed(2));
+    base.recentSuccesses = Math.max(base.recentSuccesses, 1);
+    base.status = base.masteryScore >= 0.8 ? 'mastered' : 'fragile';
+    base.confidence = Math.max(base.confidence, mastered.confidence);
+    base.updatedAt = Math.max(base.updatedAt, mastered.updatedAt);
+
+    conceptMap.set(key, base);
+  }
+
+  const conceptProjections = Array.from(conceptMap.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+
+  // 从 learningHistory 生成 episodic projections
+  const episodicProjections = legacyMemory.learningHistory.map((record) => ({
+    id: createMemoryId('episode', 'course', record.courseId),
+    topic: record.topic,
+    courseId: record.courseId,
+    kind: 'course' as const,
+    summary: `${record.topic} 已完成 ${record.nodesCompleted}/${record.totalNodes} 节`,
+    conceptIds: conceptProjections
+      .filter((c) => c.topic === record.topic)
+      .map((c) => c.conceptId)
+      .slice(0, 5),
+    explanationStyles: [],
+    updatedAt: record.completedAt || legacyMemory.lastUpdated,
+  }));
+
   return {
     version: 3,
-    learnerId: v2.learnerId,
-    profile: v2.profile,
-    events: compactMemoryEvents(convertEventsFromV2(v2)),
-    projections: {
-      conceptProjections: v2.states.conceptStates.map((item) => ({
-        topic: item.topic,
-        conceptId: createMemoryId('concept', item.topic, item.concept),
-        conceptName: item.concept,
-        masteryScore: item.masteryScore,
-        status: item.status,
-        recentErrors: item.recentErrors,
-        recentSuccesses: item.recentSuccesses,
-        misconceptionHints: item.misconceptionHints,
-        confidence: item.confidence,
-        lastSeenAt: item.lastSeenAt,
-        nextReviewAt: item.nextReviewAt,
-        updatedAt: item.updatedAt,
-      })),
-      topicProjections: v2.states.topicStates.map((item) => ({
-        topic: item.topic,
-        familiarityScore: item.familiarityScore,
-        estimatedLevel: item.estimatedLevel,
-        mustCoverConceptIds: item.mustCoverConcepts.map((concept) => createMemoryId('concept', item.topic, concept)),
-        skippableConceptIds: item.skippableBasics.map((concept) => createMemoryId('concept', item.topic, concept)),
-        riskConceptIds: item.riskConcepts.map((concept) => createMemoryId('concept', item.topic, concept)),
-        confidence: item.confidence,
-        updatedAt: item.updatedAt,
-      })),
-      episodicProjections: [
-        ...v2.summaries.courseSummaries.map((item) => ({
-          id: createMemoryId('episode', 'course', item.courseId),
-          topic: item.topic,
-          courseId: item.courseId,
-          kind: 'course' as const,
-          summary: item.summary,
-          conceptIds: [],
-          explanationStyles: [],
-          updatedAt: item.updatedAt,
-        })),
-        ...v2.summaries.topicSummaries.map((item) => ({
-          id: createMemoryId('episode', 'topic', item.topic),
-          topic: item.topic,
-          kind: 'chat' as const,
-          summary: item.summary,
-          conceptIds: item.keyGaps,
-          explanationStyles: [],
-          updatedAt: item.updatedAt,
-        })),
-      ],
-    },
-    updatedAt: v2.updatedAt,
-  };
-}
-
-function buildPreferencesFromLegacy(memory: UserMemory): MemoryStoreV2['profile']['preferences'] {
-  return memory.extractedInsights.learningPreferences
-    .slice()
-    .sort((a, b) => b.updatedAt - a.updatedAt)
-    .map((item, index) => ({
-      id: createMemoryId('preference', item.kind, item.value, index),
-      kind: item.kind,
-      value: item.value,
-      confidence: item.confidence,
-      source: 'chat' as const,
-      updatedAt: item.updatedAt,
-    }));
-}
-
-function buildSignalsFromLegacy(memory: UserMemory) {
-  const signals = [] as MemoryStoreV2['signals'];
-
-  for (const record of memory.learningHistory) {
-    signals.push({
-      id: createMemoryId('signal', 'progress', record.courseId, record.topic),
-      type: 'course_progress',
-      topic: record.topic,
-      courseId: record.courseId,
-      source: 'progress',
-      confidence: 0.78,
-      occurredAt: record.completedAt || memory.lastUpdated,
-      payload: { nodesCompleted: record.nodesCompleted, totalNodes: record.totalNodes },
-    });
-  }
-
-  for (const pattern of memory.extractedInsights.questionPatterns) {
-    signals.push({
-      id: createMemoryId('signal', 'chat-question', pattern.topic, pattern.timestamp),
-      type: 'chat_question',
-      topic: pattern.topic,
-      source: pattern.source === 'assessment' ? 'assessment' : 'chat',
-      confidence: pattern.confidence || 0.6,
-      occurredAt: pattern.timestamp,
-      payload: { question: pattern.question },
-    });
-  }
-
-  for (const gap of memory.extractedInsights.knowledgeGaps) {
-    signals.push({
-      id: createMemoryId('signal', 'gap', gap.topic, normalizeConceptKey(gap.concept)),
-      type: 'chat_confusion',
-      topic: gap.topic,
-      concept: normalizeConceptKey(gap.concept),
-      source: gap.source === 'assessment' ? 'assessment' : 'chat',
-      confidence: gap.confidence || (gap.source === 'assessment' ? 0.85 : 0.65),
-      occurredAt: gap.lastUpdated || memory.lastUpdated,
-      payload: { evidence: gap.evidence, severity: gap.severity },
-    });
-  }
-
-  for (const mastery of memory.extractedInsights.conceptMastery) {
-    signals.push({
-      id: createMemoryId('signal', 'attempt', mastery.topic, normalizeConceptKey(mastery.concept), mastery.lastReviewedAt),
-      type: 'question_attempt',
-      topic: mastery.topic,
-      concept: normalizeConceptKey(mastery.concept),
-      source: mastery.source === 'chat' ? 'chat' : 'assessment',
-      confidence: mastery.confidence || 0.75,
-      occurredAt: mastery.lastReviewedAt,
-      payload: {
-        totalAttempts: mastery.totalAttempts,
-        correctAttempts: mastery.correctAttempts,
-        accuracy: mastery.accuracy,
-        needsReview: mastery.needsReview,
-      },
-    });
-  }
-
-  for (const mastery of memory.extractedInsights.masteredConcepts) {
-    signals.push({
-      id: createMemoryId('signal', 'chat-mastery', mastery.topic, normalizeConceptKey(mastery.concept), mastery.updatedAt),
-      type: 'chat_mastery',
-      topic: mastery.topic,
-      concept: normalizeConceptKey(mastery.concept),
-      source: 'chat',
-      confidence: mastery.confidence || 0.66,
-      occurredAt: mastery.updatedAt,
-      payload: {
-        evidence: mastery.evidence,
-      },
-    });
-  }
-
-  return signals.sort((a, b) => b.occurredAt - a.occurredAt);
-}
-
-function buildConceptStates(memory: UserMemory): ConceptState[] {
-  const conceptMap = new Map<string, ConceptState>();
-  const now = Date.now();
-
-  for (const mastery of memory.extractedInsights.conceptMastery) {
-    const normalizedConcept = normalizeConceptKey(mastery.concept);
-    const key = `${mastery.topic}::${normalizedConcept}`;
-    conceptMap.set(key, {
-      topic: mastery.topic,
-      concept: normalizedConcept,
-      masteryScore: Number(mastery.accuracy.toFixed(2)),
-      status: determineConceptStatus(mastery.accuracy, mastery.totalAttempts - mastery.correctAttempts, mastery.needsReview),
-      evidenceCount: mastery.totalAttempts,
-      recentErrors: mastery.totalAttempts - mastery.correctAttempts,
-      recentSuccesses: mastery.correctAttempts,
-      lastSeenAt: mastery.lastReviewedAt,
-      nextReviewAt: mastery.needsReview ? mastery.lastReviewedAt + 7 * 24 * 60 * 60 * 1000 : undefined,
-      misconceptionHints: [],
-      confidence: mastery.confidence || 0.8,
-      updatedAt: mastery.lastReviewedAt || now,
-    });
-  }
-
-  for (const gap of memory.extractedInsights.knowledgeGaps) {
-    const normalizedConcept = normalizeConceptKey(gap.concept);
-    const key = `${gap.topic}::${normalizedConcept}`;
-    const existing = conceptMap.get(key);
-    const gapConfidence = gap.confidence || (gap.source === 'assessment' ? 0.82 : 0.62);
-    const hints = uniqueStrings(gap.evidence.map(summarizeEvidence)).slice(0, 3);
-
-    if (existing) {
-      existing.misconceptionHints = uniqueStrings([...existing.misconceptionHints, ...hints]).slice(0, 3);
-      existing.recentErrors = Math.max(existing.recentErrors, gap.evidence.length);
-      existing.evidenceCount = Math.max(existing.evidenceCount, gap.evidence.length);
-      existing.masteryScore = Number(Math.min(existing.masteryScore, gap.source === 'assessment' ? 0.45 : 0.55).toFixed(2));
-      existing.status = existing.masteryScore >= 0.55 ? 'fragile' : 'learning';
-      existing.confidence = Math.max(existing.confidence, gapConfidence);
-      existing.updatedAt = Math.max(existing.updatedAt, gap.lastUpdated || now);
-    } else {
-      conceptMap.set(key, {
-        topic: gap.topic,
-        concept: normalizedConcept,
-        masteryScore: gap.source === 'assessment' ? 0.32 : 0.4,
-        status: 'learning',
-        evidenceCount: gap.evidence.length,
-        recentErrors: gap.evidence.length,
-        recentSuccesses: 0,
-        lastSeenAt: gap.lastUpdated,
-        nextReviewAt: gap.lastUpdated ? gap.lastUpdated + 3 * 24 * 60 * 60 * 1000 : undefined,
-        misconceptionHints: hints,
-        confidence: gapConfidence,
-        updatedAt: gap.lastUpdated || now,
-      });
-    }
-  }
-
-  for (const mastered of memory.extractedInsights.masteredConcepts) {
-    const normalizedConcept = normalizeConceptKey(mastered.concept);
-    const key = `${mastered.topic}::${normalizedConcept}`;
-    const existing = conceptMap.get(key);
-    if (existing) {
-      existing.masteryScore = Number(Math.max(existing.masteryScore, 0.72).toFixed(2));
-      existing.recentSuccesses = Math.max(existing.recentSuccesses, 1);
-      existing.status = existing.masteryScore >= 0.8 ? 'mastered' : 'fragile';
-      existing.confidence = Math.max(existing.confidence, mastered.confidence);
-      existing.updatedAt = Math.max(existing.updatedAt, mastered.updatedAt);
-      existing.lastSeenAt = Math.max(existing.lastSeenAt || 0, mastered.updatedAt);
-    } else {
-      conceptMap.set(key, {
-        topic: mastered.topic,
-        concept: normalizedConcept,
-        masteryScore: 0.72,
-        status: 'fragile',
-        evidenceCount: 1,
-        recentErrors: 0,
-        recentSuccesses: 1,
-        lastSeenAt: mastered.updatedAt,
-        misconceptionHints: [],
-        confidence: mastered.confidence,
-        updatedAt: mastered.updatedAt,
-      });
-    }
-  }
-
-  return Array.from(conceptMap.values()).sort((a, b) => b.updatedAt - a.updatedAt);
-}
-
-function buildTopicStates(memory: UserMemory, conceptStates: ConceptState[]): TopicState[] {
-  const topics = new Set<string>([
-    ...memory.learningHistory.map((item) => item.topic),
-    ...conceptStates.map((item) => item.topic),
-  ]);
-
-  return Array.from(topics).map((topic) => {
-    const relatedConcepts = conceptStates.filter((item) => item.topic === topic);
-    const learningRecord = memory.learningHistory.find((item) => item.topic === topic);
-    const averageMastery = relatedConcepts.length
-      ? relatedConcepts.reduce((sum, item) => sum + item.masteryScore, 0) / relatedConcepts.length
-      : 0;
-    const progressScore = learningRecord ? learningRecord.nodesCompleted / Math.max(learningRecord.totalNodes, 1) : 0;
-    const familiarityScore = Number(Math.min(0.95, averageMastery * 0.65 + progressScore * 0.35).toFixed(2));
-
-    return {
-      topic,
-      familiarityScore,
-      estimatedLevel: inferLevel(familiarityScore),
-      transferableBackground: [],
-      mustCoverConcepts: uniqueStrings(
-        relatedConcepts.filter((item) => item.status === 'learning' || item.status === 'fragile').sort((a, b) => a.masteryScore - b.masteryScore).map((item) => item.concept),
-      ).slice(0, 4),
-      skippableBasics: uniqueStrings(
-        relatedConcepts.filter((item) => item.status === 'mastered').sort((a, b) => b.masteryScore - a.masteryScore).map((item) => item.concept),
-      ).slice(0, 3),
-      riskConcepts: uniqueStrings(
-        relatedConcepts.filter((item) => item.recentErrors > 0 || item.misconceptionHints.length > 0).sort((a, b) => b.recentErrors - a.recentErrors).map((item) => item.concept),
-      ).slice(0, 4),
-      confidence: Number(Math.min(0.92, 0.45 + relatedConcepts.length * 0.08 + (learningRecord ? 0.12 : 0)).toFixed(2)),
-      updatedAt: Math.max(learningRecord?.completedAt || 0, ...relatedConcepts.map((item) => item.updatedAt), memory.lastUpdated),
-    };
-  }).sort((a, b) => b.updatedAt - a.updatedAt);
-}
-
-function buildCourseSummaries(memory: UserMemory) {
-  return memory.learningHistory.map((record) => ({
-    courseId: record.courseId,
-    topic: record.topic,
-    summary: `${record.topic} 已完成 ${record.nodesCompleted}/${record.totalNodes} 节`,
-    completedNodes: record.nodesCompleted,
-    totalNodes: record.totalNodes,
-    updatedAt: record.completedAt || memory.lastUpdated,
-  }));
-}
-
-function buildTopicSummaries(memory: UserMemory, conceptStates: ConceptState[]) {
-  const topics = new Set<string>([
-    ...memory.learningHistory.map((item) => item.topic),
-    ...conceptStates.map((item) => item.topic),
-  ]);
-
-  return Array.from(topics).map((topic) => {
-    const topicConcepts = conceptStates.filter((item) => item.topic === topic);
-    const keyGaps = topicConcepts.filter((item) => item.status === 'learning' || item.status === 'fragile').slice(0, 3).map((item) => item.concept);
-    const keyStrengths = topicConcepts.filter((item) => item.status === 'mastered').slice(0, 3).map((item) => item.concept);
-
-    return {
-      topic,
-      summary: keyGaps.length ? `${topic} 当前最需要补的是 ${keyGaps.join('、')}` : `${topic} 暂无明确薄弱点`,
-      keyGaps,
-      keyStrengths,
-      updatedAt: Math.max(memory.lastUpdated, ...topicConcepts.map((item) => item.updatedAt)),
-    };
-  });
-}
-
-export function migrateUserMemoryToV2(memory: UserMemory | MemoryStoreV2 | MemoryStoreV3 | null | undefined, profile?: UserProfile | null): MemoryStoreV2 {
-  if (isMemoryStoreV2(memory)) {
-    return memory;
-  }
-
-  if (isMemoryStoreV3(memory)) {
-    return convertMemoryStoreV3ToV2(memory);
-  }
-
-  const legacyMemory = memory ? decayUserMemory(mergeProfileIntoMemory(memory, profile || memory.profile)) : createDefaultUserMemory(profile);
-  const conceptStates = buildConceptStates(legacyMemory);
-
-  return {
-    version: 2,
     learnerId: 'local-user',
     profile: {
       stableFacts: buildStableFacts(legacyMemory.profile),
       goals: buildGoals(legacyMemory.profile),
-      preferences: buildPreferencesFromLegacy(legacyMemory),
+      preferences: [],
     },
-    signals: buildSignalsFromLegacy(legacyMemory),
-    states: {
-      topicStates: buildTopicStates(legacyMemory, conceptStates),
-      conceptStates,
-    },
-    summaries: {
-      topicSummaries: buildTopicSummaries(legacyMemory, conceptStates),
-      courseSummaries: buildCourseSummaries(legacyMemory),
+    events: [],
+    projections: {
+      conceptProjections,
+      topicProjections: [],
+      episodicProjections,
     },
     updatedAt: legacyMemory.lastUpdated,
   };
 }
 
-function rebuildStatesFromSignals(memoryStore: MemoryStoreV2): MemoryStoreV2 {
-  const conceptStateMap = new Map<string, ConceptState>();
-  const topicSignals = new Map<string, MemoryStoreV2['signals']>();
-
-  for (const signal of memoryStore.signals) {
-    const topicGroup = topicSignals.get(signal.topic) || [];
-    topicGroup.push(signal);
-    topicSignals.set(signal.topic, topicGroup);
-
-    if (!signal.concept) continue;
-
-    const concept = normalizeConceptKey(signal.concept);
-    const key = `${signal.topic}::${concept}`;
-    const current = conceptStateMap.get(key) || {
-      topic: signal.topic,
-      concept,
-      masteryScore: 0,
-      status: 'unknown' as const,
-      evidenceCount: 0,
-      recentErrors: 0,
-      recentSuccesses: 0,
-      misconceptionHints: [],
-      confidence: 0.4,
-      updatedAt: signal.occurredAt,
-    };
-
-    current.evidenceCount += 1;
-    current.updatedAt = Math.max(current.updatedAt, signal.occurredAt);
-    current.lastSeenAt = signal.occurredAt;
-    current.confidence = Math.max(current.confidence, signal.confidence);
-
-    if (signal.type === 'question_attempt') {
-      const accuracy = Number(signal.payload.accuracy || 0);
-      current.masteryScore = Number(((current.masteryScore + accuracy) / (current.evidenceCount > 1 ? 2 : 1)).toFixed(2));
-      if (accuracy >= 0.7) {
-        current.recentSuccesses += 1;
-      } else {
-        current.recentErrors += 1;
-      }
-    }
-
-    if (signal.type === 'chat_mastery') {
-      current.recentSuccesses += 1;
-      current.masteryScore = Number(Math.max(current.masteryScore, 0.72).toFixed(2));
-    }
-
-    if (signal.type === 'chat_confusion') {
-      current.recentErrors += 1;
-      current.masteryScore = Number(Math.min(current.masteryScore || 0.45, 0.45).toFixed(2));
-      const evidence = Array.isArray(signal.payload.evidence) ? signal.payload.evidence : [signal.payload.evidence];
-      current.misconceptionHints = uniqueStrings([
-        ...current.misconceptionHints,
-        ...evidence.filter(Boolean).map((item) => summarizeEvidence(String(item))),
-      ]).slice(0, 3);
-    }
-
-    if (signal.type === 'chat_question' && typeof signal.payload.question === 'string') {
-      current.misconceptionHints = uniqueStrings([
-        ...current.misconceptionHints,
-        summarizeEvidence(signal.payload.question),
-      ]).slice(0, 3);
-    }
-
-    current.status = determineConceptStatus(current.masteryScore, current.recentErrors, current.recentErrors > 0 && current.masteryScore < 0.75);
-    conceptStateMap.set(key, current);
-  }
-
-  const conceptStates = Array.from(conceptStateMap.values()).sort((a, b) => b.updatedAt - a.updatedAt);
-  const topicStates: TopicState[] = Array.from(topicSignals.entries()).map(([topic, signals]) => {
-    const relatedConcepts = conceptStates.filter((item) => item.topic === topic);
-    const familiarityBase = relatedConcepts.length ? relatedConcepts.reduce((sum, item) => sum + item.masteryScore, 0) / relatedConcepts.length : 0;
-    const familiarityScore = Number(Math.min(0.95, familiarityBase + Math.min(signals.length, 5) * 0.04).toFixed(2));
-
-    return {
-      topic,
-      familiarityScore,
-      estimatedLevel: inferLevel(familiarityScore),
-      transferableBackground: [],
-      mustCoverConcepts: uniqueStrings(relatedConcepts.filter((item) => item.status === 'learning' || item.status === 'fragile').map((item) => item.concept)).slice(0, 4),
-      skippableBasics: uniqueStrings(relatedConcepts.filter((item) => item.status === 'mastered').map((item) => item.concept)).slice(0, 3),
-      riskConcepts: uniqueStrings(relatedConcepts.filter((item) => item.recentErrors > 0 || item.misconceptionHints.length > 0).map((item) => item.concept)).slice(0, 4),
-      confidence: Number(Math.min(0.92, 0.45 + signals.length * 0.05).toFixed(2)),
-      updatedAt: Math.max(...signals.map((item) => item.occurredAt)),
-    };
-  }).sort((a, b) => b.updatedAt - a.updatedAt);
-
-  return {
-    ...memoryStore,
-    states: { topicStates, conceptStates },
-    updatedAt: Math.max(memoryStore.updatedAt, ...memoryStore.signals.map((item) => item.occurredAt), memoryStore.updatedAt),
-  };
-}
-
-function getFreshnessScore(updatedAt?: number): number {
-  if (!updatedAt) return 0.55;
-  const ageInDays = daysBetween(Date.now(), updatedAt);
-  if (ageInDays <= 7) return 1;
-  if (ageInDays <= 30) return 0.8;
-  if (ageInDays <= 90) return 0.6;
-  return 0.4;
-}
-
-function rankBackgroundFacts(topic: string, memoryStore: MemoryStoreV2): string[] {
-  return memoryStore.profile.stableFacts
-    .filter((item) => item.kind === 'knowledge_background' || item.kind === 'analogy_experience')
-    .map((item) => ({
-      text: item.text,
-      score: getTopicRelevanceScore(topic, item.text) * item.confidence * getFreshnessScore(item.updatedAt),
-    }))
-    .filter((item) => item.score >= 0.25)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 2)
-    .map((item) => item.text);
-}
-
-function getPreferredExplanationStyles(memoryStore: MemoryStoreV2): string[] {
-  return memoryStore.profile.preferences
-    .filter((item) => item.kind === 'explanation_style' || item.kind === 'analogy_style')
-    .map((item) => ({
-      value: item.value,
-      score: item.confidence * getFreshnessScore(item.updatedAt),
-    }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 2)
-    .map((item) => item.value);
-}
-
-export function appendChatSignalsToMemoryStore(memoryStore: MemoryStoreV2, input: ChatSignalInput): MemoryStoreV2 {
-  const now = Date.now();
-  const nextSignals = [...memoryStore.signals];
-
-  nextSignals.unshift({
-    id: createMemoryId('signal', 'chat-question', input.topic, now, input.question.slice(0, 12)),
-    type: 'chat_question',
-    topic: input.topic,
-    source: 'chat',
-    confidence: DEFAULT_QUESTION_CONFIDENCE,
-    occurredAt: now,
-    courseId: input.courseId,
-    payload: { question: input.question },
-  });
-
-  if (input.confusionConcept && input.confusionEvidence) {
-    nextSignals.unshift({
-      id: createMemoryId('signal', 'chat-confusion', input.topic, normalizeConceptKey(input.confusionConcept), now),
-      type: 'chat_confusion',
-      topic: input.topic,
-      concept: normalizeConceptKey(input.confusionConcept),
-      source: 'chat',
-      confidence: input.confidence || DEFAULT_CHAT_GAP_CONFIDENCE,
-      occurredAt: now,
-      courseId: input.courseId,
-      payload: { evidence: [input.confusionEvidence] },
-    });
-  }
-
-  return rebuildStatesFromSignals({ ...memoryStore, signals: nextSignals, updatedAt: now });
-}
-
-export function getPlanningMemoryPayload(topic: string, userMemory?: UserMemory | MemoryStoreV2 | MemoryStoreV3 | null): PlanningMemoryPayload {
-  const memoryStore = isMemoryStoreV3(userMemory) ? convertMemoryStoreV3ToV2(userMemory) : migrateUserMemoryToV2(userMemory);
-  const topicState = memoryStore.states.topicStates
-    .map((item) => ({ item, score: getTopicRelevanceScore(topic, item.topic) * item.confidence * getFreshnessScore(item.updatedAt) }))
-    .filter((entry) => entry.score >= 0.2)
-    .sort((a, b) => b.score - a.score)[0]?.item;
-
-  const recentRelevantCourses = memoryStore.summaries.courseSummaries
-    .map((item) => ({ ...item, score: getTopicRelevanceScore(topic, item.topic) * getFreshnessScore(item.updatedAt) }))
-    .filter((item) => item.score >= 0.3)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 2)
-    .map((item) => ({ topic: item.topic, summary: item.summary }));
-
-  return {
-    learnerSnapshot: {
-      targetGoal: memoryStore.profile.goals[0]?.goalText,
-      estimatedLevel: topicState?.estimatedLevel || 'novice',
-      confidence: topicState?.confidence || 0.35,
-    },
-    transferableBackground: rankBackgroundFacts(topic, memoryStore),
-    mustCoverConcepts: topicState?.mustCoverConcepts.slice(0, 3) || [],
-    skippableBasics: topicState?.skippableBasics.slice(0, 2) || [],
-    riskConcepts: topicState?.riskConcepts.slice(0, 3) || [],
-    recentRelevantCourses,
-  };
-}
-
-export function getTeachingMemoryPayload(input: TeachingPayloadInput): TeachingMemoryPayload {
-  const { topic, nodeTitle, nodeConcepts, prerequisiteConcepts = [], userMemory } = input;
-  const memoryStore = isMemoryStoreV3(userMemory) ? convertMemoryStoreV3ToV2(userMemory) : migrateUserMemoryToV2(userMemory);
-  const conceptStates = memoryStore.states.conceptStates.filter((item) => getTopicRelevanceScore(topic, item.topic) >= 0.45);
-  const normalizedNodeConcepts = nodeConcepts.map(normalizeConceptKey);
-  const normalizedPrerequisiteConcepts = prerequisiteConcepts.map(normalizeConceptKey);
-
-  const targetConceptStates = normalizedNodeConcepts.map((concept) => {
-    const matched = conceptStates
-      .filter((item) => Math.max(getTopicRelevanceScore(concept, item.concept), getTopicRelevanceScore(nodeTitle, item.concept)) >= 0.55)
-      .sort((a, b) => a.masteryScore - b.masteryScore)[0];
-
-    return matched ? {
-      concept: matched.concept,
-      status: matched.status,
-      masteryScore: matched.masteryScore,
-      misconceptionHints: matched.misconceptionHints.slice(0, 2),
-    } : {
-      concept,
-      status: 'unknown' as const,
-      masteryScore: 0,
-      misconceptionHints: [],
-    };
-  }).slice(0, 3);
-
-  const prerequisiteConceptStates = normalizedPrerequisiteConcepts.map((concept) => {
-    const matched = conceptStates
-      .filter((item) => getTopicRelevanceScore(concept, item.concept) >= 0.55)
-      .sort((a, b) => b.masteryScore - a.masteryScore)[0];
-
-    return matched ? {
-      concept: matched.concept,
-      status: matched.status,
-      masteryScore: matched.masteryScore,
-    } : {
-      concept,
-      status: 'unknown' as const,
-      masteryScore: 0,
-    };
-  }).slice(0, 2);
-
-  const recentQuestionSummaries = memoryStore.signals
-    .filter((item) => item.type === 'chat_question')
-    .map((item) => ({
-      text: String(item.payload.question || ''),
-      score: getTopicRelevanceScore(topic, item.topic) * Math.max(getTopicRelevanceScore(nodeTitle, String(item.payload.question || '')), ...normalizedNodeConcepts.map((concept) => getTopicRelevanceScore(concept, String(item.payload.question || '')))) * item.confidence * getFreshnessScore(item.occurredAt),
-    }))
-    .filter((item) => item.score >= 0.18)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3)
-    .map((item) => item.text);
-
-  return {
-    nodeTopic: topic,
-    nodeTitle,
-    prerequisiteConceptStates,
-    targetConceptStates,
-    recentQuestionSummaries,
-    analogyHints: rankBackgroundFacts(`${topic} ${nodeTitle}`, memoryStore),
-    preferredExplanationStyles: getPreferredExplanationStyles(memoryStore),
-  };
-}
-
-export function getChatMemoryPayload(input: ChatPayloadInput): ChatMemoryPayload {
-  const { topic, currentNodeTitle = '', currentQuestion = '', userMemory } = input;
-  const memoryStore = isMemoryStoreV3(userMemory) ? convertMemoryStoreV3ToV2(userMemory) : migrateUserMemoryToV2(userMemory);
-  const focusSource = currentNodeTitle || currentQuestion || topic;
-
-  const topicState = memoryStore.states.topicStates
-    .map((item) => ({ item, score: Math.max(getTopicRelevanceScore(topic, item.topic), getTopicRelevanceScore(focusSource, item.topic)) * item.confidence * getFreshnessScore(item.updatedAt) }))
-    .filter((entry) => entry.score >= 0.2)
-    .sort((a, b) => b.score - a.score)[0]?.item;
-
-  const focusConceptStates = memoryStore.states.conceptStates
-    .map((item) => ({ item, score: Math.max(getTopicRelevanceScore(topic, item.topic), getTopicRelevanceScore(focusSource, item.concept), getTopicRelevanceScore(currentQuestion, item.concept)) * item.confidence * getFreshnessScore(item.updatedAt) }))
-    .filter((entry) => entry.score >= 0.2)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3)
-    .map(({ item }) => ({
-      concept: item.concept,
-      status: item.status,
-      masteryScore: item.masteryScore,
-      misconceptionHints: item.misconceptionHints.slice(0, 2),
-    }));
-
-  const recentQuestionSummaries = memoryStore.signals
-    .filter((item) => item.type === 'chat_question')
-    .map((item) => ({
-      text: String(item.payload.question || ''),
-      score: Math.max(getTopicRelevanceScore(topic, item.topic), getTopicRelevanceScore(focusSource, String(item.payload.question || ''))) * item.confidence * getFreshnessScore(item.occurredAt),
-    }))
-    .filter((item) => item.score >= 0.18)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3)
-    .map((item) => item.text);
-
-  const topicSummary = memoryStore.summaries.topicSummaries
-    .map((item) => ({ item, score: getTopicRelevanceScore(topic, item.topic) * getFreshnessScore(item.updatedAt) }))
-    .filter((entry) => entry.score >= 0.25)
-    .sort((a, b) => b.score - a.score)[0]?.item.summary;
-
-  return {
-    topic,
-    focusConceptStates,
-    riskConcepts: topicState?.riskConcepts.slice(0, 3) || focusConceptStates.map((item) => item.concept),
-    recentQuestionSummaries,
-    analogyHints: rankBackgroundFacts(`${topic} ${focusSource}`, memoryStore),
-    preferredExplanationStyles: getPreferredExplanationStyles(memoryStore),
-    topicSummary,
-  };
-}

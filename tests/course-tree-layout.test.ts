@@ -14,22 +14,15 @@ let compactChatHistoryMessages: typeof import('../hooks/useChatHistory').compact
 let generateConversationSummary: typeof import('../hooks/useChatHistory').generateConversationSummary;
 let createMemoryRepository: typeof import('../lib/memory/repository').createMemoryRepository;
 let CHAT_CONCEPT_ALIASES: typeof import('../lib/memory/aggregator').CHAT_CONCEPT_ALIASES;
-let appendChatSignalsInAggregator: typeof import('../lib/memory/aggregator').appendChatSignalsToMemoryStore;
 let detectChatLearningPreferences: typeof import('../lib/memory/aggregator').detectChatLearningPreferences;
 let detectExplicitMasteredConcept: typeof import('../lib/memory/aggregator').detectExplicitMasteredConcept;
-let getChatPayloadFromAggregator: typeof import('../lib/memory/aggregator').getChatMemoryPayload;
-let getPlanningPayloadFromAggregator: typeof import('../lib/memory/aggregator').getPlanningMemoryPayload;
-let getTeachingPayloadFromAggregator: typeof import('../lib/memory/aggregator').getTeachingMemoryPayload;
-let migrateToV2FromAggregator: typeof import('../lib/memory/aggregator').migrateUserMemoryToV2;
 let normalizeConceptKeyFromAggregator: typeof import('../lib/memory/aggregator').normalizeConceptKey;
-let appendChatSignalsToMemoryStore: typeof import('../hooks/useUserMemory').appendChatSignalsToMemoryStore;
 let analyzeChatMessageForMemory: typeof import('../hooks/useUserMemory').analyzeChatMessageForMemory;
 let createDefaultUserMemory: typeof import('../hooks/useUserMemory').createDefaultUserMemory;
 let decayUserMemory: typeof import('../hooks/useUserMemory').decayUserMemory;
 let getChatMemoryPayload: typeof import('../hooks/useUserMemory').getChatMemoryPayload;
 let getPlanningMemoryPayload: typeof import('../hooks/useUserMemory').getPlanningMemoryPayload;
 let getTeachingMemoryPayload: typeof import('../hooks/useUserMemory').getTeachingMemoryPayload;
-let migrateUserMemoryToV2: typeof import('../hooks/useUserMemory').migrateUserMemoryToV2;
 let normalizeConceptKey: typeof import('../hooks/useUserMemory').normalizeConceptKey;
 let recordQuestionAttemptInMemory: typeof import('../hooks/useUserMemory').recordQuestionAttemptInMemory;
 let recordChatInsightInMemory: typeof import('../hooks/useUserMemory').recordChatInsightInMemory;
@@ -70,24 +63,17 @@ test.before(async () => {
 
   const aggregatorModule = await import('../lib/memory/aggregator');
   CHAT_CONCEPT_ALIASES = aggregatorModule.CHAT_CONCEPT_ALIASES;
-  appendChatSignalsInAggregator = aggregatorModule.appendChatSignalsToMemoryStore;
   detectChatLearningPreferences = aggregatorModule.detectChatLearningPreferences;
   detectExplicitMasteredConcept = aggregatorModule.detectExplicitMasteredConcept;
-  getChatPayloadFromAggregator = aggregatorModule.getChatMemoryPayload;
-  getPlanningPayloadFromAggregator = aggregatorModule.getPlanningMemoryPayload;
-  getTeachingPayloadFromAggregator = aggregatorModule.getTeachingMemoryPayload;
-  migrateToV2FromAggregator = aggregatorModule.migrateUserMemoryToV2;
   normalizeConceptKeyFromAggregator = aggregatorModule.normalizeConceptKey;
 
   const userMemoryModule = await import('../hooks/useUserMemory');
-  appendChatSignalsToMemoryStore = userMemoryModule.appendChatSignalsToMemoryStore;
   analyzeChatMessageForMemory = userMemoryModule.analyzeChatMessageForMemory;
   createDefaultUserMemory = userMemoryModule.createDefaultUserMemory;
   decayUserMemory = userMemoryModule.decayUserMemory;
   getChatMemoryPayload = userMemoryModule.getChatMemoryPayload;
   getPlanningMemoryPayload = userMemoryModule.getPlanningMemoryPayload;
   getTeachingMemoryPayload = userMemoryModule.getTeachingMemoryPayload;
-  migrateUserMemoryToV2 = userMemoryModule.migrateUserMemoryToV2;
   normalizeConceptKey = userMemoryModule.normalizeConceptKey;
   recordQuestionAttemptInMemory = userMemoryModule.recordQuestionAttemptInMemory;
   recordChatInsightInMemory = userMemoryModule.recordChatInsightInMemory;
@@ -167,8 +153,12 @@ test('buildCourseTreePrompt injects profile and memory based personalization rul
     workExperience: [],
     education: [],
     insights: {
-      knowledgeBackground: ['做过 React 后台项目'],
+      workSummary: ['做过 React 后台项目'],
+      educationSummary: [],
       analogyExperiences: ['负责过埋点分析和 A/B 实验'],
+      learningStyle: '实践型',
+      technicalLevel: '业务级',
+      valuePriorities: ['效率提升'],
       summary: '有前端和数据分析经验',
     },
   });
@@ -201,8 +191,12 @@ test('buildNodeContentPrompt asks for course context and mastery aware question 
     workExperience: [],
     education: [],
     insights: {
-      knowledgeBackground: ['熟悉 React 组件开发'],
+      workSummary: ['熟悉 React 组件开发'],
+      educationSummary: [],
       analogyExperiences: ['做过复杂表单和状态管理'],
+      learningStyle: '实践型',
+      technicalLevel: '业务级',
+      valuePriorities: ['效率提升'],
       summary: '有前端开发经验',
     },
   });
@@ -658,8 +652,12 @@ test('selectPersonalizationSignals keeps only directly relevant mastery signals 
   });
 
   memory.profile.insights = {
-    knowledgeBackground: ['做过 React 后台项目', '自己做过播客剪辑'],
+    workSummary: ['做过 React 后台项目', '自己做过播客剪辑'],
+    educationSummary: [],
     analogyExperiences: ['做过埋点分析', '录过播客并剪辑音频'],
+    learningStyle: '实践型',
+    technicalLevel: '业务级',
+    valuePriorities: ['效率提升'],
     summary: '前端和内容创作背景',
   };
 
@@ -676,8 +674,12 @@ test('selectPersonalizationSignals keeps weakly related background only for anal
     workExperience: [],
     education: [],
     insights: {
-      knowledgeBackground: ['做过 React 后台项目'],
+      workSummary: ['做过 React 后台项目'],
+      educationSummary: [],
       analogyExperiences: ['负责过埋点分析和实验设计'],
+      learningStyle: '实践型',
+      technicalLevel: '业务级',
+      valuePriorities: ['效率提升'],
       summary: '有前端和数据分析经验',
     },
   });
@@ -698,140 +700,7 @@ test('selectPersonalizationSignals keeps weakly related background only for anal
   assert.equal(signals.analogyOnlyItems.some((item) => item.includes('埋点分析')), true);
 });
 
-test('migrateUserMemoryToV2 preserves stable profile facts and derives topic state', () => {
-  const memory = createDefaultUserMemory({
-    name: '小王',
-    targetJob: 'AI 产品经理',
-    workExperience: [],
-    education: [],
-    insights: {
-      knowledgeBackground: ['做过 React 后台项目'],
-      analogyExperiences: ['负责过埋点分析和实验设计'],
-      summary: '前端和数据分析经验',
-    },
-  });
-
-  recordQuestionAttemptInMemory(memory, {
-    courseId: 'course-agent',
-    topic: 'Agent',
-    concept: '工具调用',
-    question: '什么时候必须调用工具？',
-    isCorrect: false,
-    difficulty: 2,
-    dimension: 'application',
-  });
-
-  const migrated = migrateUserMemoryToV2(memory);
-
-  assert.equal(migrated.version, 2);
-  assert.equal(migrated.profile.stableFacts.some((item) => item.text.includes('React 后台项目')), true);
-  assert.equal(migrated.profile.stableFacts.some((item) => item.text.includes('埋点分析')), true);
-  assert.equal(migrated.states.topicStates.some((item) => item.topic === 'Agent'), true);
-  assert.equal(migrated.states.conceptStates.some((item) => item.concept === '工具调用'), true);
-});
-
-// ============ 以下测试使用废弃的 V1/V2 API，已跳过 ============
-// 新的 V3 + Memory Agent 测试在 course-blueprint-memory-v3.test.ts
-
-test.skip('getPlanningMemoryPayload keeps high-signal topic guidance and drops unrelated chat noise', () => {
-  const memory = createDefaultUserMemory({
-    targetJob: 'AI 产品经理',
-    workExperience: [],
-    education: [],
-    insights: {
-      knowledgeBackground: ['做过 React 后台项目'],
-      analogyExperiences: ['负责过埋点分析和实验设计', '录过英语播客'],
-      summary: '前端和内容创作经验',
-    },
-  });
-
-  memory.learningHistory.push({
-    courseId: 'course-agent',
-    topic: 'Agent',
-    nodesCompleted: 3,
-    totalNodes: 6,
-    completedAt: Date.now(),
-  });
-
-  recordQuestionAttemptInMemory(memory, {
-    courseId: 'course-agent',
-    topic: 'Agent',
-    concept: '工具调用',
-    question: '什么时候必须调用外部工具？',
-    isCorrect: false,
-    difficulty: 2,
-    dimension: 'application',
-  });
-
-  recordChatInsightInMemory(memory, {
-    topic: '英语口语',
-    concept: '发音',
-    evidence: '总是搞不懂这个发音规则',
-    confidence: 0.82,
-  });
-
-  const payload = getPlanningMemoryPayload('Agent 工具调用', memory);
-
-  assert.equal(payload.mustCoverConcepts.includes('工具调用'), true);
-  assert.equal(payload.riskConcepts.includes('工具调用'), true);
-  assert.equal(payload.transferableBackground.some((item) => item.includes('埋点分析')), true);
-  assert.equal(payload.transferableBackground.some((item) => item.includes('播客')), false);
-  assert.equal(payload.recentRelevantCourses.some((item) => item.topic === 'Agent'), true);
-});
-
-test.skip('getTeachingMemoryPayload focuses on node concepts and prerequisite mastery', () => {
-  const memory = createDefaultUserMemory({
-    targetJob: 'AI 产品经理',
-    workExperience: [],
-    education: [],
-    insights: {
-      knowledgeBackground: ['做过 React 后台项目'],
-      analogyExperiences: ['负责过埋点分析和实验设计'],
-      summary: '前端和数据分析经验',
-    },
-  });
-
-  recordQuestionAttemptInMemory(memory, {
-    courseId: 'course-agent',
-    topic: 'Agent',
-    concept: 'Agent 基本定义',
-    question: 'Agent 的核心特征是什么？',
-    isCorrect: true,
-    difficulty: 1,
-    dimension: 'understanding',
-  });
-
-  recordQuestionAttemptInMemory(memory, {
-    courseId: 'course-agent',
-    topic: 'Agent',
-    concept: '工具调用',
-    question: '什么时候必须调用外部工具？',
-    isCorrect: false,
-    difficulty: 2,
-    dimension: 'application',
-  });
-
-  memory.extractedInsights.questionPatterns.push({
-    topic: 'Agent',
-    question: '工具调用和工作流编排有什么区别？',
-    timestamp: Date.now(),
-    confidence: 0.7,
-    source: 'chat',
-  });
-
-  const payload = getTeachingMemoryPayload({
-    topic: 'Agent',
-    nodeTitle: '工具调用',
-    nodeConcepts: ['工具调用', '工具选择时机'],
-    prerequisiteConcepts: ['Agent 基本定义'],
-    userMemory: memory,
-  });
-
-  assert.equal(payload.targetConceptStates.some((item) => item.concept === '工具调用'), true);
-  assert.equal(payload.prerequisiteConceptStates.some((item) => item.concept === 'Agent 基本定义'), true);
-  assert.equal(payload.recentQuestionSummaries.some((item) => item.includes('工具调用和工作流编排')), true);
-  assert.equal(payload.analogyHints.some((item) => item.includes('埋点分析')), true);
-});
+// V1/V2 API 相关测试已移除，新的 V3 + Memory Agent 测试在 course-blueprint-memory-v3.test.ts
 
 test('detectChatLearningPreferences extracts explanation style preferences from user wording', () => {
   const preferences = detectChatLearningPreferences('还是有点懵，能不能一步一步讲，再举个例子对比一下？');
@@ -914,84 +783,6 @@ test('normalizeConceptKey collapses close variants into one canonical concept', 
   assert.equal(normalizeConceptKey('工作流编排'), normalizeConceptKey('workflow 编排'));
 });
 
-test('appendChatSignalsToMemoryStore writes v2 chat signals that feed teaching payload', () => {
-  const legacyMemory = createDefaultUserMemory({
-    targetJob: 'AI 产品经理',
-    workExperience: [],
-    education: [],
-    insights: {
-      knowledgeBackground: ['做过 React 后台项目'],
-      analogyExperiences: ['负责过埋点分析和实验设计'],
-      summary: '前端和数据分析经验',
-    },
-  });
-
-  const store = migrateUserMemoryToV2(legacyMemory);
-  const updated = appendChatSignalsToMemoryStore(store, {
-    topic: 'Agent',
-    question: '外部工具调用和工作流编排有什么区别？',
-    confusionConcept: '外部工具调用',
-    confusionEvidence: '我还是没懂外部工具调用和工作流编排有什么区别',
-    confidence: 0.74,
-  });
-
-  const payload = getTeachingMemoryPayload({
-    topic: 'Agent',
-    nodeTitle: '工具调用',
-    nodeConcepts: ['工具调用'],
-    prerequisiteConcepts: [],
-    userMemory: updated,
-  });
-
-  assert.equal(updated.signals.some((item) => item.type === 'chat_question'), true);
-  assert.equal(updated.signals.some((item) => item.type === 'chat_confusion'), true);
-  assert.equal(payload.targetConceptStates.some((item) => item.concept === '工具调用'), true);
-  assert.equal(payload.recentQuestionSummaries.some((item) => item.includes('外部工具调用和工作流编排')), true);
-});
-
-test.skip('getChatMemoryPayload keeps chat context focused on current topic and node risk concepts', () => {
-  const legacyMemory = createDefaultUserMemory({
-    targetJob: 'AI 产品经理',
-    workExperience: [],
-    education: [],
-    insights: {
-      knowledgeBackground: ['做过 React 后台项目'],
-      analogyExperiences: ['负责过埋点分析和实验设计'],
-      summary: '前端和数据分析经验',
-    },
-  });
-
-  recordQuestionAttemptInMemory(legacyMemory, {
-    courseId: 'course-agent',
-    topic: 'Agent',
-    concept: '工具调用',
-    question: '什么时候必须调用外部工具？',
-    isCorrect: false,
-    difficulty: 2,
-    dimension: 'application',
-  });
-
-  const store = appendChatSignalsToMemoryStore(migrateUserMemoryToV2(legacyMemory), {
-    topic: 'Agent',
-    question: '工具调用和工作流编排有什么区别？',
-    confusionConcept: '工具调用',
-    confusionEvidence: '我还是没懂工具调用和工作流编排有什么区别',
-    confidence: 0.74,
-  });
-
-  const payload = getChatMemoryPayload({
-    topic: 'Agent',
-    currentNodeTitle: '工具调用',
-    currentQuestion: '什么时候必须调用工具？',
-    userMemory: store,
-  });
-
-  assert.equal(payload.focusConceptStates.some((item) => item.concept === '工具调用'), true);
-  assert.equal(payload.riskConcepts.includes('工具调用'), true);
-  assert.equal(payload.recentQuestionSummaries.some((item) => item.includes('工具调用和工作流编排')), true);
-  assert.equal(payload.analogyHints.some((item) => item.includes('埋点分析')), true);
-});
-
 test('buildChatContext prefers structured v2 payload over legacy chat memory noise', () => {
   const context = buildChatContext(
     {
@@ -1062,136 +853,6 @@ test('compactChatHistoryMessages summarizes truncated history instead of silentl
   assert.equal(result.droppedSummary?.summary.includes('工具调用和工作流编排'), true);
 });
 
-test.skip('positive chat memory flows into teaching and chat payloads', () => {
-  const memory = createDefaultUserMemory();
-
-  memory.extractedInsights.learningPreferences.push({
-    kind: 'explanation_style',
-    value: '分步拆解',
-    confidence: 0.72,
-    evidence: '用户说想一步一步讲',
-    updatedAt: Date.now(),
-  });
-
-  memory.extractedInsights.masteredConcepts.push({
-    topic: 'Agent',
-    concept: '工具调用',
-    evidence: '用户说工具调用已经明白了',
-    confidence: 0.68,
-    updatedAt: Date.now(),
-  });
-
-  const teachingPayload = getTeachingMemoryPayload({
-    topic: 'Agent',
-    nodeTitle: '工具调用',
-    nodeConcepts: ['工具调用'],
-    userMemory: memory,
-  });
-  const chatPayload = getChatMemoryPayload({
-    topic: 'Agent',
-    currentNodeTitle: '工具调用',
-    userMemory: memory,
-  });
-
-  assert.equal(teachingPayload.preferredExplanationStyles.includes('分步拆解'), true);
-  assert.equal(chatPayload.preferredExplanationStyles.includes('分步拆解'), true);
-  assert.equal(chatPayload.focusConceptStates.some((item) => item.concept === '工具调用'), true);
-});
-
-test.skip('memory repository reads and writes v2 snapshots without leaking storage details', () => {
-  const store = new Map<string, string>();
-  const storage = {
-    getItem: (key: string) => store.get(key) ?? null,
-    setItem: (key: string, value: string) => {
-      store.set(key, value);
-    },
-  };
-
-  const repository = createMemoryRepository({
-    storage,
-    getProfile: () => ({
-      targetJob: 'AI 产品经理',
-      workExperience: [],
-      education: [],
-      insights: {
-        knowledgeBackground: ['做过 React 后台项目'],
-        analogyExperiences: ['负责过埋点分析和实验设计'],
-        summary: '前端和数据分析经验',
-      },
-    }),
-  });
-
-  const storeV2 = repository.getMemoryStore();
-  const updated = appendChatSignalsToMemoryStore(storeV2, {
-    topic: 'Agent',
-    question: '工具调用和工作流编排有什么区别？',
-    confusionConcept: '工具调用',
-    confusionEvidence: '我还是没懂工具调用和工作流编排有什么区别',
-    confidence: 0.74,
-  });
-  repository.saveMemoryStore(updated);
-
-  const planningPayload = repository.getPlanningPayload('Agent');
-  const chatPayload = repository.getChatPayload({
-    topic: 'Agent',
-    currentNodeTitle: '工具调用',
-  });
-
-  assert.equal(repository.getMemoryStore().signals.length >= 2, true);
-  assert.equal(planningPayload.transferableBackground.some((item) => item.includes('埋点分析')), true);
-  assert.equal(chatPayload.focusConceptStates.some((item) => item.concept === '工具调用'), true);
-});
-
-test.skip('aggregator exports stay consistent with hook-facing memory helpers', () => {
-  const legacyMemory = createDefaultUserMemory({
-    targetJob: 'AI 产品经理',
-    workExperience: [],
-    education: [],
-    insights: {
-      knowledgeBackground: ['做过 React 后台项目'],
-      analogyExperiences: ['负责过埋点分析和实验设计'],
-      summary: '前端和数据分析经验',
-    },
-  });
-
-  const storeFromHook = appendChatSignalsToMemoryStore(migrateUserMemoryToV2(legacyMemory), {
-    topic: 'Agent',
-    question: '工具调用和工作流编排有什么区别？',
-    confusionConcept: '外部工具调用',
-    confusionEvidence: '我还是没懂外部工具调用和工作流编排有什么区别',
-    confidence: 0.74,
-  });
-  const storeFromAggregator = appendChatSignalsInAggregator(migrateToV2FromAggregator(legacyMemory), {
-    topic: 'Agent',
-    question: '工具调用和工作流编排有什么区别？',
-    confusionConcept: '外部工具调用',
-    confusionEvidence: '我还是没懂外部工具调用和工作流编排有什么区别',
-    confidence: 0.74,
-  });
-
-  assert.deepEqual(getPlanningMemoryPayload('Agent', storeFromHook), getPlanningPayloadFromAggregator('Agent', storeFromAggregator));
-  assert.deepEqual(getTeachingMemoryPayload({
-    topic: 'Agent',
-    nodeTitle: '工具调用',
-    nodeConcepts: ['工具调用'],
-    userMemory: storeFromHook,
-  }), getTeachingPayloadFromAggregator({
-    topic: 'Agent',
-    nodeTitle: '工具调用',
-    nodeConcepts: ['工具调用'],
-    userMemory: storeFromAggregator,
-  }));
-  assert.deepEqual(getChatMemoryPayload({
-    topic: 'Agent',
-    currentNodeTitle: '工具调用',
-    userMemory: storeFromHook,
-  }), getChatPayloadFromAggregator({
-    topic: 'Agent',
-    currentNodeTitle: '工具调用',
-    userMemory: storeFromAggregator,
-  }));
-});
-
 test('concept alias dictionary covers extendable variants beyond hard-coded regexes', () => {
   assert.equal(Array.isArray(CHAT_CONCEPT_ALIASES['工具调用']), true);
   assert.equal(CHAT_CONCEPT_ALIASES['工具调用'].includes('tool call'), true);
@@ -1199,41 +860,3 @@ test('concept alias dictionary covers extendable variants beyond hard-coded rege
   assert.equal(normalizeConceptKeyFromAggregator('调用工具时机'), '工具选择时机');
 });
 
-test.skip('memory repository can build payloads from injected server-side memory without localStorage', () => {
-  const legacyMemory = createDefaultUserMemory({
-    targetJob: 'AI 产品经理',
-    workExperience: [],
-    education: [],
-    insights: {
-      knowledgeBackground: ['做过 React 后台项目'],
-      analogyExperiences: ['负责过埋点分析和实验设计'],
-      summary: '前端和数据分析经验',
-    },
-  });
-
-  recordQuestionAttemptInMemory(legacyMemory, {
-    courseId: 'course-agent',
-    topic: 'Agent',
-    concept: '工具调用',
-    question: '什么时候必须调用工具？',
-    isCorrect: false,
-    difficulty: 2,
-    dimension: 'application',
-  });
-
-  const repository = createMemoryRepository({
-    initialMemory: migrateUserMemoryToV2(legacyMemory),
-    getProfile: () => legacyMemory.profile,
-  });
-
-  assert.equal(repository.getPlanningPayload('Agent').mustCoverConcepts.includes('工具调用'), true);
-  assert.equal(repository.getTeachingPayload({
-    topic: 'Agent',
-    nodeTitle: '工具调用',
-    nodeConcepts: ['工具调用'],
-  }).targetConceptStates.some((item) => item.concept === '工具调用'), true);
-  assert.equal(repository.getChatPayload({
-    topic: 'Agent',
-    currentNodeTitle: '工具调用',
-  }).focusConceptStates.some((item) => item.concept === '工具调用'), true);
-});

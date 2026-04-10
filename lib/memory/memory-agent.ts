@@ -3,7 +3,6 @@ import type {
   ChatMemoryPayload,
   ConceptProjection,
   CourseBlueprint,
-  MemoryStoreV2,
   MemoryStoreV3,
   PlanningMemoryPayload,
   TeachingMemoryPayload,
@@ -229,11 +228,10 @@ function filterValidConcepts(concepts: string[]): string[] {
 /** Planning 场景：课程纲要生成 */
 export function getPlanningMemoryPayload(
   topic: string,
-  userMemory?: UserMemory | MemoryStoreV2 | MemoryStoreV3 | null
+  userMemory?: UserMemory | MemoryStoreV3 | null
 ): PlanningMemoryPayload {
   const now = Date.now();
   
-  // 兼容 V2：自动迁移到 V3
   let memoryV3: MemoryStoreV3;
   if (!userMemory) {
     return {
@@ -263,15 +261,14 @@ export function getPlanningMemoryPayload(
 
   const recentRelevantCourses = getRecentCourses(topic, memoryStore.projections.episodicProjections, 3, now);
 
-  // 从 topicProjection 中提取概念名称
   const mustCoverConceptNames = topicProjection?.mustCoverConceptIds
     .map(id => memoryStore.projections.conceptProjections.find(c => c.conceptId === id)?.conceptName)
     .filter((name): name is string => !!name) || [];
-  
+
   const skippableConceptNames = topicProjection?.skippableConceptIds
     .map(id => memoryStore.projections.conceptProjections.find(c => c.conceptId === id)?.conceptName)
     .filter((name): name is string => !!name) || [];
-  
+
   const riskConceptNames = topicProjection?.riskConceptIds
     .map(id => memoryStore.projections.conceptProjections.find(c => c.conceptId === id)?.conceptName)
     .filter((name): name is string => !!name) || [];
@@ -297,12 +294,10 @@ export function getTeachingMemoryPayload(input: {
   nodeConcepts: string[];
   prerequisiteConcepts?: string[];
   blueprints?: CourseBlueprint[]; // 新增：用于构建图谱
-  userMemory?: UserMemory | MemoryStoreV2 | MemoryStoreV3 | null;
+  userMemory?: UserMemory | MemoryStoreV3 | null;
 }): TeachingMemoryPayload {
   const { topic, nodeTitle, nodeConcepts, prerequisiteConcepts = [], blueprints = [], userMemory } = input;
   const now = Date.now();
-  
-  // 兼容 V2：自动迁移到 V3
   let memoryV3: MemoryStoreV3;
   if (!userMemory) {
     return {
@@ -402,12 +397,10 @@ export function getChatMemoryPayload(input: {
   topic: string;
   currentNodeTitle?: string;
   currentQuestion?: string;
-  userMemory?: UserMemory | MemoryStoreV2 | MemoryStoreV3 | null;
+  userMemory?: UserMemory | MemoryStoreV3 | null;
 }): ChatMemoryPayload {
   const { topic, currentNodeTitle = '', currentQuestion = '', userMemory } = input;
   const now = Date.now();
-  
-  // 兼容 V2：自动迁移到 V3
   let memoryV3: MemoryStoreV3;
   if (!userMemory) {
     return {

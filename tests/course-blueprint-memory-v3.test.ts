@@ -9,9 +9,9 @@ import {
 import {
   appendEventToMemoryStoreV3,
   createEmptyMemoryStoreV3,
-  getPlanningMemoryPayload,
   migrateMemoryToV3,
 } from '../lib/memory/aggregator';
+import { getPlanningMemoryPayload } from '../lib/memory/memory-agent';
 import { activateSystemCourse, clearLegacyLearningData, getStoredData, getSystemCourseRecommendations } from '../lib/storage';
 import { buildCompactCourseBlueprintPrompt, buildNodeLessonPrompt } from '../lib/prompt';
 import { validateCourseBlueprint } from '../lib/validation/course-validator';
@@ -99,8 +99,12 @@ test('createEmptyMemoryStoreV3 seeds profile, event log, and projections', () =>
     workExperience: [],
     education: [],
     insights: {
-      knowledgeBackground: ['做过 React 后台项目'],
+      workSummary: ['做过 React 后台项目'],
+      educationSummary: [],
       analogyExperiences: ['负责过埋点分析和实验设计'],
+      learningStyle: '实践型',
+      technicalLevel: '业务级',
+      valuePriorities: ['效率提升'],
       summary: '前端和数据分析经验',
     },
   });
@@ -346,8 +350,12 @@ test('appendEventToMemoryStoreV3 projects question and chat events into concept 
     workExperience: [],
     education: [],
     insights: {
-      knowledgeBackground: ['做过 React 后台项目'],
+      workSummary: ['做过 React 后台项目'],
+      educationSummary: [],
       analogyExperiences: ['负责过埋点分析和实验设计'],
+      learningStyle: '实践型',
+      technicalLevel: '业务级',
+      valuePriorities: ['效率提升'],
       summary: '前端和数据分析经验',
     },
   });
@@ -391,8 +399,12 @@ test('getPlanningMemoryPayload can read MemoryStoreV3 projections directly', () 
       workExperience: [],
       education: [],
       insights: {
-        knowledgeBackground: ['做过 React 后台项目'],
+        workSummary: ['做过 React 后台项目'],
+        educationSummary: [],
         analogyExperiences: ['负责过埋点分析和实验设计'],
+        learningStyle: '实践型' as const,
+        technicalLevel: '业务级' as const,
+        valuePriorities: ['效率提升'],
         summary: '前端和数据分析经验',
       },
     },

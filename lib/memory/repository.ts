@@ -3,10 +3,8 @@ import {
   createDefaultUserMemory,
   decayUserMemory,
   isMemoryStoreV3,
-  isMemoryStoreV2,
   mergeProfileIntoMemory,
   migrateMemoryToV3,
-  migrateUserMemoryToV2,
 } from '@/lib/memory/aggregator';
 import {
   getChatMemoryPayload,
@@ -19,7 +17,6 @@ import type {
   CourseBlueprint,
   MemoryEvent,
   MemoryStoreV3,
-  MemoryStoreV2,
   PlanningMemoryPayload,
   StoredCourseBundle,
   TeachingMemoryPayload,
@@ -28,7 +25,6 @@ import type {
 } from '@/types/course';
 
 const USER_MEMORY_KEY = 'userMemory';
-const USER_MEMORY_V2_KEY = 'userMemoryV2';
 const USER_MEMORY_V3_KEY = 'userMemoryV3';
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
@@ -36,7 +32,7 @@ type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
 type CreateMemoryRepositoryOptions = {
   storage?: StorageLike;
   getProfile?: () => UserProfile | null;
-  initialMemory?: UserMemory | MemoryStoreV2 | MemoryStoreV3 | null;
+  initialMemory?: UserMemory | MemoryStoreV3 | null;
 };
 
 function getStorage(storage?: StorageLike): StorageLike | null {
@@ -53,7 +49,7 @@ export function createMemoryRepository(options: CreateMemoryRepositoryOptions = 
   function getLegacyMemory(): UserMemory {
     const profile = getProfile();
 
-    if (initialMemory && !isMemoryStoreV2(initialMemory) && !isMemoryStoreV3(initialMemory)) {
+    if (initialMemory && !isMemoryStoreV3(initialMemory)) {
       return decayUserMemory(mergeProfileIntoMemory(initialMemory, profile));
     }
 
@@ -84,7 +80,6 @@ export function createMemoryRepository(options: CreateMemoryRepositoryOptions = 
     };
 
     storage.setItem(USER_MEMORY_KEY, JSON.stringify(nextMemory));
-    storage.setItem(USER_MEMORY_V2_KEY, JSON.stringify(migrateUserMemoryToV2(nextMemory, getProfile())));
 
     // 同步写入 V3：将 legacy memory 迁移后合并到现有 V3 存储
     try {
@@ -94,48 +89,19 @@ export function createMemoryRepository(options: CreateMemoryRepositoryOptions = 
         : null;
 
       if (existingV3 && isMemoryStoreV3(existingV3)) {
-        // V3 已存在：更新 profile.stableFacts 和 profile.goals
-        const newV2 = migrateUserMemoryToV2(nextMemory, getProfile());
+        // V3 已存在：更新 profile（stableFacts + goals）
+        const newV3 = migrateMemoryToV3(nextMemory, getProfile());
         const updatedV3: MemoryStoreV3 = {
           ...existingV3,
-          profile: newV2.profile,
+          profile: newV3.profile,
           updatedAt: Math.max(existingV3.updatedAt, nextMemory.lastUpdated),
         };
         storage.setItem(USER_MEMORY_V3_KEY, JSON.stringify(updatedV3));
       }
       // V3 不存在时不主动创建，等下次读取时自动迁移
     } catch {
-      // V3 写入失败不影响 V1/V2 的正常保存
+      // V3 写入失败不影响 V1 的正常保存
     }
-  }
-
-  function getMemoryStore(): MemoryStoreV2 {
-    if (initialMemory && !isMemoryStoreV3(initialMemory)) {
-      return migrateUserMemoryToV2(initialMemory, getProfile());
-    }
-
-    if (!storage) return migrateUserMemoryToV2(getLegacyMemory(), getProfile());
-
-    try {
-      const raw = storage.getItem(USER_MEMORY_V2_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as MemoryStoreV2;
-        if (isMemoryStoreV2(parsed)) {
-          return parsed;
-        }
-      }
-    } catch {
-      // 损坏数据回退迁移
-    }
-
-    const migrated = migrateUserMemoryToV2(getLegacyMemory(), getProfile());
-    saveMemoryStore(migrated);
-    return migrated;
-  }
-
-  function saveMemoryStore(memoryStore: MemoryStoreV2): void {
-    if (!storage) return;
-    storage.setItem(USER_MEMORY_V2_KEY, JSON.stringify(memoryStore));
   }
 
   function getMemoryStoreV3(): MemoryStoreV3 {
@@ -143,7 +109,7 @@ export function createMemoryRepository(options: CreateMemoryRepositoryOptions = 
       return migrateMemoryToV3(initialMemory, getProfile());
     }
 
-    if (!storage) return migrateMemoryToV3(getMemoryStore(), getProfile());
+    if (!storage) return migrateMemoryToV3(getLegacyMemory(), getProfile());
 
     try {
       const raw = storage.getItem(USER_MEMORY_V3_KEY);
@@ -157,7 +123,7 @@ export function createMemoryRepository(options: CreateMemoryRepositoryOptions = 
       // 损坏数据回退迁移
     }
 
-    const migrated = migrateMemoryToV3(getMemoryStore(), getProfile());
+    const migrated = migrateMemoryToV3(getLegacyMemory(), getProfile());
     saveMemoryStoreV3(migrated);
     return migrated;
   }
@@ -183,7 +149,6 @@ export function createMemoryRepository(options: CreateMemoryRepositoryOptions = 
     nodeConcepts: string[];
     prerequisiteConcepts?: string[];
   }): TeachingMemoryPayload {
-    // 获取所有课程的 blueprints
     const storedData = getStoredDataV2();
     const blueprints: CourseBlueprint[] = storedData.courses.map((b: StoredCourseBundle) => b.blueprint);
 
@@ -208,8 +173,6 @@ export function createMemoryRepository(options: CreateMemoryRepositoryOptions = 
   return {
     getLegacyMemory,
     saveLegacyMemory,
-    getMemoryStore,
-    saveMemoryStore,
     getMemoryStoreV3,
     saveMemoryStoreV3,
     appendMemoryEvent,

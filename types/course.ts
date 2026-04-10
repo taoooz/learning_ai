@@ -100,6 +100,7 @@ export interface CourseBlueprintNode {
   index: number;
   title: string;
   teachingGoal: string;
+  frame?: string;
   teachConceptIds: string[];
   prerequisiteConceptIds: string[];
   assessmentTargetIds?: string[];
@@ -118,6 +119,8 @@ export interface CourseBlueprint {
   learnerPositioning: {
     estimatedLevel: 'novice' | 'beginner' | 'intermediate' | 'advanced' | '初级' | '中级' | '高级';
     difficultySummary?: string;
+    backgroundSummary?: string;
+    skipBasics?: string[];
     whyThisCourseFits?: string;
   };
   courseGoal: string;
@@ -159,6 +162,7 @@ export interface OutlineLearnerPositioning {
 
 export interface OutlineBlueprint {
   learningDirection: string;
+  learningKeypoint: string;
   learningGoal: string;
   learnerPositioning: OutlineLearnerPositioning;
 }
@@ -229,8 +233,12 @@ export interface StoredRecommendation {
 export type GenerationStatus = 'idle' | 'generating' | 'success' | 'error';
 
 export interface LearningInsight {
-  knowledgeBackground: string[];
+  workSummary: string[];
+  educationSummary: string[];
   analogyExperiences: string[];
+  learningStyle: '理论型' | '实践型' | '';
+  technicalLevel: '入门级' | '业务级' | '专家型' | '';
+  valuePriorities: string[];
   summary: string;
 }
 
@@ -283,19 +291,6 @@ export interface LearningPreference {
   updatedAt: number;
 }
 
-export interface LearningSignal {
-  id: string;
-  type: 'question_attempt' | 'chat_question' | 'chat_confusion' | 'chat_mastery' | 'node_complete' | 'course_progress';
-  topic: string;
-  concept?: string;
-  nodeTitle?: string;
-  courseId?: string;
-  source: 'assessment' | 'chat' | 'progress';
-  confidence: number;
-  occurredAt: number;
-  payload: Record<string, unknown>;
-}
-
 export interface TopicState {
   topic: string;
   familiarityScore: number;
@@ -320,43 +315,6 @@ export interface ConceptState {
   nextReviewAt?: number;
   misconceptionHints: string[];
   confidence: number;
-  updatedAt: number;
-}
-
-export interface TopicSummary {
-  topic: string;
-  summary: string;
-  keyGaps: string[];
-  keyStrengths: string[];
-  updatedAt: number;
-}
-
-export interface CourseSummary {
-  courseId: string;
-  topic: string;
-  summary: string;
-  completedNodes: number;
-  totalNodes: number;
-  updatedAt: number;
-}
-
-export interface MemoryStoreV2 {
-  version: 2;
-  learnerId: string;
-  profile: {
-    stableFacts: MemoryStableFact[];
-    goals: MemoryGoal[];
-    preferences: LearningPreference[];
-  };
-  signals: LearningSignal[];
-  states: {
-    topicStates: TopicState[];
-    conceptStates: ConceptState[];
-  };
-  summaries: {
-    topicSummaries: TopicSummary[];
-    courseSummaries: CourseSummary[];
-  };
   updatedAt: number;
 }
 

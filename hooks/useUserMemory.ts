@@ -2,14 +2,11 @@
 import { useCallback } from 'react';
 import {
   analyzeChatMessageForMemory,
-  appendChatSignalsToMemoryStore,
   createDefaultUserMemory,
   decayUserMemory,
   detectAssistantExplanationStyle,
   detectChatLearningPreferences,
   detectExplicitMasteredConcept,
-  isMemoryStoreV2,
-  migrateUserMemoryToV2,
   normalizeConceptKey,
   recordChatInsightInMemory,
   recordLearningPreferenceInMemory,
@@ -35,7 +32,6 @@ function getRepository() {
 
 export {
   analyzeChatMessageForMemory,
-  appendChatSignalsToMemoryStore,
   createDefaultUserMemory,
   decayUserMemory,
   detectAssistantExplanationStyle,
@@ -44,8 +40,6 @@ export {
   getChatMemoryPayload,
   getPlanningMemoryPayload,
   getTeachingMemoryPayload,
-  isMemoryStoreV2,
-  migrateUserMemoryToV2,
   normalizeConceptKey,
   recordChatInsightInMemory,
   recordLearningPreferenceInMemory,
@@ -139,11 +133,6 @@ export function useUserMemory() {
   }, [memory]);
 
   const recordChatSignals = useCallback((input: ChatSignalInput): void => {
-    const updatedStore = appendChatSignalsToMemoryStore(repository.getMemoryStore(), {
-      ...input,
-      confusionConcept: input.confusionConcept ? normalizeConceptKey(input.confusionConcept) : input.confusionConcept,
-    });
-    repository.saveMemoryStore(updatedStore);
     repository.appendMemoryEvent({
       type: 'chat_user_message',
       topic: input.topic,

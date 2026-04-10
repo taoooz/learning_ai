@@ -4,7 +4,7 @@ import { callMiniMaxChatStream } from '@/lib/minimax';
 import { buildChatContext } from '@/lib/chat-context';
 import { createMemoryRepository } from '@/lib/memory/repository';
 import type { ChatMessage } from '@/types/chat';
-import type { ConversationSummary, CourseTree, MemoryStoreV2, MemoryStoreV3, UserMemory } from '@/types/course';
+import type { ConversationSummary } from '@/types/course';
 
 export const runtime = 'nodejs';
 
