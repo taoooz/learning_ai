@@ -4,7 +4,7 @@ from typing import Literal, Optional
 
 class LearnerPositioning(BaseModel):
     """用户定位"""
-    estimatedLevel: Literal["novice", "beginner", "intermediate", "advanced"]
+    estimatedLevel: Literal["beginner", "intermediate", "advanced"]
     difficultySummary: str
     backgroundSummary: str
     skipBasics: list[str] = Field(default_factory=list)

@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-// Python Agent 服务地址
-const PYTHON_AGENT_URL = process.env.PYTHON_AGENT_URL || 'http://localhost:8000';
+import { PYTHON_AGENT_URL } from '@/lib/agent-config';
 
 /**
  * 消费 Python Agent 的 SSE 流，解析事件并返回结构化 JSON
@@ -94,10 +92,10 @@ export async function POST(request: NextRequest) {
     let agentBody: Record<string, any>;
 
     if (sessionId) {
-      agentUrl = `${PYTHON_AGENT_URL}/api/agents/outline/answer`;
+      agentUrl = `${PYTHON_AGENT_URL}/api/agents/outline/answer_agent`;
       agentBody = { sessionId, answer: userMessage };
     } else {
-      agentUrl = `${PYTHON_AGENT_URL}/api/agents/outline/generate`;
+      agentUrl = `${PYTHON_AGENT_URL}/api/agents/outline/generate_agent`;
       agentBody = { topic, userProfile: userProfile || {}, userMemory: userMemory || {} };
     }
 

@@ -1,15 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { buildQuestionsPrompt } from '@/lib/prompt';
-import { callMiniMax, parseJSONResponse } from '@/lib/minimax';
-import type { Question } from '@/types/course';
+import { PYTHON_AGENT_URL } from '@/lib/agent-config';
 
 export async function POST(request: NextRequest) {
   const { topic, nodeInfo, cards } = await request.json();
 
-  const prompt = buildQuestionsPrompt(topic, nodeInfo, cards);
-  const content = await callMiniMax(prompt);
+  // 转换为 Python Agent 期望的参数格式
+  const agentBody = {
+    topic: topic || '',
+    cards: cards || [],
+    payload: {
+      nodeTitle: nodeInfo?.title || '',
+      teachingGoal: nodeInfo?.teachingGoal || '',
+      courseName: topic || '',
+    },
+  };
 
-  const result = parseJSONResponse<{ questions: Question[] }>(content);
+  try {
+    const response = await fetch(`${PYTHON_AGENT_URL}/api/agents/questions/generate_agent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(agentBody),
+    });
 
-  return NextResponse.json(result);
+    if (!response.ok) {
+      throw new Error(`Python Agent error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error('[Questions Agent proxy] Error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : '题目生成失败' },
+      { status: 500 }
+    );
+  }
 }

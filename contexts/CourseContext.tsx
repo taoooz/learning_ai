@@ -1,22 +1,19 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { CourseTree, GenerationStatus, NodeLesson, CourseBlueprint, StoredCourseBundle, OutlineLearnerPositioning } from '@/types/course';
+import { CourseTree, GenerationStatus, NodeLesson, StoredCourseBundle, OutlineLearnerPositioning } from '@/types/course';
 import {
   activateSystemCourse,
   addCourseBundle,
   deleteCourse as deleteCourseFromStorage,
   getStoredCourseBundle,
   getStoredData,
-  getStoredDataV2,
   getSystemCourseRecommendations,
   getUserProfile,
-  saveCourseBlueprint,
   SystemCourseRecommendation,
   updateNodeLesson as saveNodeLesson,
 } from '@/lib/storage';
 import { getUserMemoryStoreSnapshot } from '@/hooks/useUserMemory';
-import { createMemoryRepository } from '@/lib/memory/repository';
 
 interface CourseContextType {
   courses: CourseTree[];

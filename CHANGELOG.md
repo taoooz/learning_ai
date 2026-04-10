@@ -1,5 +1,47 @@
 # 项目迭代日志
 
+## 2026-04-09
+
+### Agent 搜索能力推广到 TOC/Cards/Questions 阶段
+
+- 新增 `services/toc_agent.py`：Agent 版 TOC 生成，复用 `build_toc_prompt` 和流式解析逻辑，支持 AI 自动搜索最新课程资料后生成目录
+- 新增 `services/cards_agent.py`：Agent 版 Cards 生成，支持 AI 搜索补充专业知识后生成学习卡片
+- 新增 `services/questions_agent.py`：Agent 版 Questions 生成，支持 AI 搜索后生成更准确的练习题
+- `main.py` 新增 3 个 Agent 路由：`/api/agents/toc/generate_agent`（流式 SSE）、`/api/agents/cards/generate_agent`（JSON）、`/api/agents/questions/generate_agent`（JSON）
+- 所有 Agent 路由保留原有非 Agent 版作为 fallback，前端可按需切换
+- 前端 `app/api/generate/toc/route.ts` 改为转发到 Python Agent，消费 SSE 流提取 complete 事件
+- 前端 `app/api/generate/node/cards/route.ts` 改为转发到 Python Agent，做字段映射（nodeInfo → payload）
+- 前端 `app/api/generate/node/questions/route.ts` 改为转发到 Python Agent，做字段映射（nodeInfo → payload）
+- 前端 CourseContext 无需改动，接口兼容
+
+### Chat 和 Outline Answer 迁移到 Agent + 搜索
+
+- 新增 `services/chat_agent.py`：Agent 版学习对话，AI 自主判断是否需要搜索，输出 MiniMax 兼容 SSE 格式（前端 ChatWidget 零改动）
+- `main.py` 新增 `/api/agents/chat/generate` 路由，`max_iterations=2` 控制延迟
+- 前端 `app/api/chat/route.ts` 改为转发到 Python Agent，pipe SSE 流透传
+- `outline_agent.py` 新增 `stream_answer_with_tools`，多轮澄清问答也支持搜索
+- `main.py` 新增 `/api/agents/outline/answer_agent` 路由
+- 前端 `app/api/agents/outline/route.ts` 的 generate 和 answer 均切到 `_agent` 端点
+- 删除废弃路由 `app/api/generate/outline/route.ts`（前端已全部走 `/api/agents/outline`）
+
+### 代码审查清理
+
+**Python Agent 清理**
+- 删除 `agents/` 目录（LangGraph 实现，未投入使用的废弃代码），将 `OutlineState` 内联到 `outline_service.py`
+- 删除 `mcp/` 目录（旧版 MCP 工具，未被任何代码引用）
+
+**前端废弃代码清理**
+- `lib/minimax.ts`：删除 `callMiniMaxChatStream`、`callMiniMaxWithSearch` 及 4 个搜索辅助函数，移除硬编码调试代码（写 `/tmp/`），353 行精简到 181 行
+- `lib/prompt.ts`：删除 4 个已迁移到 Python Agent 的废弃函数（`buildOutlinePrompt`、`buildTocPrompt`、`buildCardsPrompt`、`buildQuestionsPrompt`）及关联的 `TocCourseBlueprint`、`buildProfileSection`
+- 删除 2 个废弃空壳路由（`/api/generate/route.ts`、`/api/generate/node/route.ts`）
+- `contexts/CourseContext.tsx`：移除 4 个未使用的 import（`CourseBlueprint`、`getStoredDataV2`、`saveCourseBlueprint`、`createMemoryRepository`）
+
+**配置统一**
+- 新增 `lib/agent-config.ts`，统一管理 `PYTHON_AGENT_URL`，5 个代理路由文件不再各自重复定义
+
+**安全修复**
+- `app/api/auth/set-cookie/route.ts`：cookie 改为 `httpOnly: true`（前端无 JS 读取需求，仅 middleware 服务端读取）
+
 ## 2026-03-27
 
 ### 课程目录排布与标题截断修复
