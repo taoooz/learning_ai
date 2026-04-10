@@ -9,7 +9,6 @@ import {
 import {
   appendEventToMemoryStoreV3,
   createEmptyMemoryStoreV3,
-  migrateMemoryToV3,
 } from '../lib/memory/aggregator';
 import { getPlanningMemoryPayload } from '../lib/memory/memory-agent';
 import { activateSystemCourse, clearLegacyLearningData, getStoredData, getSystemCourseRecommendations } from '../lib/storage';
@@ -392,47 +391,42 @@ test('appendEventToMemoryStoreV3 projects question and chat events into concept 
 });
 
 test('getPlanningMemoryPayload can read MemoryStoreV3 projections directly', () => {
-  const legacyMemory = {
-    profile: {
-      name: '小王',
-      targetJob: 'AI 产品经理',
-      workExperience: [],
-      education: [],
-      insights: {
-        workSummary: ['做过 React 后台项目'],
-        educationSummary: [],
-        analogyExperiences: ['负责过埋点分析和实验设计'],
-        learningStyle: '实践型' as const,
-        technicalLevel: '业务级' as const,
-        valuePriorities: ['效率提升'],
-        summary: '前端和数据分析经验',
-      },
+  const store = createEmptyMemoryStoreV3({
+    name: '小王',
+    targetJob: 'AI 产品经理',
+    workExperience: [],
+    education: [],
+    insights: {
+      workSummary: ['做过 React 后台项目'],
+      educationSummary: [],
+      analogyExperiences: ['负责过埋点分析和实验设计'],
+      learningStyle: '实践型' as const,
+      technicalLevel: '业务级' as const,
+      valuePriorities: ['效率提升'],
+      summary: '前端和数据分析经验',
     },
-    learningHistory: [],
-    extractedInsights: {
-      interests: [],
-      knowledgeGaps: [
-        {
-          concept: '工具调用',
-          topic: 'Agent',
-          evidence: ['总和工作流编排混淆'],
-          severity: 'high' as const,
-        },
-      ],
-      questionPatterns: [],
-      conceptMastery: [],
-      learningPreferences: [],
-      masteredConcepts: [],
+  });
+
+  // 通过事件注入答题行为（创建 topicProjection）
+  const storeWithEvent = appendEventToMemoryStoreV3(store, {
+    type: 'question_answered',
+    topic: 'Agent',
+    courseId: 'course-agent',
+    occurredAt: Date.now(),
+    payload: {
+      conceptId: 'concept-tool-use',
+      conceptName: '工具调用',
+      question: '什么时候必须调用工具？',
+      isCorrect: false,
     },
-    lastUpdated: Date.now(),
-    version: 1,
-    conversationSummaries: [],
-  };
+  });
 
-  const payload = getPlanningMemoryPayload('Agent', migrateMemoryToV3(legacyMemory));
+  const payload = getPlanningMemoryPayload('Agent', storeWithEvent);
 
-  assert.equal(payload.mustCoverConcepts.includes('工具调用'), true);
-  assert.equal(payload.transferableBackground.some((item) => item.includes('埋点分析')), true);
+  // 答错事件应导致工具调用被标记为 riskConcept
+  assert.equal(payload.riskConcepts.includes('工具调用'), true);
+  // 事件后 topicProjection 应该有 estimatedLevel
+  assert.equal(typeof payload.learnerSnapshot.estimatedLevel, 'string');
 });
 
 test('validateCourseBlueprint accepts a blueprint that covers must-cover concepts and dependencies', () => {

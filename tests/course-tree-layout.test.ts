@@ -6,9 +6,6 @@ import { normalizeVisualization } from '../lib/visualization';
 
 let getCourseTreeLayout: typeof import('../lib/course-tree-layout').getCourseTreeLayout;
 let getCourseTreeInitialScrollTop: typeof import('../lib/course-tree-layout').getCourseTreeInitialScrollTop;
-let buildCourseTreePrompt: typeof import('../lib/prompt').buildCourseTreePrompt;
-let buildNodeContentPrompt: typeof import('../lib/prompt').buildNodeContentPrompt;
-let selectPersonalizationSignals: typeof import('../lib/prompt').selectPersonalizationSignals;
 let buildChatContext: typeof import('../lib/chat-context').buildChatContext;
 let compactChatHistoryMessages: typeof import('../hooks/useChatHistory').compactChatHistoryMessages;
 let generateConversationSummary: typeof import('../hooks/useChatHistory').generateConversationSummary;
@@ -18,14 +15,10 @@ let detectChatLearningPreferences: typeof import('../lib/memory/aggregator').det
 let detectExplicitMasteredConcept: typeof import('../lib/memory/aggregator').detectExplicitMasteredConcept;
 let normalizeConceptKeyFromAggregator: typeof import('../lib/memory/aggregator').normalizeConceptKey;
 let analyzeChatMessageForMemory: typeof import('../hooks/useUserMemory').analyzeChatMessageForMemory;
-let createDefaultUserMemory: typeof import('../hooks/useUserMemory').createDefaultUserMemory;
-let decayUserMemory: typeof import('../hooks/useUserMemory').decayUserMemory;
 let getChatMemoryPayload: typeof import('../hooks/useUserMemory').getChatMemoryPayload;
 let getPlanningMemoryPayload: typeof import('../hooks/useUserMemory').getPlanningMemoryPayload;
 let getTeachingMemoryPayload: typeof import('../hooks/useUserMemory').getTeachingMemoryPayload;
 let normalizeConceptKey: typeof import('../hooks/useUserMemory').normalizeConceptKey;
-let recordQuestionAttemptInMemory: typeof import('../hooks/useUserMemory').recordQuestionAttemptInMemory;
-let recordChatInsightInMemory: typeof import('../hooks/useUserMemory').recordChatInsightInMemory;
 let shouldEnterLearningPhase: typeof import('../contexts/CourseContext').shouldEnterLearningPhase;
 let hasResolvedQuestions: typeof import('../contexts/CourseContext').hasResolvedQuestions;
 let buildNodeContentPatch: typeof import('../contexts/CourseContext').buildNodeContentPatch;
@@ -37,11 +30,6 @@ test.before(async () => {
   const layoutModule = await import('../lib/course-tree-layout');
   getCourseTreeLayout = layoutModule.getCourseTreeLayout;
   getCourseTreeInitialScrollTop = layoutModule.getCourseTreeInitialScrollTop;
-
-  const promptModule = await import('../lib/prompt');
-  buildCourseTreePrompt = promptModule.buildCourseTreePrompt;
-  buildNodeContentPrompt = promptModule.buildNodeContentPrompt;
-  selectPersonalizationSignals = promptModule.selectPersonalizationSignals;
 
   const chatContextModule = await import('../lib/chat-context');
   buildChatContext = chatContextModule.buildChatContext;
@@ -69,14 +57,10 @@ test.before(async () => {
 
   const userMemoryModule = await import('../hooks/useUserMemory');
   analyzeChatMessageForMemory = userMemoryModule.analyzeChatMessageForMemory;
-  createDefaultUserMemory = userMemoryModule.createDefaultUserMemory;
-  decayUserMemory = userMemoryModule.decayUserMemory;
   getChatMemoryPayload = userMemoryModule.getChatMemoryPayload;
   getPlanningMemoryPayload = userMemoryModule.getPlanningMemoryPayload;
   getTeachingMemoryPayload = userMemoryModule.getTeachingMemoryPayload;
   normalizeConceptKey = userMemoryModule.normalizeConceptKey;
-  recordQuestionAttemptInMemory = userMemoryModule.recordQuestionAttemptInMemory;
-  recordChatInsightInMemory = userMemoryModule.recordChatInsightInMemory;
 });
 
 test('getCourseTreeLayout returns left-biased staggered positions', () => {
@@ -144,121 +128,6 @@ test('getCourseTreeInitialScrollTop clamps to zero near the top', () => {
   });
 
   assert.equal(scrollTop, 0);
-});
-
-test('buildCourseTreePrompt injects profile and memory based personalization rules', () => {
-  const memory = createDefaultUserMemory({
-    name: '小王',
-    targetJob: 'AI 产品经理',
-    workExperience: [],
-    education: [],
-    insights: {
-      workSummary: ['做过 React 后台项目'],
-      educationSummary: [],
-      analogyExperiences: ['负责过埋点分析和 A/B 实验'],
-      learningStyle: '实践型',
-      technicalLevel: '业务级',
-      valuePriorities: ['效率提升'],
-      summary: '有前端和数据分析经验',
-    },
-  });
-
-  recordQuestionAttemptInMemory(memory, {
-    courseId: 'course-1',
-    topic: 'Agent',
-    concept: '工具调用',
-    question: '为什么 Agent 需要工具调用？',
-    isCorrect: false,
-    difficulty: 2,
-    dimension: 'understanding',
-  });
-
-  const prompt = buildCourseTreePrompt('Agent', memory.profile, undefined, memory);
-
-  assert.match(prompt, /个性化课程设计要求/);
-  assert.match(prompt, /已掌握基础/);
-  assert.match(prompt, /待补薄弱点/);
-  assert.match(prompt, /避免完整重讲用户已经掌握的内容/);
-  assert.match(prompt, /工具调用/);
-  assert.match(prompt, /先在内部判断：哪些内容可以跳过、哪些必须补上/);
-  assert.match(prompt, /为每个节点确定：目标、前置依赖、与用户背景的连接点/);
-  assert.match(prompt, /至少 2 个节点明确写出将使用的用户经历类比/);
-});
-
-test('buildNodeContentPrompt asks for course context and mastery aware question metadata', () => {
-  const memory = createDefaultUserMemory({
-    targetJob: '前端工程师',
-    workExperience: [],
-    education: [],
-    insights: {
-      workSummary: ['熟悉 React 组件开发'],
-      educationSummary: [],
-      analogyExperiences: ['做过复杂表单和状态管理'],
-      learningStyle: '实践型',
-      technicalLevel: '业务级',
-      valuePriorities: ['效率提升'],
-      summary: '有前端开发经验',
-    },
-  });
-
-  const prompt = buildNodeContentPrompt(
-    'Agent',
-    '规划与执行',
-    8,
-    memory.profile.insights,
-    memory,
-    {
-      difficultySummary: '适合有 React 基础、第一次系统学习 Agent 的用户',
-      previousNodeTitle: '什么是 Agent',
-      nextNodeTitle: '工具调用',
-      currentNodeGoal: '理解规划与执行如何协同工作',
-      courseOutline: ['什么是 Agent', '规划与执行', '工具调用', '记忆系统'],
-      prerequisiteTitles: ['什么是 Agent'],
-    },
-  );
-
-  assert.match(prompt, /课程上下文/);
-  assert.match(prompt, /上一节：什么是 Agent/);
-  assert.match(prompt, /下一节：工具调用/);
-  assert.match(prompt, /整门课程结构：/);
-  assert.match(prompt, /当前节点前置依赖：什么是 Agent/);
-  assert.match(prompt, /避免重复讲解上一节已经覆盖的定义和例子/);
-  assert.match(prompt, /"concept": "本题考查的核心概念"/);
-  assert.match(prompt, /如果用户已掌握某概念，用 1 张卡片内快速唤醒/);
-});
-
-test('recordQuestionAttemptInMemory updates mastery and escalates repeated gaps', () => {
-  const memory = createDefaultUserMemory();
-
-  recordQuestionAttemptInMemory(memory, {
-    courseId: 'course-2',
-    topic: 'React',
-    concept: '闭包',
-    question: '为什么这里会拿到旧 state？',
-    isCorrect: false,
-    difficulty: 2,
-    dimension: 'application',
-  });
-
-  recordQuestionAttemptInMemory(memory, {
-    courseId: 'course-2',
-    topic: 'React',
-    concept: '闭包',
-    question: '闭包和 useEffect 依赖有什么关系？',
-    isCorrect: false,
-    difficulty: 2,
-    dimension: 'application',
-  });
-
-  const mastery = memory.extractedInsights.conceptMastery[0];
-  const gap = memory.extractedInsights.knowledgeGaps[0];
-
-  assert.equal(mastery.concept, '闭包');
-  assert.equal(mastery.totalAttempts, 2);
-  assert.equal(mastery.correctAttempts, 0);
-  assert.equal(mastery.needsReview, true);
-  assert.equal(gap.severity, 'medium');
-  assert.equal(gap.evidence.length, 2);
 });
 
 test('parseStreamContent keeps text, quiz, and outline blocks in original order', () => {
@@ -479,227 +348,6 @@ test('analyzeChatMessageForMemory extracts concept when user explicitly says the
   assert.equal(result.extractedConcept, '工具调用和工作流编排的区别');
 });
 
-test('recordChatInsightInMemory stores confidence and assessment upgrades stay incremental', () => {
-  const memory = createDefaultUserMemory();
-
-  recordChatInsightInMemory(memory, {
-    topic: 'Agent',
-    concept: '工具调用',
-    evidence: '我还是没懂工具调用和工作流编排的区别',
-    confidence: 0.62,
-  });
-
-  const firstGap = memory.extractedInsights.knowledgeGaps[0];
-  assert.equal(firstGap.source, 'chat');
-  assert.equal(firstGap.confidence, 0.62);
-  assert.equal(firstGap.severity, 'low');
-
-  recordQuestionAttemptInMemory(memory, {
-    courseId: 'course-3',
-    topic: 'Agent',
-    concept: '工具调用',
-    question: '哪种情况应该调用外部工具？',
-    isCorrect: false,
-    difficulty: 2,
-    dimension: 'application',
-  });
-
-  const upgradedGap = memory.extractedInsights.knowledgeGaps[0];
-  assert.equal(upgradedGap.source, 'assessment');
-  assert.equal((upgradedGap.confidence || 0) < 0.85, true);
-  assert.equal(upgradedGap.severity, 'low');
-});
-
-test('recordQuestionAttemptInMemory avoids locking mastery after a single wrong answer', () => {
-  const memory = createDefaultUserMemory();
-
-  recordQuestionAttemptInMemory(memory, {
-    courseId: 'course-4',
-    topic: 'Agent',
-    concept: '工具调用',
-    question: '什么时候必须调用工具？',
-    isCorrect: false,
-    difficulty: 2,
-    dimension: 'application',
-  });
-
-  const mastery = memory.extractedInsights.conceptMastery[0]!;
-  const gap = memory.extractedInsights.knowledgeGaps[0]!;
-
-  assert.equal((mastery.confidence || 0) < 0.8, true);
-  assert.equal((gap.confidence || 0) < 0.8, true);
-  assert.equal(gap.severity, 'low');
-});
-
-test('recordQuestionAttemptInMemory lets sustained correct answers repair earlier misunderstanding', () => {
-  const memory = createDefaultUserMemory();
-
-  recordQuestionAttemptInMemory(memory, {
-    courseId: 'course-5',
-    topic: 'Agent',
-    concept: '工具调用',
-    question: '什么时候必须调用工具？',
-    isCorrect: false,
-    difficulty: 2,
-    dimension: 'application',
-  });
-
-  recordQuestionAttemptInMemory(memory, {
-    courseId: 'course-5',
-    topic: 'Agent',
-    concept: '工具调用',
-    question: '工具调用和直接回答有什么区别？',
-    isCorrect: true,
-    difficulty: 2,
-    dimension: 'understanding',
-  });
-
-  recordQuestionAttemptInMemory(memory, {
-    courseId: 'course-5',
-    topic: 'Agent',
-    concept: '工具调用',
-    question: '什么场景下不需要工具调用？',
-    isCorrect: true,
-    difficulty: 2,
-    dimension: 'understanding',
-  });
-
-  const mastery = memory.extractedInsights.conceptMastery[0]!;
-  const gap = memory.extractedInsights.knowledgeGaps[0]!;
-
-  assert.equal(mastery.accuracy > 0.6, true);
-  assert.equal(mastery.needsReview, false);
-  assert.equal(gap.severity, 'low');
-  assert.equal((gap.confidence || 0) < 0.6, true);
-});
-
-test('decayUserMemory lowers stale chat-derived weights but keeps recent assessment signals', () => {
-  const memory = createDefaultUserMemory();
-  const fortyDaysAgo = Date.now() - 40 * 24 * 60 * 60 * 1000;
-
-  memory.extractedInsights.interests.push({
-    topic: 'Agent',
-    weight: 5,
-    source: 'chat',
-    lastInteraction: fortyDaysAgo,
-  });
-
-  memory.extractedInsights.questionPatterns.push({
-    topic: 'Agent',
-    question: '工具调用和 MCP 有什么区别？',
-    timestamp: fortyDaysAgo,
-    confidence: 0.7,
-    source: 'chat',
-  });
-
-  memory.extractedInsights.knowledgeGaps.push({
-    topic: 'Agent',
-    concept: '工作流编排',
-    evidence: ['我还是没懂工作流编排'],
-    severity: 'medium',
-    confidence: 0.68,
-    source: 'chat',
-    lastUpdated: fortyDaysAgo,
-  });
-
-  memory.extractedInsights.conceptMastery.push({
-    topic: 'Agent',
-    concept: '工具调用',
-    totalAttempts: 3,
-    correctAttempts: 1,
-    accuracy: 0.33,
-    lastReviewedAt: Date.now(),
-    lastOutcome: 'incorrect',
-    needsReview: true,
-    confidence: 0.95,
-    source: 'assessment',
-  });
-
-  decayUserMemory(memory, Date.now());
-
-  const interest = memory.extractedInsights.interests[0]!;
-  const questionPattern = memory.extractedInsights.questionPatterns[0]!;
-  const knowledgeGap = memory.extractedInsights.knowledgeGaps[0]!;
-  const conceptMastery = memory.extractedInsights.conceptMastery[0]!;
-
-  assert.equal(interest.weight < 5, true);
-  assert.equal((questionPattern.confidence || 0) < 0.7, true);
-  assert.equal((knowledgeGap.confidence || 0) < 0.68, true);
-  assert.equal(conceptMastery.confidence, 0.95);
-});
-
-test('selectPersonalizationSignals keeps only directly relevant mastery signals for structural changes', () => {
-  const memory = createDefaultUserMemory();
-
-  memory.extractedInsights.knowledgeGaps.push({
-    topic: 'Agent',
-    concept: '工具调用',
-    evidence: ['哪种场景必须调用外部工具？'],
-    severity: 'medium',
-    confidence: 0.86,
-    source: 'assessment',
-    lastUpdated: Date.now(),
-  });
-
-  memory.extractedInsights.knowledgeGaps.push({
-    topic: '英语口语',
-    concept: '发音',
-    evidence: ['总是分不清发音规则'],
-    severity: 'high',
-    confidence: 0.9,
-    source: 'assessment',
-    lastUpdated: Date.now(),
-  });
-
-  memory.profile.insights = {
-    workSummary: ['做过 React 后台项目', '自己做过播客剪辑'],
-    educationSummary: [],
-    analogyExperiences: ['做过埋点分析', '录过播客并剪辑音频'],
-    learningStyle: '实践型',
-    technicalLevel: '业务级',
-    valuePriorities: ['效率提升'],
-    summary: '前端和内容创作背景',
-  };
-
-  const signals = selectPersonalizationSignals('Agent 工具调用', memory);
-
-  assert.equal(signals.mustAddressGaps.some((item) => item.concept === '工具调用'), true);
-  assert.equal(signals.mustAddressGaps.some((item) => item.concept === '发音'), false);
-  assert.equal(signals.analogyOnlyItems.some((item) => item.includes('播客')), false);
-});
-
-test('selectPersonalizationSignals keeps weakly related background only for analogy', () => {
-  const memory = createDefaultUserMemory({
-    targetJob: 'AI 产品经理',
-    workExperience: [],
-    education: [],
-    insights: {
-      workSummary: ['做过 React 后台项目'],
-      educationSummary: [],
-      analogyExperiences: ['负责过埋点分析和实验设计'],
-      learningStyle: '实践型',
-      technicalLevel: '业务级',
-      valuePriorities: ['效率提升'],
-      summary: '有前端和数据分析经验',
-    },
-  });
-
-  memory.extractedInsights.knowledgeGaps.push({
-    topic: '前端工程',
-    concept: '状态管理',
-    evidence: ['还是分不清全局状态和局部状态'],
-    severity: 'medium',
-    confidence: 0.66,
-    source: 'chat',
-    lastUpdated: Date.now(),
-  });
-
-  const signals = selectPersonalizationSignals('Agent 规划机制', memory);
-
-  assert.equal(signals.mustAddressGaps.length, 0);
-  assert.equal(signals.analogyOnlyItems.some((item) => item.includes('埋点分析')), true);
-});
-
 // V1/V2 API 相关测试已移除，新的 V3 + Memory Agent 测试在 course-blueprint-memory-v3.test.ts
 
 test('detectChatLearningPreferences extracts explanation style preferences from user wording', () => {
@@ -715,67 +363,6 @@ test('detectExplicitMasteredConcept captures explicit understanding statements',
 
   assert.equal(mastered?.concept, '工具调用');
   assert.equal((mastered?.confidence || 0) >= 0.65, true);
-});
-
-test('buildCourseTreePrompt supports structured planning payload injection', () => {
-  const prompt = buildCourseTreePrompt(
-    'Agent',
-    null,
-    undefined,
-    null,
-    undefined,
-    undefined,
-    {
-      learnerSnapshot: {
-        targetGoal: '希望课程服务于 AI 产品经理相关成长',
-        estimatedLevel: 'beginner',
-        confidence: 0.82,
-      },
-      transferableBackground: ['负责过埋点分析和实验设计'],
-      mustCoverConcepts: ['工具调用'],
-      skippableBasics: ['基础前端组件概念'],
-      riskConcepts: ['工具调用'],
-      recentRelevantCourses: [{ topic: 'Agent', summary: 'Agent 已完成 3/6 节' }],
-    },
-  );
-
-  assert.match(prompt, /课程规划输入/);
-  assert.match(prompt, /必须补上的概念/);
-  assert.match(prompt, /Agent 已完成 3\/6 节/);
-});
-
-test('buildNodeContentPrompt supports structured teaching payload injection', () => {
-  const prompt = buildNodeContentPrompt(
-    'Agent',
-    '工具调用',
-    8,
-    null,
-    null,
-    {
-      difficultySummary: '适合初学者',
-      previousNodeTitle: '什么是 Agent',
-      nextNodeTitle: '工作流编排',
-      currentNodeGoal: '理解工具调用的必要性',
-      courseOutline: ['什么是 Agent', '工具调用', '工作流编排'],
-      prerequisiteTitles: ['什么是 Agent'],
-    },
-    undefined,
-    undefined,
-    {
-      nodeTopic: 'Agent',
-      nodeTitle: '工具调用',
-      prerequisiteConceptStates: [{ concept: 'Agent 基本定义', status: 'mastered', masteryScore: 0.84 }],
-      targetConceptStates: [{ concept: '工具调用', status: 'learning', masteryScore: 0.42, misconceptionHints: ['容易和工作流编排混淆'] }],
-      recentQuestionSummaries: ['工具调用和工作流编排有什么区别？'],
-      analogyHints: ['负责过埋点分析和实验设计'],
-      preferredExplanationStyles: ['分步拆解', '例子驱动'],
-    },
-  );
-
-  assert.match(prompt, /节点教学输入/);
-  assert.match(prompt, /当前节点重点概念状态/);
-  assert.match(prompt, /容易和工作流编排混淆/);
-  assert.match(prompt, /偏好解释方式/);
 });
 
 test('normalizeConceptKey collapses close variants into one canonical concept', () => {

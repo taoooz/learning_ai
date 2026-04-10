@@ -2,7 +2,6 @@ import type {
   KnowledgeGap,
   PlanningMemoryPayload,
   TeachingMemoryPayload,
-  UserMemory,
   UserProfile,
 } from '../../types/course';
 
@@ -58,34 +57,15 @@ function getTopicRelevanceScore(topic: string, candidate: string): number {
   return score;
 }
 
-export function selectPersonalizationSignals(topic: string, userMemory?: UserMemory | null): PersonalizationSignals {
-  if (!userMemory) {
+export function selectPersonalizationSignals(topic: string, userProfile?: UserProfile | null): PersonalizationSignals {
+  if (!userProfile) {
     return { mustAddressGaps: [], reviewOnlyItems: [], analogyOnlyItems: [] };
   }
 
-  const mustAddressGaps = userMemory.extractedInsights.knowledgeGaps.filter((gap) => {
-    const relevance = Math.max(
-      getTopicRelevanceScore(topic, gap.topic),
-      getTopicRelevanceScore(topic, gap.concept),
-    );
-    const confidence = gap.confidence || 0;
-    return relevance >= 0.7 || (relevance >= 0.5 && gap.source === 'assessment' && confidence >= 0.8);
-  });
-
-  const reviewOnlyItems = userMemory.extractedInsights.conceptMastery
-    .filter((item) => item.needsReview)
-    .filter((item) => {
-      const relevance = Math.max(
-        getTopicRelevanceScore(topic, item.topic),
-        getTopicRelevanceScore(topic, item.concept),
-      );
-      return relevance >= 0.7 || (relevance >= 0.5 && item.source === 'assessment' && (item.confidence || 0) >= 0.85);
-    })
-    .map((item) => `${item.concept}（${item.source === 'assessment' ? '高置信度测验信号' : '复习提醒'}）`);
-
   const analogyCandidates = [
-    ...(userMemory.profile.insights?.knowledgeBackground || []),
-    ...(userMemory.profile.insights?.analogyExperiences || []),
+    ...(userProfile.insights?.workSummary || []),
+    ...(userProfile.insights?.educationSummary || []),
+    ...(userProfile.insights?.analogyExperiences || []),
   ];
 
   const analogyOnlyItems = analogyCandidates.filter((item) => {
@@ -94,58 +74,22 @@ export function selectPersonalizationSignals(topic: string, userMemory?: UserMem
   });
 
   return {
-    mustAddressGaps: mustAddressGaps.slice(0, 4),
-    reviewOnlyItems: reviewOnlyItems.slice(0, 4),
+    mustAddressGaps: [],
+    reviewOnlyItems: [],
     analogyOnlyItems: analogyOnlyItems.slice(0, 4),
   };
 }
 
-export function buildMemorySection(topic: string, userMemory?: UserMemory | null): string {
-  if (!userMemory) return '';
+export function buildMemorySection(topic: string, userProfile?: UserProfile | null): string {
+  if (!userProfile) return '';
 
-  const signals = selectPersonalizationSignals(topic, userMemory);
-
-  const relatedRecords = userMemory.learningHistory
-    .filter((record) => record.topic === topic || record.courseId === topic)
-    .slice(-3)
-    .map((record) => `- ${record.topic}：已完成 ${record.nodesCompleted}/${record.totalNodes} 节`);
-
-  const masteredConcepts = userMemory.extractedInsights.conceptMastery
-    .filter((item) => item.topic === topic && item.accuracy >= 0.75)
-    .sort((a, b) => b.accuracy - a.accuracy)
-    .slice(0, 5)
-    .map((item) => `- ${item.concept}（正确率 ${Math.round(item.accuracy * 100)}%）`);
-
-  const weakConcepts = [
-    ...signals.mustAddressGaps
-      .map((gap) => `- ${gap.concept}（${gap.source === 'assessment' ? '高相关高置信度，必须补' : gap.severity}）`),
-    ...signals.reviewOnlyItems.map((item) => `- ${item}`),
-  ].slice(0, 6);
-
-  const questionPatterns = userMemory.extractedInsights.questionPatterns
-    .filter((item) => item.topic === topic)
-    .slice(-5)
-    .map((item) => `- ${item.question}`);
-
-  const analogyHints = signals.analogyOnlyItems.map((item) => `- ${item}`);
+  const analogyHints = selectPersonalizationSignals(topic, userProfile).analogyOnlyItems;
 
   return `
 ## 用户学习记忆
 
-相关学习记录：
-${relatedRecords.length ? relatedRecords.join('\n') : '暂无'}
-
-已掌握基础：
-${masteredConcepts.length ? masteredConcepts.join('\n') : '暂无明确已掌握项'}
-
-待补薄弱点：
-${weakConcepts.length ? weakConcepts.join('\n') : '暂无明确薄弱点'}
-
-近期高频问题：
-${questionPatterns.length ? questionPatterns.join('\n') : '暂无'}
-
 只可用于类比的弱相关背景：
-${analogyHints.length ? analogyHints.join('\n') : '暂无'}
+${analogyHints.length ? analogyHints.map((item) => `- ${item}`).join('\n') : '暂无'}
 `;
 }
 
@@ -251,12 +195,12 @@ export function buildProfileSection(userProfile: UserProfile | null): string {
 
   let insightSection = '';
   if (insights) {
-    const { knowledgeBackground, analogyExperiences, summary } = insights;
+    const { workSummary, analogyExperiences, summary } = insights;
     insightSection = `
 用户背景总结：${summary || '暂无'}
 
-知识背景：
-${knowledgeBackground?.length ? knowledgeBackground.map(k => `- ${k}`).join('\n') : '暂无相关背景'}
+工作背景：
+${workSummary?.length ? workSummary.map(k => `- ${k}`).join('\n') : '暂无相关工作背景'}
 
 类比经历：
 ${analogyExperiences?.length ? analogyExperiences.map(a => `- ${a}`).join('\n') : '暂无相关经历'}

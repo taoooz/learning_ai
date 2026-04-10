@@ -162,7 +162,7 @@ export interface OutlineLearnerPositioning {
 
 export interface OutlineBlueprint {
   learningDirection: string;
-  learningKeypoint: string;
+  learningKeypoint?: string;
   learningGoal: string;
   learnerPositioning: OutlineLearnerPositioning;
 }
@@ -471,82 +471,6 @@ export interface ChatMemoryPayload {
   topicSummary?: string;
 }
 
-// UserMemory 子类型
-export interface Interest {
-  topic: string;
-  weight: number;           // 1-5
-  source: 'course' | 'chat';
-  courseId?: string;
-  lastInteraction: number;
-  confidence?: number;
-}
-
-export interface KnowledgeGap {
-  concept: string;
-  topic: string;
-  evidence: string[];
-  severity: 'high' | 'medium' | 'low';
-  confidence?: number;
-  source?: 'chat' | 'assessment';
-  lastUpdated?: number;
-}
-
-export interface QuestionPattern {
-  question: string;
-  topic: string;
-  timestamp: number;
-  confidence?: number;
-  source?: 'chat' | 'assessment';
-}
-
-export interface LearningPreferenceNote {
-  kind: 'explanation_style' | 'pace' | 'analogy_style';
-  value: string;
-  confidence: number;
-  evidence: string;
-  updatedAt: number;
-}
-
-export interface MasteredConceptNote {
-  topic: string;
-  concept: string;
-  evidence: string;
-  confidence: number;
-  updatedAt: number;
-}
-
-export interface ConceptMastery {
-  concept: string;
-  topic: string;
-  totalAttempts: number;
-  correctAttempts: number;
-  accuracy: number;
-  lastReviewedAt: number;
-  lastOutcome: 'correct' | 'incorrect';
-  difficulty?: 1 | 2 | 3;
-  dimension?: 'memory' | 'understanding' | 'application' | 'analysis';
-  needsReview: boolean;
-  confidence?: number;
-  source?: 'chat' | 'assessment';
-}
-
-export interface LearningRecord {
-  courseId: string;
-  topic: string;
-  nodesCompleted: number;
-  totalNodes: number;
-  completedAt?: number;
-}
-
-export interface ExtractedInsights {
-  interests: Interest[];
-  knowledgeGaps: KnowledgeGap[];
-  questionPatterns: QuestionPattern[];
-  conceptMastery: ConceptMastery[];
-  learningPreferences: LearningPreferenceNote[];
-  masteredConcepts: MasteredConceptNote[];
-}
-
 // 对话摘要（过期对话生成）
 export interface ConversationSummary {
   courseId: string;
@@ -558,13 +482,4 @@ export interface ConversationSummary {
   explanationPath?: string;
   resolutionStatus?: 'resolved' | 'partial' | 'open';
   followUp?: string;
-}
-
-export interface UserMemory {
-  profile: UserProfile;
-  learningHistory: LearningRecord[];
-  extractedInsights: ExtractedInsights;
-  lastUpdated: number;
-  version: number;
-  conversationSummaries: ConversationSummary[];
 }

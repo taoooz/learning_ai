@@ -1,0 +1,805 @@
+{
+  "blueprint": {
+    "courseId": "system-personal-finance",
+    "topic": "打工人的实用理财框架",
+    "learnerPositioning": {
+      "estimatedLevel": "beginner",
+      "difficultySummary": "适用于打工人的普世理财方法，不追热点，耐心追求复利。",
+      "backgroundSummary": "适用于打工人的普世理财方法，不追热点，耐心追求复利。",
+      "skipBasics": [],
+      "whyThisCourseFits": "给打工人的普世理财方法，先稳住现金流，再用长期复利慢慢把资产做厚。"
+    },
+    "courseGoal": "为零基础打工人打造的理财入门课，从应急金管理到长期复利，建立完整的个人理财框架。",
+    "globalConcepts": [
+      {
+        "id": "concept-现金流与应急金",
+        "name": "现金流与应急金",
+        "aliases": []
+      },
+      {
+        "id": "concept-消费与负债",
+        "name": "消费与负债",
+        "aliases": []
+      },
+      {
+        "id": "concept-长期复利",
+        "name": "长期复利",
+        "aliases": []
+      },
+      {
+        "id": "concept-资产配置与风险",
+        "name": "资产配置与风险",
+        "aliases": []
+      }
+    ],
+    "nodes": [
+      {
+        "index": 0,
+        "title": "先稳住：建立3-6个月应急金",
+        "teachingGoal": "讲解为什么要先储备应急金，具体的金额标准，以及如何快速积累这笔'保命钱'，避免因意外事件打乱整个理财计划。",
+        "teachConceptIds": [
+          "concept-现金流与应急金"
+        ],
+        "prerequisiteConceptIds": [],
+        "assessmentTargetIds": [
+          "concept-现金流与应急金"
+        ],
+        "bridgeFromPreviousNode": "从这门课最重要的起点开始。",
+        "personalizationHooks": {
+          "mustRemediateConceptIds": [],
+          "canCompressKnownConceptIds": [],
+          "analogyFactIds": []
+        },
+        "status": "available"
+      },
+      {
+        "index": 1,
+        "title": "理清消费：区分必要支出和欲望",
+        "teachingGoal": "用简单方法分析每月支出结构，找到可以优化的消费习惯，建立实用的预算控制方法，让钱真正花在刀刃上。",
+        "teachConceptIds": [
+          "concept-消费与负债"
+        ],
+        "prerequisiteConceptIds": [
+          "concept-现金流与应急金"
+        ],
+        "assessmentTargetIds": [
+          "concept-消费与负债"
+        ],
+        "bridgeFromPreviousNode": "承接上一节，继续深入 消费与负债 的理解与应用。",
+        "personalizationHooks": {
+          "mustRemediateConceptIds": [
+            "concept-消费与负债"
+          ],
+          "canCompressKnownConceptIds": [],
+          "analogyFactIds": []
+        },
+        "status": "locked"
+      },
+      {
+        "index": 2,
+        "title": "聪明负债：分辨好债与坏债",
+        "teachingGoal": "解释什么是'良性债务'和'恶性债务'，如何判断自己的负债是否合理，以及如何制定实用的还债策略。",
+        "teachConceptIds": [
+          "concept-长期复利"
+        ],
+        "prerequisiteConceptIds": [
+          "concept-消费与负债"
+        ],
+        "assessmentTargetIds": [
+          "concept-长期复利"
+        ],
+        "bridgeFromPreviousNode": "承接上一节，继续深入 长期复利 的理解与应用。",
+        "personalizationHooks": {
+          "mustRemediateConceptIds": [],
+          "canCompressKnownConceptIds": [],
+          "analogyFactIds": []
+        },
+        "status": "locked"
+      },
+      {
+        "index": 3,
+        "title": "风险底线：先求不亏再求收益",
+        "teachingGoal": "介绍资产配置的基础逻辑，为什么普通人要先做好风险防护再追求收益，提供判断理财产品风险的实际方法。",
+        "teachConceptIds": [
+          "concept-资产配置与风险"
+        ],
+        "prerequisiteConceptIds": [
+          "concept-长期复利"
+        ],
+        "assessmentTargetIds": [
+          "concept-资产配置与风险"
+        ],
+        "bridgeFromPreviousNode": "承接上一节，继续深入 资产配置与风险 的理解与应用。",
+        "personalizationHooks": {
+          "mustRemediateConceptIds": [
+            "concept-资产配置与风险"
+          ],
+          "canCompressKnownConceptIds": [],
+          "analogyFactIds": []
+        },
+        "status": "locked"
+      },
+      {
+        "index": 4,
+        "title": "复利起步：每月500元的长期增值",
+        "teachingGoal": "用真实案例展示时间与复利的力量，指导如何选择适合自己的低门槛投资工具，开启持续积累的第一步。",
+        "teachConceptIds": [
+          "concept-资产配置与风险"
+        ],
+        "prerequisiteConceptIds": [
+          "concept-资产配置与风险"
+        ],
+        "assessmentTargetIds": [
+          "concept-资产配置与风险"
+        ],
+        "bridgeFromPreviousNode": "承接上一节，继续深入 资产配置与风险 的理解与应用。",
+        "personalizationHooks": {
+          "mustRemediateConceptIds": [
+            "concept-资产配置与风险"
+          ],
+          "canCompressKnownConceptIds": [],
+          "analogyFactIds": []
+        },
+        "status": "locked"
+      }
+    ],
+    "coverage": {
+      "introducedConceptIds": [
+        "concept-现金流与应急金",
+        "concept-消费与负债",
+        "concept-长期复利",
+        "concept-资产配置与风险",
+        "concept-资产配置与风险"
+      ],
+      "assessedConceptIds": [
+        "concept-现金流与应急金",
+        "concept-消费与负债",
+        "concept-长期复利",
+        "concept-资产配置与风险",
+        "concept-资产配置与风险"
+      ],
+      "remediatedConceptIds": [
+        "concept-消费与负债",
+        "concept-资产配置与风险"
+      ]
+    },
+    "generationNotes": {
+      "compressedKnownConceptIds": [],
+      "emphasizedRiskConceptIds": [
+        "concept-消费与负债",
+        "concept-资产配置与风险"
+      ],
+      "selectedAnalogyFactIds": []
+    }
+  },
+  "treeView": {
+    "courseId": "system-personal-finance",
+    "topic": "打工人的实用理财框架",
+    "courseGoal": "为零基础打工人打造的理财入门课，从应急金管理到长期复利，建立完整的个人理财框架。",
+    "difficultySummary": "适用于打工人的普世理财方法，不追热点，耐心追求复利。",
+    "totalNodes": 5,
+    "nodes": [
+      {
+        "index": 0,
+        "title": "先稳住：建立3-6个月应急金",
+        "status": "available"
+      },
+      {
+        "index": 1,
+        "title": "理清消费：区分必要支出和欲望",
+        "status": "locked"
+      },
+      {
+        "index": 2,
+        "title": "聪明负债：分辨好债与坏债",
+        "status": "locked"
+      },
+      {
+        "index": 3,
+        "title": "风险底线：先求不亏再求收益",
+        "status": "locked"
+      },
+      {
+        "index": 4,
+        "title": "复利起步：每月500元的长期增值",
+        "status": "locked"
+      }
+    ]
+  },
+  "lessons": {
+    "0": {
+      "courseId": "system-personal-finance",
+      "nodeIndex": 0,
+      "title": "先稳住：建立3-6个月应急金",
+      "teachingGoal": "讲解为什么要先储备应急金，具体的金额标准，以及如何快速积累这笔'保命钱'，避免因意外事件打乱整个理财计划。",
+      "teachConceptIds": [
+        "concept-现金流与应急金"
+      ],
+      "assessmentTargetIds": [
+        "concept-现金流与应急金"
+      ],
+      "cards": [
+        {
+          "id": "card-1",
+          "title": "为什么需要应急金",
+          "content": "生活中总有意想不到的变故：突发疾病、意外事故、公司裁员……这些都可能让你的收入突然中断。\n\n没有应急金，你可能被迫动用投资本金、申请高息贷款，甚至陷入债务危机。**应急金就是你的「保命钱」，是所有理财计划的前提。**",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-现金流与应急金"
+          ]
+        },
+        {
+          "id": "card-2",
+          "title": "应急金该存多少",
+          "content": "标准是储备 **3-6 个月的生活费用**。统计每月必要支出（房租、伙食、交通、保险等），乘以月数。\n\n比如月支出 6000 元，至少准备 1.8 万元。工作不稳定或家庭负担重的人，建议取上限。",
+          "imageUrl": null,
+          "visualization": {
+            "type": "table",
+            "title": "不同收入档位的应急金参考",
+            "columns": [
+              "月必要支出",
+              "3个月下限",
+              "6个月上限"
+            ],
+            "rows": [
+              [
+                "4000元",
+                "1.2万元",
+                "2.4万元"
+              ],
+              [
+                "6000元",
+                "1.8万元",
+                "3.6万元"
+              ],
+              [
+                "10000元",
+                "3万元",
+                "6万元"
+              ]
+            ]
+          },
+          "coveredConceptIds": [
+            "concept-现金流与应急金"
+          ]
+        },
+        {
+          "id": "card-3",
+          "title": "快速积累应急金的方法",
+          "content": "**先储蓄，后消费**：发工资后立刻把应急金转出，剩余的钱再用于日常开支。\n\n**具体操作**：设定每月固定金额（如 3000 元），自动转账到专门的应急账户，6 个月内即可积累 1.8 万元。自动化能避免你「忍不住花掉」。",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-现金流与应急金"
+          ]
+        },
+        {
+          "id": "card-4",
+          "title": "应急金的管理原则",
+          "content": "应急金要放在 **流动性高、随时可取** 的账户，如活期存款或货币基金，收益虽低但安全方便。\n\n使用时只限于真正的紧急情况，动用后记得及时补充。这个账户平时不要动，让它默默守护你的财务安全。",
+          "imageUrl": null,
+          "visualization": {
+            "type": "keyPoints",
+            "title": "应急金使用原则",
+            "items": [
+              "存放：高流动性账户（活期/货币基金）",
+              "用途：仅限真正的紧急情况",
+              "补充：动用后尽快恢复原有金额"
+            ]
+          },
+          "coveredConceptIds": [
+            "concept-现金流与应急金"
+          ]
+        }
+      ],
+      "questions": [
+        {
+          "id": "q-1",
+          "type": "single",
+          "question": "如果你的月支出是8000元，按照3-6个月的标准，应该准备多少应急金？",
+          "options": [
+            "1.8万-3.6万",
+            "2.4万-4.8万",
+            "3.2万-6.4万",
+            "4万-8万"
+          ],
+          "answer": "2.4万-4.8万",
+          "explanation": "3个月对应2.4万，6个月对应4.8万，所以范围是2.4万-4.8万。",
+          "concept": "concept-现金流与应急金",
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": "card-1",
+          "targetConceptId": "concept-现金流与应急金"
+        },
+        {
+          "id": "q-2",
+          "type": "multiple",
+          "question": "下列哪些做法有助于快速积累应急金？",
+          "options": [
+            "设定每月固定金额自动转账",
+            "工资发放后先消费再储蓄",
+            "使用高收益股票投资应急金",
+            "放在流动性高的活期账户"
+          ],
+          "answer": [
+            "设定每月固定金额自动转账",
+            "放在流动性高的活期账户"
+          ],
+          "explanation": "自动化转账和流动性高的账户能确保资金及时积累且随时可取；先消费后储蓄和高风险股票不符合应急金管理原则。",
+          "concept": "concept-现金流与应急金",
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": "card-1",
+          "targetConceptId": "concept-现金流与应急金"
+        }
+      ]
+    },
+    "1": {
+      "courseId": "system-personal-finance",
+      "nodeIndex": 1,
+      "title": "理清消费：区分必要支出和欲望",
+      "teachingGoal": "用简单方法分析每月支出结构，找到可以优化的消费习惯，建立实用的预算控制方法，让钱真正花在刀刃上。",
+      "teachConceptIds": [
+        "concept-消费与负债"
+      ],
+      "assessmentTargetIds": [
+        "concept-消费与负债"
+      ],
+      "cards": [
+        {
+          "id": "card-1",
+          "title": "必要支出和欲望的本质区别",
+          "content": "**必要支出**：维持基本生活的开销，没它日子真的过不下去——房租、基础伙食、上班公交。\n\n**欲望支出**：超出基本需求的选择，没有它只是不方便，但不致命——奶茶、换新手机、周末下馆子。\n\n**判断技巧**：问自己“离开它生活会崩溃吗？”会崩溃是必要，只是肉疼就是欲望。",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-消费与负债"
+          ]
+        },
+        {
+          "id": "card-2",
+          "title": "三步完成每月支出分析",
+          "content": "**第一步：记录。** 用记账App或手机备忘录，记下每笔消费，哪怕一杯咖啡。\n\n**第二步：分类。** 月底把支出分成两堆：必要支出 vs 欲望支出。\n\n**第三步：算比例。** 用欲望支出除以月收入，超过30%就要警惕了。**3个月后你会看到自己的消费真相。** 坚持记录是关键，数据不会骗人。",
+          "imageUrl": null,
+          "visualization": {
+            "type": "table",
+            "title": "三步支出分析法",
+            "columns": [
+              "步骤",
+              "操作",
+              "目标"
+            ],
+            "rows": [
+              [
+                "记录",
+                "记下每笔消费",
+                "积累真实数据"
+              ],
+              [
+                "分类",
+                "必要 vs 欲望",
+                "看清钱花哪儿"
+              ],
+              [
+                "算比例",
+                "欲望÷收入",
+                "判断是否过度"
+              ]
+            ]
+          },
+          "coveredConceptIds": [
+            "concept-消费与负债"
+          ]
+        },
+        {
+          "id": "card-3",
+          "title": "识别吞噬钱包的\"拿铁因子\"",
+          "content": "每天15元奶茶看似不多，**一年累计5400元**，足够买一部手机。\n\n**“拿铁因子”就是这类小额但频繁的欲望消费。** 识别方法：打开账单搜索，找出那些“单价不贵但经常买”的东西。\n\n**自问三秒**：这东西真让我开心吗？不买会死吗？有没有更便宜的替代？三个问题帮你判断该砍还是留。",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-消费与负债"
+          ]
+        },
+        {
+          "id": "card-4",
+          "title": "简单三步预算控制法",
+          "content": "**第一步：先保必要。** 工资到账，先把房租、交通、饭钱等必要支出单独留出来。\n\n**第二步：再定储蓄。** 立刻转10%-20%到独立账户，这钱不是用来花的。\n\n**第三步：最后消费。** 用剩下的钱安排欲望支出，**花完就停，不透支。** 核心原则：必要支出是底线，储蓄是纪律，欲望在能力范围内满足。简单三步，让钱真正花在刀刃上。",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-消费与负债"
+          ]
+        }
+      ],
+      "questions": [
+        {
+          "id": "q-1",
+          "type": "single",
+          "question": "小李整理自己上个月的消费账单，以下哪项支出最可能属于“欲望支出”？",
+          "options": [
+            "地铁月卡充值150元，用于每天上下班通勤",
+            "用会员积分兑换的视频网站年费，省去了每月30元的订阅费",
+            "每天下午在公司楼下买一杯15元的奶茶",
+            "家里冰箱坏了，支付了300元维修费"
+          ],
+          "answer": "每天下午在公司楼下买一杯15元的奶茶",
+          "explanation": "正确答案来自本节知识点，请回看相关卡片后再试一次。",
+          "concept": "concept-消费与负债",
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": "card-1",
+          "targetConceptId": "concept-消费与负债"
+        },
+        {
+          "id": "q-2",
+          "type": "sorting",
+          "question": "小王月薪8000元，想按照“三步预算控制法”安排工资。请将以下三个步骤按照正确顺序排列：",
+          "options": [
+            "把10%~20%的工资立刻转到独立的储蓄账户，这笔钱不动用",
+            "用剩余的工资安排“想要”的消费，比如聚餐、换季买衣服等，量入为出",
+            "先把房租、水电费、交通费、基础伙食费等必要支出留出来"
+          ],
+          "answer": [
+            "先把房租、水电费、交通费、基础伙食费等必要支出留出来",
+            "把10%~20%的工资立刻转到独立的储蓄账户，这笔钱不动用",
+            "用剩余的工资安排“想要”的消费，比如聚餐、换季买衣服等，量入为出"
+          ],
+          "explanation": "正确答案来自本节知识点，请回看相关卡片后再试一次。",
+          "concept": "concept-消费与负债",
+          "difficulty": 2,
+          "dimension": "application",
+          "cardId": "card-1",
+          "targetConceptId": "concept-消费与负债"
+        }
+      ]
+    },
+    "2": {
+      "courseId": "system-personal-finance",
+      "nodeIndex": 2,
+      "title": "聪明负债：分辨好债与坏债",
+      "teachingGoal": "解释什么是'良性债务'和'恶性债务'，如何判断自己的负债是否合理，以及如何制定实用的还债策略。",
+      "teachConceptIds": [
+        "concept-长期复利"
+      ],
+      "assessmentTargetIds": [
+        "concept-长期复利"
+      ],
+      "cards": [
+        {
+          "id": "card-1",
+          "title": "什么是良性债务与恶性债务",
+          "content": "债务并非洪水猛兽。**良性债务**指能带来长期收益或提升赚钱能力的负债：比如房贷让你拥有资产，教育贷可能带来更高收入。**恶性债务**则相反——利率高、期限长、用于纯消耗：比如信用卡分期买奢侈品。判断核心：**这笔钱未来能否为你创造价值**。",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-长期复利"
+          ]
+        },
+        {
+          "id": "card-2",
+          "title": "三个信号判断你的负债是否合理",
+          "content": "检查债务是否合理，看这三个指标：\n\n1. **月供占比**：不超过收入的40%，否则影响生活质量\n2. **利率对比**：贷款利率是否低于你能获得的投资收益\n3. **用途评估**：借来的钱能产生正向现金流吗\n\n三占其二，基本可以判断这笔债务值得保留。",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-长期复利"
+          ]
+        },
+        {
+          "id": "card-3",
+          "title": "实用的还债策略",
+          "content": "还债有两条常见路径：**雪崩法**优先偿还高利率债务，数学最优；**雪球法**先清理小额债务，心理满足感强。根据性格选择，关键在于坚持执行。\n\n实操建议：每月工资到账后，先划出固定金额转入独立还债账户，避免挪用。设定具体的清偿截止日期，让目标可追踪。",
+          "imageUrl": null,
+          "visualization": {
+            "type": "comparison",
+            "title": "两种还债策略对比",
+            "columns": [
+              "维度",
+              "雪崩法",
+              "雪球法"
+            ],
+            "rows": [
+              [
+                "策略",
+                ">>>优先高利率",
+                ">>>优先小额"
+              ],
+              [
+                "优势",
+                ">>>总利息最少",
+                ">>>快速获得正反馈"
+              ],
+              [
+                "适合人群",
+                ">>>理性、执行力强",
+                ">>>需要激励坚持"
+              ]
+            ]
+          },
+          "coveredConceptIds": [
+            "concept-长期复利"
+          ]
+        },
+        {
+          "id": "card-4",
+          "title": "本章核心要点",
+          "content": "记住三个原则：\n\n- **良性债务三特征**：提升收入潜力、利率相对较低、用于实质性投资\n- **月供安全线**：不超过收入的40%\n- **还债行动优先**：选择适合自己的方法，坚持执行比完美更重要\n\n合理负债是工具，失控负债是陷阱。",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-长期复利"
+          ]
+        }
+      ],
+      "questions": [
+        {
+          "id": "q-1",
+          "type": "single",
+          "question": "李明月收入8000元，计划贷款5万元参加MBA课程，预期毕业后年薪提升50%。以下哪项最符合良性债务的特征？",
+          "options": [
+            "利率比房贷低",
+            "能够提升未来收入潜力",
+            "有担保公司担保",
+            "可以分5年慢慢还"
+          ],
+          "answer": "能够提升未来收入潜力",
+          "explanation": "良性债务的核心标准是能为未来创造价值，教育投资提升收入潜力符合这一特征。",
+          "concept": "concept-长期复利",
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": "card-1",
+          "targetConceptId": "concept-长期复利"
+        },
+        {
+          "id": "q-2",
+          "type": "multiple",
+          "question": "判断一笔负债是否合理，可以通过哪三个核心信号来评估？",
+          "options": [
+            "月供占比不超过收入的40%",
+            "债务期限不超过5年",
+            "贷款利率是否低于你能获得的投资收益",
+            "借来的钱能产生正向现金流",
+            "债务金额不超过家庭总资产的50%"
+          ],
+          "answer": [
+            "月供占比不超过收入的40%",
+            "贷款利率是否低于你能获得的投资收益",
+            "借来的钱能产生正向现金流"
+          ],
+          "explanation": "三个判断信号是：月供占比、利率对比、用途评估，三占其二可判断债务值得保留。",
+          "concept": "concept-长期复利",
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": "card-1",
+          "targetConceptId": "concept-长期复利"
+        }
+      ]
+    },
+    "3": {
+      "courseId": "system-personal-finance",
+      "nodeIndex": 3,
+      "title": "风险底线：先求不亏再求收益",
+      "teachingGoal": "介绍资产配置的基础逻辑，为什么普通人要先做好风险防护再追求收益，提供判断理财产品风险的实际方法。",
+      "teachConceptIds": [
+        "concept-资产配置与风险"
+      ],
+      "assessmentTargetIds": [
+        "concept-资产配置与风险"
+      ],
+      "cards": [
+        {
+          "id": "card-1",
+          "title": "为什么理财要先“保本”",
+          "content": "亏损比想象的要命。假设投100元亏50%只剩50元，要回本必须涨100%——亏损越深，回本越难。\n\n普通人没有源源不断的增量资金，一次重大亏损可能让你10年白干。\n\n**先求不亏，是一种保护劳动成果的智慧。**",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-资产配置与风险"
+          ]
+        },
+        {
+          "id": "card-2",
+          "title": "风险等级与理财工具对照",
+          "content": "理财产品按风险大致分三类：\n\n| 风险等级 | 典型产品 | 收益特点 |\n| :--- | :--- | :--- |\n| 低风险 | 银行存款、国债、货币基金 | 年化2-4%，本金安全性高 |\n| 中风险 | 债券基金、银行理财 | 年化4-6%，有波动但可控 |\n| 高风险 | 股票、股票基金、P2P | 年化可能超10%，也可能亏损 |\n\n**记住：收益越高，风险越大，这是铁律。**",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-资产配置与风险"
+          ]
+        },
+        {
+          "id": "card-3",
+          "title": "三步判断理财产品风险",
+          "content": "第一步，看产品是谁卖的。银行、证券公司、持牌基金公司的产品更可靠，来路不明的平台直接跳过。\n\n第二步，看钱投向哪里。说不清资金去向的不要碰。\n\n第三步，看合同里有没有\"保本\"\"刚兑\"字样。正规产品不会承诺保本，高收益+保本=骗局。\n\n**说不清、找不到、不认识的，一律不买。**",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-资产配置与风险"
+          ]
+        },
+        {
+          "id": "card-4",
+          "title": "打工人的风险底线行动清单",
+          "content": "建立自己的风险底线，分三步走：\n\n1. 先储备3-6个月应急金，放货币基金，随取随用\n2. 用80%以上的闲钱配置低风险产品，打好地基\n3. 用少量资金（不影响生活的额度）尝试中高风险，当练手\n\n**先让自己立于不败之地，再追求收益。**",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-资产配置与风险"
+          ]
+        }
+      ],
+      "questions": [
+        {
+          "id": "q-1",
+          "type": "single",
+          "question": "以下哪种理财产品属于低风险，适合作为打工人的稳健基础？",
+          "options": [
+            "银行存款",
+            "股票基金",
+            "P2P",
+            "期货"
+          ],
+          "answer": "银行存款",
+          "explanation": "低风险产品包括银行存款、国债、货币基金，收益稳定且本金安全性高。",
+          "concept": "concept-资产配置与风险",
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": "card-1",
+          "targetConceptId": "concept-资产配置与风险"
+        },
+        {
+          "id": "q-2",
+          "type": "multiple",
+          "question": "在判断理财产品风险时，以下哪些做法是正确的？（多选）",
+          "options": [
+            "只看收益率，忽略风险",
+            "查看产品发行方是否为持牌机构",
+            "关注资金投向，确保清晰",
+            "合同中若出现“保本”“刚兑”字样，则一定是正规产品"
+          ],
+          "answer": [
+            "查看产品发行方是否为持牌机构",
+            "关注资金投向，确保清晰"
+          ],
+          "explanation": "正规产品应由持牌机构发行，且资金投向需明确；合同中承诺保本往往是骗局。",
+          "concept": "concept-资产配置与风险",
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": "card-1",
+          "targetConceptId": "concept-资产配置与风险"
+        }
+      ]
+    },
+    "4": {
+      "courseId": "system-personal-finance",
+      "nodeIndex": 4,
+      "title": "复利起步：每月500元的长期增值",
+      "teachingGoal": "用真实案例展示时间与复利的力量，指导如何选择适合自己的低门槛投资工具，开启持续积累的第一步。",
+      "teachConceptIds": [
+        "concept-资产配置与风险"
+      ],
+      "assessmentTargetIds": [
+        "concept-资产配置与风险"
+      ],
+      "cards": [
+        {
+          "id": "card-1",
+          "title": "复利是什么",
+          "content": "复利就是“利滚利”——利息也产生利息。\n\n想象池塘里的荷花：第1天开1朵，第2天2朵，每天翻倍。30天后整个池塘开满荷花。\n\n**投资同理**：本金产生收益，收益再产生收益。持有时间越长，财富增长速度越快。",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-资产配置与风险"
+          ]
+        },
+        {
+          "id": "card-2",
+          "title": "每月500元，时间算笔账",
+          "content": "每月投500元，年化收益6%，不同阶段的差距惊人：\n\n- **5年**：本金3万 → 积累3.5万\n- **10年**：本金6万 → 积累8.2万\n- **20年**：本金12万 → 积累26万\n- **30年**：本金18万 → 积累近70万\n\n**关键发现**：时间越久，利息占比越高。复利真正的魔法在后半场。",
+          "imageUrl": null,
+          "visualization": {
+            "type": "table",
+            "title": "每月500元定投收益对照",
+            "columns": [
+              "投资时长",
+              "本金投入",
+              "积累金额",
+              "利息收益"
+            ],
+            "rows": [
+              [
+                "5年",
+                "3万元",
+                "3.5万元",
+                "0.5万元"
+              ],
+              [
+                "10年",
+                "6万元",
+                "8.2万元",
+                "2.2万元"
+              ],
+              [
+                "20年",
+                "12万元",
+                "26万元",
+                "14万元"
+              ],
+              [
+                "30年",
+                "18万元",
+                "70万元",
+                "52万元"
+              ]
+            ]
+          },
+          "coveredConceptIds": [
+            "concept-资产配置与风险"
+          ]
+        },
+        {
+          "id": "card-3",
+          "title": "低门槛投资工具怎么选",
+          "content": "打工人最适合的工具：**指数基金定投**。\n\n**为什么是它**：\n- 不需要研究个股，降低选错风险\n- 手续费低，长期持有成本可控\n- 自动扣款，强迫储蓄不费力\n\n**在哪里买**：支付宝“基金”或天天基金App，搜索“沪深300”指数基金即可。\n\n**另一个选择**：货币基金，适合暂时不投、只想存放应急金的过渡期。",
+          "imageUrl": null,
+          "visualization": {
+            "type": "keyPoints",
+            "title": "打工人投资工具选择",
+            "items": [
+              "首选：指数基金定投（沪深300/全市场）",
+              "应急金：货币基金（随存随取）",
+              "避免：个股、杠杆、数字货币"
+            ]
+          },
+          "coveredConceptIds": [
+            "concept-资产配置与风险"
+          ]
+        },
+        {
+          "id": "card-4",
+          "title": "三步开启你的定投",
+          "content": "**第一步**：确认应急金已备足（3-6个月生活费），闲钱才用来投资。\n\n**第二步**：打开支付宝或天天基金，搜索沪深300指数基金，设定每月自动扣款500元。\n\n**第三步**：设置后不再天天看，忽略短期涨跌，耐心持有。\n\n**核心理念**：用时间换空间，不追求暴富，只追求稳稳的积累。",
+          "imageUrl": null,
+          "visualization": {
+            "type": "flowchart",
+            "title": "定投启动三步流程",
+            "mermaidCode": "flowchart TD\n    A[确认应急金已备足] --> B[选择沪深300指数基金]\n    B --> C[设置每月自动定投500元]\n    C --> D[长期持有·忽略短期波动]"
+          },
+          "coveredConceptIds": [
+            "concept-资产配置与风险"
+          ]
+        }
+      ],
+      "questions": [
+        {
+          "id": "q-1",
+          "type": "single",
+          "question": "复利真正的魔法主要体现在哪一个因素？",
+          "options": [
+            "短期高收益",
+            "本金大小",
+            "时间长短",
+            "高频交易"
+          ],
+          "answer": "时间长短",
+          "explanation": "复利的增长随时间累计，时间越久收益的复利效应越明显。",
+          "concept": "concept-资产配置与风险",
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": "card-1",
+          "targetConceptId": "concept-资产配置与风险"
+        },
+        {
+          "id": "q-2",
+          "type": "multiple",
+          "question": "在开始指数基金定投前，哪些准备工作是必要的？",
+          "options": [
+            "确认已建立应急金（3-6个月生活费）",
+            "了解每只股票的基本面",
+            "选定高风险高收益的基金",
+            "设定每月自动扣款"
+          ],
+          "answer": [
+            "确认已建立应急金（3-6个月生活费）",
+            "设定每月自动扣款"
+          ],
+          "explanation": "先确保有应急金，剩余闲钱才可用于定投；同时需设定自动扣款保证持续投入。",
+          "concept": "concept-资产配置与风险",
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": "card-1",
+          "targetConceptId": "concept-资产配置与风险"
+        }
+      ]
+    }
+  }
+}

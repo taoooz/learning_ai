@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { UserProfile } from '@/types/course';
 import { getUserProfile, saveUserProfile, getRecommendations, saveRecommendations } from '@/lib/storage';
+import { createMemoryRepository } from '@/lib/memory/repository';
 
 interface UserProfileContextType {
   userProfile: UserProfile | null;
@@ -37,7 +38,7 @@ export function UserProfileProvider({ children }: { children: React.ReactNode })
       const profileInsights = profile?.insights;
       const insights = profileInsights ? [
         profileInsights.summary,
-        ...(profileInsights.knowledgeBackground || []).slice(0, 2),
+        ...(profileInsights.workSummary || []).slice(0, 2),
       ].filter(Boolean) : [];
 
       const context = {
@@ -68,6 +69,12 @@ export function UserProfileProvider({ children }: { children: React.ReactNode })
   const updateProfile = useCallback((profile: UserProfile) => {
     try {
       saveUserProfile(profile);
+      // 同步更新 V3 profile（stableFacts + goals）
+      try {
+        createMemoryRepository().syncProfileToV3();
+      } catch {
+        // V3 同步失败不影响主流程
+      }
       setUserProfile(profile);
       // 如果还没有推荐课程，生成一份
       generateRecommendationsIfNeeded(profile);

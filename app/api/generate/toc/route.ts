@@ -35,6 +35,20 @@ export async function POST(request: NextRequest) {
       throw new Error(`Python Agent error: ${response.status}${parsedDetail ? ` - ${parsedDetail}` : ''}`);
     }
 
+    // 检查是否是流式响应（Python Agent返回SSE）
+    const contentType = response.headers.get('content-type');
+    if (contentType?.includes('text/event-stream')) {
+      // 直接转发流式响应给前端
+      return new Response(response.body, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
+      });
+    }
+
+    // 兼容非流式响应（如果Python Agent返回JSON）
     const result = await response.json();
     return NextResponse.json(result);
   } catch (error) {

@@ -18,6 +18,8 @@ import {
 import { getUserMemoryStoreSnapshot } from '@/hooks/useUserMemory';
 import { createMemoryRepository } from '@/lib/memory/repository';
 import { normalizeVisualization } from '@/lib/visualization';
+import { parseTocSSEStream, type TocSSEEvent } from '@/app/generate/toc/utils/tocSseParser';
+export type { TocSSEEvent as TocStreamEvent } from '@/app/generate/toc/utils/tocSseParser';
 
 interface CourseContextType {
   courses: CourseTree[];
@@ -37,10 +39,12 @@ interface CourseContextType {
     learningDirection: string;
     learningGoal: string;
     learnerPositioning: OutlineLearnerPositioning;
+  }, options?: {
+    onEvent?: (event: TocSSEEvent) => void;
   }) => Promise<{
     courseName: string;
     courseDescription: string;
-    nodes: Array<{ index: number; title: string; teachingGoal: string; description: string }>;
+    nodes: Array<{ index: number; title: string; description: string; frame?: string }>;
   }>;
   generateNodeCards: (
     courseId: string,
@@ -132,6 +136,7 @@ export function buildNodeInfoPayload(bundle: StoredCourseBundle, nodeIndex: numb
     courseDescription: bundle.blueprint.courseGoal,
     estimatedLevel: bundle.blueprint.learnerPositioning.estimatedLevel,
     backgroundSummary: learnerPositioning.backgroundSummary,
+    frame: node.frame,
     prevNode: prevNode ? { title: prevNode.title, concepts: prevNode.teachConceptIds || [] } : undefined,
     nextNode: nextNode ? { title: nextNode.title, concepts: nextNode.teachConceptIds || [] } : undefined,
   };
@@ -266,29 +271,79 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     learningDirection: string;
     learningGoal: string;
     learnerPositioning: OutlineLearnerPositioning;
-  }) => {
+  }, options?: { onEvent?: (event: TocSSEEvent) => void }) => {
     setGenerationStatus('generating');
     setGenerationError(null);
     try {
       // 获取用户记忆用于个性化
       const memoryRepository = createMemoryRepository();
       const userMemory = memoryRepository.getMemoryStoreV3();
-      
+
       const response = await fetch('/api/generate/toc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           blueprint: outline,
-          userMemory, // 传递用户记忆
+          userMemory,
         }),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(getGenerationErrorMessage(data, '目录生成失败，请稍后再试。'));
+        const text = await response.text().catch(() => '');
+        throw new Error(text || '目录生成失败，请稍后再试。');
       }
 
+      // 检测 SSE 流式响应
+      const contentType = response.headers.get('content-type');
+      if (contentType?.includes('text/event-stream')) {
+        let courseName = '';
+        let courseDescription = '';
+        const nodes: Array<{ index: number; title: string; description: string }> = [];
+
+        for await (const event of parseTocSSEStream(response)) {
+          switch (event.type) {
+            case 'course_name':
+              courseName = event.value;
+              options?.onEvent?.({ type: 'course_name', value: event.value });
+              break;
+            case 'course_description':
+              courseDescription = event.value;
+              options?.onEvent?.({ type: 'course_description', value: event.value });
+              break;
+            case 'node':
+              nodes.push(event.node);
+              options?.onEvent?.({ type: 'node', node: event.node });
+              break;
+            case 'complete': {
+              // 从 complete 事件提取最终结果（权威数据源）
+              if (event.result) {
+                if (event.result.courseName) courseName = event.result.courseName;
+                if (event.result.courseDescription) courseDescription = event.result.courseDescription;
+                if (Array.isArray(event.result.nodes)) {
+                  const existingIndices = new Set(nodes.map(n => n.index));
+                  for (const n of event.result.nodes) {
+                    if (!existingIndices.has(n.index)) {
+                      nodes.push({ index: n.index, title: n.title, description: n.description || '', frame: n.frame });
+                      options?.onEvent?.({ type: 'node', node: { index: n.index, title: n.title, description: n.description || '', frame: n.frame } });
+                    }
+                  }
+                }
+              }
+              options?.onEvent?.({ type: 'complete', result: event.result ?? { courseName: '', courseDescription: '', nodes: [] } });
+              break;
+            }
+            case 'error':
+              options?.onEvent?.({ type: 'error', message: event.message });
+              throw new Error(event.message);
+          }
+        }
+
+        setGenerationStatus('success');
+        return { courseName, courseDescription, nodes };
+      }
+
+      // 兼容非流式 JSON 响应
+      const data = await response.json();
       setGenerationStatus('success');
       return data;
     } catch (error) {

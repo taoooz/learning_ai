@@ -1,10 +1,6 @@
 import {
   appendEventToMemoryStoreV3,
-  createDefaultUserMemory,
-  decayUserMemory,
-  isMemoryStoreV3,
-  mergeProfileIntoMemory,
-  migrateMemoryToV3,
+  createEmptyMemoryStoreV3,
 } from '@/lib/memory/aggregator';
 import {
   getChatMemoryPayload,
@@ -20,11 +16,9 @@ import type {
   PlanningMemoryPayload,
   StoredCourseBundle,
   TeachingMemoryPayload,
-  UserMemory,
   UserProfile,
 } from '@/types/course';
 
-const USER_MEMORY_KEY = 'userMemory';
 const USER_MEMORY_V3_KEY = 'userMemoryV3';
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
@@ -32,7 +26,7 @@ type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
 type CreateMemoryRepositoryOptions = {
   storage?: StorageLike;
   getProfile?: () => UserProfile | null;
-  initialMemory?: UserMemory | MemoryStoreV3 | null;
+  initialMemory?: MemoryStoreV3 | null;
 };
 
 function getStorage(storage?: StorageLike): StorageLike | null {
@@ -46,86 +40,59 @@ export function createMemoryRepository(options: CreateMemoryRepositoryOptions = 
   const getProfile = options.getProfile || getUserProfile;
   const initialMemory = options.initialMemory;
 
-  function getLegacyMemory(): UserMemory {
-    const profile = getProfile();
-
-    if (initialMemory && !isMemoryStoreV3(initialMemory)) {
-      return decayUserMemory(mergeProfileIntoMemory(initialMemory, profile));
-    }
-
-    if (!storage) {
-      return createDefaultUserMemory(profile);
-    }
-
-    try {
-      const raw = storage.getItem(USER_MEMORY_KEY);
-      if (!raw) {
-        return createDefaultUserMemory(profile);
-      }
-
-      const parsed = JSON.parse(raw) as UserMemory;
-      return decayUserMemory(mergeProfileIntoMemory(parsed, profile));
-    } catch {
-      return createDefaultUserMemory(profile);
-    }
-  }
-
-  function saveLegacyMemory(memory: UserMemory): void {
+  /**
+   * 将当前 profile 数据同步到 V3 存储（更新 stableFacts + goals，保留 events 和 projections）
+   */
+  function syncProfileToV3(): void {
     if (!storage) return;
 
-    const nextMemory = {
-      ...memory,
-      lastUpdated: Date.now(),
-      version: (memory.version || 0) + 1,
-    };
-
-    storage.setItem(USER_MEMORY_KEY, JSON.stringify(nextMemory));
-
-    // 同步写入 V3：将 legacy memory 迁移后合并到现有 V3 存储
     try {
       const existingV3Raw = storage.getItem(USER_MEMORY_V3_KEY);
       const existingV3 = existingV3Raw
         ? JSON.parse(existingV3Raw) as MemoryStoreV3
         : null;
 
-      if (existingV3 && isMemoryStoreV3(existingV3)) {
-        // V3 已存在：更新 profile（stableFacts + goals）
-        const newV3 = migrateMemoryToV3(nextMemory, getProfile());
+      const freshV3 = createEmptyMemoryStoreV3(getProfile());
+
+      if (existingV3 && existingV3.version === 3 && Array.isArray(existingV3.events)) {
+        // V3 已存在：只更新 profile，保留 events 和 projections
         const updatedV3: MemoryStoreV3 = {
           ...existingV3,
-          profile: newV3.profile,
-          updatedAt: Math.max(existingV3.updatedAt, nextMemory.lastUpdated),
+          profile: freshV3.profile,
+          updatedAt: Math.max(existingV3.updatedAt, Date.now()),
         };
         storage.setItem(USER_MEMORY_V3_KEY, JSON.stringify(updatedV3));
+      } else {
+        // V3 不存在：创建并写入
+        storage.setItem(USER_MEMORY_V3_KEY, JSON.stringify(freshV3));
       }
-      // V3 不存在时不主动创建，等下次读取时自动迁移
     } catch {
-      // V3 写入失败不影响 V1 的正常保存
+      // V3 写入失败静默处理
     }
   }
 
   function getMemoryStoreV3(): MemoryStoreV3 {
     if (initialMemory) {
-      return migrateMemoryToV3(initialMemory, getProfile());
+      return initialMemory;
     }
 
-    if (!storage) return migrateMemoryToV3(getLegacyMemory(), getProfile());
+    if (!storage) return createEmptyMemoryStoreV3(getProfile());
 
     try {
       const raw = storage.getItem(USER_MEMORY_V3_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as MemoryStoreV3;
-        if (isMemoryStoreV3(parsed)) {
+        if (parsed && parsed.version === 3 && Array.isArray(parsed.events)) {
           return parsed;
         }
       }
     } catch {
-      // 损坏数据回退迁移
+      // 损坏数据回退到新创建
     }
 
-    const migrated = migrateMemoryToV3(getLegacyMemory(), getProfile());
-    saveMemoryStoreV3(migrated);
-    return migrated;
+    const fresh = createEmptyMemoryStoreV3(getProfile());
+    saveMemoryStoreV3(fresh);
+    return fresh;
   }
 
   function saveMemoryStoreV3(memoryStore: MemoryStoreV3): void {
@@ -171,8 +138,7 @@ export function createMemoryRepository(options: CreateMemoryRepositoryOptions = 
   }
 
   return {
-    getLegacyMemory,
-    saveLegacyMemory,
+    syncProfileToV3,
     getMemoryStoreV3,
     saveMemoryStoreV3,
     appendMemoryEvent,

@@ -1,18 +1,13 @@
 'use client';
 
-import { Suspense, useEffect, useState, useRef } from 'react';
+import { Suspense, useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useCourse } from '@/contexts/CourseContext';
+import { type TocStreamEvent } from '@/contexts/CourseContext';
 import { CourseHeaderBar } from '@/components/CourseHeaderBar';
 import { createStoredCourseBundleFromBlueprint } from '@/lib/course-blueprint';
 import type { CourseBlueprint, StoredCourseBundle, OutlineLearnerPositioning } from '@/types/course';
-
-interface TocResponse {
-  courseName: string;
-  courseDescription: string;
-  nodes: { index: number; title: string; description: string }[];
-}
 
 interface PendingOutline {
   topic: string;
@@ -26,49 +21,54 @@ function TocPageContent() {
   const searchParams = useSearchParams();
   const topic = searchParams.get('topic') || '';
   const { generateToc, addCourse, generateNodeContent } = useCourse();
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 用于标记是否已经发起过请求（防止 Strict Mode 重复请求）
+  // 流式展示状态
+  const [courseName, setCourseName] = useState('');
+  const [courseDescription, setCourseDescription] = useState('');
+  const [streamNodes, setStreamNodes] = useState<Array<{ index: number; title: string; description: string }>>([]);
+  const [isComplete, setIsComplete] = useState(false);
+
   const hasRequestedRef = useRef(false);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleTocEvent = useCallback((event: TocStreamEvent) => {
+    if (event.type === 'course_name') setCourseName(event.value);
+    else if (event.type === 'course_description') setCourseDescription(event.value);
+    else if (event.type === 'node') setStreamNodes(prev => [...prev, event.node]);
+    else if (event.type === 'complete') setIsComplete(true);
+    else if (event.type === 'error') setError(event.message);
+  }, []);
 
   useEffect(() => {
     const outlineData = sessionStorage.getItem('pendingOutline');
     if (!outlineData) {
       setError('没有找到课程纲要，请重新开始');
-      setIsLoading(false);
       return;
     }
-
-    // 如果已经发起过请求，直接返回
     if (hasRequestedRef.current) return;
     hasRequestedRef.current = true;
 
     const outline: PendingOutline = JSON.parse(outlineData);
+    let errorHandled = false;
 
-    console.log('[TOC Page] Starting TOC generation');
-
-    // 调用 toc API 生成课程名称、描述、节点详情
-    generateToc(outline).then(async (result) => {
-      try {
-        const tocResult = result as TocResponse;
-
-        // 构建完整的 CourseBlueprint
-        // 注意：courseName 由 TOC API 生成，应作为课程标题（topic）使用
+    generateToc(outline, { onEvent: handleTocEvent })
+      .then(async (result) => {
         const blueprint: CourseBlueprint = {
           courseId: `course-${Date.now()}`,
-          topic: tocResult.courseName || outline.topic,
+          topic: result.courseName || outline.topic,
           learnerPositioning: {
             estimatedLevel: outline.learnerPositioning.estimatedLevel,
             difficultySummary: outline.learnerPositioning.difficultySummary,
             whyThisCourseFits: outline.learnerPositioning.whyThisCourseFits,
           },
-          courseGoal: tocResult.courseDescription || outline.learningGoal,
+          courseGoal: result.courseDescription || outline.learningGoal,
           globalConcepts: [],
-          nodes: tocResult.nodes.map((n, i) => ({
+          nodes: result.nodes.map((n) => ({
             index: n.index,
             title: n.title,
             teachingGoal: n.description,
+            frame: n.frame,
             teachConceptIds: [],
             prerequisiteConceptIds: [],
             bridgeFromPreviousNode: '',
@@ -76,153 +76,221 @@ function TocPageContent() {
           })),
         };
 
-        // 创建课程 bundle
-        const bundle: StoredCourseBundle = createStoredCourseBundleFromBlueprint(blueprint);
-
-        // 保存 bundle 并更新上下文状态
-        addCourse(bundle);
-
-        // 后台预生成第一个节点内容（不阻塞跳转）
-        generateNodeContent(blueprint.courseId, 0).catch(err => {
-          console.warn('[TOC Page] Preload node 0 failed:', err);
-        });
-
-        // 清理 sessionStorage
+        addCourse(createStoredCourseBundleFromBlueprint(blueprint));
+        generateNodeContent(blueprint.courseId, 0).catch(() => {});
         sessionStorage.removeItem('pendingOutline');
 
-        // 跳转到课程页面
-        router.push(`/course/${blueprint.courseId}`);
-      } catch (err) {
-        console.error('[TOC Page] Failed to create course:', err);
-        setError('创建课程失败，请稍后再试');
-        setIsLoading(false);
-      }
-    }).catch((err) => {
-      console.error('[TOC Page] Failed to generate TOC:', err);
-      setError('生成目录失败，请稍后再试');
-      setIsLoading(false);
-    });
-  }, [generateToc, addCourse, router]);
+        timerRef.current = setTimeout(() => {
+          router.push(`/course/${blueprint.courseId}`);
+        }, 1500);
+      })
+      .catch((err) => {
+        console.error('[TOC Page] Failed to generate TOC:', err);
+        if (!errorHandled) {
+          setError(err instanceof Error ? err.message : '生成目录失败，请稍后再试');
+        }
+      });
 
-  if (isLoading) {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [generateToc, addCourse, generateNodeContent, handleTocEvent, router]);
+
+  // 错误状态
+  if (error) {
     return (
       <main className="min-h-screen flex flex-col bg-background">
         <CourseHeaderBar title="生成课程" backLabel="返回" onBack={() => router.push('/generate/chat?topic=' + encodeURIComponent(topic))} />
-        
         <div className="flex-1 flex items-center justify-center px-6">
           <div className="text-center">
-            <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ duration: 0.4 }}
-              className="mb-8 mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-accent/20 via-accent/10 to-accent/5 shadow-[0_8px_24px_rgba(255,138,0,0.12)]"
+            <div className="mb-6 mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-error/20 to-error/5 shadow-[0_8px_24px_rgba(239,71,111,0.12)]">
+              <svg className="h-8 w-8 text-error" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 className="mb-2 text-[20px] font-bold text-primary">{error}</h3>
+            <p className="mb-6 text-sm text-secondary">请稍后再试</p>
+            <button
+              onClick={() => router.push('/generate')}
+              className="inline-flex min-h-12 items-center justify-center rounded-full bg-accent px-6 py-3 text-[15px] font-semibold text-white shadow-[0_4px_16px_rgba(255,138,0,0.20)] transition-all hover:shadow-[0_6px_20px_rgba(255,138,0,0.25)] active:scale-[0.985]"
             >
-              <motion.svg 
-                className="w-10 h-10 text-accent" 
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24"
-              animate={{ rotate: 360 }}
-              transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </motion.svg>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.2 }}
-          >
-            <h3 className="mb-3 text-[22px] font-bold text-primary">正在生成课程目录</h3>
-            <p className="mb-6 text-[15px] leading-relaxed text-secondary">
-              AI 正在为你规划学习路径
-            </p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.4, delay: 0.6 }}
-            className="w-full max-w-xs mx-auto space-y-3"
-          >
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5, delay: 1 }}
-              className="flex items-center gap-3 rounded-2xl bg-white/60 px-4 py-3 shadow-sm"
-            >
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10">
-                <svg className="h-4 w-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-              </div>
-              <span className="text-sm text-secondary">规划课程结构...</span>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5, delay: 1.5 }}
-              className="flex items-center gap-3 rounded-2xl bg-white/60 px-4 py-3 shadow-sm"
-            >
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10">
-                <svg className="h-4 w-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-              <span className="text-sm text-secondary">设计学习节点...</span>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5, delay: 2 }}
-              className="flex items-center gap-3 rounded-2xl bg-white/60 px-4 py-3 shadow-sm"
-            >
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10">
-                <svg className="h-4 w-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <span className="text-sm text-secondary">完善课程信息...</span>
-            </motion.div>
-          </motion.div>
-
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.4, delay: 2.5 }}
-            className="mt-8 text-xs text-tertiary"
-          >
-            通常需要 5-10 秒
-          </motion.p>
-        </div>
+              重新开始
+            </button>
+          </div>
         </div>
       </main>
     );
   }
 
+  const hasContent = courseName || streamNodes.length > 0;
+
   return (
     <main className="min-h-screen flex flex-col bg-background">
       <CourseHeaderBar title="生成课程" backLabel="返回" onBack={() => router.push('/generate/chat?topic=' + encodeURIComponent(topic))} />
-      
-      <div className="flex-1 flex items-center justify-center px-6">
-        <div className="text-center">
-          <div className="mb-6 mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-error/20 to-error/5 shadow-[0_8px_24px_rgba(239,71,111,0.12)]">
-          <svg className="h-8 w-8 text-error" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </div>
-        <h3 className="mb-2 text-[20px] font-bold text-primary">{error}</h3>
-        <p className="mb-6 text-sm text-secondary">请稍后再试</p>
-        <button
-          onClick={() => router.push('/generate')}
-          className="inline-flex min-h-12 items-center justify-center rounded-full bg-accent px-6 py-3 text-[15px] font-semibold text-white shadow-[0_4px_16px_rgba(255,138,0,0.20)] transition-all hover:shadow-[0_6px_20px_rgba(255,138,0,0.25)] active:scale-[0.985]"
+
+      <div className="relative flex-1 overflow-hidden">
+        {/* Loading 层：居中展示，交叉淡出 */}
+        <motion.div
+          animate={{ opacity: hasContent ? 0 : 1 }}
+          transition={{ duration: 0.3 }}
+          className="absolute inset-0 flex items-center justify-center px-6"
+          style={{ pointerEvents: hasContent ? 'none' : 'auto' }}
         >
-          重新开始
-        </button>
-      </div>
+          <div className="text-center">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+              className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-accent/20 via-accent/10 to-accent/5 shadow-[0_8px_24px_rgba(255,138,0,0.12)]"
+            >
+              <svg className="h-7 w-7 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </motion.div>
+            <h3 className="mb-1.5 text-[18px] font-bold text-primary">正在规划课程</h3>
+            <p className="text-sm text-secondary">AI 正在根据你的情况设计学习路径</p>
+            <div className="mt-6 space-y-2 text-left">
+              {['分析学习目标', '设计课程结构', '生成章节内容'].map((step, i) => (
+                <motion.div
+                  key={step}
+                  initial={{ opacity: 0, x: -12 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.3, delay: 0.3 + i * 0.15 }}
+                  className="flex items-center gap-2.5 rounded-xl bg-white/50 px-3.5 py-2.5"
+                >
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent/8">
+                    <span className="text-[11px] font-semibold text-accent">{i + 1}</span>
+                  </div>
+                  <span className="text-[13px] text-secondary">{step}</span>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+
+        {/* 流式内容层：交叉淡入 */}
+        <motion.div
+          animate={{ opacity: hasContent ? 1 : 0 }}
+          transition={{ duration: 0.3, delay: hasContent ? 0.2 : 0 }}
+          className="absolute inset-0 overflow-y-auto pt-[88px] px-5 pb-8"
+        >
+          <div className="mx-auto max-w-lg">
+            {/* 状态指示 */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="mb-4 flex items-center gap-2"
+            >
+              <div className="flex items-center gap-1.5">
+                {!isComplete ? (
+                  <>
+                    <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 0.8, repeat: Infinity, delay: 0 }} className="inline-block h-1.5 w-1.5 rounded-full bg-accent" />
+                    <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 0.8, repeat: Infinity, delay: 0.2 }} className="inline-block h-1.5 w-1.5 rounded-full bg-accent" />
+                    <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 0.8, repeat: Infinity, delay: 0.4 }} className="inline-block h-1.5 w-1.5 rounded-full bg-accent" />
+                  </>
+                ) : (
+                  <svg className="h-4 w-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </div>
+              <span className="text-[13px] font-medium text-secondary/70">
+                {isComplete ? '课程规划完成' : '正在生成课程大纲...'}
+              </span>
+            </motion.div>
+
+            {/* 课程名称 + 描述 */}
+            {courseName && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                className="mb-5"
+              >
+                <h2 className="text-[20px] font-bold leading-snug text-primary">{courseName}</h2>
+                {courseDescription && (
+                  <motion.p
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.3, delay: 0.2 }}
+                    className="mt-1.5 text-[14px] leading-relaxed text-secondary"
+                  >
+                    {courseDescription}
+                  </motion.p>
+                )}
+              </motion.div>
+            )}
+
+            {/* 章节分隔 */}
+            {streamNodes.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3, delay: 0.1 }}
+                className="mb-3 flex items-center gap-2"
+              >
+                <div className="h-px flex-1 bg-black/[0.06]" />
+                <span className="text-[12px] font-medium text-tertiary">课程章节</span>
+                <div className="h-px flex-1 bg-black/[0.06]" />
+              </motion.div>
+            )}
+
+            {/* 章节列表 */}
+            <div className="space-y-2">
+              {streamNodes.map((node, idx) => (
+                <motion.div
+                  key={node.index}
+                  initial={{ opacity: 0, x: -12 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                  className="flex items-center gap-3 rounded-xl bg-white/70 px-4 py-3"
+                >
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent/10">
+                    <span className="text-[12px] font-bold text-accent">{idx + 1}</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h4 className="truncate text-[14px] font-semibold text-primary">{node.title}</h4>
+                    {node.description && (
+                      <p className="mt-0.5 text-[12px] text-secondary/70 line-clamp-1">{node.description}</p>
+                    )}
+                  </div>
+                  {isComplete && (
+                    <svg className="h-4 w-4 shrink-0 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </motion.div>
+              ))}
+
+              {/* 加载中 */}
+              {!isComplete && streamNodes.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="flex items-center gap-2 px-4 py-1.5"
+                >
+                  <div className="flex items-center gap-1">
+                    <motion.span animate={{ opacity: [0.2, 0.8, 0.2] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0 }} className="inline-block h-1 w-1 rounded-full bg-accent/50" />
+                    <motion.span animate={{ opacity: [0.2, 0.8, 0.2] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.15 }} className="inline-block h-1 w-1 rounded-full bg-accent/50" />
+                    <motion.span animate={{ opacity: [0.2, 0.8, 0.2] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.3 }} className="inline-block h-1 w-1 rounded-full bg-accent/50" />
+                  </div>
+                  <span className="text-[12px] text-tertiary">规划更多章节...</span>
+                </motion.div>
+              )}
+            </div>
+
+            {/* 完成提示 */}
+            {isComplete && (
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: 0.5 }}
+                className="mt-5 flex items-center justify-center"
+              >
+                <span className="text-[13px] text-tertiary">即将进入课程...</span>
+              </motion.div>
+            )}
+          </div>
+        </motion.div>
       </div>
     </main>
   );

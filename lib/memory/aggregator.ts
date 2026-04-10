@@ -1,23 +1,14 @@
 import type {
-  ConceptState,
   EpisodicProjection,
   MemoryEvent,
   MemoryStoreV3,
   TopicState,
-  UserMemory,
   UserProfile,
 } from '@/types/course';
 import { CHAT_CONCEPT_ALIASES } from '@/lib/memory/aliases';
 
 export { CHAT_CONCEPT_ALIASES };
 
-const INTEREST_DECAY_DAYS = 30;
-const INTEREST_DECAY_FACTOR = 0.5;
-const CHAT_SIGNAL_DECAY_DAYS = 21;
-const CHAT_SIGNAL_DECAY_FACTOR = 0.78;
-const MIN_CONFIDENCE = 0.2;
-const DEFAULT_QUESTION_CONFIDENCE = 0.62;
-const DEFAULT_CHAT_GAP_CONFIDENCE = 0.65;
 const MAX_V3_HOT_EVENTS = 180;
 const MAX_V3_IMPORTANT_EVENTS = 40;
 
@@ -37,28 +28,6 @@ export type ChatMemoryAnalysisResult = {
   confidence: number;
 };
 
-export type ChatInsightPayload = {
-  topic: string;
-  concept: string;
-  evidence: string;
-  confidence: number;
-};
-
-export type TeachingPayloadInput = {
-  topic: string;
-  nodeTitle: string;
-  nodeConcepts: string[];
-  prerequisiteConcepts?: string[];
-  userMemory?: UserMemory | MemoryStoreV3 | null;
-};
-
-export type ChatPayloadInput = {
-  topic: string;
-  currentNodeTitle?: string;
-  currentQuestion?: string;
-  userMemory?: UserMemory | MemoryStoreV3 | null;
-};
-
 export type ChatSignalInput = {
   topic: string;
   question: string;
@@ -66,6 +35,22 @@ export type ChatSignalInput = {
   confusionEvidence?: string;
   confidence?: number;
   courseId?: string;
+};
+
+export type DetectedLearningPreference = {
+  kind: 'analogy_style' | 'explanation_style';
+  value: string;
+  confidence: number;
+  evidence: string;
+  updatedAt: number;
+};
+
+export type DetectedMasteredConcept = {
+  topic: string;
+  concept: string;
+  evidence: string;
+  confidence: number;
+  updatedAt: number;
 };
 
 const CONFUSION_SIGNALS = [
@@ -93,49 +78,7 @@ const EXPLANATION_STYLE_PATTERNS = [
   { matcher: /(区别|对比|放在一起比较)/, value: '对比讲解', confidence: 0.7 },
 ];
 
-function createEmptyProfile(profile?: UserProfile | null): UserProfile {
-  return {
-    name: profile?.name,
-    targetJob: profile?.targetJob || '',
-    workExperience: profile?.workExperience || [],
-    education: profile?.education || [],
-    insights: profile?.insights,
-  };
-}
-
-export function createDefaultUserMemory(profile?: UserProfile | null): UserMemory {
-  return {
-    profile: createEmptyProfile(profile),
-    learningHistory: [],
-    extractedInsights: {
-      interests: [],
-      knowledgeGaps: [],
-      questionPatterns: [],
-      conceptMastery: [],
-      learningPreferences: [],
-      masteredConcepts: [],
-    },
-    lastUpdated: Date.now(),
-    version: 1,
-    conversationSummaries: [],
-  };
-}
-
-export function mergeProfileIntoMemory(memory: UserMemory, profile?: UserProfile | null): UserMemory {
-  return {
-    ...memory,
-    profile: createEmptyProfile(profile || memory.profile),
-    extractedInsights: {
-      interests: memory.extractedInsights?.interests || [],
-      knowledgeGaps: memory.extractedInsights?.knowledgeGaps || [],
-      questionPatterns: memory.extractedInsights?.questionPatterns || [],
-      conceptMastery: memory.extractedInsights?.conceptMastery || [],
-      learningPreferences: memory.extractedInsights?.learningPreferences || [],
-      masteredConcepts: memory.extractedInsights?.masteredConcepts || [],
-    },
-    conversationSummaries: memory.conversationSummaries || [],
-  };
-}
+// ============ 概念规范化 ============
 
 function normalizeConceptText(raw: string): string {
   return raw
@@ -165,6 +108,8 @@ export function normalizeConceptKey(raw: string): string {
 
   return normalizedConcept;
 }
+
+// ============ 聊天分析函数 ============
 
 export function analyzeChatMessageForMemory(text: string): ChatMemoryAnalysisResult {
   const normalizedText = text.trim();
@@ -212,7 +157,7 @@ export function analyzeChatMessageForMemory(text: string): ChatMemoryAnalysisRes
   };
 }
 
-export function detectChatLearningPreferences(text: string): UserMemory['extractedInsights']['learningPreferences'] {
+export function detectChatLearningPreferences(text: string): DetectedLearningPreference[] {
   const normalizedText = text.trim();
   if (!normalizedText) return [];
 
@@ -236,7 +181,7 @@ export function detectAssistantExplanationStyle(text: string): string | undefine
     .find((item) => item.matched)?.value;
 }
 
-export function detectExplicitMasteredConcept(text: string): UserMemory['extractedInsights']['masteredConcepts'][number] | null {
+export function detectExplicitMasteredConcept(text: string): DetectedMasteredConcept | null {
   const normalizedText = text.trim();
   if (!normalizedText) return null;
 
@@ -263,291 +208,28 @@ export function detectExplicitMasteredConcept(text: string): UserMemory['extract
   return null;
 }
 
-function decayConfidence(value: number | undefined, factor: number): number | undefined {
-  if (value === undefined) return value;
-  return Math.max(MIN_CONFIDENCE, Number((value * factor).toFixed(2)));
-}
+// ============ V3 MemoryStore 函数 ============
 
-function daysBetween(now: number, timestamp: number | undefined): number {
-  if (!timestamp) return 0;
-  return (now - timestamp) / (1000 * 60 * 60 * 24);
-}
-
-export function decayUserMemory(memory: UserMemory, now: number = Date.now()): UserMemory {
-  for (const interest of memory.extractedInsights.interests) {
-    const daysSinceInteraction = daysBetween(now, interest.lastInteraction);
-    if (interest.source === 'chat' && daysSinceInteraction > INTEREST_DECAY_DAYS) {
-      interest.weight = Math.max(1, Number((interest.weight * INTEREST_DECAY_FACTOR).toFixed(2)));
-      interest.confidence = decayConfidence(interest.confidence, CHAT_SIGNAL_DECAY_FACTOR);
-    }
-  }
-
-  for (const pattern of memory.extractedInsights.questionPatterns) {
-    const ageInDays = daysBetween(now, pattern.timestamp);
-    if (pattern.source === 'chat' && ageInDays > CHAT_SIGNAL_DECAY_DAYS) {
-      pattern.confidence = decayConfidence(pattern.confidence, CHAT_SIGNAL_DECAY_FACTOR);
-    }
-  }
-
-  for (const gap of memory.extractedInsights.knowledgeGaps) {
-    const ageInDays = daysBetween(now, gap.lastUpdated);
-    if (gap.source === 'chat' && ageInDays > CHAT_SIGNAL_DECAY_DAYS) {
-      gap.confidence = decayConfidence(gap.confidence, CHAT_SIGNAL_DECAY_FACTOR);
-      if ((gap.confidence || 0) <= 0.4 && gap.severity === 'medium') {
-        gap.severity = 'low';
-      }
-    }
-  }
-
-  return memory;
-}
-
-export function recordChatInsightInMemory(memory: UserMemory, payload: ChatInsightPayload): UserMemory {
-  const { topic, concept, evidence, confidence } = payload;
-  const now = Date.now();
-  const normalizedConcept = normalizeConceptKey(concept);
-  const existing = memory.extractedInsights.knowledgeGaps.find(
-    (gap) => gap.topic === topic && normalizeConceptKey(gap.concept) === normalizedConcept,
-  );
-
-  if (existing) {
-    if (!existing.evidence.includes(evidence)) {
-      existing.evidence.push(evidence);
-    }
-    existing.concept = normalizedConcept;
-    existing.confidence = Math.max(existing.confidence || 0, Number(confidence.toFixed(2)));
-    existing.lastUpdated = now;
-    if (existing.source !== 'assessment') {
-      existing.source = 'chat';
-    }
-    if (existing.severity === 'low' && existing.evidence.length >= 2 && (existing.confidence || 0) >= 0.75) {
-      existing.severity = 'medium';
-    }
-  } else {
-    memory.extractedInsights.knowledgeGaps.push({
-      concept: normalizedConcept,
-      topic,
-      evidence: [evidence],
-      severity: 'low',
-      confidence: Number(confidence.toFixed(2)),
-      source: 'chat',
-      lastUpdated: now,
-    });
-  }
-
-  return memory;
-}
-
-export function recordLearningPreferenceInMemory(
-  memory: UserMemory,
-  preference: UserMemory['extractedInsights']['learningPreferences'][number],
-): UserMemory {
-  const now = Date.now();
-  const existing = memory.extractedInsights.learningPreferences.find(
-    (item) => item.kind === preference.kind && item.value === preference.value,
-  );
-
-  if (existing) {
-    existing.confidence = Math.max(existing.confidence, preference.confidence);
-    existing.evidence = existing.evidence.includes(preference.evidence)
-      ? existing.evidence
-      : `${existing.evidence}；${preference.evidence}`.slice(0, 120);
-    existing.updatedAt = now;
-  } else {
-    memory.extractedInsights.learningPreferences.push({
-      ...preference,
-      updatedAt: now,
-    });
-  }
-
-  memory.extractedInsights.learningPreferences.sort((a, b) => b.updatedAt - a.updatedAt);
-  memory.extractedInsights.learningPreferences = memory.extractedInsights.learningPreferences.slice(0, 12);
-  return memory;
-}
-
-export function recordMasteredConceptInMemory(
-  memory: UserMemory,
-  mastered: UserMemory['extractedInsights']['masteredConcepts'][number],
-): UserMemory {
-  const now = Date.now();
-  const normalizedConcept = normalizeConceptKey(mastered.concept);
-  const existing = memory.extractedInsights.masteredConcepts.find(
-    (item) => item.topic === mastered.topic && normalizeConceptKey(item.concept) === normalizedConcept,
-  );
-
-  if (existing) {
-    existing.concept = normalizedConcept;
-    existing.confidence = Math.max(existing.confidence, mastered.confidence);
-    existing.evidence = mastered.evidence;
-    existing.updatedAt = now;
-  } else {
-    memory.extractedInsights.masteredConcepts.push({
-      ...mastered,
-      concept: normalizedConcept,
-      updatedAt: now,
-    });
-  }
-
-  const mastery = memory.extractedInsights.conceptMastery.find(
-    (item) => item.topic === mastered.topic && normalizeConceptKey(item.concept) === normalizedConcept,
-  );
-  if (!mastery) {
-    memory.extractedInsights.conceptMastery.push({
-      concept: normalizedConcept,
-      topic: mastered.topic,
-      totalAttempts: 1,
-      correctAttempts: 1,
-      accuracy: 0.75,
-      lastReviewedAt: now,
-      lastOutcome: 'correct',
-      needsReview: false,
-      confidence: Math.max(0.58, mastered.confidence),
-      source: 'chat',
-    });
-  } else {
-    mastery.concept = normalizedConcept;
-    mastery.correctAttempts += 1;
-    mastery.totalAttempts += 1;
-    mastery.accuracy = Number((mastery.correctAttempts / mastery.totalAttempts).toFixed(2));
-    mastery.lastReviewedAt = now;
-    mastery.lastOutcome = 'correct';
-    mastery.needsReview = mastery.accuracy < 0.7;
-    mastery.confidence = Math.max(mastery.confidence || 0.4, Math.min(0.76, (mastery.confidence || 0.4) + 0.08));
-  }
-
-  return memory;
-}
-
-export function recordQuestionAttemptInMemory(memory: UserMemory, payload: QuestionAttemptPayload): UserMemory {
-  const { topic, concept, question, isCorrect, difficulty, dimension } = payload;
-  const now = Date.now();
-  const normalizedConcept = normalizeConceptKey(concept);
-  const masteryList = memory.extractedInsights.conceptMastery;
-  const existingMastery = masteryList.find((item) => item.topic === topic && normalizeConceptKey(item.concept) === normalizedConcept);
-
-  if (existingMastery) {
-    existingMastery.concept = normalizedConcept;
-    existingMastery.totalAttempts += 1;
-    if (isCorrect) {
-      existingMastery.correctAttempts += 1;
-    }
-    existingMastery.accuracy = existingMastery.correctAttempts / existingMastery.totalAttempts;
-    existingMastery.lastReviewedAt = now;
-    existingMastery.lastOutcome = isCorrect ? 'correct' : 'incorrect';
-    existingMastery.needsReview = shouldKeepReviewFlag(
-      existingMastery.totalAttempts,
-      existingMastery.accuracy,
-      isCorrect,
-    );
-    existingMastery.difficulty = difficulty ?? existingMastery.difficulty;
-    existingMastery.dimension = dimension ?? existingMastery.dimension;
-    existingMastery.confidence = getAssessmentConfidence(existingMastery.totalAttempts, existingMastery.accuracy);
-    existingMastery.source = 'assessment';
-  } else {
-    const accuracy = isCorrect ? 1 : 0;
-    masteryList.push({
-      concept: normalizedConcept,
-      topic,
-      totalAttempts: 1,
-      correctAttempts: isCorrect ? 1 : 0,
-      accuracy,
-      lastReviewedAt: now,
-      lastOutcome: isCorrect ? 'correct' : 'incorrect',
-      difficulty,
-      dimension,
-      needsReview: shouldKeepReviewFlag(1, accuracy, isCorrect),
-      confidence: getAssessmentConfidence(1, accuracy),
-      source: 'assessment',
-    });
-  }
-
-  const gap = memory.extractedInsights.knowledgeGaps.find((item) => item.topic === topic && normalizeConceptKey(item.concept) === normalizedConcept);
-  if (!isCorrect) {
-    if (gap) {
-      const previousSource = gap.source;
-      if (!gap.evidence.includes(question)) {
-        gap.evidence.push(question);
-      }
-      gap.concept = normalizedConcept;
-      gap.severity = previousSource === 'chat'
-        ? gap.evidence.length >= 3 ? 'medium' : 'low'
-        : gap.evidence.length >= 3 ? 'high' : gap.evidence.length >= 2 ? 'medium' : 'low';
-      gap.source = 'assessment';
-      gap.confidence = getAssessmentGapConfidence(gap.evidence.length, previousSource);
-      gap.lastUpdated = now;
-    } else {
-      memory.extractedInsights.knowledgeGaps.push({
-        concept: normalizedConcept,
-        topic,
-        evidence: [question],
-        severity: 'low',
-        confidence: getAssessmentGapConfidence(1, 'assessment'),
-        source: 'assessment',
-        lastUpdated: now,
-      });
-    }
-  } else if (gap) {
-    if (gap.severity === 'high') {
-      gap.severity = 'medium';
-    } else if (gap.severity === 'medium') {
-      gap.severity = 'low';
-    }
-    gap.concept = normalizedConcept;
-    gap.source = 'assessment';
-    gap.confidence = Number(Math.max(0.2, (gap.confidence || 0.5) - 0.18).toFixed(2));
-    gap.lastUpdated = now;
-  }
-
-  return memory;
+function createEmptyProfile(profile?: UserProfile | null): UserProfile {
+  return {
+    name: profile?.name,
+    targetJob: profile?.targetJob || '',
+    workExperience: profile?.workExperience || [],
+    education: profile?.education || [],
+    insights: profile?.insights,
+  };
 }
 
 function createMemoryId(prefix: string, ...parts: Array<string | number | undefined>): string {
   return [prefix, ...parts].filter((part) => part !== undefined && part !== '').join(':').replace(/\s+/g, '-');
 }
 
-function normalizeForMatch(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/g, ' ').trim();
-}
-
-function tokenizeTopic(value: string): string[] {
-  const normalized = normalizeForMatch(value);
-  const chunks = normalized.split(/\s+/).filter(Boolean);
-  const chineseChunks = normalized.match(/[\u4e00-\u9fa5]{2,}/g) || [];
-  return Array.from(new Set([...chunks, ...chineseChunks]));
-}
-
-function getTopicRelevanceScore(topic: string, candidate: string): number {
-  const topicTokens = tokenizeTopic(topic);
-  const candidateText = normalizeForMatch(candidate);
-  if (!topicTokens.length || !candidateText) return 0;
-
-  let score = 0;
-  for (const token of topicTokens) {
-    if (candidateText.includes(token)) {
-      score = Math.max(score, token.length >= 4 ? 1 : 0.75);
-    }
-  }
-
-  const coarseMappings: Array<{ matcher: RegExp; tokens: string[] }> = [
-    { matcher: /(agent|工具调用|工作流|规划|执行|mcp|记忆)/i, tokens: ['react', '埋点', '实验', '状态', '前端'] },
-    { matcher: /(英语|口语|发音|语法|单词)/i, tokens: ['播客', '写作', '翻译'] },
-  ];
-
-  for (const mapping of coarseMappings) {
-    if (mapping.matcher.test(topic) && mapping.tokens.some((token) => candidateText.includes(token))) {
-      score = Math.max(score, 0.45);
-    }
-  }
-
-  return score;
+function summarizeEvidence(text: string): string {
+  return text.replace(/\s+/g, ' ').trim().slice(0, 36);
 }
 
 function uniqueStrings(items: string[]): string[] {
   return Array.from(new Set(items.filter(Boolean)));
-}
-
-function summarizeEvidence(text: string): string {
-  return text.replace(/\s+/g, ' ').trim().slice(0, 36);
 }
 
 function inferLevel(score: number): TopicState['estimatedLevel'] {
@@ -555,30 +237,6 @@ function inferLevel(score: number): TopicState['estimatedLevel'] {
   if (score >= 0.62) return 'intermediate';
   if (score >= 0.38) return 'beginner';
   return 'novice';
-}
-
-function determineConceptStatus(masteryScore: number, recentErrors: number, needsReview: boolean): ConceptState['status'] {
-  if (masteryScore >= 0.8 && !needsReview) return 'mastered';
-  if (masteryScore >= 0.55 && recentErrors <= 1) return 'fragile';
-  if (masteryScore > 0) return 'learning';
-  return 'unknown';
-}
-
-function getAssessmentConfidence(totalAttempts: number, accuracy: number): number {
-  const evidenceFactor = Math.min(totalAttempts, 5) * 0.1;
-  const consistencyBonus = accuracy === 0 || accuracy === 1 ? 0.04 : 0;
-  return Number(Math.min(0.88, 0.42 + evidenceFactor + consistencyBonus).toFixed(2));
-}
-
-function shouldKeepReviewFlag(totalAttempts: number, accuracy: number, isCorrect: boolean): boolean {
-  if (!isCorrect) return true;
-  if (totalAttempts >= 3) return accuracy < 0.6;
-  return accuracy < 0.75;
-}
-
-function getAssessmentGapConfidence(errorEvidenceCount: number, previousSource?: 'chat' | 'assessment'): number {
-  const base = previousSource === 'chat' ? 0.46 : 0.5;
-  return Number(Math.min(0.78, base + errorEvidenceCount * 0.12).toFixed(2));
 }
 
 function buildStableFacts(profile: UserProfile) {
@@ -677,11 +335,6 @@ export function createEmptyMemoryStoreV3(profile?: UserProfile | null): MemorySt
   };
 }
 
-export function isMemoryStoreV3(memory: UserMemory | MemoryStoreV3 | null | undefined): memory is MemoryStoreV3 {
-  if (!memory || typeof memory !== 'object') return false;
-  return (memory as MemoryStoreV3).version === 3 && Array.isArray((memory as MemoryStoreV3).events) && !!(memory as MemoryStoreV3).projections;
-}
-
 function getEventPayloadValue<T>(payload: Record<string, unknown>, key: string, fallback: T): T {
   if (!(key in payload)) return fallback;
   return payload[key] as T;
@@ -727,7 +380,7 @@ function upsertConceptProjection(
     console.warn(`[Memory] Invalid conceptId filtered: "${conceptId}"`);
     return;
   }
-  
+
   const list = memoryStore.projections.conceptProjections;
   const existing = list.find((item) => item.topic === topic && item.conceptId === conceptId);
   const base = existing || {
@@ -886,7 +539,7 @@ export function appendEventToMemoryStoreV3(memoryStore: MemoryStoreV3, event: Me
     const teachConceptNames = getEventPayloadValue<string[]>(event.payload, 'teachConceptNames', []);
     const nodeTitle = getEventPayloadValue<string>(event.payload, 'nodeTitle', '');
     const teachingGoal = getEventPayloadValue<string>(event.payload, 'teachingGoal', '');
-    
+
     teachConceptIds.forEach((conceptId, index) => {
       upsertConceptProjection(next, event.topic, conceptId, teachConceptNames[index] || conceptId, (current) => {
         current.masteryScore = Number(Math.max(current.masteryScore, 0.62).toFixed(2));
@@ -900,7 +553,7 @@ export function appendEventToMemoryStoreV3(memoryStore: MemoryStoreV3, event: Me
       const summary = nodeTitle && teachingGoal
         ? `完成了「${nodeTitle}」：${teachingGoal}`
         : `完成了 ${event.topic} 的第 ${typeof event.nodeIndex === 'number' ? event.nodeIndex + 1 : '?'} 节`;
-      
+
       upsertEpisodicProjection(next, {
         id: createMemoryId('episode', 'course', event.courseId),
         topic: event.topic,
@@ -946,146 +599,3 @@ export function appendEventToMemoryStoreV3(memoryStore: MemoryStoreV3, event: Me
 
   return next;
 }
-
-export function migrateMemoryToV3(memory: UserMemory | MemoryStoreV3 | null | undefined, profile?: UserProfile | null): MemoryStoreV3 {
-  if (isMemoryStoreV3(memory)) {
-    return memory;
-  }
-
-  const legacyMemory = memory
-    ? decayUserMemory(mergeProfileIntoMemory(memory, profile || memory.profile))
-    : createDefaultUserMemory(profile);
-
-  const now = Date.now();
-  const conceptMap = new Map<string, MemoryStoreV3['projections']['conceptProjections'][number]>();
-  const topicSet = new Set<string>();
-
-  // 从 V1 conceptMastery 构建概念投影
-  for (const mastery of legacyMemory.extractedInsights.conceptMastery) {
-    const normalizedConcept = normalizeConceptKey(mastery.concept);
-    const topic = mastery.topic;
-    topicSet.add(topic);
-
-    const key = `${topic}::${normalizedConcept}`;
-    const existing = conceptMap.get(key);
-    const base = existing || {
-      topic,
-      conceptId: normalizedConcept,
-      conceptName: normalizedConcept,
-      masteryScore: 0,
-      status: 'unknown' as const,
-      recentErrors: 0,
-      recentSuccesses: 0,
-      misconceptionHints: [] as string[],
-      confidence: 0.4,
-      updatedAt: mastery.lastReviewedAt || now,
-    };
-
-    base.masteryScore = Number(mastery.accuracy.toFixed(2));
-    base.recentErrors = mastery.totalAttempts - mastery.correctAttempts;
-    base.recentSuccesses = mastery.correctAttempts;
-    base.status = determineConceptStatus(base.masteryScore, base.recentErrors, mastery.needsReview);
-    base.confidence = Math.max(base.confidence, mastery.confidence || 0.8);
-    base.updatedAt = Math.max(base.updatedAt, mastery.lastReviewedAt || now);
-
-    conceptMap.set(key, base);
-  }
-
-  // 从 V1 knowledgeGaps 合并
-  for (const gap of legacyMemory.extractedInsights.knowledgeGaps) {
-    const normalizedConcept = normalizeConceptKey(gap.concept);
-    const topic = gap.topic;
-    topicSet.add(topic);
-
-    const key = `${topic}::${normalizedConcept}`;
-    const existing = conceptMap.get(key);
-    const base = existing || {
-      topic,
-      conceptId: normalizedConcept,
-      conceptName: normalizedConcept,
-      masteryScore: 0,
-      status: 'unknown' as const,
-      recentErrors: 0,
-      recentSuccesses: 0,
-      misconceptionHints: [] as string[],
-      confidence: 0.4,
-      updatedAt: gap.lastUpdated || now,
-    };
-
-    base.recentErrors = Math.max(base.recentErrors, gap.evidence.length);
-    base.masteryScore = Number(Math.min(base.masteryScore, gap.source === 'assessment' ? 0.45 : 0.55).toFixed(2));
-    base.status = base.masteryScore >= 0.55 ? 'fragile' : 'learning';
-    base.confidence = Math.max(base.confidence, gap.confidence || 0.65);
-    base.updatedAt = Math.max(base.updatedAt, gap.lastUpdated || now);
-
-    const hints = uniqueStrings(gap.evidence.map(summarizeEvidence)).slice(0, 3);
-    base.misconceptionHints = uniqueStrings([...base.misconceptionHints, ...hints]).slice(0, 3);
-
-    conceptMap.set(key, base);
-  }
-
-  // 从 V1 masteredConcepts 提升
-  for (const mastered of legacyMemory.extractedInsights.masteredConcepts) {
-    const normalizedConcept = normalizeConceptKey(mastered.concept);
-    const topic = mastered.topic;
-    topicSet.add(topic);
-
-    const key = `${topic}::${normalizedConcept}`;
-    const existing = conceptMap.get(key);
-    const base = existing || {
-      topic,
-      conceptId: normalizedConcept,
-      conceptName: normalizedConcept,
-      masteryScore: 0,
-      status: 'unknown' as const,
-      recentErrors: 0,
-      recentSuccesses: 0,
-      misconceptionHints: [] as string[],
-      confidence: 0.4,
-      updatedAt: mastered.updatedAt,
-    };
-
-    base.masteryScore = Number(Math.max(base.masteryScore, 0.72).toFixed(2));
-    base.recentSuccesses = Math.max(base.recentSuccesses, 1);
-    base.status = base.masteryScore >= 0.8 ? 'mastered' : 'fragile';
-    base.confidence = Math.max(base.confidence, mastered.confidence);
-    base.updatedAt = Math.max(base.updatedAt, mastered.updatedAt);
-
-    conceptMap.set(key, base);
-  }
-
-  const conceptProjections = Array.from(conceptMap.values()).sort((a, b) => b.updatedAt - a.updatedAt);
-
-  // 从 learningHistory 生成 episodic projections
-  const episodicProjections = legacyMemory.learningHistory.map((record) => ({
-    id: createMemoryId('episode', 'course', record.courseId),
-    topic: record.topic,
-    courseId: record.courseId,
-    kind: 'course' as const,
-    summary: `${record.topic} 已完成 ${record.nodesCompleted}/${record.totalNodes} 节`,
-    conceptIds: conceptProjections
-      .filter((c) => c.topic === record.topic)
-      .map((c) => c.conceptId)
-      .slice(0, 5),
-    explanationStyles: [],
-    updatedAt: record.completedAt || legacyMemory.lastUpdated,
-  }));
-
-  return {
-    version: 3,
-    learnerId: 'local-user',
-    profile: {
-      stableFacts: buildStableFacts(legacyMemory.profile),
-      goals: buildGoals(legacyMemory.profile),
-      preferences: [],
-    },
-    events: [],
-    projections: {
-      conceptProjections,
-      topicProjections: [],
-      episodicProjections,
-    },
-    updatedAt: legacyMemory.lastUpdated,
-  };
-}
-

@@ -6,9 +6,7 @@ import type {
   MemoryStoreV3,
   PlanningMemoryPayload,
   TeachingMemoryPayload,
-  UserMemory,
 } from '@/types/course';
-import { migrateMemoryToV3 } from './aggregator';
 import { CHAT_CONCEPT_ALIASES } from './aliases';
 import { getConceptGraph, getPrerequisites } from './concept-graph';
 
@@ -228,11 +226,10 @@ function filterValidConcepts(concepts: string[]): string[] {
 /** Planning 场景：课程纲要生成 */
 export function getPlanningMemoryPayload(
   topic: string,
-  userMemory?: UserMemory | MemoryStoreV3 | null
+  userMemory?: MemoryStoreV3 | null
 ): PlanningMemoryPayload {
   const now = Date.now();
-  
-  let memoryV3: MemoryStoreV3;
+
   if (!userMemory) {
     return {
       learnerSnapshot: { estimatedLevel: 'novice', confidence: 0.35 },
@@ -242,11 +239,9 @@ export function getPlanningMemoryPayload(
       riskConcepts: [],
       recentRelevantCourses: [],
     };
-  } else if ('projections' in userMemory) {
-    memoryV3 = userMemory;
-  } else {
-    memoryV3 = migrateMemoryToV3(userMemory);
   }
+
+  const memoryV3 = userMemory;
 
   let memoryStore = cleanupOldConcepts(memoryV3, now);
   memoryStore = enforceDataLimits(memoryStore, now);
@@ -294,11 +289,10 @@ export function getTeachingMemoryPayload(input: {
   nodeConcepts: string[];
   prerequisiteConcepts?: string[];
   blueprints?: CourseBlueprint[]; // 新增：用于构建图谱
-  userMemory?: UserMemory | MemoryStoreV3 | null;
+  userMemory?: MemoryStoreV3 | null;
 }): TeachingMemoryPayload {
   const { topic, nodeTitle, nodeConcepts, prerequisiteConcepts = [], blueprints = [], userMemory } = input;
   const now = Date.now();
-  let memoryV3: MemoryStoreV3;
   if (!userMemory) {
     return {
       nodeTopic: topic,
@@ -309,11 +303,9 @@ export function getTeachingMemoryPayload(input: {
       analogyHints: [],
       preferredExplanationStyles: [],
     };
-  } else if ('projections' in userMemory) {
-    memoryV3 = userMemory;
-  } else {
-    memoryV3 = migrateMemoryToV3(userMemory);
   }
+
+  const memoryV3 = userMemory;
 
   let memoryStore = cleanupOldConcepts(memoryV3, now);
   memoryStore = enforceDataLimits(memoryStore, now);
@@ -397,11 +389,10 @@ export function getChatMemoryPayload(input: {
   topic: string;
   currentNodeTitle?: string;
   currentQuestion?: string;
-  userMemory?: UserMemory | MemoryStoreV3 | null;
+  userMemory?: MemoryStoreV3 | null;
 }): ChatMemoryPayload {
   const { topic, currentNodeTitle = '', currentQuestion = '', userMemory } = input;
   const now = Date.now();
-  let memoryV3: MemoryStoreV3;
   if (!userMemory) {
     return {
       topic,
@@ -411,11 +402,9 @@ export function getChatMemoryPayload(input: {
       analogyHints: [],
       preferredExplanationStyles: [],
     };
-  } else if ('projections' in userMemory) {
-    memoryV3 = userMemory;
-  } else {
-    memoryV3 = migrateMemoryToV3(userMemory);
   }
+
+  const memoryV3 = userMemory;
 
   let memoryStore = cleanupOldConcepts(memoryV3, now);
   memoryStore = enforceDataLimits(memoryStore, now);

@@ -189,6 +189,7 @@ export function RichStreamingMessage({
                         key={`o-${idx}`}
                         blueprint={{
                           learningDirection: block.learningDirection,
+                          learningKeypoint: 'learningKeypoint' in block ? (block as { learningKeypoint?: string }).learningKeypoint : undefined,
                           learningGoal: block.learningGoal,
                           learnerPositioning: {
                             estimatedLevel: block.estimatedLevel as 'novice' | 'beginner' | 'intermediate' | 'advanced',

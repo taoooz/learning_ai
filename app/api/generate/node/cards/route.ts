@@ -2,16 +2,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createMemoryRepository } from '@/lib/memory/repository';
 import { validateCardsRequest } from '@/lib/validation/api-schemas';
-import type { UserMemory } from '@/types/course';
+import type { LearningInsight } from '@/types/course';
 
 // Python Agent 服务地址
 const PYTHON_AGENT_URL = process.env.PYTHON_AGENT_URL || 'http://localhost:8000';
 
-function extractUserInsights(userMemory: UserMemory | null): string {
-  if (!userMemory?.profile?.insights) return '暂无';
-  const { knowledgeBackground, analogyExperiences, summary } = userMemory.profile.insights;
+function extractUserInsights(insights: LearningInsight | null | undefined): string {
+  if (!insights) return '暂无';
+  const { workSummary, analogyExperiences, summary } = insights;
   const parts = [];
-  if (knowledgeBackground?.length) parts.push(`知识背景：${knowledgeBackground.join('、')}`);
+  if (workSummary?.length) parts.push(`工作背景：${workSummary.join('、')}`);
   if (analogyExperiences?.length) parts.push(`类比经历：${analogyExperiences.join('、')}`);
   if (summary) parts.push(`总结：${summary}`);
   return parts.join('；') || '暂无';
@@ -30,8 +30,10 @@ export async function POST(request: NextRequest) {
       prerequisiteConcepts: nodeInfo.prerequisiteConceptIds || [],
     });
 
-    // 从 userMemory 提取用户洞察
-    const insights = extractUserInsights(userMemory);
+    // 从 V3 profile 提取用户洞察
+    const insights = extractUserInsights(
+      (userMemory as { profile?: { insights?: LearningInsight } } | null)?.profile?.insights
+    );
 
     // 构建 payload
     const payload = {
@@ -42,8 +44,10 @@ export async function POST(request: NextRequest) {
       userInsights: insights,
       estimatedLevel: nodeInfo.estimatedLevel,
       backgroundSummary: nodeInfo.backgroundSummary,
+      frame: nodeInfo.frame,
       prevNode: nodeInfo.prevNode,
       nextNode: nodeInfo.nextNode,
+      teachingMemory: teachingPayload,
     };
 
     console.log('[Cards API] Calling Python Agent');
@@ -55,7 +59,16 @@ export async function POST(request: NextRequest) {
     });
 
     if (!response.ok) {
-      throw new Error(`Python Agent error: ${response.status}`);
+      const responseText = await response.text();
+      let parsedDetail = responseText;
+      try {
+        const parsed = JSON.parse(responseText) as { detail?: string; error?: string; message?: string };
+        parsedDetail = parsed.detail || parsed.error || parsed.message || responseText;
+      } catch {
+        // keep raw text
+      }
+      console.error('[Cards API] Python Agent error:', response.status, parsedDetail);
+      throw new Error(`Python Agent error: ${response.status}${parsedDetail ? ` - ${parsedDetail}` : ''}`);
     }
 
     const result = await response.json();

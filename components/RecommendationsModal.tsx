@@ -57,7 +57,7 @@ export function RecommendationsModal({ isOpen, onClose, userProfile, existingCou
       const profileInsights = userProfile?.insights;
       const insights = profileInsights ? [
         profileInsights.summary,
-        ...(profileInsights.knowledgeBackground || []).slice(0, 2),
+        ...(profileInsights.workSummary || []).slice(0, 2),
       ].filter(Boolean) : [];
 
       // 提取当前已有的推荐标题，避免重复

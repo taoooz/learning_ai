@@ -2,6 +2,36 @@
 
 ## 2026-04-10
 
+### 🐛 修复 TOC 生成 500 错误 + 流式展示
+
+**根因：** `5bfe386`（统一到 Python Agent）重构时误删了 `27359d7` 中已有的 SSE 解析逻辑，`response.json()` 直接解析 SSE 流导致 `SyntaxError`。
+
+**修改文件：** `app/api/generate/toc/route.ts`、`contexts/CourseContext.tsx`、`app/generate/toc/page.tsx`
+
+**改动内容：**
+- API route 检测 `text/event-stream` Content-Type，直接透传 SSE 流给前端
+- `CourseContext.generateToc` 增加 `onEvent` 回调，使用已有的 `tocSseParser.ts` 解析 SSE 流
+- `complete` 事件提取 `event.result` 作为权威数据源，兼容只有 complete 事件的情况
+- 修复 `data: data:` 双重前缀的解析（`parseTocSSELine` 已处理）
+- TOC 页面改为流式展示 + 初始 loading 垂直居中
+- 保留非流式 JSON 响应兼容
+
+### ♻️ 完成 V1 清理，统一到纯 V3 架构
+
+**修改文件：** `lib/prompt/course-tree.ts`、`lib/prompt/node-content.ts`、`lib/prompt/shared.ts`、`app/api/generate/node/route.ts`、`app/api/generate/node/cards/route.ts`、`app/api/generate/node/questions/route.ts`、`components/RecommendationsModal.tsx`、`components/chat/RichStreamingMessage.tsx`、`contexts/UserProfileContext.tsx`、`types/course.ts`、`tests/course-tree-layout.test.ts`、`tests/course-blueprint-memory-v3.test.ts`
+
+**删除文件：** `tests/system-course-generation.test.ts`（引用了不存在的函数导出，与本次重构无关的预先存在的问题）
+
+**改动内容：**
+- 移除所有 `UserMemory` 类型引用（V1），API 路由统一使用 `MemoryStoreV3`
+- `buildCourseTreePrompt` 和 `buildNodeContentPrompt` 签名更新：`userMemory` 参数替换为 `userProfile`，`knowledgeBackground` 全部替换为 `workSummary`
+- `selectPersonalizationSignals` 和 `buildMemorySection` 改为接受 `UserProfile` 而非 `UserMemory`
+- `RecommendationsModal` 中 `knowledgeBackground` 改为 `workSummary`
+- `OutlineBlueprint.learningKeypoint` 改为可选字段（streaming outline block 不携带此字段）
+- `UserProfileContext.updateProfile` 保留 `syncProfileToV3()` 调用，确保 profile 变更同步到 V3
+- 删除 9 个依赖 V1 函数的测试用例，重写 `getPlanningMemoryPayload` 测试使用 V3 事件注入
+- tsc 零错误，41/41 测试全部通过
+
 ### ♻️ 清理 MemoryStoreV2，统一到 V1 + V3 双存储
 
 **修改文件：** `lib/memory/aggregator.ts`、`lib/memory/repository.ts`、`lib/memory/memory-agent.ts`、`hooks/useUserMemory.ts`、`types/course.ts`、`app/api/chat/route.ts`、`app/api/generate/node/route.ts`、`lib/chat-context.ts`、`tests/course-tree-layout.test.ts`、`tests/course-blueprint-memory-v3.test.ts`

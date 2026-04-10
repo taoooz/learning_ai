@@ -1,0 +1,802 @@
+{
+  "blueprint": {
+    "courseId": "system-ai-for-everyone",
+    "topic": "AI 通识实战课",
+    "learnerPositioning": {
+      "estimatedLevel": "beginner",
+      "difficultySummary": "面向对 AI 一知半解，只用过 ChatGPT、豆包类产品的普通用户。",
+      "backgroundSummary": "面向对 AI 一知半解，只用过 ChatGPT、豆包类产品的普通用户。",
+      "skipBasics": [],
+      "whyThisCourseFits": "给只用过 ChatGPT、豆包这类产品的用户，补上真正该懂的 AI 常识、边界和正确使用方法。"
+    },
+    "courseGoal": "面向普通人的 AI 入门课，聚焦大模型认知、提示词使用、Agent 工具调用与幻觉识别，建立实用的 AI 思维框架。",
+    "globalConcepts": [
+      {
+        "id": "concept-大语言模型",
+        "name": "大语言模型",
+        "aliases": []
+      },
+      {
+        "id": "concept-提示词与上下文",
+        "name": "提示词与上下文",
+        "aliases": []
+      },
+      {
+        "id": "concept-工具调用与-agent",
+        "name": "工具调用与 Agent",
+        "aliases": []
+      },
+      {
+        "id": "concept-幻觉与校验",
+        "name": "幻觉与校验",
+        "aliases": []
+      }
+    ],
+    "nodes": [
+      {
+        "index": 0,
+        "title": "大语言模型是什么",
+        "teachingGoal": "用生活化比喻解释大模型的工作原理，帮助用户理解它为何能「听懂」问题并生成回答，明确它的能力边界。掌握这个基础认知，才能用好 AI。",
+        "teachConceptIds": [
+          "concept-大语言模型"
+        ],
+        "prerequisiteConceptIds": [],
+        "assessmentTargetIds": [
+          "concept-大语言模型"
+        ],
+        "bridgeFromPreviousNode": "从这门课最重要的起点开始。",
+        "personalizationHooks": {
+          "mustRemediateConceptIds": [],
+          "canCompressKnownConceptIds": [],
+          "analogyFactIds": []
+        },
+        "status": "available"
+      },
+      {
+        "index": 1,
+        "title": "写好提示词的技巧",
+        "teachingGoal": "从「随便问」到「会提问」，介绍有效提示词的核心要素（角色、任务、格式），通过对比示例让用户直观感受提示词质量对 AI 回答的影响。配套可复用的提示词模板。",
+        "teachConceptIds": [
+          "concept-提示词与上下文"
+        ],
+        "prerequisiteConceptIds": [
+          "concept-大语言模型"
+        ],
+        "assessmentTargetIds": [
+          "concept-提示词与上下文"
+        ],
+        "bridgeFromPreviousNode": "承接上一节，继续深入 提示词与上下文 的理解与应用。",
+        "personalizationHooks": {
+          "mustRemediateConceptIds": [],
+          "canCompressKnownConceptIds": [],
+          "analogyFactIds": []
+        },
+        "status": "locked"
+      },
+      {
+        "index": 2,
+        "title": "让 AI 调用工具做事",
+        "teachingGoal": "理解什么是 Agent 与工具调用：用 AI 帮你查天气、写代码、做分析背后的逻辑。普通人能直接使用的工具调用场景，以及如何判断什么时候该用它。学会让 AI 从「回答问题」升级到「完成任务」。",
+        "teachConceptIds": [
+          "concept-工具调用与-agent"
+        ],
+        "prerequisiteConceptIds": [
+          "concept-提示词与上下文"
+        ],
+        "assessmentTargetIds": [
+          "concept-工具调用与-agent"
+        ],
+        "bridgeFromPreviousNode": "承接上一节，继续深入 工具调用与 Agent 的理解与应用。",
+        "personalizationHooks": {
+          "mustRemediateConceptIds": [
+            "concept-工具调用与-agent"
+          ],
+          "canCompressKnownConceptIds": [],
+          "analogyFactIds": []
+        },
+        "status": "locked"
+      },
+      {
+        "index": 3,
+        "title": "识别 AI 的幻觉与错误",
+        "teachingGoal": "AI 会一本正经地胡说八道。本章重点讲解幻觉产生的原因、常见类型，以及普通人能快速上手的校验方法（如交叉验证、事实核查、逻辑检验），帮助用户建立对 AI 输出的健康怀疑态度。",
+        "teachConceptIds": [
+          "concept-幻觉与校验"
+        ],
+        "prerequisiteConceptIds": [
+          "concept-工具调用与-agent"
+        ],
+        "assessmentTargetIds": [
+          "concept-幻觉与校验"
+        ],
+        "bridgeFromPreviousNode": "承接上一节，继续深入 幻觉与校验 的理解与应用。",
+        "personalizationHooks": {
+          "mustRemediateConceptIds": [
+            "concept-幻觉与校验"
+          ],
+          "canCompressKnownConceptIds": [],
+          "analogyFactIds": []
+        },
+        "status": "locked"
+      },
+      {
+        "index": 4,
+        "title": "普通人该守的 AI 安全边界",
+        "teachingGoal": "从隐私保护到信息辨别，总结普通人使用 AI 时的安全边界与红线意识。包括：什么信息不能丢给 AI、遇到敏感内容如何处理、如何避免过度依赖 AI 做重大决策。",
+        "teachConceptIds": [
+          "concept-幻觉与校验"
+        ],
+        "prerequisiteConceptIds": [
+          "concept-幻觉与校验"
+        ],
+        "assessmentTargetIds": [
+          "concept-幻觉与校验"
+        ],
+        "bridgeFromPreviousNode": "承接上一节，继续深入 幻觉与校验 的理解与应用。",
+        "personalizationHooks": {
+          "mustRemediateConceptIds": [
+            "concept-幻觉与校验"
+          ],
+          "canCompressKnownConceptIds": [],
+          "analogyFactIds": []
+        },
+        "status": "locked"
+      }
+    ],
+    "coverage": {
+      "introducedConceptIds": [
+        "concept-大语言模型",
+        "concept-提示词与上下文",
+        "concept-工具调用与-agent",
+        "concept-幻觉与校验",
+        "concept-幻觉与校验"
+      ],
+      "assessedConceptIds": [
+        "concept-大语言模型",
+        "concept-提示词与上下文",
+        "concept-工具调用与-agent",
+        "concept-幻觉与校验",
+        "concept-幻觉与校验"
+      ],
+      "remediatedConceptIds": [
+        "concept-工具调用与-agent",
+        "concept-幻觉与校验"
+      ]
+    },
+    "generationNotes": {
+      "compressedKnownConceptIds": [],
+      "emphasizedRiskConceptIds": [
+        "concept-工具调用与-agent",
+        "concept-幻觉与校验"
+      ],
+      "selectedAnalogyFactIds": []
+    }
+  },
+  "treeView": {
+    "courseId": "system-ai-for-everyone",
+    "topic": "AI 通识实战课",
+    "courseGoal": "面向普通人的 AI 入门课，聚焦大模型认知、提示词使用、Agent 工具调用与幻觉识别，建立实用的 AI 思维框架。",
+    "difficultySummary": "面向对 AI 一知半解，只用过 ChatGPT、豆包类产品的普通用户。",
+    "totalNodes": 5,
+    "nodes": [
+      {
+        "index": 0,
+        "title": "大语言模型是什么",
+        "status": "available"
+      },
+      {
+        "index": 1,
+        "title": "写好提示词的技巧",
+        "status": "locked"
+      },
+      {
+        "index": 2,
+        "title": "让 AI 调用工具做事",
+        "status": "locked"
+      },
+      {
+        "index": 3,
+        "title": "识别 AI 的幻觉与错误",
+        "status": "locked"
+      },
+      {
+        "index": 4,
+        "title": "普通人该守的 AI 安全边界",
+        "status": "locked"
+      }
+    ]
+  },
+  "lessons": {
+    "0": {
+      "courseId": "system-ai-for-everyone",
+      "nodeIndex": 0,
+      "title": "大语言模型是什么",
+      "teachingGoal": "用生活化比喻解释大模型的工作原理，帮助用户理解它为何能「听懂」问题并生成回答，明确它的能力边界。掌握这个基础认知，才能用好 AI。",
+      "teachConceptIds": [
+        "concept-大语言模型"
+      ],
+      "assessmentTargetIds": [
+        "concept-大语言模型"
+      ],
+      "cards": [
+        {
+          "id": "card-1",
+          "title": "什么是大语言模型",
+          "content": "大语言模型可以理解为一个「读完了整座图书馆」的人。它学习了互联网上几乎所有的文字，从而掌握了语言的规律。\n\n当你向它提问时，它会基于已有知识「匹配」出最可能合适的回答。\n\n**简单说：它是一个通过海量阅读学会说话的超级模仿者。**",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-大语言模型"
+          ]
+        },
+        {
+          "id": "card-2",
+          "title": "它为什么能「听懂」你的问题",
+          "content": "它能「听懂」，不是因为真正理解，而是因为它见过太多类似的表达。\n\n就像一个经验丰富的客服，遇到过各种提问方式，所以总能猜到你想要什么。\n\n**本质上，它是在做「模式匹配」，而非真正的语义理解。**",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-大语言模型"
+          ]
+        },
+        {
+          "id": "card-3",
+          "title": "它如何生成回答",
+          "content": "生成回答的过程像「接话」：根据你的问题，结合学过的内容，预测下一个最可能出现的词。\n\n就像你看完一部剧，能猜到下一集的发展——它只是在文字上做这件事。\n\n**所以它的回答是「概率生成」，不是逻辑推理。**",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-大语言模型"
+          ]
+        },
+        {
+          "id": "card-4",
+          "title": "大模型的能力边界",
+          "content": "**它擅长的：** 回答常识、写文章、解释概念、翻译、总结文本。\n\n**它的局限：** 可能「一本正经胡说八道」（幻觉），不知道最新信息，不擅长精确计算。\n\n**记住：它是工具，不是权威。** 使用时需要有自己的判断。",
+          "imageUrl": null,
+          "visualization": {
+            "type": "keyPoints",
+            "title": "大模型的能力边界速查",
+            "items": [
+              "✅ 擅长：常识问答、写作、翻译、总结",
+              "⚠️ 局限：可能编造信息（幻觉）",
+              "⚠️ 局限：不知道最新发生的事",
+              "⚠️ 局限：不擅长精确数学计算",
+              "💡 建议：用它辅助思考，但保留批判性判断"
+            ]
+          },
+          "coveredConceptIds": [
+            "concept-大语言模型"
+          ]
+        }
+      ],
+      "questions": [
+        {
+          "id": "q-1",
+          "type": "single",
+          "question": "大语言模型之所以能听懂你的问题，是因为什么？",
+          "options": [
+            "A. 真正的语义理解",
+            "B. 模式匹配",
+            "C. 实时访问互联网",
+            "D. 人为编程的规则"
+          ],
+          "answer": "B. 模式匹配",
+          "explanation": "它通过学习大量文本进行模式匹配，而不是真正理解语义。",
+          "concept": "concept-大语言模型",
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": "card-1",
+          "targetConceptId": "concept-大语言模型"
+        },
+        {
+          "id": "q-2",
+          "type": "multiple",
+          "question": "以下哪些是大语言模型常见的局限？（多选）",
+          "options": [
+            "A. 可能产生幻觉信息",
+            "B. 能实时获取最新新闻",
+            "C. 不擅长精确计算",
+            "D. 可以进行复杂的逻辑推理"
+          ],
+          "answer": [
+            "A",
+            "C"
+          ],
+          "explanation": "大模型可能胡说且不擅长精确计算，但它不具备实时获取最新信息或强逻辑推理能力。",
+          "concept": "concept-大语言模型",
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": "card-1",
+          "targetConceptId": "concept-大语言模型"
+        }
+      ]
+    },
+    "1": {
+      "courseId": "system-ai-for-everyone",
+      "nodeIndex": 1,
+      "title": "写好提示词的技巧",
+      "teachingGoal": "从「随便问」到「会提问」，介绍有效提示词的核心要素（角色、任务、格式），通过对比示例让用户直观感受提示词质量对 AI 回答的影响。配套可复用的提示词模板。",
+      "teachConceptIds": [
+        "concept-提示词与上下文"
+      ],
+      "assessmentTargetIds": [
+        "concept-提示词与上下文"
+      ],
+      "cards": [
+        {
+          "id": "card-1",
+          "title": "为什么同样问AI，效果差很多？",
+          "content": "你有没有这种感觉：问AI同样的问题，有时回答很水，有时却很精准？**问题往往不在AI，而在你怎么问。** 就像问路，说「帮我找个地方」和说「我想找适合带孩子、预算500以内的周末好去处」，得到的答案完全不一样。提示词就是你和AI沟通的方式，质量直接决定输出价值。\n\n> 高质量的提问 = 更容易获得有用的回答",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-提示词与上下文"
+          ]
+        },
+        {
+          "id": "card-2",
+          "title": "好提示词的三个核心要素",
+          "content": "想让AI准确帮到你，记住三个关键要素：\n\n- **角色**：让AI扮演什么身份？比如「你是一位有10年经验的健身教练」\n- **任务**：具体要做什么？比如「帮我制定一份减脂计划」\n- **格式**：希望怎么呈现？比如「用表格列出每天的饮食和运动安排」\n\n三个要素组合越清晰，AI越能给出你真正需要的答案。",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-提示词与上下文"
+          ]
+        },
+        {
+          "id": "card-3",
+          "title": "对比一下：模糊提问 vs 清晰提问",
+          "content": "看一个具体例子，同样是让AI推荐：\n\n| 提问方式 | 示例 | AI回答质量 |\n| --- | --- | --- |\n| 模糊提问 | 「推荐个旅游地方」 | 泛泛而谈，参考价值低 |\n| 清晰提问 | 「我是上班族，年假5天，预算8000，想去自然风光好的地方，推荐国内目的地并说明理由」 | 针对性强，实用价值高 |\n\n**核心差异**：说清楚你的情况、目标和约束条件，AI才能给出定制化答案。",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-提示词与上下文"
+          ]
+        },
+        {
+          "id": "card-4",
+          "title": "一个万能提示词模板",
+          "content": "下次问AI前，按这个结构组织你的问题：\n\n> 你是一位[角色]。我需要你帮我[任务]。背景是[你的情况]。请用[格式]输出，重点关注[约束]。\n\n**实操练习**：把「帮我写一封邮件」变成「你是一位商务沟通专家，我需要联系一位延迟付款的客户，金额3万元，请用正式但友好的语气写一封催款邮件，突出合作历史，不要强硬」——这就是一个合格的好提示词。\n\n> 提示词越具体，AI越能帮到你。",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-提示词与上下文"
+          ]
+        }
+      ],
+      "questions": [
+        {
+          "id": "q-1",
+          "type": "multiple",
+          "question": "下面这个提示词包含了哪些核心要素？请注意，高质量提示词的三个核心要素是角色、任务和格式。\n\n你是一位有10年经验的健身教练，我需要你帮我制定一份3个月的减脂计划。我目前体重75公斤，每周能锻炼3次。请用表格形式列出每周的饮食和运动安排。",
+          "options": [
+            "角色：健身教练",
+            "任务：制定减脂计划",
+            "格式：表格形式",
+            "背景：体重和锻炼频率信息"
+          ],
+          "answer": [
+            "角色：健身教练",
+            "任务：制定减脂计划",
+            "格式：表格形式"
+          ],
+          "explanation": "正确答案来自本节知识点，请回看相关卡片后再试一次。",
+          "concept": "concept-提示词与上下文",
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": "card-1",
+          "targetConceptId": "concept-提示词与上下文"
+        },
+        {
+          "id": "q-2",
+          "type": "sorting",
+          "question": "根据万能提示词模板的逻辑结构，将以下四个部分按照正确顺序排列。",
+          "options": [
+            "请用表格形式输出",
+            "我需要你帮我制定一份节日礼物清单",
+            "你是一位擅长送礼规划的策划师",
+            "朋友40岁生日，爱好摄影，预算500元以内"
+          ],
+          "answer": [
+            "你是一位擅长送礼规划的策划师",
+            "我需要你帮我制定一份节日礼物清单",
+            "朋友40岁生日，爱好摄影，预算500元以内",
+            "请用表格形式输出"
+          ],
+          "explanation": "正确答案来自本节知识点，请回看相关卡片后再试一次。",
+          "concept": "concept-提示词与上下文",
+          "difficulty": 2,
+          "dimension": "application",
+          "cardId": "card-1",
+          "targetConceptId": "concept-提示词与上下文"
+        }
+      ]
+    },
+    "2": {
+      "courseId": "system-ai-for-everyone",
+      "nodeIndex": 2,
+      "title": "让 AI 调用工具做事",
+      "teachingGoal": "理解什么是 Agent 与工具调用：用 AI 帮你查天气、写代码、做分析背后的逻辑。普通人能直接使用的工具调用场景，以及如何判断什么时候该用它。学会让 AI 从「回答问题」升级到「完成任务」。",
+      "teachConceptIds": [
+        "concept-工具调用与-agent"
+      ],
+      "assessmentTargetIds": [
+        "concept-工具调用与-agent"
+      ],
+      "cards": [
+        {
+          "id": "card-1",
+          "title": "什么是 Agent 和工具调用？",
+          "content": "**Agent = AI 的大脑 + 工具的手脚**\n\n普通 AI 只能“想”，而 Agent 能“想”完直接“做”。工具调用就是给 AI 装上插件，让它不仅回答问题，还能帮你查航班、写代码、发邮件——像个听话的助理。\n\n简单说：Agent 是会使用工具的 AI，它能把「帮我查一下」变成「我已经帮你订好了」。",
+          "imageUrl": null,
+          "visualization": {
+            "type": "keyPoints",
+            "title": "核心区别",
+            "items": [
+              "普通 AI：输入 → 思考 → 输出答案",
+              "Agent：输入 → 思考 → 调用工具 → 执行任务 → 输出结果"
+            ]
+          },
+          "coveredConceptIds": [
+            "concept-工具调用与-agent"
+          ]
+        },
+        {
+          "id": "card-2",
+          "title": "工具是怎么被调用的？",
+          "content": "工具调用的过程像点外卖：\n\n1️⃣ 你说“明天杭州天气怎样”\n2️⃣ AI 识别出需要查天气\n3️⃣ 它调用天气 API 获取数据\n4️⃣ 把结果整合成你看得懂的回答\n\n整个过程由 AI 自动完成，你只需要提需求。**它替你想清楚了该用什么工具、怎么用。**",
+          "imageUrl": null,
+          "visualization": {
+            "type": "flowchart",
+            "title": "工具调用流程",
+            "mermaidCode": "flowchart TD\n    A[你提出需求] --> B[AI 识别需要什么工具]\n    B --> C[调用相应 API]\n    C --> D[获取实时信息]\n    D --> E[整合结果反馈给你]"
+          },
+          "coveredConceptIds": [
+            "concept-工具调用与-agent"
+          ]
+        },
+        {
+          "id": "card-3",
+          "title": "普通人能直接用的工具场景",
+          "content": "这些场景你现在就能用：\n\n- 📅 **日程管理**：让 AI 帮你创建日历、设提醒\n- ✈️ **旅行规划**：查航班、算时差、翻译外语句子\n- 📊 **数据分析**：上传表格，让 AI 分析趋势\n- 💻 **代码调试**：粘贴报错信息，让 AI 找出问题\n\n**核心判断**：任务涉及实时信息、具体操作、多步骤执行时，工具调用最有用。",
+          "imageUrl": null,
+          "visualization": {
+            "type": "table",
+            "title": "常见工具调用场景",
+            "columns": [
+              "场景",
+              "能做的事",
+              "适合用它吗"
+            ],
+            "rows": [
+              [
+                "查天气/股价",
+                "实时数据获取",
+                "非常适合"
+              ],
+              [
+                "写文案/故事",
+                "创意生成",
+                "不太需要"
+              ],
+              [
+                "订机票/外卖",
+                "具体操作执行",
+                "非常适合"
+              ],
+              [
+                "解释概念",
+                "知识问答",
+                "不太需要"
+              ]
+            ]
+          },
+          "coveredConceptIds": [
+            "concept-工具调用与-agent"
+          ]
+        },
+        {
+          "id": "card-4",
+          "title": "什么时候该用工具调用？",
+          "content": "**该用工具的场景**：需要实时数据、具体操作、精确计算、多步骤完成的任务。\n\n**不需要工具的场景**：纯聊天、创意写作、概念解释、情感交流。\n\n**一个判断技巧**：如果你的问题里出现“帮我...”“替我...”“给我查...”这类动词，大概率需要工具调用。\n\n**记住**：工具调用是让 AI 从“答题者”升级为“执行者”的关键能力。",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-工具调用与-agent"
+          ]
+        }
+      ],
+      "questions": [
+        {
+          "id": "q-1",
+          "type": "single",
+          "question": "以下哪个场景最能体现工具调用的价值？",
+          "options": [
+            "A. 让AI讲一个关于猫的幽默故事",
+            "B. 让AI解释什么是机器学习",
+            "C. 让AI帮你查询今晚北京到上海的航班",
+            "D. 让AI写一首赞美秋天的诗"
+          ],
+          "answer": "C",
+          "explanation": "查询航班需要实时数据和具体操作，体现了AI从“答题者”到“执行者”的升级",
+          "concept": "concept-工具调用与-agent",
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": "card-1",
+          "targetConceptId": "concept-工具调用与-agent"
+        },
+        {
+          "id": "q-2",
+          "type": "multiple",
+          "question": "以下哪些场景需要使用工具调用？（多选）",
+          "options": [
+            "A. 帮我在日历上添加下周三下午两点的会议提醒",
+            "B. 写一段Python代码实现冒泡排序",
+            "C. 上传Excel表格，让AI分析本月销售额趋势",
+            "D. 安慰情绪低落的朋友"
+          ],
+          "answer": [
+            "A",
+            "C"
+          ],
+          "explanation": "日历添加和数据分析都需要AI调用外部工具执行具体操作，属于工具调用场景",
+          "concept": "concept-工具调用与-agent",
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": "card-1",
+          "targetConceptId": "concept-工具调用与-agent"
+        }
+      ]
+    },
+    "3": {
+      "courseId": "system-ai-for-everyone",
+      "nodeIndex": 3,
+      "title": "识别 AI 的幻觉与错误",
+      "teachingGoal": "AI 会一本正经地胡说八道。本章重点讲解幻觉产生的原因、常见类型，以及普通人能快速上手的校验方法（如交叉验证、事实核查、逻辑检验），帮助用户建立对 AI 输出的健康怀疑态度。",
+      "teachConceptIds": [
+        "concept-幻觉与校验"
+      ],
+      "assessmentTargetIds": [
+        "concept-幻觉与校验"
+      ],
+      "cards": [
+        {
+          "id": "card-1",
+          "title": "什么是 AI 幻觉",
+          "content": "AI 幻觉是指大模型生成看似合理、流畅，但实际**包含错误、不存在或无法验证**的内容。它不是程序故障，而是 AI“自信地编造”信息。比如问它某部小说的具体情节，它可能凭空补全一段从未写过的对话。\n\n**关键特征**：语言流畅、逻辑自洽、但经不起核实。\n——这与“不知道答案”完全不同，是更隐蔽的风险。",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-幻觉与校验"
+          ]
+        },
+        {
+          "id": "card-2",
+          "title": "为什么 AI 会产生幻觉",
+          "content": "大语言模型的工作原理是**根据概率预测下一个词**，它不“记忆”事实，而是生成最像正确答案的文本。\n\n两个核心原因：\n1. **训练数据偏差**：某些知识在语料中稀缺或表述模糊，模型只能“猜”。\n2. **缺乏实时核查**：模型无法访问互联网实时验证，只能基于训练时的信息作答。\n\n——这意味着：**越专业、越细分的问题，幻觉风险越高**。",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-幻觉与校验"
+          ]
+        },
+        {
+          "id": "card-3",
+          "title": "常见幻觉的三种类型",
+          "content": "**事实性幻觉**：断言具体数值、日期、人物，但与真实世界不符。如声称某城市人口为虚假数字。\n\n**逻辑幻觉**：推理过程看似合理，但关键前提错误，导致结论误导。如算错账单、误用法律条款。\n\n**上下文幻觉**：忘记对话前提或用户指令，生成与之前所述矛盾的内容。\n\n**高危场景**：健康建议、法律咨询、金融计算——建议尽量交叉核实。",
+          "imageUrl": null,
+          "visualization": {
+            "type": "table",
+            "title": "三种幻觉类型对比",
+            "columns": [
+              "类型",
+              "表现",
+              "高风险场景"
+            ],
+            "rows": [
+              [
+                "事实性幻觉",
+                "捏造具体信息",
+                "历史事件、专业参数"
+              ],
+              [
+                "逻辑幻觉",
+                "推理前提或计算错误",
+                "医疗剂量、法律条款"
+              ],
+              [
+                "上下文幻觉",
+                "与前文自相矛盾",
+                "长对话、多轮决策"
+              ]
+            ]
+          },
+          "coveredConceptIds": [
+            "concept-幻觉与校验"
+          ]
+        },
+        {
+          "id": "card-4",
+          "title": "三个快速校验方法",
+          "content": "遇到 AI 输出关键信息时，用这三步核实：\n\n**① 交叉验证**：换一种问法或让 AI 给出信息来源，再通过搜索引擎核实。\n\n**② 逻辑检验**：让 AI 复述推理过程，检查关键前提是否成立、数字是否自洽。\n\n**③ 明确不确定性**：直接问它“你的把握有多大？”——如果它回避或继续自信输出，就要警惕。\n\n**核心原则**：对涉及真金白银、健康安全的信息，始终保持“**先核实再使用**”的习惯。",
+          "imageUrl": null,
+          "visualization": {
+            "type": "flowchart",
+            "title": "AI 输出校验流程",
+            "mermaidCode": "flowchart TD\n    A[获取 AI 回答] --> B{涉及关键决策?}\n    B -- 否 --> E[可直接参考]\n    B -- 是 --> C[交叉验证 + 逻辑检验]\n    C --> D[核实通过?]\n    D -- 否 --> F[保持怀疑，另寻可靠来源]\n    D -- 是 --> E"
+          },
+          "coveredConceptIds": [
+            "concept-幻觉与校验"
+          ]
+        }
+      ],
+      "questions": [
+        {
+          "id": "q-1",
+          "type": "single",
+          "question": "以下哪项最能描述AI幻觉的本质？",
+          "options": [
+            "模型故意编造信息以欺骗用户",
+            "模型生成流畅且看似合理，但实际包含错误或不存在的内容",
+            "模型在遇到不确定问题时直接回答“不知道”",
+            "模型无法处理长文本而中断输出"
+          ],
+          "answer": "模型生成流畅且看似合理，但实际包含错误或不存在的内容",
+          "explanation": "AI幻觉的核心特征是生成看似合理却错误的语言。",
+          "concept": "concept-幻觉与校验",
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": "card-1",
+          "targetConceptId": "concept-幻觉与校验"
+        },
+        {
+          "id": "q-2",
+          "type": "multiple",
+          "question": "针对AI输出的关键信息，推荐采用哪些核实步骤？",
+          "options": [
+            "仅依赖模型的首次回答",
+            "交叉验证信息源",
+            "直接忽略模型的所有输出",
+            "询问模型对自己答案的确信程度",
+            "检查推理过程中的前提和逻辑"
+          ],
+          "answer": [
+            "交叉验证信息源",
+            "询问模型对自己答案的确信程度",
+            "检查推理过程中的前提和逻辑"
+          ],
+          "explanation": "通过多源核实、置信度询问和逻辑检查可有效降低幻觉风险。",
+          "concept": "concept-幻觉与校验",
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": "card-1",
+          "targetConceptId": "concept-幻觉与校验"
+        }
+      ]
+    },
+    "4": {
+      "courseId": "system-ai-for-everyone",
+      "nodeIndex": 4,
+      "title": "普通人该守的 AI 安全边界",
+      "teachingGoal": "从隐私保护到信息辨别，总结普通人使用 AI 时的安全边界与红线意识。包括：什么信息不能丢给 AI、遇到敏感内容如何处理、如何避免过度依赖 AI 做重大决策。",
+      "teachConceptIds": [
+        "concept-幻觉与校验"
+      ],
+      "assessmentTargetIds": [
+        "concept-幻觉与校验"
+      ],
+      "cards": [
+        {
+          "id": "card-1",
+          "title": "为什么AI也有风险",
+          "content": "AI像一位数字助手，能帮你处理信息、回答问题。但它处理的数据会经过云端服务器，这些信息可能被存储、分析，甚至被滥用。**隐私一旦泄露，很难完全追回**。所以在享受AI便利时，必须建立基本的安全边界意识。",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-幻觉与校验"
+          ]
+        },
+        {
+          "id": "card-2",
+          "title": "这四类信息绝不能给AI",
+          "content": "以下信息一旦泄露风险极高，建议直接拒绝提供：\n\n1. **个人身份信息**：身份证、护照、驾照照片及号码\n2. **财务信息**：银行卡号、密码、验证码、收入证明\n3. **健康信息**：病历、检查报告、处方单\n4. **工作敏感信息**：内部文件、客户名单、商业合同",
+          "imageUrl": null,
+          "visualization": {
+            "type": "table",
+            "title": "高风险信息分类",
+            "columns": [
+              "禁止类型",
+              "典型内容",
+              "潜在危害"
+            ],
+            "rows": [
+              [
+                "个人身份信息",
+                "身份证、护照照片",
+                "身份盗用"
+              ],
+              [
+                "财务信息",
+                "银行卡号、密码",
+                "资金被盗"
+              ],
+              [
+                "健康信息",
+                "病历、检查报告",
+                "隐私泄露"
+              ],
+              [
+                "工作敏感信息",
+                "内部文件、客户名单",
+                "商业秘密泄露"
+              ]
+            ]
+          },
+          "coveredConceptIds": [
+            "concept-幻觉与校验"
+          ]
+        },
+        {
+          "id": "card-3",
+          "title": "遇到敏感内容怎么办",
+          "content": "当AI主动询问或要求上传以下内容时，应立即拒绝：要求上传身份证照片、让你输入银行卡密码、要求上传医疗报告、要求描述公司内部工作。**如果不确定，直接说「不」**，并考虑向专业人士咨询。",
+          "imageUrl": null,
+          "coveredConceptIds": [
+            "concept-幻觉与校验"
+          ]
+        },
+        {
+          "id": "card-4",
+          "title": "AI不能替你做的决定",
+          "content": "涉及法律、医疗、投资的重大决策时，AI只能提供参考。合同条款让律师把关，医疗方案听医生建议，投资决策找理财顾问。**AI是助手，不是决策者**，任何后果仍需自己承担。",
+          "imageUrl": null,
+          "visualization": {
+            "type": "keyPoints",
+            "title": "需要谨慎的决策类型",
+            "items": [
+              "法律诉讼与合同签署",
+              "医疗方案与用药选择",
+              "重大投资与资产配置"
+            ]
+          },
+          "coveredConceptIds": [
+            "concept-幻觉与校验"
+          ]
+        }
+      ],
+      "questions": [
+        {
+          "id": "q-1",
+          "type": "single",
+          "question": "小李在手机上使用AI助手时，AI突然要求他上传身份证照片来验证身份。下列做法正确的是？",
+          "options": [
+            "按照要求上传身份证照片完成验证",
+            "直接拒绝上传，并向官方渠道核实这个请求是否正当",
+            "上传一张模糊的照片试试看",
+            "把身份证号码打字发给AI代替照片"
+          ],
+          "answer": "直接拒绝上传，并向官方渠道核实这个请求是否正当",
+          "explanation": "正确答案来自本节知识点，请回看相关卡片后再试一次。",
+          "concept": "concept-幻觉与校验",
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": "card-1",
+          "targetConceptId": "concept-幻觉与校验"
+        },
+        {
+          "id": "q-2",
+          "type": "multiple",
+          "question": "以下哪些信息是【绝不能给AI】的敏感信息？（多选）",
+          "options": [
+            "身份证照片及号码",
+            "银行卡密码和验证码",
+            "医院检查报告",
+            "公司内部会议纪要"
+          ],
+          "answer": [
+            "身份证照片及号码",
+            "银行卡密码和验证码",
+            "医院检查报告",
+            "公司内部会议纪要"
+          ],
+          "explanation": "正确答案来自本节知识点，请回看相关卡片后再试一次。",
+          "concept": "concept-幻觉与校验",
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": "card-1",
+          "targetConceptId": "concept-幻觉与校验"
+        }
+      ]
+    }
+  }
+}
