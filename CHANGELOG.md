@@ -1,5 +1,201 @@
 # 项目迭代日志
 
+## 2026-04-10
+
+### 🔧 修复 V3 Memory 双写链路断裂
+
+**修改文件：** `lib/memory/repository.ts`
+
+**改动内容：**
+- `saveLegacyMemory` 现在同步写入 V3 存储：写入 V1/V2 后，将 profile（stableFacts + goals）合并到现有 V3
+- 修复了 V3 event-sourced 架构形同虚设的问题，确保 profile 变更不会丢失
+- V3 写入失败不影响 V1/V2 正常保存（try-catch 隔离）
+
+**验证结论（代码审查）：**
+- 前端 TOC/Cards/Questions 路由已正确传递 userMemory，无需改动
+- Python Agent 服务（toc/cards/questions）已正确注入用户画像和教学记忆，无需改动
+- LearningInsight 字段名（workSummary/educationSummary/analogyExperiences/learningStyle/technicalLevel/valuePriorities）已统一，knowledgeBackground 已完全废弃（零源码引用）
+- MemoryStoreV2 仍被 9 个文件引用，清理需独立 PR
+
+### 🎨 TOC 生成页面 UI/UX 优化
+
+**修改文件：** `app/generate/toc/page.tsx`
+
+**改动内容：**
+- 新增初始空状态中心化加载区域：三层脉动圆圈 + 浮动动画 + 装饰性圆点
+- 新增动态文案轮播（6 条进度文案，每 3.8 秒切换，AnimatePresence 过渡动画）
+- 骨架屏下移至空状态区域，作为加载氛围的一部分
+- 节点出现后显示带计数器的进度提示「正在补齐剩余章节... (X)」
+- 两阶段布局：空状态 → 有节点后，条件渲染切换
+
+## 2026-04-09
+
+### ✨ 新功能：Python Agent 支持 function calling，outline 阶段集成搜索
+
+**新增文件：**
+- `lib/minimax_agent.py`：AgentClient 类，继承 MiniMaxClient，支持 tools 参数的 LLM 调用和自动 tool_calls 循环（最多 3 轮）
+- `lib/tools/search_tools.py`：搜索工具函数（web_search / read_url），使用 Jina Reader API，含 OpenAI 格式工具定义
+- `services/outline_agent.py`：Agent 版 outline 服务，复用原有 prompt 构建和解析逻辑，通过 AgentClient 实现 function calling 自动搜索
+
+**修改文件：**
+- `main.py`：新增 `/api/agents/outline/generate_agent` 路由（SSE 流式）
+- `requirements.txt`：新增 `requests` 依赖
+
+**技术要点：**
+- MiniMax M2.7 使用 OpenAI 兼容的 tools 格式，`reasoning_split=True` 将思考内容分离到 `reasoning_details`
+- `finish_reason: "tool_calls"` 表示有工具调用，assistant message 必须完整保留在历史中
+- 搜索结果截断到 3000 字符避免 prompt 过长，搜索超时 15 秒
+- 新路由与原有 `/api/agents/outline/generate` 并行存在，前端可切换验证效果
+
+### ♻️ 重构：抽取共享常量模块，新增用户偏好转换
+
+**共享常量（lib/constants.py）**
+- 新增 `LEARNING_STYLE_DESCRIPTIONS`：理论型/实践型 → 描述文案，指导内容组织偏好
+- 新增 `TECHNICAL_LEVEL_DESCRIPTIONS`：入门级/业务级/专家型 → 描述文案，指导术语密度
+- `LEVEL_DESCRIPTIONS`、`FRAME_DESCRIPTIONS` 统一收归此文件
+- outline/toc/cards/questions 四处移除本地重复定义，统一引用共享模块
+
+**用户偏好下游消费（cards prompt）**
+- cards route 提取 `learningStyle`、`technicalLevel`、`valuePriorities` 传入 payload
+- cards prompt 用户情况区展示转换后的描述文案，AI 可据此调整讲解风格和举例方向
+- outline/toc 的 `_format_user_profile` 同步使用转换描述，全链路统一
+
+## 2026-04-09
+
+### ✨ 优化：重构练习题（Questions）生成 prompt 和数据接入
+
+**prompt 优化**
+- 结构改为"参考信息 / 任务要求"两层
+- 新增出题维度引导：memory/understanding/application/analysis，同一维度不超过 2 道（仅引导，不输出）
+- 新增难度梯度引导：1-3 档，根据用户水平动态调整分布（仅引导，不输出）
+- 新增卡片编号标注（"【卡片 1】"），方便 AI 定位内容
+- 用户情况精简为：当前水平 + 已掌握知识 + 工作背景 + 教育背景
+
+**数据接入修复**
+- payload 补传 `estimatedLevel`、`skipBasics`（原来只传了 courseName/nodeTitle/teachingGoal/userInsights）
+- 用户背景改为单独传 `workBackground`、`educationBackground`，替代原来合并的 `userInsights`
+- 移除不再需要的 `teachingMemory` 和 `createMemoryRepository` 调用
+
+## 2026-04-09
+
+### ✨ 优化：重构节点卡片（Cards）生成 prompt 和数据接入
+
+**prompt 优化**
+- 新增 `FRAME_DESCRIPTIONS` 常量（8 种章节框架的描述文案），在构建 prompt 时通过 `node_frame_description` 注入，替代原来 prompt 内列举框架枚举的方式
+- 新增 `LEVEL_DESCRIPTIONS` 常量（3 档水平的描述文案），在构建 prompt 时通过 `level_description` 注入，指导 AI 调整内容深度
+- 移除"内容按认知顺序逐步展开"，改为"按照内容组织方式组织卡片顺序和逻辑"，避免与章节框架冲突
+- 合并"对重点结论使用 Markdown 强调"为"将内容恰当使用 Markdown 格式传递给用户"
+
+**teachingMemory 字段修复**
+- 旧代码读取 `masteredConcepts`/`riskyConcepts`/`preferredAnalogyFacts`（TS 端不存在），实际字段为 `prerequisiteConceptStates`/`targetConceptStates`/`analogyHints`/`recentQuestionSummaries`/`preferredExplanationStyles`
+- 新增 `_format_teaching_memory` 函数，正确读取所有字段并格式化为可读文本
+
+**frame 字段传递**
+- `buildNodeInfoPayload` 新增 `frame` 字段（默认 `total_split_total`）
+- Next.js cards route 转发 `frame` 到 Python Agent payload
+- Python `build_cards_prompt` 读取 `frame` 并查找 `FRAME_DESCRIPTIONS` 注入 prompt
+
+## 2026-04-09
+
+### 🛠 修复：统一水平等级为 3 档，移除 novice
+
+**改动**
+- Python 端 `outline_service.py` 和 `toc_service.py` 统一 `LEVEL_DESCRIPTIONS` 为 3 档（beginner/intermediate/advanced），移除 novice
+- `LEVEL_DESCRIPTIONS` 从简单标签映射改为描述性文案，指导 AI 内容生成策略
+- 清理旧架构代码中的 novice 引用（schemas/outline.py、agents/outline/prompts.py、agents/outline/nodes.py）
+
+## 2026-04-09
+
+### ✨ 优化：重构课程目录（TOC）生成 prompt 和数据接入
+
+**prompt 优化**
+- 重写 Python 端 `build_toc_prompt`：两步分析（课程内容框架 → 章节框架选择 → 生成目录）
+- 新增 8 维课程内容框架（progressive/problem_driven/systematic/comparative/evolutionary/case_based/theory_to_practice/project_based）
+- 新增 8 维章节框架（what_why_how/total_split_total/step_by_step/case_review/problem_solution/comparative_analysis/timeline_evolution/exploration_deduction）
+- 新增 `frame` 字段，标记每章的内容组织方式，传递给下游内容生成
+
+**数据接入**
+- 新增 `_format_learning_plan` 将 outline blueprint 格式化为可读文本（包含课程定位、课程重点、学习目标、水平、背景、已掌握知识）
+- 新增 `_format_user_profile` 将用户画像格式化为可读文本（复用 outline_service 逻辑）
+- 前端 `CourseContext.generateToc` 传递精简 userProfile，Next.js route 转发到 Python Agent
+
+**类型和解析**
+- `TocStreamNode` 新增 `frame` 字段和 `NodeFrameType` 类型
+- `CourseBlueprintNode` 新增可选 `frame` 字段
+- Python 端流式解析适配 `frame`（默认 `total_split_total`）
+- TOC 页面将 `frame` 传递到 CourseBlueprint
+
+## 2026-04-09
+
+### ✨ 优化：重构课程纲要生成 prompt 和数据接入
+
+**prompt 优化**
+- 重写 Python 端 `build_initial_prompt`：两步分析（判断需求 → 确定设计重点 → 生成计划）
+- 新增 8 维课程设计重点枚举（概念解析/原理机制/实践应用/商业价值/发展趋势/成本效益/对比辨析/决策策略），AI 选 2-5 个
+- 新增 `keypoint`（课程重点）slot，前端同步展示
+
+**数据接入修复**
+- 修复 Python 端字段映射：`knowledgeBackground` → `workSummary`、`careerGoal` → `learnerSnapshot.targetGoal`、`recentCourses` → `recentRelevantCourses`
+- 新增 `_format_user_profile` 将用户画像 JSON 格式化为可读文本，完整接入 `workSummary`、`educationSummary`、`learningStyle`、`technicalLevel`、`valuePriorities`
+
+**前端同步**
+- `ContentBlock` 和 `OutlineBlueprint` 类型新增 `learningKeypoint` 字段
+- `contentParser.ts` 流式/完整解析支持 `keypoint` slot
+- `OutlineCard`、`ConfirmationCard`、`RichStreamingMessage` 展示课程重点
+
+## 2026-04-08
+
+### ✨ 优化：重构用户画像生成逻辑
+
+**改动**
+- `LearningInsight` 新增 `workSummary`、`educationSummary`、`learningStyle`、`technicalLevel`、`valuePriorities` 字段，替代原 `knowledgeBackground`
+- 重写 `buildProfileInsightPrompt`，增加角色设定、约束条款、枚举值定义和输出示例
+- 同步更新所有下游消费：CourseContext、UserProfileContext、RecommendationsModal、Memory 系统、prompt 模板（course-tree/shared/node-content）、API 路由（cards/questions）
+- 测试数据同步更新
+
+## 2026-04-08
+
+### 🐛 修复：学习计划流式请求异常时不再直接断开连接
+
+**问题**
+- 生成学习计划时，`/api/agents/outline` 若在 SSE 已开始后抛出异常，浏览器可能直接收到 `ERR_EMPTY_RESPONSE`
+- 前端拿不到结构化错误，只会看到请求被中断
+
+**修复**
+- Python Agent 的 `outline/generate` 与 `outline/answer` 生成器补上内部 `try/catch`，异常时改为发送 `error` SSE 事件，再正常结束流
+- Next.js `/api/agents/outline` 在透传 SSE 前增加 `response.body` 保护
+- 前端 SSE 解析器新增 `error` 事件支持，并补齐尾包解析，避免最后一条错误事件丢失
+
+### 🎨 优化：课程目录生成页的版式层级与留白
+
+**优化**
+- 拉开顶部内容与 titlebar 的距离，避免进入页面时视觉过于顶
+- 未生成课程标题前改为标题骨架屏，不再把两行提示文案挤在一起
+- 课程描述区域、生成中占位卡片和错误区的留白重新整理，整体更稳更透气
+
+### 🐛 修复：节点 Cards 生成链路补齐用户定位与错误详情
+
+**修复**
+- TOC 建课时保留 `backgroundSummary` 与 `skipBasics`，避免后续节点内容生成丢失用户定位
+- `buildNodeInfoPayload` 与 `/api/generate/node/cards` 现在会把 `skipBasics` 和 teaching memory 一并传给 Python Agent
+- Cards API 透传 Python Agent 的详细错误正文，后续再出错时前端能直接看到真实原因
+
+### ✨ 优化：`/generate/toc` 升级为流式目录生成页
+
+**体验升级**
+- 课程目录生成过程不再只是单一 loading，而是逐步展示课程名、课程描述和章节列表
+- 章节按生成顺序依次插入，完整后短暂停留再自动进入正式课程目录页
+- 出错时保留已经展示出的内容，只在底部追加错误提示和“重新开始”操作区
+
+**链路改造**
+- Python Agent 的 TOC 生成改为 SSE 事件流，按 `course_name / course_description / node / complete / error` 输出
+- Next.js `/api/generate/toc` 改为透传 SSE，`CourseContext.generateToc` 改为返回流式 `Response`
+- `/generate/toc` 页面只把中间结果用于展示，只有收到 `complete` 后才建课、预生成首节点并跳转
+
+**稳定性**
+- 保留 Strict Mode 防重入保护，避免重复发起 TOC 请求、重复插入节点、重复建课和重复跳转
+- 新增 TOC SSE 解析测试，并补齐流尾事件解析，确保 `complete`/`error` 不会因尾包格式丢失
+
 ## 2026-04-07
 
 ### 🐛 修复：课程节点索引统一为内部 0-based，避免进入错节内容

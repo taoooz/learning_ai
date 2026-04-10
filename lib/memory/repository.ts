@@ -85,6 +85,28 @@ export function createMemoryRepository(options: CreateMemoryRepositoryOptions = 
 
     storage.setItem(USER_MEMORY_KEY, JSON.stringify(nextMemory));
     storage.setItem(USER_MEMORY_V2_KEY, JSON.stringify(migrateUserMemoryToV2(nextMemory, getProfile())));
+
+    // 同步写入 V3：将 legacy memory 迁移后合并到现有 V3 存储
+    try {
+      const existingV3Raw = storage.getItem(USER_MEMORY_V3_KEY);
+      const existingV3 = existingV3Raw
+        ? JSON.parse(existingV3Raw) as MemoryStoreV3
+        : null;
+
+      if (existingV3 && isMemoryStoreV3(existingV3)) {
+        // V3 已存在：更新 profile.stableFacts 和 profile.goals
+        const newV2 = migrateUserMemoryToV2(nextMemory, getProfile());
+        const updatedV3: MemoryStoreV3 = {
+          ...existingV3,
+          profile: newV2.profile,
+          updatedAt: Math.max(existingV3.updatedAt, nextMemory.lastUpdated),
+        };
+        storage.setItem(USER_MEMORY_V3_KEY, JSON.stringify(updatedV3));
+      }
+      // V3 不存在时不主动创建，等下次读取时自动迁移
+    } catch {
+      // V3 写入失败不影响 V1/V2 的正常保存
+    }
   }
 
   function getMemoryStore(): MemoryStoreV2 {
