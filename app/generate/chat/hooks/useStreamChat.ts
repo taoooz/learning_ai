@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
 import { useCourse } from '@/contexts/CourseContext';
-import { parseSSEStream } from '../utils/sseParser';
 import { extractThinkingAndVisibleContent, getStreamingThinkingState } from '../utils/contentParser';
 import { useChatMessages } from './useChatMessages';
 import type { OutlineBlueprint } from '@/types/course';
@@ -46,110 +45,83 @@ export function useStreamChat(topic: string) {
     }
 
     try {
-      const result = await submitOutlineMessage(topic, message, sessionIdRef.current || undefined);
+      await submitOutlineMessage(topic, message, {
+        onThinking: (msg) => {
+          const s = streamState.current;
+          if (s.sawThinkTag) return;
 
-      if (!(result instanceof Response)) {
-        console.warn('[StreamChat] Expected streaming response');
-        return;
-      }
-
-      for await (const event of parseSSEStream(result)) {
-        const s = streamState.current;
-
-        switch (event.type) {
-          case 'thinking':
-            if (s.sawThinkTag) {
-              break;
-            }
-
-            s.thinkingContent += (event.message || '') + '\n';
-            if (s.streamingIndex < 0) {
-              const idx = addMessage({ 
-                type: 'streaming', 
-                content: '', 
-                thinkingContent: s.thinkingContent,
-                isThinking: true,
-                timestamp: Date.now() 
-              });
-              s.streamingIndex = idx;
-            } else {
-              updateMessageAt(s.streamingIndex, msg =>
-                msg.type === 'streaming' ? { ...msg, thinkingContent: s.thinkingContent, isThinking: true } : msg
-              );
-            }
-            break;
-
-          case 'content_delta':
-            s.rawContent += event.content;
-            const parsed = extractThinkingAndVisibleContent(s.rawContent);
-            if (parsed.thinkingContent) {
-              s.sawThinkTag = true;
-              s.thinkingContent = parsed.thinkingContent;
-            }
-            s.visibleContent = parsed.visibleContent;
-            const isThinking = getStreamingThinkingState({
-              sawThinkTag: s.sawThinkTag,
-              hasOpenThinkBlock: parsed.hasOpenThinkBlock,
-              hasThinkingContent: Boolean(s.thinkingContent.trim()),
+          s.thinkingContent += (msg || '') + '\n';
+          if (s.streamingIndex < 0) {
+            const idx = addMessage({
+              type: 'streaming',
+              content: '',
+              thinkingContent: s.thinkingContent,
+              isThinking: true,
+              timestamp: Date.now(),
             });
+            s.streamingIndex = idx;
+          } else {
+            updateMessageAt(s.streamingIndex, m =>
+              m.type === 'streaming' ? { ...m, thinkingContent: s.thinkingContent, isThinking: true } : m
+            );
+          }
+        },
+        onContentDelta: (content) => {
+          const s = streamState.current;
+          s.rawContent += content;
+          const parsed = extractThinkingAndVisibleContent(s.rawContent);
+          if (parsed.thinkingContent) {
+            s.sawThinkTag = true;
+            s.thinkingContent = parsed.thinkingContent;
+          }
+          s.visibleContent = parsed.visibleContent;
+          const isThinking = getStreamingThinkingState({
+            sawThinkTag: s.sawThinkTag,
+            hasOpenThinkBlock: parsed.hasOpenThinkBlock,
+            hasThinkingContent: Boolean(s.thinkingContent.trim()),
+          });
 
-            if (s.streamingIndex < 0) {
-              const idx = addMessage({
-                type: 'streaming',
-                content: s.visibleContent,
-                thinkingContent: s.thinkingContent || undefined,
-                isThinking,
-                timestamp: Date.now(),
-              });
-              s.streamingIndex = idx;
-            } else {
-              updateMessageAt(s.streamingIndex, msg =>
-                msg.type === 'streaming'
-                  ? {
-                      ...msg,
-                      content: s.visibleContent,
-                      thinkingContent: s.thinkingContent || msg.thinkingContent,
-                      isThinking,
-                    }
-                  : msg
-              );
+          if (s.streamingIndex < 0) {
+            const idx = addMessage({
+              type: 'streaming',
+              content: s.visibleContent,
+              thinkingContent: s.thinkingContent || undefined,
+              isThinking,
+              timestamp: Date.now(),
+            });
+            s.streamingIndex = idx;
+          } else {
+            updateMessageAt(s.streamingIndex, m =>
+              m.type === 'streaming'
+                ? {
+                    ...m,
+                    content: s.visibleContent,
+                    thinkingContent: s.thinkingContent || m.thinkingContent,
+                    isThinking,
+                  }
+                : m
+            );
+          }
+        },
+        onQuestions: (_questions, sessionId) => {
+          if (sessionId) sessionIdRef.current = sessionId;
+        },
+        onConfirmation: (blueprint, sessionId) => {
+          if (sessionId) sessionIdRef.current = sessionId;
+          if (blueprint) {
+            setCurrentBlueprint(blueprint);
+            if (blueprint.learningDirection) {
+              setGeneratedCourseName(blueprint.learningDirection.split('：')[0] || topic);
             }
-            break;
-
-          case 'question_start':
-            break;
-
-          case 'questions':
-            if (event.sessionId) {
-              sessionIdRef.current = event.sessionId;
-            }
-            break;
-
-          case 'blueprint_start':
-            break;
-
-          case 'blueprint_field':
-            break;
-
-          case 'confirmation':
-            if (event.sessionId) {
-              sessionIdRef.current = event.sessionId;
-            }
-            if (event.blueprint) {
-              setCurrentBlueprint(event.blueprint);
-              if (event.blueprint.learningDirection) {
-                setGeneratedCourseName(event.blueprint.learningDirection.split('：')[0] || topic);
-              }
-            }
-            break;
-
-          case 'session_created':
-            if (event.sessionId) {
-              sessionIdRef.current = event.sessionId;
-            }
-            break;
-        }
-      }
+          }
+        },
+        onSessionCreated: (sessionId) => {
+          sessionIdRef.current = sessionId;
+        },
+        onError: () => {
+          addMessage({ type: 'system', content: '抱歉，出现了一些问题，请稍后重试', timestamp: Date.now() });
+        },
+      });
     } catch (err) {
       addMessage({ type: 'system', content: '抱歉，出现了一些问题，请稍后重试', timestamp: Date.now() });
     } finally {

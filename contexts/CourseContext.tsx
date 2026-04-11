@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { CourseTree, GenerationStatus, NodeLesson, CourseBlueprint, StoredCourseBundle, OutlineLearnerPositioning, OutlineResponse, LearningCard, Question } from '@/types/course';
+import { CourseTree, GenerationStatus, NodeLesson, CourseBlueprint, StoredCourseBundle, OutlineLearnerPositioning, OutlineResponse, LearningCard, Question, ClarificationQuestion, OutlineBlueprint as OutlineBlueprintType, OutlineSSEEvent } from '@/types/course';
 import {
   activateSystemCourse,
   addCourseBundle,
@@ -18,8 +18,19 @@ import {
 import { getUserMemoryStoreSnapshot } from '@/hooks/useUserMemory';
 import { createMemoryRepository } from '@/lib/memory/repository';
 import { normalizeVisualization } from '@/lib/visualization';
-import { parseTocSSEStream, type TocSSEEvent } from '@/app/generate/toc/utils/tocSseParser';
+import { parseTocSSEStream, type TocSSEEvent, type TocStreamNode } from '@/app/generate/toc/utils/tocSseParser';
 export type { TocSSEEvent as TocStreamEvent } from '@/app/generate/toc/utils/tocSseParser';
+
+// Outline SSE 流式回调接口
+export interface OutlineStreamCallbacks {
+  onThinking?: (message: string) => void;
+  onContentDelta?: (content: string) => void;
+  onBlueprintField?: (field: string, value: any) => void;
+  onSessionCreated?: (sessionId: string) => void;
+  onQuestions?: (questions: ClarificationQuestion[], sessionId: string) => void;
+  onConfirmation?: (blueprint: OutlineBlueprintType, sessionId: string) => void;
+  onError?: (error: string) => void;
+}
 
 interface CourseContextType {
   courses: CourseTree[];
@@ -33,7 +44,7 @@ interface CourseContextType {
   updateNodeContent: (courseId: string, nodeIndex: number, lesson: NodeLesson) => void;
   deleteCourse: (courseId: string) => void;
   addCourse: (bundle: StoredCourseBundle) => void;
-  submitOutlineMessage: (topic: string, userMessage?: string, sessionId?: string) => Promise<OutlineResponse>;
+  submitOutlineMessage: (topic: string, userMessage?: string, callbacks?: OutlineStreamCallbacks) => Promise<void>;
   generateToc: (outline: {
     topic: string;
     learningDirection: string;
@@ -174,13 +185,9 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
   const [generationStatus, setGenerationStatus] = useState<GenerationStatus>('idle');
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [systemCourseRecommendations] = useState<SystemCourseRecommendation[]>(() => getSystemCourseRecommendations());
-  const [agentSessionId, setAgentSessionId] = useState<string | null>(null);
 
-  // 使用 ref 来跟踪最新的 sessionId，避免 useCallback 依赖问题
+  // 使用 ref 来跟踪最新的 sessionId（由 SSE session_created 事件更新）
   const agentSessionIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    agentSessionIdRef.current = agentSessionId;
-  }, [agentSessionId]);
 
   // 使用 ref 来跟踪最新的 courses，避免依赖变化
   const coursesRef = useRef<CourseTree[]>([]);
@@ -209,60 +216,160 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('node-completed', handleNodeCompleted);
   }, []);
 
-  const submitOutlineMessage = useCallback(async (topic: string, userMessage?: string, sessionId?: string) => {
+  const submitOutlineMessage = useCallback(async (topic: string, userMessage?: string, callbacks?: OutlineStreamCallbacks) => {
     setGenerationStatus('generating');
     setGenerationError(null);
+
+    const abortController = new AbortController();
+    // 每个 chunk 必须在此时间内到达，否则视为连接断开
+    const CHUNK_TIMEOUT_MS = 30_000;
+
     try {
       // 使用 Memory Agent 获取精简的 planning payload
       const memoryRepository = createMemoryRepository();
       const planningPayload = memoryRepository.getPlanningPayload(topic);
-      
+
       // 精简 userProfile，只传递关键字段
       const fullProfile = getUserProfile();
       const slimProfile = fullProfile ? {
         name: fullProfile.name,
         targetJob: fullProfile.targetJob,
-        insights: fullProfile.insights, // insights 已经提炼了背景知识
-        // 不传 education 和 workExperience，避免冗余
+        insights: fullProfile.insights,
       } : null;
-      
+
       const response = await fetch('/api/agents/outline', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           topic,
           userProfile: slimProfile,
-          userMemory: planningPayload, // 只传递精简的 payload
-          sessionId: sessionId || agentSessionIdRef.current,
+          userMemory: planningPayload,
+          sessionId: agentSessionIdRef.current,
           userMessage,
         }),
+        signal: abortController.signal,
       });
 
       if (!response.ok) {
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
         throw new Error(getGenerationErrorMessage(data, '大纲生成失败，请稍后再试。'));
       }
 
-      // 检查是否是流式响应
-      const contentType = response.headers.get('content-type');
-      if (contentType?.includes('text/event-stream')) {
-        // 返回 response 对象，让调用方处理流式数据
-        setGenerationStatus('success');
-        return response;
+      // SSE 流式消费（带逐 chunk 超时）
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No response body');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      // 分发单个 SSE 事件到回调
+      const dispatchEvent = (event: OutlineSSEEvent) => {
+        console.log('[Outline SSE] event:', event.type, event.type === 'thinking' ? event.message : event.type === 'content_delta' ? `"${(event as any).content?.slice(0, 50)}..."` : '');
+        switch (event.type) {
+          case 'thinking':
+            callbacks?.onThinking?.(event.message);
+            break;
+          case 'content_delta':
+            callbacks?.onContentDelta?.(event.content);
+            break;
+          case 'blueprint_field':
+            callbacks?.onBlueprintField?.(event.field, event.value);
+            break;
+          case 'session_created':
+            agentSessionIdRef.current = event.sessionId;
+            callbacks?.onSessionCreated?.(event.sessionId);
+            break;
+          case 'questions':
+            callbacks?.onQuestions?.(event.questions, event.sessionId);
+            break;
+          case 'confirmation':
+            callbacks?.onConfirmation?.(event.blueprint, event.sessionId);
+            break;
+          case 'error':
+            callbacks?.onError?.(event.message);
+            break;
+        }
+      };
+
+      // 解析 buffer 中完整的 SSE 行并分发
+      const processBufferLines = (lines: string[]) => {
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith('data:')) continue;
+
+          // 去除所有 "data:" 前缀（Python Agent 通过 EventSourceResponse 会产生双重前缀）
+          let payload = trimmed;
+          while (payload.startsWith('data:')) {
+            payload = payload.slice(5).trim();
+          }
+          if (!payload || payload === '[DONE]') continue;
+
+          try {
+            dispatchEvent(JSON.parse(payload));
+          } catch {
+            console.warn('[Outline SSE] Failed to parse payload:', payload.slice(0, 120));
+          }
+        }
+      };
+
+      console.log('[Outline SSE] Starting stream consumption...');
+
+      // 带超时的 read，每次收到数据后重置计时
+      const readWithTimeout = (): Promise<ReadableStreamReadResult<Uint8Array>> => {
+        let timer: ReturnType<typeof setTimeout>;
+        const timeout = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            abortController.abort();
+            reject(new Error('响应超时，服务器似乎没有响应，请重试'));
+          }, CHUNK_TIMEOUT_MS);
+        });
+        const readPromise = reader.read().then((result) => {
+          clearTimeout(timer!);
+          return result;
+        });
+        return Promise.race([readPromise, timeout]);
+      };
+
+      while (true) {
+        const { done, value } = await readWithTimeout();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        processBufferLines(lines);
       }
 
-      // 非流式响应
-      const data = await response.json();
-      if (data.sessionId) {
-        setAgentSessionId(data.sessionId);
+      // 处理 buffer 中可能残留的最后一行
+      if (buffer.trim().startsWith('data: ')) {
+        const payload = buffer.trim().slice(6);
+        if (payload !== '[DONE]') {
+          try {
+            dispatchEvent(JSON.parse(payload));
+          } catch {
+            // 忽略
+          }
+        }
       }
 
       setGenerationStatus('success');
-      return data;
     } catch (error) {
-      setGenerationError(error instanceof Error ? error.message : '大纲生成失败，请稍后再试。');
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        const errorMsg = '请求已取消';
+        setGenerationError(errorMsg);
+        setGenerationStatus('error');
+        callbacks?.onError?.(errorMsg);
+        return;
+      }
+      const errorMsg = error instanceof Error ? error.message : '大纲生成失败，请稍后再试。';
+      setGenerationError(errorMsg);
       setGenerationStatus('error');
+      callbacks?.onError?.(errorMsg);
       throw error;
+    } finally {
+      // 确保流被关闭
+      abortController.abort();
     }
   }, []);
 
@@ -298,7 +405,7 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
       if (contentType?.includes('text/event-stream')) {
         let courseName = '';
         let courseDescription = '';
-        const nodes: Array<{ index: number; title: string; description: string }> = [];
+        const nodes: TocStreamNode[] = [];
 
         for await (const event of parseTocSSEStream(response)) {
           switch (event.type) {
@@ -323,8 +430,8 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
                   const existingIndices = new Set(nodes.map(n => n.index));
                   for (const n of event.result.nodes) {
                     if (!existingIndices.has(n.index)) {
-                      nodes.push({ index: n.index, title: n.title, description: n.description || '', frame: n.frame });
-                      options?.onEvent?.({ type: 'node', node: { index: n.index, title: n.title, description: n.description || '', frame: n.frame } });
+                      nodes.push(n);
+                      options?.onEvent?.({ type: 'node', node: n });
                     }
                   }
                 }

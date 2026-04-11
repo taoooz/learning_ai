@@ -15,10 +15,8 @@ async function testTocGeneration() {
     topic: 'TypeScript 类型系统入门',
     learnerPositioning: {
       estimatedLevel: 'beginner' as const,
-      difficultySummary: '面向零基础学员，从类型基础讲起',
       backgroundSummary: '有一些编程基础，了解 JavaScript',
       skipBasics: [] as string[],
-      whyThisCourseFits: '系统学习 TypeScript 类型系统',
     },
   };
 
@@ -167,10 +165,8 @@ async function main() {
         topic: tocData.courseName || '测试课程',
         learnerPositioning: {
           estimatedLevel: 'beginner' as const,
-          difficultySummary: '面向零基础学员',
           backgroundSummary: '有一些编程基础',
           skipBasics: [] as string[],
-          whyThisCourseFits: '系统学习',
         },
         nodes: tocData.nodes.map((n: any, i: number) => ({
           index: i,

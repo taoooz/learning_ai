@@ -1,5 +1,148 @@
 # 项目迭代日志
 
+## 2026-04-11
+
+### fix: 修复 SSE 双重前缀导致 outline 流式内容无法渲染
+
+**根因：** Python Agent 的 outline_agent/toc_agent/main.py 手动拼接 `data: {...}\n\n` 字符串，再由 `sse-starlette` 的 `EventSourceResponse` 自动加 `data: ` 前缀，导致线路上出现 `data: data: {...}` 双重前缀。前端 `processBufferLines` 只 strip 一次前缀，JSON.parse 全部失败。
+
+**修复：**
+- `contexts/CourseContext.tsx`：SSE 解析器改为 while 循环 strip 所有 `data:` 前缀（防御性修复，立即生效）
+- `outline_agent.py` / `toc_agent.py` / `main.py`：改为 yield dict，由 EventSourceResponse 自动序列化（根治，需重启 Python 服务）
+- `chat_agent.py`：暂不修改（使用 MiniMax 兼容格式，前端已有 while 循环解析器兜底）
+
+---
+
+## 2026-04-11
+
+### Outline 流式化改造：SSE 透传 + 实时 UI
+
+**修改文件：** 5 个（后端 1 + 类型 1 + Context 1 + 前端 2）
+
+**改动内容：**
+- `app/api/agents/outline/route.ts`：SSE 透传代理，检测上游 content-type，非 SSE 时包装为单条 SSE 事件兜底
+- `types/course.ts`：新增 `OutlineSSEEvent` 联合类型和 `StreamingOutlineState` 接口
+- `contexts/CourseContext.tsx`：SSE 流消费 + 30s 逐 chunk 超时 + AbortController 清理 + 事件分发回调
+- `app/generate/confirm/page.tsx`：流式状态管理，用 `!response` 替代 `isLoading` 作为流式阶段判断，修复 React 18 批处理吞帧问题
+- `app/generate/chat/hooks/useStreamChat.ts`：适配回调接口，移除手动 SSE 解析
+
+### 清理废弃字段 `difficultySummary` / `whyThisCourseFits`
+
+**修改文件：** 3 个 scripts、4 个 tests、2 个 lib
+
+**改动内容：**
+- 从 9 个文件中移除所有 `difficultySummary` 和 `whyThisCourseFits` 的类型定义、赋值和引用
+- 涉及文件：`smoke-generation.ts`、`generate-system-courses.ts`、`test-generation.ts`、`outline-card.test.ts`、`course-blueprint-memory-v3.test.ts`、`course-tree-layout.test.ts`、`concept-graph.test.ts`、`system-courses.ts`、`shared.ts`
+
+### 🧹 修复全部 tsc 错误（2→0）
+
+**修改文件：** `contexts/CourseContext.tsx`、`lib/prompt/shared.ts`
+
+**改动内容：**
+- `CourseContext.tsx`：本地 `nodes` 数组类型改用 `TocStreamNode`（含 `frame` 字段），消除手动构造对象的冗余代码
+- `shared.ts`：移除不存在的 `KnowledgeGap` 类型导入，用内联类型替代
+- 项目 tsc 零错误
+
+### 🐛 修复 outline 流式渲染卡在"学习目标"
+
+**修改文件：** `components/chat/OutlineCard.tsx`、`components/chat/RichStreamingMessage.tsx`
+
+**问题：** 生成 outline 时，"为你定制"区域在流式过程中不显示，导致卡片看起来卡在学习目标。
+
+**改动内容：**
+- `OutlineCard` 新增 `streaming` prop，流式期间即使"为你定制"无内容也展示骨架占位
+- `RichStreamingMessage` 传入 `streaming={!block.complete}` 驱动骨架状态
+
+### 🐛 修复题目序号始终显示"第1题"
+
+**修改文件：** `components/chat/RichStreamingMessage.tsx`
+
+**问题：** 所有题目的序号都显示为"第1题"，与实际题目数量无关。
+
+**改动内容：**
+- 用 IIFE 预构建 `questionIndices` Map，只对 `type === 'question'` 的 block 递增计数
+- 问题序号使用 Map 查询，不再依赖 `parseInt(block.id)`
+
+### ♻️ 归档废弃的 `node-lesson.ts` 及相关脚本
+
+**删除文件：**
+- `lib/prompt/node-lesson.ts`：已废弃，被 Python Agent 的 `cards_service.py` 替代
+- `scripts/smoke-generation.ts`：无人维护的冒烟测试脚本
+
+**修改文件：**
+- `scripts/generate-system-courses.ts`：移除 `buildNodeLessonPrompt` import，改为内联 prompt 生成函数（保持独立，不引入 Python Agent session 管理复杂性）
+- `tests/course-blueprint-memory-v3.test.ts`：移除 lesson prompt 相关断言
+- `lib/prompt/index.ts`：移除 `node-lesson` export
+- `package.json`：移除 `smoke:generation` script 条目
+
+**说明：** 系统预置课程（`generate-system-courses.ts`）仍用于批量预生成 JSON，但 prompt 逻辑内联为本地函数，不依赖已归档的 `node-lesson.ts`。生产环境课程生成走 Python Agent（`/api/generate/node/cards`）。
+
+### 🐛 修复 TOC 生成报 `No JSON found` 错误
+
+**修改文件：** `lib/minimax.ts`、`.worktrees/agent-feature/python-agent/lib/minimax.py`
+
+**问题：** MiniMax 模型返回的内容包含 `<quiz>` Chinese thinking 标签，`parseJSONResponse` 直接找 `{`，导致 thinking 标签在最前面时找不到 JSON 开始位置。
+
+**改动内容：**
+- 两端 `parseJSONResponse`/`parse_json_response` 均在解析前去除 `<think>...</think>` 标签
+
+### 🗑️ 删除孤立的 `/generate` topic 输入页
+
+**删除文件：** `app/generate/page.tsx`
+
+**说明：** 该页面没有任何导航指向它，用户从首页或课程完成后直接进入 `/generate/chat`，中间无需经过该页面。报错重试按钮已改为跳转首页 `/`。
+
+### 🎨 答题反馈动效增强
+
+**修改文件：** `app/course/[courseId]/learn/[nodeIndex]/page.tsx`
+
+**改动内容：**
+- 答错时选中的错误选项添加左右抖动动画（shake）
+- 答错时正确选项添加脉冲高亮（scale pulse），引导视线
+- 反馈面板的 emoji 添加 spring 弹入动画（scale 0→1 + rotate）
+- 步骤推进时顶部进度条添加发光脉冲效果
+- 选项按钮改为 `motion.button` 支持动画驱动
+
+### 🧹 清理废弃组件
+
+**删除文件：** `components/QuizQuestion.tsx`、`components/LearnFlow.tsx`、`lib/quiz-utils.ts`
+
+**改动内容：**
+- 删除 3 个不再被任何活跃代码引用的废弃组件/工具文件
+- `generateId` 内联到 `hooks/useChatHistory.ts`（唯一活跃引用处）
+- tsc 错误从 12+ 降至 2（剩余 2 个为预先存在的无关错误）
+
+### 🎨 章节学习页面加载体验优化
+
+**修改文件：** `app/course/[courseId]/learn/[nodeIndex]/page.tsx`、`components/learning/EnhancedLoadingScreen.tsx`（新增）
+
+**改动内容：**
+- 新增 `EnhancedLoadingScreen` 组件，替换旧的固定文案加载 UI
+- 4 阶段进度指示：分析学习目标 → 生成知识卡片 → 设计练习题 → 优化学习体验
+- 基于时间的真实进度估算，显示预计剩余秒数
+- 已完成阶段显示绿色勾选，当前阶段显示旋转动画
+- 每 4 秒轮换趣味提示文案，减少等待焦虑
+
+### 🎨 文字对比度优化
+
+**修改文件：** `app/globals.css`
+
+**改动内容：**
+- `--color-text-secondary` 从 `#8A8A8A` 调至 `#5C5C5C`（对比度 3.3:1 → 5.7:1，通过 WCAG AA）
+- `--color-text-tertiary` 从 `#666666` 调至 `#707070`，保持与 secondary 的合理层级差
+
+### 🧹 清理废弃的 Question.explanation 字段
+
+**修改文件：** `types/course.ts`、`lib/prompt/node-lesson.ts`、`lib/data/system-courses.ts`、`scripts/generate-system-courses.ts`、`scripts/smoke-generation.ts`、`tests/course-tree-layout.test.ts`、`tests/course-blueprint-memory-v3.test.ts`
+
+**改动内容：**
+- 从 `Question` 接口移除 `explanation?: string` 字段
+- 从 node-lesson prompt 的 JSON 模板移除 `"explanation": "解析"`
+- 从 `systemQuestion` 工厂函数和所有系统课程数据中移除 explanation
+- 从测试夹具中移除 explanation 字段
+- 修复脚本的 prompt 文案（"高质量解释" → "高质量内容"）避免歧义
+- 注：`explanation_style` / `preferredExplanationStyles` 等用户偏好系统字段不受影响
+
 ## 2026-04-10
 
 ### 🐛 修复 TOC 生成 500 错误 + 流式展示

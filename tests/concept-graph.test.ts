@@ -9,8 +9,6 @@ test('buildConceptGraph constructs prerequisite relationships from blueprint nod
     topic: 'React Hooks',
     learnerPositioning: {
       estimatedLevel: 'beginner',
-      difficultySummary: '适合初学者',
-      whyThisCourseFits: '从基础开始',
     },
     courseGoal: '掌握 React Hooks',
     globalConcepts: [
@@ -95,8 +93,6 @@ test('getPrerequisites recursively finds all prerequisite concepts', () => {
     topic: 'React Hooks',
     learnerPositioning: {
       estimatedLevel: 'beginner',
-      difficultySummary: '适合初学者',
-      whyThisCourseFits: '从基础开始',
     },
     courseGoal: '掌握 React Hooks',
     globalConcepts: [
@@ -179,8 +175,6 @@ test('getSimilarConcepts finds concepts with overlapping aliases', () => {
     topic: 'React Hooks',
     learnerPositioning: {
       estimatedLevel: 'beginner',
-      difficultySummary: '适合初学者',
-      whyThisCourseFits: '从基础开始',
     },
     courseGoal: '掌握 React Hooks',
     globalConcepts: [

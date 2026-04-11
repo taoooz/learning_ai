@@ -13,6 +13,7 @@ import { RetryModal } from '@/components/RetryModal';
 import { LearningCard, Question } from '@/types/course';
 import { ChatLauncher, ChatWidget } from '@/components/ui/ChatWidget';
 import { CardVisualization } from '@/components/ui/CardVisualization';
+import { EnhancedLoadingScreen } from '@/components/learning/EnhancedLoadingScreen';
 import { useUserMemory } from '@/hooks/useUserMemory';
 import { getStoredDataV2 } from '@/lib/storage';
 
@@ -34,10 +35,11 @@ function getOptionBadgeLabel(option: string, index: number): string {
 }
 
 function extractQuestionConcept(question: Question): string {
-  if (question.concept?.trim()) return question.concept.trim();
-
-  const match = question.question.match(/([^，。？?\s]{2,12})/);
-  return match ? match[1] : '当前知识点';
+  if (!question?.concept?.trim()) {
+    const match = question?.question?.match(/([^，。？?\s]{2,12})/);
+    return match?.[1] || '当前知识点';
+  }
+  return question.concept.trim();
 }
 
 function checkIsCorrect(question: Question, selectedAnswer: string[], sortOptions: string[]): boolean {
@@ -55,9 +57,10 @@ function checkIsCorrect(question: Question, selectedAnswer: string[], sortOption
     return selectedKeys.length === answer.length && selectedKeys.every((key) => answer.includes(key));
   }
 
-  if (question.type === 'sorting' && Array.isArray(answer)) {
-    return sortOptions.length === answer.length &&
-      sortOptions.every((item, index) => extractAnswerKey(item) === answer[index]);
+  if (question.type === 'fill_blank' && Array.isArray(answer)) {
+    const correctAnswers = answer as string[];
+    return selectedAnswer.length === correctAnswers.length &&
+      selectedAnswer.every((item, index) => item === correctAnswers[index]);
   }
 
   return false;
@@ -163,6 +166,7 @@ export default function LearnPage() {
   const [isCorrect, setIsCorrect] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatInitialMessage, setChatInitialMessage] = useState<string | undefined>();
+  const [progressPulseKey, setProgressPulseKey] = useState(0);
 
   // 用于跟踪当前有效的加载请求
   const loadingVersionRef = useRef(0);
@@ -295,14 +299,12 @@ export default function LearnPage() {
     preloadNextNode(courseId, nodeIndex);
   }, [courseId, nodeIndex, node, phase, preloadNextNode]);
 
-  // 当步骤变化时，如果是排序题，初始化 sortOptions
+  // 当步骤变化时，重置题目状态
   useEffect(() => {
     if (!currentStep || currentStep.type !== 'question') return;
-    if (currentStep.question.type !== 'sorting') return;
-    if (!currentStep.question.options) return;
-    setSortOptions([...currentStep.question.options]);
     setIsAnswered(false);
     setIsCorrect(false);
+    setSelectedAnswer([]);
   }, [currentStepIndex, currentStep]);
 
   const loadNodeContent = async (expectedVersion: number) => {
@@ -342,6 +344,7 @@ export default function LearnPage() {
 
     setCurrentStepIndex(prev => prev + 1);
     resetQuestionState();
+    setProgressPulseKey(prev => prev + 1);
     window.scrollTo({ top: 0, behavior: 'instant' });
   };
 
@@ -357,8 +360,13 @@ export default function LearnPage() {
     );
   };
 
+  const handleFillBlankSelect = (option: string) => {
+    if (isAnswered) return;
+    setSelectedAnswer((prev) => [...prev, option]);
+  };
+
   const handleCheckAnswer = () => {
-    if (!currentStep || currentStep.type !== 'question') return;
+    if (!currentStep || currentStep.type !== 'question' || !currentStep.question) return;
     const correct = checkIsCorrect(currentStep.question, selectedAnswer, sortOptions);
     setIsCorrect(correct);
     setIsAnswered(true);
@@ -411,11 +419,20 @@ export default function LearnPage() {
         onBack={() => router.push(`/course/${courseId}`)}
         trailing={(
           <div className="flex items-center gap-2">
-            <div className="h-1.5 w-14 rounded-full bg-black/[0.06] overflow-hidden">
-              <div 
+            <div className="h-1.5 w-14 rounded-full bg-black/[0.06] overflow-hidden relative">
+              <div
                 className="h-full bg-accent rounded-full transition-all duration-300"
                 style={{ width: `${((currentStepIndex + 1) / Math.max(steps.length, 1)) * 100}%` }}
               />
+              {progressPulseKey > 0 && (
+                <motion.div
+                  key={progressPulseKey}
+                  initial={{ opacity: 0.6 }}
+                  animate={{ opacity: 0, scale: 1.5 }}
+                  transition={{ duration: 0.6, ease: 'easeOut' }}
+                  className="absolute inset-0 rounded-full bg-accent/40"
+                />
+              )}
             </div>
             <span className="text-xs font-medium text-secondary">
               {currentStepIndex + 1}/{Math.max(steps.length, 1)}
@@ -432,96 +449,7 @@ export default function LearnPage() {
           paddingBottom: 'max(20px, env(safe-area-inset-bottom))',
         }}
       >
-        {phase === 'loading' && (
-          <div className="flex min-h-[60vh] flex-1 flex-col items-center justify-center text-center px-6">
-            <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ duration: 0.4 }}
-              className="mb-8 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-accent/20 via-accent/10 to-accent/5 shadow-[0_8px_24px_rgba(255,138,0,0.12)]"
-            >
-              <motion.svg 
-                className="w-10 h-10 text-accent" 
-                fill="none" 
-                stroke="currentColor" 
-                viewBox="0 0 24 24"
-                animate={{ rotate: [0, 5, -5, 0] }}
-                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-              </motion.svg>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.2 }}
-            >
-              <h3 className="mb-3 text-[22px] font-bold text-primary">正在为你准备内容</h3>
-              <p className="mb-6 text-[15px] leading-relaxed text-secondary">
-                AI 正在生成这一节的学习材料和练习题
-              </p>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.4, delay: 0.6 }}
-              className="w-full max-w-xs space-y-3"
-            >
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.5, delay: 1 }}
-                className="flex items-center gap-3 rounded-2xl bg-white/60 px-4 py-3 shadow-sm"
-              >
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10">
-                  <svg className="h-4 w-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                </div>
-                <span className="text-sm text-secondary">生成知识卡片...</span>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.5, delay: 1.5 }}
-                className="flex items-center gap-3 rounded-2xl bg-white/60 px-4 py-3 shadow-sm"
-              >
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10">
-                  <svg className="h-4 w-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                  </svg>
-                </div>
-                <span className="text-sm text-secondary">设计练习题...</span>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.5, delay: 2 }}
-                className="flex items-center gap-3 rounded-2xl bg-white/60 px-4 py-3 shadow-sm"
-              >
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10">
-                  <svg className="h-4 w-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                </div>
-                <span className="text-sm text-secondary">优化学习体验...</span>
-              </motion.div>
-            </motion.div>
-
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.4, delay: 2.5 }}
-              className="mt-8 text-xs text-tertiary"
-            >
-              通常需要 10-20 秒
-            </motion.p>
-          </div>
-        )}
+        {phase === 'loading' && <EnhancedLoadingScreen />}
 
         {phase === 'learning' && currentStep && (
           <div className="flex flex-1 flex-col pb-28">
@@ -600,103 +528,89 @@ export default function LearnPage() {
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>{currentStep.question.question}</ReactMarkdown>
                             {' '}
                             <span className="inline-flex rounded-full bg-tag px-3 py-1 text-xs font-medium text-secondary align-middle">
-                              {currentStep.question.type === 'single' ? '单选' : currentStep.question.type === 'multiple' ? '多选' : '排序'}
+                              {currentStep.question.type === 'single' ? '单选' : currentStep.question.type === 'multiple' ? '多选' : '填空'}
                             </span>
                           </div>
                         </LastLineMarker>
                       </div>
 
-                      {currentStep.question.type === 'sorting' ? (
-                        <div className="space-y-2">
-                          <p className="text-xs text-secondary mb-2">点击上下箭头调整顺序</p>
-                          {sortOptions.map((option, optionIndex) => {
-                            const answer = currentStep.question.answer;
-                            const isCorrectPosition = isAnswered && Array.isArray(answer)
-                              ? extractAnswerKey(option) === answer[optionIndex]
-                              : false;
+                      {currentStep.question.type === 'fill_blank' && currentStep.question.sentence ? (
+                        <div className="space-y-4">
+                          <div className="rounded-[22px] border-2 border-black/8 bg-white px-4 py-5 text-[15px] leading-8 text-primary">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {currentStep.question.sentence.replace(/___/g, '______')}
+                            </ReactMarkdown>
+                          </div>
+                          {currentStep.question.options && (
+                            <div className="flex flex-wrap gap-2">
+                              {currentStep.question.options.map((option, optionIndex) => {
+                                const correctAnswers = currentStep.question.answer as string[];
+                                const blankIndex = selectedAnswer.length;
+                                const isCorrectPosition = isAnswered && blankIndex < correctAnswers.length
+                                  ? option === correctAnswers[blankIndex]
+                                  : false;
+                                const isSelected = selectedAnswer.includes(option);
+                                const showUserAnswer = isAnswered && isSelected;
 
-                            return (
-                              <div key={option} className="flex items-center gap-2">
-                                <span className="w-6 h-6 rounded-full bg-subtle text-xs flex items-center justify-center text-secondary">
-                                  {optionIndex + 1}
-                                </span>
-                                <div
-                                  className={`
-                                    flex-1 rounded-[22px] border-2 px-4 py-4 text-[15px] text-primary
-                                    ${isAnswered && isCorrectPosition ? 'border-[#2E7D32] bg-success/10' : ''}
-                                    ${isAnswered && !isCorrectPosition ? 'border-error' : ''}
-                                    ${!isAnswered ? 'border-black/8 bg-white' : ''}
-                                  `}
-                                >
-                                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{option}</ReactMarkdown>
-                                </div>
-                                {!isAnswered && (
-                                  <div className="flex flex-col gap-1">
-                                    <button
-                                      onClick={() => {
-                                        const newOptions = [...sortOptions];
-                                        const temp = newOptions[optionIndex];
-                                        newOptions[optionIndex] = newOptions[optionIndex - 1];
-                                        newOptions[optionIndex - 1] = temp;
-                                        setSortOptions(newOptions);
-                                      }}
-                                      disabled={optionIndex === 0}
-                                      aria-label="上移"
-                                      className="flex items-center justify-center w-10 h-10 rounded-xl bg-subtle text-secondary hover:bg-subtle/80 active:scale-95 transition-all duration-150 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                    >
-                                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                                      </svg>
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        const newOptions = [...sortOptions];
-                                        const temp = newOptions[optionIndex];
-                                        newOptions[optionIndex] = newOptions[optionIndex + 1];
-                                        newOptions[optionIndex + 1] = temp;
-                                        setSortOptions(newOptions);
-                                      }}
-                                      disabled={optionIndex === sortOptions.length - 1}
-                                      aria-label="下移"
-                                      className="flex items-center justify-center w-10 h-10 rounded-xl bg-subtle text-secondary hover:bg-subtle/80 active:scale-95 transition-all duration-150 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                                    >
-                                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                      </svg>
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
+                                return (
+                                  <button
+                                    key={option}
+                                    onClick={() => handleFillBlankSelect(option)}
+                                    disabled={isAnswered || (isSelected && blankIndex < selectedAnswer.length)}
+                                    className={`
+                                      rounded-[22px] border-2 px-4 py-3 text-[14px] transition-all duration-150
+                                      ${isSelected && !isAnswered ? 'border-accent bg-[linear-gradient(135deg,rgba(255,138,0,0.10),rgba(255,248,240,1))] text-primary shadow-[0_6px_14px_rgba(255,138,0,0.08)]' : ''}
+                                      ${showUserAnswer && isCorrectPosition ? 'border-[#2E7D32] bg-[linear-gradient(135deg,rgba(52,199,89,0.14),rgba(247,252,248,1))] text-primary' : ''}
+                                      ${showUserAnswer && !isCorrectPosition ? 'border-error bg-[linear-gradient(135deg,rgba(239,71,111,0.12),rgba(255,248,249,1))] text-primary' : ''}
+                                      ${!isAnswered && !isSelected ? 'border-black/8 bg-white hover:border-accent/40 hover:bg-accent/[0.025]' : ''}
+                                      ${isAnswered && !isSelected ? 'border-black/6 bg-white opacity-50' : ''}
+                                    `}
+                                  >
+                                    {option}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                          <p className="text-xs text-secondary">点击候选词填入空位</p>
                         </div>
                       ) : currentStep.question.options && (
                         <div className="space-y-3">
                           {currentStep.question.options.map((option, optionIndex) => {
                             const isSelected = selectedAnswer.includes(option);
                             const showUserAnswer = isAnswered && isSelected;
+                            const isCorrectOption = isAnswered && !isCorrect && option === currentStep.question.answer;
 
                             return (
-                              <button
+                              <motion.button
                                 key={option}
                                 onClick={() => currentStep.question.type === 'single' ? handleSingleSelect(option) : handleMultiSelect(option)}
                                 disabled={isAnswered}
+                                animate={isAnswered ? (
+                                  showUserAnswer && !isCorrect
+                                    ? { x: [0, -6, 6, -4, 4, -2, 2, 0] }
+                                    : isCorrectOption
+                                      ? { scale: [1, 1.02, 1] }
+                                      : {}
+                                ) : {}}
+                                transition={{ duration: 0.4 }}
                                 className={`
-                                  w-full rounded-[22px] border-2 px-4 py-4 text-left text-[15px] transition-all duration-150
+                                  w-full rounded-[22px] border-2 px-4 py-4 text-left text-[15px] transition-colors duration-150
                                   ${isSelected && !isAnswered ? 'border-accent bg-[linear-gradient(135deg,rgba(255,138,0,0.10),rgba(255,248,240,1))] text-primary shadow-[0_6px_14px_rgba(255,138,0,0.08)]' : ''}
                                   ${showUserAnswer && isCorrect ? 'border-[#2E7D32] bg-[linear-gradient(135deg,rgba(52,199,89,0.14),rgba(247,252,248,1))] text-primary' : ''}
                                   ${showUserAnswer && !isCorrect ? 'border-error bg-[linear-gradient(135deg,rgba(239,71,111,0.12),rgba(255,248,249,1))] text-primary' : ''}
+                                  ${isCorrectOption ? 'border-[#2E7D32] bg-[linear-gradient(135deg,rgba(52,199,89,0.14),rgba(247,252,248,1))] text-primary' : ''}
                                   ${!isAnswered && !isSelected ? 'border-black/8 bg-white hover:border-accent/40 hover:bg-accent/[0.025]' : ''}
-                                  ${isAnswered && !isSelected ? 'border-black/6 bg-white opacity-50' : ''}
+                                  ${isAnswered && !isSelected && !isCorrectOption ? 'border-black/6 bg-white opacity-50' : ''}
                                 `}
                               >
                                 <div className="flex items-start gap-3">
                                   <div className={`
                                     flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-all duration-150
-                                    ${showUserAnswer && isCorrect ? 'bg-success/22 text-success' : ''}
+                                    ${(showUserAnswer && isCorrect) || isCorrectOption ? 'bg-success/22 text-success' : ''}
                                     ${showUserAnswer && !isCorrect ? 'bg-error/20 text-error' : ''}
                                     ${isSelected && !isAnswered ? 'bg-accent text-white' : ''}
-                                    ${!showUserAnswer && !(isSelected && !isAnswered) ? 'bg-subtle text-secondary' : ''}
+                                    ${!showUserAnswer && !(isSelected && !isAnswered) && !isCorrectOption ? 'bg-subtle text-secondary' : ''}
                                   `}>
                                     {getOptionBadgeLabel(option, optionIndex)}
                                   </div>
@@ -704,7 +618,7 @@ export default function LearnPage() {
                                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{option}</ReactMarkdown>
                                   </div>
                                 </div>
-                              </button>
+                              </motion.button>
                             );
                           })}
                         </div>
@@ -722,8 +636,8 @@ export default function LearnPage() {
                     <button
                       onClick={handleCheckAnswer}
                       disabled={
-                        currentStep.question.type === 'sorting'
-                          ? sortOptions.length < (currentStep.question.options?.length || 0)
+                        currentStep.question.type === 'fill_blank'
+                          ? selectedAnswer.length < ((currentStep.question.answer as string[])?.length || 0)
                           : selectedAnswer.length === 0
                       }
                       className="inline-flex min-h-13 w-full items-center justify-center rounded-full bg-cta px-6 py-3 text-sm font-semibold text-cta shadow-[0_10px_24px_rgba(17,24,39,0.10)] transition-all duration-150 active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-40"
@@ -744,9 +658,14 @@ export default function LearnPage() {
                     `}
                   >
                   <div className="mb-4 flex items-center gap-2">
-                    <span className={`text-2xl ${isCorrect ? 'text-[#2E7D32]' : 'text-error'}`}>
+                    <motion.span
+                      initial={{ scale: 0, rotate: -15 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      transition={{ type: 'spring', stiffness: 400, damping: 15, delay: 0.1 }}
+                      className={`text-2xl ${isCorrect ? 'text-[#2E7D32]' : 'text-error'}`}
+                    >
                       {isCorrect ? '🎉' : '💡'}
-                    </span>
+                    </motion.span>
                     <p className={`text-lg font-semibold ${isCorrect ? 'text-[#2E7D32]' : 'text-error'}`}>
                       {isCorrect ? '答对了！' : '再想想'}
                     </p>

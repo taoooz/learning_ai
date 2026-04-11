@@ -18,7 +18,6 @@ function systemQuestion(config: {
   question: string;
   options: string[];
   answer: string;
-  explanation: string;
   targetConceptId: string;
   cardId: string;
   concept: string;
@@ -31,7 +30,6 @@ function systemQuestion(config: {
     question: config.question,
     options: config.options,
     answer: config.answer,
-    explanation: config.explanation,
     targetConceptId: config.targetConceptId,
     cardId: config.cardId,
     concept: config.concept,
@@ -67,8 +65,6 @@ export const SYSTEM_COURSE_LIBRARY: Array<{ recommendation: SystemCourseRecommen
         topic: '人人都该懂的 AI 课',
         learnerPositioning: {
           estimatedLevel: 'beginner',
-          difficultySummary: '适合对 AI 一知半解、想建立完整常识框架的普通用户。',
-          whyThisCourseFits: '从你最常接触的聊天式 AI 出发，先建立理解，再谈使用和边界。',
         },
         courseGoal: '学完后能理解 AI 产品的基本原理、常见误区和正确使用边界，不再只会"碰运气式提问"。',
         globalConcepts: [
@@ -153,7 +149,6 @@ export const SYSTEM_COURSE_LIBRARY: Array<{ recommendation: SystemCourseRecommen
               question: '下面哪种理解更接近大语言模型的工作方式？',
               options: ['A. 它像搜索引擎，只会把网页内容搬过来', 'B. 它会根据上下文预测最可能的后续内容', 'C. 它像人类一样真正理解了所有知识', 'D. 它只会记住固定答案模板'],
               answer: 'B',
-              explanation: '大语言模型的核心机制是基于上下文做概率预测，不等于真正像人类一样理解世界。',
               targetConceptId: 'concept-llm',
               cardId: 'ai-card-1',
               concept: '大语言模型',
@@ -179,7 +174,6 @@ export const SYSTEM_COURSE_LIBRARY: Array<{ recommendation: SystemCourseRecommen
               question: '为什么同一个问题，AI 在不同场景下可能回答质量差很多？',
               options: ['A. 因为模型每天心情不一样', 'B. 因为上下文和输入信息质量会影响它的判断', 'C. 因为 AI 只会回答固定标准题', 'D. 因为中文天然不适合和 AI 沟通'],
               answer: 'B',
-              explanation: '模型对当前上下文非常敏感，输入越清楚、约束越明确，输出越稳定。',
               targetConceptId: 'concept-context',
               cardId: 'ai-card-5',
               concept: '上下文与提示词',
@@ -205,7 +199,6 @@ export const SYSTEM_COURSE_LIBRARY: Array<{ recommendation: SystemCourseRecommen
               question: '下面哪种情况最接近 Agent，而不只是普通聊天？',
               options: ['A. 帮你改一段文案', 'B. 自动拆解任务、查资料、整理结果再给出下一步建议', 'C. 解释一个术语含义', 'D. 把一段话翻译成英文'],
               answer: 'B',
-              explanation: 'Agent 的关键是围绕目标做多步规划和执行，不只是一次性生成一段文本。',
               targetConceptId: 'concept-tool-agent',
               cardId: 'ai-card-9',
               concept: '工具调用与 Agent',
@@ -232,7 +225,6 @@ export const SYSTEM_COURSE_LIBRARY: Array<{ recommendation: SystemCourseRecommen
               question: '在下面哪种场景里，最应该对 AI 输出做二次核验？',
               options: ['A. 想几个朋友圈标题', 'B. 写祝福语草稿', 'C. 根据 AI 建议直接做个人医疗判断', 'D. 把一段话改得更口语化'],
               answer: 'C',
-              explanation: '涉及高风险决策时，AI 只能作为辅助，不应该代替专业判断和事实核验。',
               targetConceptId: 'concept-hallucination',
               cardId: 'ai-card-11',
               concept: '幻觉与校验',
@@ -258,8 +250,6 @@ export const SYSTEM_COURSE_LIBRARY: Array<{ recommendation: SystemCourseRecommen
         topic: '普通人应该如何理财',
         learnerPositioning: {
           estimatedLevel: 'beginner',
-          difficultySummary: '适合想理财但不知道从哪里开始的普通打工人。',
-          whyThisCourseFits: '先解决现金流和风险，再理解复利与长期配置，避免一上来追热点。',
         },
         courseGoal: '学完后能搭出一个适合普通人的理财基本盘：先防守，再积累，最后靠长期复利慢慢变厚。',
         globalConcepts: [
@@ -344,7 +334,6 @@ export const SYSTEM_COURSE_LIBRARY: Array<{ recommendation: SystemCourseRecommen
               question: '对普通打工人来说，理财最先该做的通常是什么？',
               options: ['A. 找高收益机会', 'B. 先看清现金流并建立应急金', 'C. 一开始就满仓长期投资', 'D. 先追热门板块'],
               answer: 'B',
-              explanation: '理财的起点通常不是追收益，而是先让生活现金流和风险承受能力稳定下来。',
               targetConceptId: 'concept-cashflow',
               cardId: 'fin-card-2',
               concept: '现金流与应急金',
@@ -370,7 +359,6 @@ export const SYSTEM_COURSE_LIBRARY: Array<{ recommendation: SystemCourseRecommen
               question: '下面哪种做法更符合普通人的理财顺序？',
               options: ['A. 一边背高利率分期，一边先追投资收益', 'B. 先处理高成本负债，再谈长期投资', 'C. 不用看负债，理财只看收益率', 'D. 理财和消费是两回事'],
               answer: 'B',
-              explanation: '高成本负债会持续侵蚀资产增长，通常应优先处理。',
               targetConceptId: 'concept-debt',
               cardId: 'fin-card-6',
               concept: '债务与消费决策',
@@ -397,7 +385,6 @@ export const SYSTEM_COURSE_LIBRARY: Array<{ recommendation: SystemCourseRecommen
               question: '复利最依赖的条件是什么？',
               options: ['A. 每次都抓到最热机会', 'B. 长期、稳定、持续投入', 'C. 一年翻倍两三次', 'D. 只要高风险就一定更快'],
               answer: 'B',
-              explanation: '复利依赖的是长期和稳定，而不是短期暴涨。',
               targetConceptId: 'concept-compound',
               cardId: 'fin-card-8',
               concept: '长期复利',
@@ -423,7 +410,6 @@ export const SYSTEM_COURSE_LIBRARY: Array<{ recommendation: SystemCourseRecommen
               question: '对普通人来说，资产配置更重要的意义是什么？',
               options: ['A. 把所有钱押在最热门资产上', 'B. 通过分散和纪律降低单点押注风险', 'C. 只要买得多就一定安全', 'D. 完全不用考虑自己多久会用钱'],
               answer: 'B',
-              explanation: '资产配置的关键是把风险和目标放进同一个系统里，而不是依赖单点押注。',
               targetConceptId: 'concept-allocation',
               cardId: 'fin-card-12',
               concept: '资产配置与风险',

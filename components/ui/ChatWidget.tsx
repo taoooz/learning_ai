@@ -238,7 +238,6 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
         body: JSON.stringify({
           course: {
             topic: course.topic,
-            difficultySummary: course.difficultySummary,
           },
           messages: limitedMessages,
           contextInfo: {

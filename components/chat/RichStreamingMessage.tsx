@@ -153,9 +153,18 @@ export function RichStreamingMessage({
               className={primarySectionClassName}
             >
               <div className="space-y-4">
-                {blocks.length > 0 ? (
+                {blocks.length > 0 ? (() => {
+                  const questionIndices = new Map<number, number>();
+                  let qCount = 0;
+                  // 当存在结构化 block（outline/question）时，text block 是 LLM 的分析过程，不应展示
+                  const hasStructuredBlock = blocks.some(b => b.type !== 'text');
+                  blocks.forEach((b, i) => {
+                    if (b.type === 'question') questionIndices.set(i, ++qCount);
+                  });
+                  return (
                   blocks.map((block, idx) => {
                     if (block.type === 'text') {
+                      if (hasStructuredBlock) return null;
                       return (
                         <div
                           key={`t-${idx}`}
@@ -176,7 +185,7 @@ export function RichStreamingMessage({
                           key={`q-${idx}`}
                           question={block.question}
                           options={optionsArray}
-                          questionNumber={parseInt(block.id, 10) || idx + 1}
+                          questionNumber={questionIndices.get(idx) || idx + 1}
                           onSelect={(answer) => onQuestionAnswer?.(answer)}
                           disabled={disableInteractions}
                           embedded
@@ -193,19 +202,19 @@ export function RichStreamingMessage({
                           learningGoal: block.learningGoal,
                           learnerPositioning: {
                             estimatedLevel: block.estimatedLevel as 'novice' | 'beginner' | 'intermediate' | 'advanced',
-                            difficultySummary: '',
                             backgroundSummary: block.backgroundSummary || '',
                             skipBasics: block.skipBasics || [],
-                            whyThisCourseFits: '',
                           },
                         }}
                         onConfirm={() => onOutlineConfirm?.()}
                         showActions={block.complete && !disableInteractions}
                         embedded
+                        streaming={!block.complete}
                       />
                     );
                   })
-                ) : (
+                  );
+                })() : (
                   <div className="text-[15px] leading-relaxed text-primary whitespace-pre-wrap">
                     {content}
                     {isThinking && !thinkingContent && (

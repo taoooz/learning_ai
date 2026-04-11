@@ -19,13 +19,12 @@ export function buildCompactCourseBlueprintPrompt(topic: string, payload: Course
 - 输出内容使用中文
 - 课程名称建议在10字以内
 - 每个节点标题建议在20字以内
-- 简要整理 difficultySummary 和 courseGoal 内容
+- 简要整理 courseGoal 内容
 - 每个 teachingGoal 简要整理
 
 输出格式：
 {
   "courseName": "课程名称",
-  "difficultySummary": "一句话描述",
   "courseGoal": "一句话描述",
   "nodes": [{
     "title": "具体标题",

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useCourse } from '@/contexts/CourseContext';
 import { ConfirmationCard } from '@/components/ConfirmationCard';
 import { CourseHeaderBar } from '@/components/CourseHeaderBar';
-import type { OutlineBlueprint, OutlineResponse } from '@/types/course';
+import type { OutlineBlueprint, OutlineResponse, StreamingOutlineState } from '@/types/course';
 
 function ConfirmPageContent() {
   const router = useRouter();
@@ -32,6 +32,26 @@ function ConfirmPageContent() {
   // 用于标记是否已经发起过请求（防止 Strict Mode 重复请求）
   const hasRequestedRef = useRef(false);
 
+  // 流式渲染状态
+  const [streamingState, setStreamingState] = useState<StreamingOutlineState>({
+    isThinking: false,
+    thinkingMessage: '',
+    contentDelta: '',
+    blueprintFields: {},
+    finalResponse: null,
+    sessionId: null,
+    error: null,
+  });
+
+  const resetStreamingSubState = () => {
+    setStreamingState(prev => ({
+      ...prev,
+      isThinking: false,
+      thinkingMessage: '',
+      contentDelta: '',
+    }));
+  };
+
   useEffect(() => {
     if (!topic) return;
 
@@ -41,18 +61,85 @@ function ConfirmPageContent() {
 
     const fetchData = async () => {
       setIsLoading(true);
+      setError(null);
+      setResponse(null);
+      setCurrentQuestion(null);
+
+      // 重置流式状态
+      setStreamingState({
+        isThinking: false,
+        thinkingMessage: '',
+        contentDelta: '',
+        blueprintFields: {},
+        finalResponse: null,
+        sessionId: null,
+        error: null,
+      });
+
       try {
-        const result = await submitOutlineMessage(topic);
-        handleResponse(result);
-        setIsLoading(false);
+        await submitOutlineMessage(topic, undefined, {
+          onThinking: (message) => {
+            setStreamingState(prev => ({
+              ...prev,
+              isThinking: true,
+              thinkingMessage: message,
+            }));
+          },
+          onContentDelta: (content) => {
+            setStreamingState(prev => ({
+              ...prev,
+              contentDelta: prev.contentDelta + content,
+            }));
+          },
+          onBlueprintField: (field, value) => {
+            setStreamingState(prev => ({
+              ...prev,
+              blueprintFields: { ...prev.blueprintFields, [field]: value },
+            }));
+          },
+          onSessionCreated: (sessionId) => {
+            setStreamingState(prev => ({ ...prev, sessionId }));
+          },
+          onQuestions: (questions, sessionId) => {
+            setStreamingState(prev => ({
+              ...prev,
+              sessionId,
+              finalResponse: { type: 'questions', questions },
+            }));
+          },
+          onConfirmation: (blueprint, sessionId) => {
+            setStreamingState(prev => ({
+              ...prev,
+              sessionId,
+              finalResponse: { type: 'confirmation', blueprint },
+            }));
+          },
+          onError: (errorMsg) => {
+            setError(errorMsg);
+          },
+        });
       } catch (err) {
         setError('生成失败，请稍后重试');
-        setIsLoading(false);
       }
+      setIsLoading(false);
     };
 
     fetchData();
   }, [topic, retryKey, submitOutlineMessage]);
+
+  // 同步流式最终结果到现有状态变量（response、currentQuestion）
+  useEffect(() => {
+    const finalResp = streamingState.finalResponse;
+    if (!finalResp) return;
+
+    if (finalResp.type === 'questions' && finalResp.questions && finalResp.questions.length > 0) {
+      setResponse(finalResp);
+      setCurrentQuestion(finalResp.questions[0]);
+    } else if (finalResp.type === 'confirmation' && finalResp.blueprint) {
+      setResponse(finalResp);
+      setCurrentQuestion(null);
+    }
+  }, [streamingState.finalResponse]);
 
   const handleResponse = (result: OutlineResponse) => {
     console.log('[DEBUG] handleResponse:', JSON.stringify(result));
@@ -82,12 +169,55 @@ function ConfirmPageContent() {
     const newAnswers = [...answers, currentAnswer];
     setAnswers(newAnswers);
     setCurrentAnswer('');
-    setCurrentQuestionIndex(prev => prev + 1); // 提交后才 +1
+    setCurrentQuestionIndex(prev => prev + 1);
+
+    // 重置流式子状态，保留 sessionId
+    resetStreamingSubState();
+    setStreamingState(prev => ({ ...prev, finalResponse: null }));
 
     try {
       const answerText = newAnswers.join('; ');
-      const result = await submitOutlineMessage(topic, answerText) as OutlineResponse;
-      handleResponse(result);
+      await submitOutlineMessage(topic, answerText, {
+        onThinking: (message) => {
+          setStreamingState(prev => ({
+            ...prev,
+            isThinking: true,
+            thinkingMessage: message,
+          }));
+        },
+        onContentDelta: (content) => {
+          setStreamingState(prev => ({
+            ...prev,
+            contentDelta: prev.contentDelta + content,
+          }));
+        },
+        onBlueprintField: (field, value) => {
+          setStreamingState(prev => ({
+            ...prev,
+            blueprintFields: { ...prev.blueprintFields, [field]: value },
+          }));
+        },
+        onSessionCreated: (sessionId) => {
+          setStreamingState(prev => ({ ...prev, sessionId }));
+        },
+        onQuestions: (questions, sessionId) => {
+          setStreamingState(prev => ({
+            ...prev,
+            sessionId,
+            finalResponse: { type: 'questions', questions },
+          }));
+        },
+        onConfirmation: (blueprint, sessionId) => {
+          setStreamingState(prev => ({
+            ...prev,
+            sessionId,
+            finalResponse: { type: 'confirmation', blueprint },
+          }));
+        },
+        onError: (errorMsg) => {
+          setError(errorMsg);
+        },
+      });
     } catch (err) {
       setError('提交失败，请稍后重试');
     }
@@ -136,17 +266,78 @@ function ConfirmPageContent() {
     }
   };
 
-  // Loading 状态 - 温暖极简风格
-  if (isLoading) {
+  // Loading / 流式阶段：response 尚未确定
+  // 用 !response（非 isLoading）作为主判断：response 由 useEffect 在渲染后异步设置，
+  // 即使 React 18 将 isLoading=false 与 streamingState 更新批处理为同一帧，
+  // response 在当前帧仍为 null，流式 UI 至少能渲染一帧。
+  if (!response && !error) {
+    // 有流式数据 → 显示流式 UI（不依赖 isLoading，避免批处理吞掉渲染帧）
+    if (streamingState.isThinking || streamingState.contentDelta || Object.keys(streamingState.blueprintFields).length > 0) {
+      return (
+        <main className="min-h-screen flex flex-col bg-background">
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-gradient-to-br from-accent/10 to-transparent blur-3xl" />
+          </div>
+
+          <CourseHeaderBar
+            title="生成中"
+            backLabel="返回"
+            onBack={() => router.push('/')}
+          />
+
+          <div className="flex-1 px-5 pt-24 pb-12">
+            <div className="mx-auto max-w-lg">
+              {/* 标题 */}
+              <h2 className="mb-4 text-xl font-semibold text-primary">正在分析你的背景</h2>
+
+              {/* 思考状态 */}
+              {streamingState.isThinking && (
+                <div className="mb-4 flex items-center gap-2 text-sm text-secondary">
+                  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-accent" />
+                  {streamingState.thinkingMessage}
+                </div>
+              )}
+
+              {/* 内容增量显示 */}
+              {streamingState.contentDelta && (
+                <div className="bg-surface border border-[rgba(0,0,0,0.06)] rounded-2xl p-4">
+                  <p className="text-sm leading-relaxed text-primary whitespace-pre-wrap">
+                    {streamingState.contentDelta}
+                  </p>
+                </div>
+              )}
+
+              {/* Blueprint 字段填充进度 */}
+              {Object.keys(streamingState.blueprintFields).length > 0 && (
+                <div className="mt-4 rounded-xl bg-surface/60 border border-[rgba(0,0,0,0.04)] p-4">
+                  <p className="mb-3 text-xs font-medium text-accent uppercase tracking-wide">课程纲要生成中</p>
+                  <div className="space-y-1.5">
+                    {Object.entries(streamingState.blueprintFields).map(([field, value]) => (
+                      <div key={field} className="flex items-center gap-2 text-sm">
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent/60" />
+                        <span className="text-secondary">{field}</span>
+                        <span className="text-primary truncate max-w-[200px]">
+                          {typeof value === 'string' ? value : JSON.stringify(value)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </main>
+      );
+    }
+
+    // 初始加载态（无流式内容时显示静态 loading）
     return (
       <main className="min-h-screen flex flex-col items-center justify-center bg-background">
-        {/* 装饰性渐变光晕 */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-gradient-to-br from-accent/10 to-transparent blur-3xl" />
           <div className="absolute -bottom-24 -left-24 h-64 w-64 rounded-full bg-gradient-to-tr from-accent/8 to-transparent blur-3xl" />
         </div>
 
-        {/* 头部导航 */}
         <CourseHeaderBar
           title="生成中"
           backLabel="返回"
@@ -154,7 +345,6 @@ function ConfirmPageContent() {
         />
 
         <div className="relative text-center pt-24">
-          {/* 动画图标 */}
           <div className="mb-8 flex h-20 w-20 items-center justify-center rounded-full bg-surface shadow-[0_8px_32px_rgba(255,138,0,0.12)]">
             <svg className="h-10 w-10 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
@@ -317,6 +507,23 @@ function ConfirmPageContent() {
             <p className="mb-4 text-center text-sm text-error">{error}</p>
           )}
 
+          {/* 提交流式思考状态 */}
+          {(streamingState.isThinking || streamingState.contentDelta) && (
+            <div className="mb-4 rounded-xl bg-surface/60 border border-[rgba(0,0,0,0.04)] p-3">
+              {streamingState.isThinking && (
+                <div className="flex items-center gap-2 text-sm text-secondary">
+                  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-accent" />
+                  {streamingState.thinkingMessage}
+                </div>
+              )}
+              {streamingState.contentDelta && (
+                <p className="mt-1 text-sm leading-relaxed text-primary whitespace-pre-wrap">
+                  {streamingState.contentDelta}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* 提交按钮 - CTA 风格 */}
           <button
             onClick={handleAnswerSubmit}
@@ -329,7 +536,7 @@ function ConfirmPageContent() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
-                提交中...
+                思考中...
               </span>
             ) : '确认选择'
             }
@@ -402,20 +609,6 @@ function ConfirmPageContent() {
                   </div>
                 </div>
 
-                {/* 难度定位 */}
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-accent uppercase tracking-wide">难度定位</label>
-                  <input
-                    type="text"
-                    value={editedBlueprint.learnerPositioning.difficultySummary}
-                    onChange={(e) => setEditedBlueprint({
-                      ...editedBlueprint,
-                      learnerPositioning: { ...editedBlueprint.learnerPositioning, difficultySummary: e.target.value }
-                    })}
-                    className="w-full h-11 px-4 rounded-xl border border-[rgba(0,0,0,0.08)] bg-background text-[15px] text-primary focus:outline-none focus:border-accent/40"
-                  />
-                </div>
-
                 {/* 背景知识 */}
                 <div className="space-y-2">
                   <label className="text-xs font-medium text-accent uppercase tracking-wide">背景知识</label>
@@ -427,19 +620,6 @@ function ConfirmPageContent() {
                       learnerPositioning: { ...editedBlueprint.learnerPositioning, backgroundSummary: e.target.value }
                     })}
                     className="w-full h-11 px-4 rounded-xl border border-[rgba(0,0,0,0.08)] bg-background text-[15px] text-primary focus:outline-none focus:border-accent/40"
-                  />
-                </div>
-
-                {/* 为什么适合 */}
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-accent uppercase tracking-wide">为什么适合你</label>
-                  <textarea
-                    value={editedBlueprint.learnerPositioning.whyThisCourseFits}
-                    onChange={(e) => setEditedBlueprint({
-                      ...editedBlueprint,
-                      learnerPositioning: { ...editedBlueprint.learnerPositioning, whyThisCourseFits: e.target.value }
-                    })}
-                    className="w-full h-20 px-4 py-3 rounded-xl border border-[rgba(0,0,0,0.08)] bg-background text-[15px] text-primary leading-relaxed resize-none focus:outline-none focus:border-accent/40"
                   />
                 </div>
               </div>

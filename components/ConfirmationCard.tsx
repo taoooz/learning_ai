@@ -10,7 +10,7 @@ interface ConfirmationCardProps {
 
 export function ConfirmationCard({ blueprint, onConfirm, onEdit }: ConfirmationCardProps) {
   const { learningDirection, learningGoal, learnerPositioning } = blueprint;
-  const { estimatedLevel, difficultySummary, backgroundSummary, skipBasics, whyThisCourseFits } = learnerPositioning;
+  const { estimatedLevel, backgroundSummary, skipBasics } = learnerPositioning;
 
   const levelLabels: Record<string, string> = {
     novice: '初学者',
@@ -63,12 +63,6 @@ export function ConfirmationCard({ blueprint, onConfirm, onEdit }: ConfirmationC
           </div>
 
           <div className="space-y-2.5 pl-4 border-l-2 border-accent/20">
-            {difficultySummary && (
-              <div className="flex items-start gap-2">
-                <span className="text-sm text-tertiary shrink-0 w-16">难度定位</span>
-                <span className="text-sm text-secondary flex-1">{difficultySummary}</span>
-              </div>
-            )}
             {backgroundSummary && (
               <div className="flex items-start gap-2">
                 <span className="text-sm text-tertiary shrink-0 w-16">背景知识</span>
@@ -79,12 +73,6 @@ export function ConfirmationCard({ blueprint, onConfirm, onEdit }: ConfirmationC
               <div className="flex items-start gap-2">
                 <span className="text-sm text-tertiary shrink-0 w-16">已跳过</span>
                 <span className="text-sm text-secondary flex-1">{skipBasics.join('、')}</span>
-              </div>
-            )}
-            {whyThisCourseFits && (
-              <div className="flex items-start gap-2 pt-2 border-t border-accent/10">
-                <span className="text-sm text-tertiary shrink-0 w-16">为什么适合</span>
-                <span className="text-sm text-secondary flex-1 leading-relaxed">{whyThisCourseFits}</span>
               </div>
             )}
           </div>

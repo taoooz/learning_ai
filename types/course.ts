@@ -35,11 +35,11 @@ export interface LearningCard {
 
 export interface Question {
   id: string;
-  type: 'single' | 'multiple' | 'sorting';
+  type: 'single' | 'multiple' | 'fill_blank';
   question: string;
-  options?: string[];      // 单选/多选/排序题
-  answer: string | string[];  // sorting 时为排列后的数组
-  explanation?: string;    // 可选：答错后引导用户使用 AI 助理
+  options?: string[];
+  answer: string | string[];
+  sentence?: string;       // fill_blank 专用：包含 ___ 空位的句子
   concept?: string;
   dimension?: 'memory' | 'understanding' | 'application' | 'analysis';
   difficulty?: 1 | 2 | 3;
@@ -72,7 +72,6 @@ export interface CourseNode {
 export interface CourseTreeResponse {
   courseId: string;
   topic: string;
-  difficultySummary: string;
   totalNodes: number;
   nodes: Array<{
     index: number;
@@ -85,7 +84,6 @@ export interface CourseTree {
   courseId: string;
   topic: string;
   courseGoal: string;
-  difficultySummary: string;
   totalNodes: number;
   nodes: CourseNode[];
 }
@@ -118,10 +116,8 @@ export interface CourseBlueprint {
   topic: string;
   learnerPositioning: {
     estimatedLevel: 'novice' | 'beginner' | 'intermediate' | 'advanced' | '初级' | '中级' | '高级';
-    difficultySummary?: string;
     backgroundSummary?: string;
     skipBasics?: string[];
-    whyThisCourseFits?: string;
   };
   courseGoal: string;
   globalConcepts: CanonicalConcept[];
@@ -142,7 +138,6 @@ export interface CourseTreeView {
   courseId: string;
   topic: string;
   courseGoal: string;
-  difficultySummary: string;
   totalNodes: number;
   nodes: Array<{
     index: number;
@@ -154,10 +149,8 @@ export interface CourseTreeView {
 // Outline API 返回的纲要类型（不包含章节结构，章节由 TOC API 生成）
 export interface OutlineLearnerPositioning {
   estimatedLevel: 'novice' | 'beginner' | 'intermediate' | 'advanced' | '初级' | '中级' | '高级';
-  difficultySummary?: string;
   backgroundSummary?: string;
   skipBasics?: string[];
-  whyThisCourseFits?: string;
 }
 
 export interface OutlineBlueprint {
@@ -469,6 +462,29 @@ export interface ChatMemoryPayload {
   analogyHints: string[];
   preferredExplanationStyles: string[];
   topicSummary?: string;
+}
+
+// Outline SSE 事件类型（对应 Python Agent yield 的事件）
+export type OutlineSSEEvent =
+  | { type: 'thinking'; message: string }
+  | { type: 'content_delta'; content: string }
+  | { type: 'question_start'; questionNumber: number }
+  | { type: 'questions'; questions: ClarificationQuestion[]; sessionId: string }
+  | { type: 'blueprint_start' }
+  | { type: 'blueprint_field'; field: string; value: any }
+  | { type: 'confirmation'; blueprint: OutlineBlueprint; sessionId: string }
+  | { type: 'session_created'; sessionId: string }
+  | { type: 'error'; message: string };
+
+// 流式状态（用于前端渲染）
+export interface StreamingOutlineState {
+  isThinking: boolean;
+  thinkingMessage: string;
+  contentDelta: string;
+  blueprintFields: Partial<OutlineBlueprint>;
+  finalResponse: OutlineResponse | null;
+  sessionId: string | null;
+  error: string | null;
 }
 
 // 对话摘要（过期对话生成）

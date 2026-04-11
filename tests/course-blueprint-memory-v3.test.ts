@@ -12,7 +12,7 @@ import {
 } from '../lib/memory/aggregator';
 import { getPlanningMemoryPayload } from '../lib/memory/memory-agent';
 import { activateSystemCourse, clearLegacyLearningData, getStoredData, getSystemCourseRecommendations } from '../lib/storage';
-import { buildCompactCourseBlueprintPrompt, buildNodeLessonPrompt } from '../lib/prompt';
+import { buildCompactCourseBlueprintPrompt } from '../lib/prompt';
 import { validateCourseBlueprint } from '../lib/validation/course-validator';
 import { validateNodeLesson } from '../lib/validation/node-validator';
 
@@ -22,8 +22,6 @@ test('deriveCourseTreeViewFromBlueprint maps blueprint nodes into lightweight co
     topic: 'Agent',
     learnerPositioning: {
       estimatedLevel: 'beginner' as const,
-      difficultySummary: '适合有基础认知、想系统学习 Agent 的用户',
-      whyThisCourseFits: '会先补齐工具调用与工作流的核心区别',
     },
     courseGoal: '能独立理解并设计基础 Agent 学习路径',
     globalConcepts: [
@@ -82,7 +80,6 @@ test('deriveCourseTreeViewFromBlueprint maps blueprint nodes into lightweight co
     courseId: 'course-agent',
     topic: 'Agent',
     courseGoal: '能独立理解并设计基础 Agent 学习路径',
-    difficultySummary: '适合有基础认知、想系统学习 Agent 的用户',
     totalNodes: 2,
     nodes: [
       { index: 0, title: '先建立 Agent 基本框架', status: 'available' },
@@ -124,8 +121,6 @@ test('stored course bundle can hydrate into runtime course tree with node lesson
     topic: 'Agent',
     learnerPositioning: {
       estimatedLevel: 'beginner' as const,
-      difficultySummary: '适合第一次系统学习 Agent 的用户',
-      whyThisCourseFits: '会先补齐工具调用这类风险概念',
     },
     courseGoal: '理解 Agent 的核心结构',
     globalConcepts: [
@@ -185,7 +180,6 @@ test('stored course bundle can hydrate into runtime course tree with node lesson
         question: 'Agent 最核心的特点是什么？',
         options: ['A. 只有模型推理', 'B. 围绕目标行动'],
         answer: 'B',
-        explanation: 'Agent 的关键是围绕目标做决策和行动。',
         cardId: 'card-1',
         targetConceptId: 'concept-agent-definition',
       },
@@ -196,7 +190,6 @@ test('stored course bundle can hydrate into runtime course tree with node lesson
 
   assert.equal(runtimeCourse.nodes[0].cards?.[0]?.title, 'Agent 是什么');
   assert.equal(runtimeCourse.nodes[0].questions?.[0]?.targetConceptId, 'concept-agent-definition');
-  assert.equal(runtimeCourse.difficultySummary, '适合第一次系统学习 Agent 的用户');
 });
 
 test('createStoredCourseBundleFromBlueprint normalizes 1-based node indexes into 0-based internal indexes', () => {
@@ -205,8 +198,6 @@ test('createStoredCourseBundleFromBlueprint normalizes 1-based node indexes into
     topic: 'React',
     learnerPositioning: {
       estimatedLevel: 'beginner' as const,
-      difficultySummary: '适合想系统入门 React 的用户',
-      whyThisCourseFits: '先建立 JSX 和组件的基本概念',
     },
     courseGoal: '完成 React 入门路径',
     globalConcepts: [
@@ -435,8 +426,6 @@ test('validateCourseBlueprint accepts a blueprint that covers must-cover concept
     topic: 'Agent',
     learnerPositioning: {
       estimatedLevel: 'beginner' as const,
-      difficultySummary: '适合第一次系统学习 Agent 的用户',
-      whyThisCourseFits: '会先补齐工具调用这类风险概念',
     },
     courseGoal: '理解 Agent 的核心结构',
     globalConcepts: [
@@ -504,8 +493,6 @@ test('validateCourseBlueprint rejects empty concept coverage and generic node ti
     topic: 'Agent',
     learnerPositioning: {
       estimatedLevel: 'beginner' as const,
-      difficultySummary: '适合第一次系统学习 Agent 的用户',
-      whyThisCourseFits: '适合初学者',
     },
     courseGoal: '理解 Agent 的核心结构',
     globalConcepts: [
@@ -558,8 +545,6 @@ test('validateCourseBlueprint accepts lightweight blueprint without assessment a
     topic: 'AI 基础',
     learnerPositioning: {
       estimatedLevel: 'beginner' as const,
-      difficultySummary: '适合第一次系统了解 AI 的用户',
-      whyThisCourseFits: '先建立最基本的 AI 使用框架',
     },
     courseGoal: '理解 AI 产品的核心概念与使用边界',
     globalConcepts: [
@@ -623,7 +608,6 @@ test('validateNodeLesson accepts explicit concept coverage and target concept bi
         question: '什么时候应该调用工具？',
         options: ['A. 需要外部信息时', 'B. 任何时候都调用'],
         answer: 'A',
-        explanation: '当回答依赖模型外数据时才应调用工具。',
         cardId: 'card-1',
         targetConceptId: 'concept-tool-use',
       },
@@ -664,7 +648,6 @@ test('validateNodeLesson rejects missing coveredConceptIds and invalid target co
         question: '什么时候应该调用工具？',
         options: ['A. 需要外部信息时', 'B. 任何时候都调用'],
         answer: 'A',
-        explanation: '当回答依赖模型外数据时才应调用工具。',
         cardId: 'card-missing',
         targetConceptId: 'concept-non-existent',
       },
@@ -683,7 +666,7 @@ test('validateNodeLesson rejects missing coveredConceptIds and invalid target co
   assert.equal(result.issues.some((item) => item.includes('cardId')), true);
 });
 
-test('new blueprint and node lesson prompts inject structured planning and teaching signals', () => {
+test('new blueprint prompt injects structured planning signals', () => {
   const coursePrompt = buildCompactCourseBlueprintPrompt('Agent', {
     learnerSnapshot: {
       estimatedLevel: 'beginner',
@@ -700,19 +683,9 @@ test('new blueprint and node lesson prompts inject structured planning and teach
     recentEpisodes: [{ topic: 'Agent', summary: '上一门 Agent 课程已完成 3/6 节' }],
   });
 
-  const lessonPrompt = buildNodeLessonPrompt('Agent', {
-    nodeTitle: '搞清工具调用为什么必要',
-    teachingGoal: '理解工具调用边界',
-    analogyFacts: [{ id: 'fact-1', text: '负责过埋点分析和实验设计' }],
-    preferredExplanationStyles: ['分步拆解'],
-    recentRelevantQuestions: ['工具调用和工作流编排有什么区别？'],
-  });
-
   assert.match(coursePrompt, /课程目录大纲/);
   assert.match(coursePrompt, /工具调用/);
   assert.doesNotMatch(coursePrompt, /generationNotes/);
   assert.doesNotMatch(coursePrompt, /coverage/);
   assert.doesNotMatch(coursePrompt, /assessmentTargetIds/);
-  assert.match(lessonPrompt, /搞清工具调用为什么必要/);
-  assert.match(lessonPrompt, /理解工具调用边界/);
 });

@@ -9,17 +9,17 @@ type OutlineCardProps = {
   onConfirm: () => void;
   showActions: boolean;
   embedded?: boolean;
+  streaming?: boolean;
 };
 
-export function OutlineCard({ blueprint, onConfirm, showActions, embedded = false }: OutlineCardProps) {
-  const { estimatedLevel, difficultySummary, backgroundSummary, skipBasics, whyThisCourseFits } = blueprint.learnerPositioning;
-  const shouldShowLearnerPositioning = shouldRenderLearnerPositioningCard({
+export function OutlineCard({ blueprint, onConfirm, showActions, embedded = false, streaming = false }: OutlineCardProps) {
+  const { estimatedLevel, backgroundSummary, skipBasics } = blueprint.learnerPositioning;
+  const hasContent = shouldRenderLearnerPositioningCard({
     estimatedLevel,
-    difficultySummary,
     backgroundSummary,
     skipBasics,
-    whyThisCourseFits,
   });
+  const shouldShowLearnerPositioning = hasContent || streaming;
 
   return (
     <motion.div
@@ -47,41 +47,46 @@ export function OutlineCard({ blueprint, onConfirm, showActions, embedded = fals
           {shouldShowLearnerPositioning && (
             <div className="rounded-lg bg-background p-3">
               <h4 className="mb-1.5 text-xs font-medium text-secondary">为你定制</h4>
-              <div className="space-y-2 text-sm text-primary">
-                <div className="flex items-center gap-2">
-                  <span className="text-tertiary">难度：</span>
-                  <span className="font-medium">
-                    {estimatedLevel === 'novice' && '入门'}
-                    {estimatedLevel === 'beginner' && '初级'}
-                    {estimatedLevel === 'intermediate' && '中级'}
-                    {estimatedLevel === 'advanced' && '高级'}
-                  </span>
+              {!hasContent && streaming ? (
+                <motion.div
+                  className="space-y-2"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-tertiary">难度：</span>
+                    <span className="inline-block h-4 w-12 animate-pulse rounded bg-black/[0.06]" />
+                  </div>
+                  <div className="space-y-1">
+                    <span className="inline-block h-3 w-16 animate-pulse rounded bg-black/[0.04]" />
+                    <span className="inline-block h-4 w-full animate-pulse rounded bg-black/[0.06]" />
+                  </div>
+                </motion.div>
+              ) : (
+                <div className="space-y-2 text-sm text-primary">
+                  <div className="flex items-center gap-2">
+                    <span className="text-tertiary">难度：</span>
+                    <span className="font-medium">
+                      {estimatedLevel === 'novice' && '入门'}
+                      {estimatedLevel === 'beginner' && '初级'}
+                      {estimatedLevel === 'intermediate' && '中级'}
+                      {estimatedLevel === 'advanced' && '高级'}
+                    </span>
+                  </div>
+                  {backgroundSummary && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-tertiary">背景知识</p>
+                      <p className="text-[15px] leading-relaxed">{backgroundSummary}</p>
+                    </div>
+                  )}
+                  {skipBasics && skipBasics.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-tertiary">已掌握知识</p>
+                      <p className="text-[15px] leading-relaxed">{skipBasics.join('、')}</p>
+                    </div>
+                  )}
                 </div>
-                {difficultySummary && (
-                  <div className="space-y-1">
-                    <p className="text-xs text-tertiary">个人情况</p>
-                    <p className="text-[15px] leading-relaxed">{difficultySummary}</p>
-                  </div>
-                )}
-                {backgroundSummary && (
-                  <div className="space-y-1">
-                    <p className="text-xs text-tertiary">背景知识</p>
-                    <p className="text-[15px] leading-relaxed">{backgroundSummary}</p>
-                  </div>
-                )}
-                {skipBasics && skipBasics.length > 0 && (
-                  <div className="space-y-1">
-                    <p className="text-xs text-tertiary">已掌握知识</p>
-                    <p className="text-[15px] leading-relaxed">{skipBasics.join('、')}</p>
-                  </div>
-                )}
-                {whyThisCourseFits && (
-                  <div className="space-y-1 border-t border-black/[0.06] pt-2">
-                    <p className="text-xs text-tertiary">为什么这样安排</p>
-                    <p className="text-[15px] leading-relaxed">{whyThisCourseFits}</p>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
           )}
         </div>

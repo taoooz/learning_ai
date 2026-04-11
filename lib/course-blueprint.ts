@@ -24,7 +24,6 @@ export function deriveCourseTreeViewFromBlueprint(blueprint: CourseBlueprint): C
     courseId: blueprint.courseId,
     topic: blueprint.topic,
     courseGoal: blueprint.courseGoal,
-    difficultySummary: blueprint.learnerPositioning.difficultySummary || '',
     totalNodes: blueprint.nodes.length,
     nodes: blueprint.nodes.map((node) => ({
       index: node.index,
@@ -47,7 +46,6 @@ export function deriveCourseTreeFromStoredCourseBundle(bundle: StoredCourseBundl
     courseId: bundle.treeView.courseId,
     topic: bundle.treeView.topic,
     courseGoal: bundle.treeView.courseGoal,
-    difficultySummary: bundle.treeView.difficultySummary,
     totalNodes: bundle.treeView.totalNodes,
     nodes: bundle.treeView.nodes.map((node) => {
       const lesson = bundle.lessons[node.index];

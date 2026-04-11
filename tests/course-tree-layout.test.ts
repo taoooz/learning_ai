@@ -216,7 +216,7 @@ test('shouldEnterLearningPhase starts once cards are ready even if questions are
 
 test('hasResolvedQuestions treats an existing questions array as resolved even when empty', () => {
   assert.equal(hasResolvedQuestions({ questions: [] }), true);
-  assert.equal(hasResolvedQuestions({ questions: [{ id: 'q-1', type: 'single', question: '问题', options: ['A. 选项'], answer: 'A', explanation: '解释', difficulty: 1, dimension: 'understanding', targetConceptId: 'concept-1' }] }), true);
+  assert.equal(hasResolvedQuestions({ questions: [{ id: 'q-1', type: 'single', question: '问题', options: ['A. 选项'], answer: 'A', difficulty: 1, dimension: 'understanding', targetConceptId: 'concept-1' }] }), true);
   assert.equal(hasResolvedQuestions({}), false);
 });
 
@@ -374,7 +374,6 @@ test('buildChatContext prefers structured v2 payload over legacy chat memory noi
   const context = buildChatContext(
     {
       topic: 'Agent',
-      difficultySummary: '适合初学者',
     },
     [{ id: 'msg-1', role: 'user', content: '工具调用到底什么时候需要？', timestamp: Date.now() }],
     {

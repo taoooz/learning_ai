@@ -32,7 +32,7 @@ ${payload.focusConceptStates.length
 }
 
 export function buildChatContext(
-  course: { topic: string; difficultySummary?: string },
+  course: { topic: string },
   chatHistory: ChatMessage[],
   contextInfo?: ContextInfo,
   conversationSummary?: ConversationSummary,
@@ -93,7 +93,6 @@ ${qc.options?.map((opt, idx) => `${String.fromCharCode(65 + idx)}. ${opt}`).join
 
 ## 当前课程信息
 主题：${course.topic}
-难度：${course.difficultySummary || '未知'}
 
 ## 当前学习场景${currentNodeContent}${questionContextSection}
 

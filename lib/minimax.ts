@@ -175,10 +175,15 @@ export async function callMiniMax(prompt: string, options: MiniMaxCallOptions = 
 }
 
 export function parseJSONResponse<T>(content: string): T {
-  // Pre-processing: Extract from markdown code blocks if present
+  // Pre-processing: Strip thinking tags and markdown code blocks
   let extractedContent = content
     .replace(/^```json\s*/i, '')  // Remove opening ```json
     .replace(/\s*```$/, '');      // Remove closing ```
+
+  // Remove thinking tags (both Chinese and English variants)
+  extractedContent = extractedContent
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .trim();
 
   // Find the first opening brace
   const firstBrace = extractedContent.indexOf('{');

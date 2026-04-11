@@ -1,802 +1,736 @@
 {
-  "blueprint": {
-    "courseId": "system-ai-for-everyone",
-    "topic": "AI 通识实战课",
-    "learnerPositioning": {
-      "estimatedLevel": "beginner",
-      "difficultySummary": "面向对 AI 一知半解，只用过 ChatGPT、豆包类产品的普通用户。",
-      "backgroundSummary": "面向对 AI 一知半解，只用过 ChatGPT、豆包类产品的普通用户。",
-      "skipBasics": [],
-      "whyThisCourseFits": "给只用过 ChatGPT、豆包这类产品的用户，补上真正该懂的 AI 常识、边界和正确使用方法。"
-    },
-    "courseGoal": "面向普通人的 AI 入门课，聚焦大模型认知、提示词使用、Agent 工具调用与幻觉识别，建立实用的 AI 思维框架。",
-    "globalConcepts": [
-      {
-        "id": "concept-大语言模型",
-        "name": "大语言模型",
-        "aliases": []
-      },
-      {
-        "id": "concept-提示词与上下文",
-        "name": "提示词与上下文",
-        "aliases": []
-      },
-      {
-        "id": "concept-工具调用与-agent",
-        "name": "工具调用与 Agent",
-        "aliases": []
-      },
-      {
-        "id": "concept-幻觉与校验",
-        "name": "幻觉与校验",
-        "aliases": []
-      }
-    ],
-    "nodes": [
-      {
-        "index": 0,
-        "title": "大语言模型是什么",
-        "teachingGoal": "用生活化比喻解释大模型的工作原理，帮助用户理解它为何能「听懂」问题并生成回答，明确它的能力边界。掌握这个基础认知，才能用好 AI。",
-        "teachConceptIds": [
-          "concept-大语言模型"
-        ],
-        "prerequisiteConceptIds": [],
-        "assessmentTargetIds": [
-          "concept-大语言模型"
-        ],
-        "bridgeFromPreviousNode": "从这门课最重要的起点开始。",
-        "personalizationHooks": {
-          "mustRemediateConceptIds": [],
-          "canCompressKnownConceptIds": [],
-          "analogyFactIds": []
-        },
-        "status": "available"
-      },
-      {
-        "index": 1,
-        "title": "写好提示词的技巧",
-        "teachingGoal": "从「随便问」到「会提问」，介绍有效提示词的核心要素（角色、任务、格式），通过对比示例让用户直观感受提示词质量对 AI 回答的影响。配套可复用的提示词模板。",
-        "teachConceptIds": [
-          "concept-提示词与上下文"
-        ],
-        "prerequisiteConceptIds": [
-          "concept-大语言模型"
-        ],
-        "assessmentTargetIds": [
-          "concept-提示词与上下文"
-        ],
-        "bridgeFromPreviousNode": "承接上一节，继续深入 提示词与上下文 的理解与应用。",
-        "personalizationHooks": {
-          "mustRemediateConceptIds": [],
-          "canCompressKnownConceptIds": [],
-          "analogyFactIds": []
-        },
-        "status": "locked"
-      },
-      {
-        "index": 2,
-        "title": "让 AI 调用工具做事",
-        "teachingGoal": "理解什么是 Agent 与工具调用：用 AI 帮你查天气、写代码、做分析背后的逻辑。普通人能直接使用的工具调用场景，以及如何判断什么时候该用它。学会让 AI 从「回答问题」升级到「完成任务」。",
-        "teachConceptIds": [
-          "concept-工具调用与-agent"
-        ],
-        "prerequisiteConceptIds": [
-          "concept-提示词与上下文"
-        ],
-        "assessmentTargetIds": [
-          "concept-工具调用与-agent"
-        ],
-        "bridgeFromPreviousNode": "承接上一节，继续深入 工具调用与 Agent 的理解与应用。",
-        "personalizationHooks": {
-          "mustRemediateConceptIds": [
-            "concept-工具调用与-agent"
-          ],
-          "canCompressKnownConceptIds": [],
-          "analogyFactIds": []
-        },
-        "status": "locked"
-      },
-      {
-        "index": 3,
-        "title": "识别 AI 的幻觉与错误",
-        "teachingGoal": "AI 会一本正经地胡说八道。本章重点讲解幻觉产生的原因、常见类型，以及普通人能快速上手的校验方法（如交叉验证、事实核查、逻辑检验），帮助用户建立对 AI 输出的健康怀疑态度。",
-        "teachConceptIds": [
-          "concept-幻觉与校验"
-        ],
-        "prerequisiteConceptIds": [
-          "concept-工具调用与-agent"
-        ],
-        "assessmentTargetIds": [
-          "concept-幻觉与校验"
-        ],
-        "bridgeFromPreviousNode": "承接上一节，继续深入 幻觉与校验 的理解与应用。",
-        "personalizationHooks": {
-          "mustRemediateConceptIds": [
-            "concept-幻觉与校验"
-          ],
-          "canCompressKnownConceptIds": [],
-          "analogyFactIds": []
-        },
-        "status": "locked"
-      },
-      {
-        "index": 4,
-        "title": "普通人该守的 AI 安全边界",
-        "teachingGoal": "从隐私保护到信息辨别，总结普通人使用 AI 时的安全边界与红线意识。包括：什么信息不能丢给 AI、遇到敏感内容如何处理、如何避免过度依赖 AI 做重大决策。",
-        "teachConceptIds": [
-          "concept-幻觉与校验"
-        ],
-        "prerequisiteConceptIds": [
-          "concept-幻觉与校验"
-        ],
-        "assessmentTargetIds": [
-          "concept-幻觉与校验"
-        ],
-        "bridgeFromPreviousNode": "承接上一节，继续深入 幻觉与校验 的理解与应用。",
-        "personalizationHooks": {
-          "mustRemediateConceptIds": [
-            "concept-幻觉与校验"
-          ],
-          "canCompressKnownConceptIds": [],
-          "analogyFactIds": []
-        },
-        "status": "locked"
-      }
-    ],
-    "coverage": {
-      "introducedConceptIds": [
-        "concept-大语言模型",
-        "concept-提示词与上下文",
-        "concept-工具调用与-agent",
-        "concept-幻觉与校验",
-        "concept-幻觉与校验"
-      ],
-      "assessedConceptIds": [
-        "concept-大语言模型",
-        "concept-提示词与上下文",
-        "concept-工具调用与-agent",
-        "concept-幻觉与校验",
-        "concept-幻觉与校验"
-      ],
-      "remediatedConceptIds": [
-        "concept-工具调用与-agent",
-        "concept-幻觉与校验"
-      ]
-    },
-    "generationNotes": {
-      "compressedKnownConceptIds": [],
-      "emphasizedRiskConceptIds": [
-        "concept-工具调用与-agent",
-        "concept-幻觉与校验"
-      ],
-      "selectedAnalogyFactIds": []
-    }
-  },
-  "treeView": {
-    "courseId": "system-ai-for-everyone",
-    "topic": "AI 通识实战课",
-    "courseGoal": "面向普通人的 AI 入门课，聚焦大模型认知、提示词使用、Agent 工具调用与幻觉识别，建立实用的 AI 思维框架。",
-    "difficultySummary": "面向对 AI 一知半解，只用过 ChatGPT、豆包类产品的普通用户。",
-    "totalNodes": 5,
-    "nodes": [
-      {
-        "index": 0,
-        "title": "大语言模型是什么",
-        "status": "available"
-      },
-      {
-        "index": 1,
-        "title": "写好提示词的技巧",
-        "status": "locked"
-      },
-      {
-        "index": 2,
-        "title": "让 AI 调用工具做事",
-        "status": "locked"
-      },
-      {
-        "index": 3,
-        "title": "识别 AI 的幻觉与错误",
-        "status": "locked"
-      },
-      {
-        "index": 4,
-        "title": "普通人该守的 AI 安全边界",
-        "status": "locked"
-      }
-    ]
-  },
+  "courseId": "system-ai-for-everyone",
+  "title": "AI实战进阶课",
   "lessons": {
     "0": {
-      "courseId": "system-ai-for-everyone",
+      "courseId": "ai实战进阶课",
       "nodeIndex": 0,
-      "title": "大语言模型是什么",
-      "teachingGoal": "用生活化比喻解释大模型的工作原理，帮助用户理解它为何能「听懂」问题并生成回答，明确它的能力边界。掌握这个基础认知，才能用好 AI。",
-      "teachConceptIds": [
-        "concept-大语言模型"
-      ],
-      "assessmentTargetIds": [
-        "concept-大语言模型"
-      ],
+      "title": "Transformer架构与注意力机制",
+      "teachingGoal": "深入理解Transformer架构和注意力机制的工作原理",
+      "teachConceptIds": [],
+      "assessmentTargetIds": [],
       "cards": [
         {
           "id": "card-1",
-          "title": "什么是大语言模型",
-          "content": "大语言模型可以理解为一个「读完了整座图书馆」的人。它学习了互联网上几乎所有的文字，从而掌握了语言的规律。\n\n当你向它提问时，它会基于已有知识「匹配」出最可能合适的回答。\n\n**简单说：它是一个通过海量阅读学会说话的超级模仿者。**",
+          "title": "Transformer：一句话核心",
+          "content": "**Transformer的核心思想：用注意力机制替代传统序列模型的循环结构，让模型能够并行处理所有位置，并直接建模任意距离的依赖关系。**\n\n2017年《Attention Is All You Need》提出后，Transformer迅速成为NLP领域的主流架构。其核心优势在于：\n- **并行计算**：摆脱RNN的时序限制，训练效率大幅提升\n- **全局视野**：任意两个位置可直接交互，无视距离\n- **可扩展性**：通过堆叠层数和注意力头数，模型容量灵活扩展\n\n从GPT到BERT，从ChatGPT到现在的各类大模型，Transformer始终是核心架构。掌握它，就掌握了现代AI模型的底层逻辑。",
           "imageUrl": null,
-          "coveredConceptIds": [
-            "concept-大语言模型"
-          ]
+          "visualization": null,
+          "coveredConceptIds": []
         },
         {
           "id": "card-2",
-          "title": "它为什么能「听懂」你的问题",
-          "content": "它能「听懂」，不是因为真正理解，而是因为它见过太多类似的表达。\n\n就像一个经验丰富的客服，遇到过各种提问方式，所以总能猜到你想要什么。\n\n**本质上，它是在做「模式匹配」，而非真正的语义理解。**",
+          "title": "注意力机制：查询-键-值三角",
+          "content": "注意力机制的本质是**\"软性查找\"**：用查询(Query)去匹配键(Key)，找到最相关的值(Value)。\n\n**计算流程**：\n1. **输入**：每个token有Q、K、V三个向量\n2. **相似度计算**：Q·K^T，结果反映token间的相关程度\n3. **归一化**：除以√d_k（向量维度的平方根），防止梯度消失\n4. **加权求和**：用softmax归一化的权重，对V加权求和\n\n**实战理解**：想象你在图书馆找书——Query是你想了解的主题，Key是每本书的目录摘要，Value是书的实际内容。系统帮你找到最相关的书并提取核心信息。\n\n**代码关键**：PyTorch中使用 `torch.nn.functional.scaled_dot_product_attention` 可高效实现这一机制。",
           "imageUrl": null,
-          "coveredConceptIds": [
-            "concept-大语言模型"
-          ]
+          "visualization": null,
+          "coveredConceptIds": []
         },
         {
           "id": "card-3",
-          "title": "它如何生成回答",
-          "content": "生成回答的过程像「接话」：根据你的问题，结合学过的内容，预测下一个最可能出现的词。\n\n就像你看完一部剧，能猜到下一集的发展——它只是在文字上做这件事。\n\n**所以它的回答是「概率生成」，不是逻辑推理。**",
+          "title": "多头注意力：多角度理解",
+          "content": "**单头注意力的局限**：只能捕捉一种类型的关联（如语法关系）。\n\n**多头注意力的解决方案**：将Q、K、V投影到多个子空间，并行计算多组注意力，再拼接输出。\n\n**实战参数**：\n- 注意力头数h：通常8或16\n- 每头维度d_k = d_model / h：保持总计算量相近\n- 最终输出：所有头的拼接，经线性变换\n\n**类比理解**：就像团队开会时，多个专家同时从不同角度分析问题（语法、语义、情绪等），最后综合各方意见得出结论。\n\n**调参建议**：\n- 头数过多可能导致过拟合，尤其小数据集\n- 大模型中增加头数通常能提升效果",
           "imageUrl": null,
-          "coveredConceptIds": [
-            "concept-大语言模型"
-          ]
+          "visualization": null,
+          "coveredConceptIds": []
         },
         {
           "id": "card-4",
-          "title": "大模型的能力边界",
-          "content": "**它擅长的：** 回答常识、写文章、解释概念、翻译、总结文本。\n\n**它的局限：** 可能「一本正经胡说八道」（幻觉），不知道最新信息，不擅长精确计算。\n\n**记住：它是工具，不是权威。** 使用时需要有自己的判断。",
+          "title": "位置编码：让序列有序",
+          "content": "**注意力机制的盲点**：自注意力本身是位置无关的——\"我爱北京\"和\"北京爱我\"在注意力计算中完全等价。\n\n**解决方案：位置编码(Positional Encoding)**\n\n**两种主流方式**：\n\n| 类型 | 公式/方法 | 特点 |\n|------|----------|------|\n| **绝对位置** | sin/cos函数 (Transformer原版) | 每个位置有唯一编码 |\n| **相对位置** | RoPE、ALiBi | 编码位置间的相对距离 |\n\n**原版公式**：\n```\nPE(pos,2i) = sin(pos/10000^(2i/d))\nPE(pos,2i+1) = cos(pos/10000^(2i/d))\n```\n\n**实战选择**：\n- 短文本：两者差异不大\n- 长上下文（>4K tokens）：优先选择RoPE（如LLaMA）或ALiBi\n- 微调任务：相对位置编码通常表现更稳定",
           "imageUrl": null,
-          "visualization": {
-            "type": "keyPoints",
-            "title": "大模型的能力边界速查",
-            "items": [
-              "✅ 擅长：常识问答、写作、翻译、总结",
-              "⚠️ 局限：可能编造信息（幻觉）",
-              "⚠️ 局限：不知道最新发生的事",
-              "⚠️ 局限：不擅长精确数学计算",
-              "💡 建议：用它辅助思考，但保留批判性判断"
-            ]
-          },
-          "coveredConceptIds": [
-            "concept-大语言模型"
-          ]
+          "visualization": null,
+          "coveredConceptIds": []
+        },
+        {
+          "id": "card-5",
+          "title": "编码器：理解输入",
+          "content": "**编码器的任务**：将输入序列转换为富有语义的表示向量。\n\n**单层编码器结构**：\n1. **多头自注意力** → 捕获词间关系\n2. **残差连接 + 层归一化** → 稳定训练\n3. **前馈神经网络(FFN)** → 逐位置非线性变换\n4. **再次残差 + 归一化**\n\n**FFN的实战作用**：\n- 两层线性变换，中间有ReLU/GELU激活\n- 维度扩展（d_model → d_ff → d_model），通常d_ff = 4 × d_model\n- 约2/3的参数来自FFN，不可忽视\n\n**堆叠策略**：\n- BERT-base：12层\n- GPT-3：96层\n- 层数增加 → 抽象能力增强，但训练难度上升\n\n**实战Trick**：\n- 深层网络用Pre-LN（层归一化在注意力前）更稳定\n- 残差连接让梯度直接回传，缓解梯度消失",
+          "imageUrl": null,
+          "visualization": null,
+          "coveredConceptIds": []
+        },
+        {
+          "id": "card-6",
+          "title": "解码器：生成输出",
+          "content": "**解码器的任务**：基于编码器输出和已生成的内容，逐步预测下一个token。\n\n**与编码器的关键区别**：\n\n1. **掩码自注意力(Masked Self-Attention)**\n   - 防止看到未来信息：生成第5个词时，只能用前4个词\n   - 通过将非法连接设为-∞实现\n\n2. **交叉注意力(Cross Attention)**\n   - Query来自解码器，K/V来自编码器\n   - 实现输入与输出的对齐（如翻译任务）\n\n**自回归生成的挑战**：\n- 一次生成一个token，延迟高\n- 解决思路：投机解码、批量并行生成\n\n**实战观察**：\n- 纯解码器模型（如GPT）擅长文本补全\n- 编码器-解码器（如T5）擅长序列到序列任务（翻译、摘要）",
+          "imageUrl": null,
+          "visualization": null,
+          "coveredConceptIds": []
+        },
+        {
+          "id": "card-7",
+          "title": "整体工作流程",
+          "content": "**以\"你好，今天天气如何\"为例**：\n\n```\n输入Embedding + 位置编码\n        ↓\n    编码器栈（N层）\n        ↓\n    语义表示矩阵\n        ↓\n解码器：逐token生成\n    ├── 第1步：生成\"很\"\n    ├── 第2步：基于\"很\"生成\"好\"\n    └── ... 直至结束符\n```\n\n**关键参数经验值**：\n- d_model：512（BERT-base）→ 1280（GPT-4）\n- 层数：12-96不等\n- 注意力头数：12-96\n- 上下文窗口：2K-200K tokens\n\n**计算复杂度**：\n- 注意力：O(n² × d)，n为序列长度\n- 这也是长上下文的瓶颈所在\n\n**实战提示**：\n- 部署时可用INT8量化减少显存\n- 推理时批处理比单条更高效",
+          "imageUrl": null,
+          "visualization": null,
+          "coveredConceptIds": []
+        },
+        {
+          "id": "card-8",
+          "title": "实战调优要点",
+          "content": "**基于Transformer的模型调优建议**：\n\n**1. 注意力层调参**\n- 注意力 dropout（训练时 0.1-0.2）\n- 注意力头数并非越多越好，与维度匹配\n\n**2. 位置编码选择**\n- 短文本（<512）：sin/cos足够\n- 长上下文：必须用RoPE或ALiBi\n\n**3. 训练技巧**\n- 学习率：warm-up + 余弦衰减\n- 梯度裁剪：max_norm=1.0\n- 权重衰减：0.01-0.1（L2正则化）\n\n**4. 推理优化**\n- KV Cache：缓存已计算的K/V，避免重复计算\n- Flash Attention：注意力计算的IO优化，显著提速\n- 投机解码：用小模型指导大模型加速\n\n**避坑指南**：\n- 不要随意修改残差连接位置\n- 层归一化位置影响训练稳定性\n- 长序列优先考虑稀疏注意力变体",
+          "imageUrl": null,
+          "visualization": null,
+          "coveredConceptIds": []
         }
       ],
       "questions": [
         {
           "id": "q-1",
           "type": "single",
-          "question": "大语言模型之所以能听懂你的问题，是因为什么？",
+          "question": "在注意力机制中，Query、Key、Value的作用分别是什么？",
           "options": [
-            "A. 真正的语义理解",
-            "B. 模式匹配",
-            "C. 实时访问互联网",
-            "D. 人为编程的规则"
+            "Query是待查询的内容，Key是索引，Value是权重",
+            "Query是查询向量，Key是匹配向量，Value是内容向量",
+            "Query是输入向量，Key是输出向量，Value是注意力分数",
+            "Query是查询键，Key是值向量，Value是匹配向量"
           ],
-          "answer": "B. 模式匹配",
-          "explanation": "它通过学习大量文本进行模式匹配，而不是真正理解语义。",
-          "concept": "concept-大语言模型",
+          "answer": "B",
+          "explanation": "在注意力机制中，Query（查询）代表当前token想查找什么信息，Key（键）用于与Query匹配计算相似度，Value（值）则是实际要提取的内容信息。通过Q和K计算相关性，再用softmax归一化的权重对V加权求和，得到最终输出。",
+          "concept": null,
           "difficulty": 1,
           "dimension": "understanding",
-          "cardId": "card-1",
-          "targetConceptId": "concept-大语言模型"
+          "cardId": null,
+          "targetConceptId": null
         },
         {
           "id": "q-2",
-          "type": "multiple",
-          "question": "以下哪些是大语言模型常见的局限？（多选）",
-          "options": [
-            "A. 可能产生幻觉信息",
-            "B. 能实时获取最新新闻",
-            "C. 不擅长精确计算",
-            "D. 可以进行复杂的逻辑推理"
-          ],
-          "answer": [
-            "A",
-            "C"
-          ],
-          "explanation": "大模型可能胡说且不擅长精确计算，但它不具备实时获取最新信息或强逻辑推理能力。",
-          "concept": "concept-大语言模型",
-          "difficulty": 1,
-          "dimension": "understanding",
-          "cardId": "card-1",
-          "targetConceptId": "concept-大语言模型"
-        }
-      ]
-    },
-    "1": {
-      "courseId": "system-ai-for-everyone",
-      "nodeIndex": 1,
-      "title": "写好提示词的技巧",
-      "teachingGoal": "从「随便问」到「会提问」，介绍有效提示词的核心要素（角色、任务、格式），通过对比示例让用户直观感受提示词质量对 AI 回答的影响。配套可复用的提示词模板。",
-      "teachConceptIds": [
-        "concept-提示词与上下文"
-      ],
-      "assessmentTargetIds": [
-        "concept-提示词与上下文"
-      ],
-      "cards": [
-        {
-          "id": "card-1",
-          "title": "为什么同样问AI，效果差很多？",
-          "content": "你有没有这种感觉：问AI同样的问题，有时回答很水，有时却很精准？**问题往往不在AI，而在你怎么问。** 就像问路，说「帮我找个地方」和说「我想找适合带孩子、预算500以内的周末好去处」，得到的答案完全不一样。提示词就是你和AI沟通的方式，质量直接决定输出价值。\n\n> 高质量的提问 = 更容易获得有用的回答",
-          "imageUrl": null,
-          "coveredConceptIds": [
-            "concept-提示词与上下文"
-          ]
-        },
-        {
-          "id": "card-2",
-          "title": "好提示词的三个核心要素",
-          "content": "想让AI准确帮到你，记住三个关键要素：\n\n- **角色**：让AI扮演什么身份？比如「你是一位有10年经验的健身教练」\n- **任务**：具体要做什么？比如「帮我制定一份减脂计划」\n- **格式**：希望怎么呈现？比如「用表格列出每天的饮食和运动安排」\n\n三个要素组合越清晰，AI越能给出你真正需要的答案。",
-          "imageUrl": null,
-          "coveredConceptIds": [
-            "concept-提示词与上下文"
-          ]
-        },
-        {
-          "id": "card-3",
-          "title": "对比一下：模糊提问 vs 清晰提问",
-          "content": "看一个具体例子，同样是让AI推荐：\n\n| 提问方式 | 示例 | AI回答质量 |\n| --- | --- | --- |\n| 模糊提问 | 「推荐个旅游地方」 | 泛泛而谈，参考价值低 |\n| 清晰提问 | 「我是上班族，年假5天，预算8000，想去自然风光好的地方，推荐国内目的地并说明理由」 | 针对性强，实用价值高 |\n\n**核心差异**：说清楚你的情况、目标和约束条件，AI才能给出定制化答案。",
-          "imageUrl": null,
-          "coveredConceptIds": [
-            "concept-提示词与上下文"
-          ]
-        },
-        {
-          "id": "card-4",
-          "title": "一个万能提示词模板",
-          "content": "下次问AI前，按这个结构组织你的问题：\n\n> 你是一位[角色]。我需要你帮我[任务]。背景是[你的情况]。请用[格式]输出，重点关注[约束]。\n\n**实操练习**：把「帮我写一封邮件」变成「你是一位商务沟通专家，我需要联系一位延迟付款的客户，金额3万元，请用正式但友好的语气写一封催款邮件，突出合作历史，不要强硬」——这就是一个合格的好提示词。\n\n> 提示词越具体，AI越能帮到你。",
-          "imageUrl": null,
-          "coveredConceptIds": [
-            "concept-提示词与上下文"
-          ]
-        }
-      ],
-      "questions": [
-        {
-          "id": "q-1",
-          "type": "multiple",
-          "question": "下面这个提示词包含了哪些核心要素？请注意，高质量提示词的三个核心要素是角色、任务和格式。\n\n你是一位有10年经验的健身教练，我需要你帮我制定一份3个月的减脂计划。我目前体重75公斤，每周能锻炼3次。请用表格形式列出每周的饮食和运动安排。",
-          "options": [
-            "角色：健身教练",
-            "任务：制定减脂计划",
-            "格式：表格形式",
-            "背景：体重和锻炼频率信息"
-          ],
-          "answer": [
-            "角色：健身教练",
-            "任务：制定减脂计划",
-            "格式：表格形式"
-          ],
-          "explanation": "正确答案来自本节知识点，请回看相关卡片后再试一次。",
-          "concept": "concept-提示词与上下文",
-          "difficulty": 1,
-          "dimension": "understanding",
-          "cardId": "card-1",
-          "targetConceptId": "concept-提示词与上下文"
-        },
-        {
-          "id": "q-2",
-          "type": "sorting",
-          "question": "根据万能提示词模板的逻辑结构，将以下四个部分按照正确顺序排列。",
-          "options": [
-            "请用表格形式输出",
-            "我需要你帮我制定一份节日礼物清单",
-            "你是一位擅长送礼规划的策划师",
-            "朋友40岁生日，爱好摄影，预算500元以内"
-          ],
-          "answer": [
-            "你是一位擅长送礼规划的策划师",
-            "我需要你帮我制定一份节日礼物清单",
-            "朋友40岁生日，爱好摄影，预算500元以内",
-            "请用表格形式输出"
-          ],
-          "explanation": "正确答案来自本节知识点，请回看相关卡片后再试一次。",
-          "concept": "concept-提示词与上下文",
-          "difficulty": 2,
-          "dimension": "application",
-          "cardId": "card-1",
-          "targetConceptId": "concept-提示词与上下文"
-        }
-      ]
-    },
-    "2": {
-      "courseId": "system-ai-for-everyone",
-      "nodeIndex": 2,
-      "title": "让 AI 调用工具做事",
-      "teachingGoal": "理解什么是 Agent 与工具调用：用 AI 帮你查天气、写代码、做分析背后的逻辑。普通人能直接使用的工具调用场景，以及如何判断什么时候该用它。学会让 AI 从「回答问题」升级到「完成任务」。",
-      "teachConceptIds": [
-        "concept-工具调用与-agent"
-      ],
-      "assessmentTargetIds": [
-        "concept-工具调用与-agent"
-      ],
-      "cards": [
-        {
-          "id": "card-1",
-          "title": "什么是 Agent 和工具调用？",
-          "content": "**Agent = AI 的大脑 + 工具的手脚**\n\n普通 AI 只能“想”，而 Agent 能“想”完直接“做”。工具调用就是给 AI 装上插件，让它不仅回答问题，还能帮你查航班、写代码、发邮件——像个听话的助理。\n\n简单说：Agent 是会使用工具的 AI，它能把「帮我查一下」变成「我已经帮你订好了」。",
-          "imageUrl": null,
-          "visualization": {
-            "type": "keyPoints",
-            "title": "核心区别",
-            "items": [
-              "普通 AI：输入 → 思考 → 输出答案",
-              "Agent：输入 → 思考 → 调用工具 → 执行任务 → 输出结果"
-            ]
-          },
-          "coveredConceptIds": [
-            "concept-工具调用与-agent"
-          ]
-        },
-        {
-          "id": "card-2",
-          "title": "工具是怎么被调用的？",
-          "content": "工具调用的过程像点外卖：\n\n1️⃣ 你说“明天杭州天气怎样”\n2️⃣ AI 识别出需要查天气\n3️⃣ 它调用天气 API 获取数据\n4️⃣ 把结果整合成你看得懂的回答\n\n整个过程由 AI 自动完成，你只需要提需求。**它替你想清楚了该用什么工具、怎么用。**",
-          "imageUrl": null,
-          "visualization": {
-            "type": "flowchart",
-            "title": "工具调用流程",
-            "mermaidCode": "flowchart TD\n    A[你提出需求] --> B[AI 识别需要什么工具]\n    B --> C[调用相应 API]\n    C --> D[获取实时信息]\n    D --> E[整合结果反馈给你]"
-          },
-          "coveredConceptIds": [
-            "concept-工具调用与-agent"
-          ]
-        },
-        {
-          "id": "card-3",
-          "title": "普通人能直接用的工具场景",
-          "content": "这些场景你现在就能用：\n\n- 📅 **日程管理**：让 AI 帮你创建日历、设提醒\n- ✈️ **旅行规划**：查航班、算时差、翻译外语句子\n- 📊 **数据分析**：上传表格，让 AI 分析趋势\n- 💻 **代码调试**：粘贴报错信息，让 AI 找出问题\n\n**核心判断**：任务涉及实时信息、具体操作、多步骤执行时，工具调用最有用。",
-          "imageUrl": null,
-          "visualization": {
-            "type": "table",
-            "title": "常见工具调用场景",
-            "columns": [
-              "场景",
-              "能做的事",
-              "适合用它吗"
-            ],
-            "rows": [
-              [
-                "查天气/股价",
-                "实时数据获取",
-                "非常适合"
-              ],
-              [
-                "写文案/故事",
-                "创意生成",
-                "不太需要"
-              ],
-              [
-                "订机票/外卖",
-                "具体操作执行",
-                "非常适合"
-              ],
-              [
-                "解释概念",
-                "知识问答",
-                "不太需要"
-              ]
-            ]
-          },
-          "coveredConceptIds": [
-            "concept-工具调用与-agent"
-          ]
-        },
-        {
-          "id": "card-4",
-          "title": "什么时候该用工具调用？",
-          "content": "**该用工具的场景**：需要实时数据、具体操作、精确计算、多步骤完成的任务。\n\n**不需要工具的场景**：纯聊天、创意写作、概念解释、情感交流。\n\n**一个判断技巧**：如果你的问题里出现“帮我...”“替我...”“给我查...”这类动词，大概率需要工具调用。\n\n**记住**：工具调用是让 AI 从“答题者”升级为“执行者”的关键能力。",
-          "imageUrl": null,
-          "coveredConceptIds": [
-            "concept-工具调用与-agent"
-          ]
-        }
-      ],
-      "questions": [
-        {
-          "id": "q-1",
           "type": "single",
-          "question": "以下哪个场景最能体现工具调用的价值？",
+          "question": "Transformer相比RNN的核心优势不包括以下哪一项？",
           "options": [
-            "A. 让AI讲一个关于猫的幽默故事",
-            "B. 让AI解释什么是机器学习",
-            "C. 让AI帮你查询今晚北京到上海的航班",
-            "D. 让AI写一首赞美秋天的诗"
+            "支持并行计算，训练效率大幅提升",
+            "任意两个位置可直接交互，无视距离",
+            "模型参数更少，占用显存更小",
+            "可通过堆叠层数灵活扩展模型容量"
           ],
           "answer": "C",
-          "explanation": "查询航班需要实时数据和具体操作，体现了AI从“答题者”到“执行者”的升级",
-          "concept": "concept-工具调用与-agent",
+          "explanation": "Transformer的核心优势包括：1）并行计算摆脱时序限制；2）全局视野直接建模任意距离依赖；3）可扩展性强。但Transformer参数量通常很大（如GPT-3有96层、1750亿参数），并不代表参数更少或显存占用更小。",
+          "concept": null,
           "difficulty": 1,
           "dimension": "understanding",
-          "cardId": "card-1",
-          "targetConceptId": "concept-工具调用与-agent"
+          "cardId": null,
+          "targetConceptId": null
         },
         {
-          "id": "q-2",
+          "id": "q-3",
           "type": "multiple",
-          "question": "以下哪些场景需要使用工具调用？（多选）",
+          "question": "多头注意力机制相比单头注意力有哪些优势？",
           "options": [
-            "A. 帮我在日历上添加下周三下午两点的会议提醒",
-            "B. 写一段Python代码实现冒泡排序",
-            "C. 上传Excel表格，让AI分析本月销售额趋势",
-            "D. 安慰情绪低落的朋友"
+            "能够捕捉多种不同类型的关联关系",
+            "每个头在独立的子空间进行计算",
+            "可以将头数设置得非常大而不增加计算量",
+            "最终输出是多个头拼接后经线性变换得到"
           ],
-          "answer": [
-            "A",
-            "C"
-          ],
-          "explanation": "日历添加和数据分析都需要AI调用外部工具执行具体操作，属于工具调用场景",
-          "concept": "concept-工具调用与-agent",
+          "answer": "ABD",
+          "explanation": "多头注意力的优势包括：1）多组并行计算能捕捉不同类型的关联（如语法、语义、情绪等）；2）将Q、K、V投影到多个子空间分别计算；3）最终输出是所有头的拼接再经线性变换。但头数增加会提升计算量，需要根据实际情况权衡，过多头数可能导致过拟合。",
+          "concept": null,
           "difficulty": 1,
           "dimension": "understanding",
-          "cardId": "card-1",
-          "targetConceptId": "concept-工具调用与-agent"
+          "cardId": null,
+          "targetConceptId": null
+        },
+        {
+          "id": "q-4",
+          "type": "single",
+          "question": "关于位置编码的作用，以下说法正确的是？",
+          "options": [
+            "注意力机制本身可以自动感知位置信息",
+            "位置编码是为了解决自注意力的位置无关性问题",
+            "绝对位置编码和相对位置编码没有本质区别",
+            "短文本必须使用相对位置编码"
+          ],
+          "answer": "B",
+          "explanation": "自注意力机制本身是位置无关的，'我爱北京'和'北京爱我'在注意力计算中完全等价。因此需要位置编码来注入序列位置信息。绝对位置编码（如sin/cos函数）为每个位置生成唯一编码；相对位置编码（如RoPE、ALiBi）编码位置间的相对距离。对于短文本（<512 tokens），两者差异不大，不是必须使用相对位置编码。",
+          "concept": null,
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": null,
+          "targetConceptId": null
+        },
+        {
+          "id": "q-5",
+          "type": "multiple",
+          "question": "解码器相比编码器增加了哪些关键机制？",
+          "options": [
+            "掩码自注意力（Masked Self-Attention）防止看到未来信息",
+            "交叉注意力（Cross Attention）实现输入输出的对齐",
+            "更高的层归一化位置以提升训练稳定性",
+            "前馈神经网络（FFN）用于非线性变换"
+          ],
+          "answer": "AB",
+          "explanation": "解码器相比编码器有两个关键区别：1）掩码自注意力通过将非法连接设为-∞，防止生成第N个token时看到第N个之后的词；2）交叉注意力的Query来自解码器，K/V来自编码器，实现输入与输出的对齐（如翻译任务）。层归一化位置和FFN是两者共有的结构，而非解码器独有。",
+          "concept": null,
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": null,
+          "targetConceptId": null
         }
-      ]
+      ],
+      "validatorSummary": null
     },
-    "3": {
-      "courseId": "system-ai-for-everyone",
-      "nodeIndex": 3,
-      "title": "识别 AI 的幻觉与错误",
-      "teachingGoal": "AI 会一本正经地胡说八道。本章重点讲解幻觉产生的原因、常见类型，以及普通人能快速上手的校验方法（如交叉验证、事实核查、逻辑检验），帮助用户建立对 AI 输出的健康怀疑态度。",
-      "teachConceptIds": [
-        "concept-幻觉与校验"
-      ],
-      "assessmentTargetIds": [
-        "concept-幻觉与校验"
-      ],
+    "1": {
+      "courseId": "ai实战进阶课",
+      "nodeIndex": 1,
+      "title": "提示词工程进阶",
+      "teachingGoal": "掌握结构化提示词、角色扮演、Chain of Thought等高级技巧",
+      "teachConceptIds": [],
+      "assessmentTargetIds": [],
       "cards": [
         {
           "id": "card-1",
-          "title": "什么是 AI 幻觉",
-          "content": "AI 幻觉是指大模型生成看似合理、流畅，但实际**包含错误、不存在或无法验证**的内容。它不是程序故障，而是 AI“自信地编造”信息。比如问它某部小说的具体情节，它可能凭空补全一段从未写过的对话。\n\n**关键特征**：语言流畅、逻辑自洽、但经不起核实。\n——这与“不知道答案”完全不同，是更隐蔽的风险。",
+          "title": "提示词工程进阶：让AI精准执行的关键",
+          "content": "**提示词工程进阶的核心**：从\"随意提问\"升级到\"精准控制\"。通过结构化表达、角色设定、思维链引导，让AI输出质量从60分提升到90分。\n\n三个核心能力：\n1. **结构化** - 用清晰框架约束输出格式\n2. **情境化** - 通过角色和背景锁定输出方向\n3. **逻辑化** - 引导AI逐步推理而非直接给答案\n\n掌握这三招，你就能把AI从\"碰运气\"工具变成\"可信赖\"助手。",
           "imageUrl": null,
-          "coveredConceptIds": [
-            "concept-幻觉与校验"
-          ]
+          "visualization": null,
+          "coveredConceptIds": []
         },
         {
           "id": "card-2",
-          "title": "为什么 AI 会产生幻觉",
-          "content": "大语言模型的工作原理是**根据概率预测下一个词**，它不“记忆”事实，而是生成最像正确答案的文本。\n\n两个核心原因：\n1. **训练数据偏差**：某些知识在语料中稀缺或表述模糊，模型只能“猜”。\n2. **缺乏实时核查**：模型无法访问互联网实时验证，只能基于训练时的信息作答。\n\n——这意味着：**越专业、越细分的问题，幻觉风险越高**。",
-          "imageUrl": null,
-          "coveredConceptIds": [
-            "concept-幻觉与校验"
-          ]
-        },
-        {
-          "id": "card-3",
-          "title": "常见幻觉的三种类型",
-          "content": "**事实性幻觉**：断言具体数值、日期、人物，但与真实世界不符。如声称某城市人口为虚假数字。\n\n**逻辑幻觉**：推理过程看似合理，但关键前提错误，导致结论误导。如算错账单、误用法律条款。\n\n**上下文幻觉**：忘记对话前提或用户指令，生成与之前所述矛盾的内容。\n\n**高危场景**：健康建议、法律咨询、金融计算——建议尽量交叉核实。",
+          "title": "结构化提示词：让AI看懂你的需求",
+          "content": "**结构化提示词**是指定义清晰的框架来组织你的指令，减少AI的理解误差。\n\n四要素框架：\n- **任务**：明确要做什么（写文章/分析数据/翻译）\n- **背景**：提供必要的上下文信息\n- **要求**：规定格式、风格、字数等限制\n- **示例**：给一个参考案例（few-shot）\n\n**实战模板**：\n```\n任务：帮我写一封商务邮件\n背景：向客户解释项目延期3天\n要求：正式语气，不超过200字\n示例：[给一个参考邮件]\n```\n\n越结构化，AI输出越符合预期。",
           "imageUrl": null,
           "visualization": {
             "type": "table",
-            "title": "三种幻觉类型对比",
+            "title": "结构化提示词四要素",
             "columns": [
-              "类型",
-              "表现",
-              "高风险场景"
+              "要素",
+              "作用",
+              "示例"
             ],
             "rows": [
               [
-                "事实性幻觉",
-                "捏造具体信息",
-                "历史事件、专业参数"
+                "任务",
+                "明确目标",
+                "帮我写产品文案"
               ],
               [
-                "逻辑幻觉",
-                "推理前提或计算错误",
-                "医疗剂量、法律条款"
+                "背景",
+                "提供情境",
+                "目标用户是Z世代"
               ],
               [
-                "上下文幻觉",
-                "与前文自相矛盾",
-                "长对话、多轮决策"
+                "要求",
+                "规定限制",
+                "风格活泼，不超过100字"
+              ],
+              [
+                "示例",
+                "参考格式",
+                "像[品牌]那样写"
               ]
             ]
           },
-          "coveredConceptIds": [
-            "concept-幻觉与校验"
-          ]
+          "coveredConceptIds": []
+        },
+        {
+          "id": "card-3",
+          "title": "角色扮演：给AI一个精准的身份",
+          "content": "**角色扮演**通过设定AI的\"身份\"，激活其相关的知识图谱和表达模式。\n\n**核心公式**：\n> 角色 + 专业背景 + 输出风格 = 精准角色设定\n\n**有效示例**：\n- ✗ \"你是一个营销专家\"\n- ✓ \"你是一位有10年经验的品牌文案专家，擅长用讲故事的方式说服用户，风格类似李奥·贝纳\"\n\n**常用角色设定维度**：\n1. 职业身份（律师/医生/程序员）\n2. 经验年限（资深/入门级）\n3. 风格特点（严谨/幽默/学术）\n4. 代表人物（像[某大家]一样思考）\n\n**注意**：角色设定要与任务匹配，给多了反而限制发挥。",
+          "imageUrl": null,
+          "visualization": null,
+          "coveredConceptIds": []
         },
         {
           "id": "card-4",
-          "title": "三个快速校验方法",
-          "content": "遇到 AI 输出关键信息时，用这三步核实：\n\n**① 交叉验证**：换一种问法或让 AI 给出信息来源，再通过搜索引擎核实。\n\n**② 逻辑检验**：让 AI 复述推理过程，检查关键前提是否成立、数字是否自洽。\n\n**③ 明确不确定性**：直接问它“你的把握有多大？”——如果它回避或继续自信输出，就要警惕。\n\n**核心原则**：对涉及真金白银、健康安全的信息，始终保持“**先核实再使用**”的习惯。",
+          "title": "Chain of Thought：引导AI逐步思考",
+          "content": "**Chain of Thought（思维链）** 是让AI\"展示推理过程\"而非直接给答案，这大幅提升复杂任务的准确率。\n\n**核心原理**：AI在生成每一步推理时，会自我修正后续输出。\n\n**两种用法**：\n\n1. **Zero-shot CoT**：在问题后加\"Let's think step by step\"\n2. **Few-shot CoT**：先给一个推理示例，再问实际问题\n\n**实战场景**：\n- 数学题：让AI逐步演算，而不是猜答案\n- 逻辑分析：要求列出判断依据\n- 方案策划：先分析现状，再推导策略\n\n**效果对比**：直接提问准确率约60%，加上CoT可提升至85%+。",
           "imageUrl": null,
           "visualization": {
             "type": "flowchart",
-            "title": "AI 输出校验流程",
-            "mermaidCode": "flowchart TD\n    A[获取 AI 回答] --> B{涉及关键决策?}\n    B -- 否 --> E[可直接参考]\n    B -- 是 --> C[交叉验证 + 逻辑检验]\n    C --> D[核实通过?]\n    D -- 否 --> F[保持怀疑，另寻可靠来源]\n    D -- 是 --> E"
+            "title": "Chain of Thought 执行流程",
+            "mermaidCode": "flowchart TD\n    A[提出问题] --> B{复杂度判断}\n    B -->|简单问题| C[直接回答]\n    B -->|复杂问题| D[添加CoT指令]\n    D --> E[步骤1：分析前提]\n    E --> F[步骤2：拆解要素]\n    F --> G[步骤3：逻辑推演]\n    G --> H[步骤4：得出结论]\n    H --> I[输出答案+推理过程]\n    C --> I"
           },
-          "coveredConceptIds": [
-            "concept-幻觉与校验"
-          ]
+          "coveredConceptIds": []
+        },
+        {
+          "id": "card-5",
+          "title": "组合技：多技巧叠加使用",
+          "content": "**高级用法**：将三大技巧组合使用，效果远超单一技巧。\n\n**组合公式**：\n```\n角色设定 + 结构化任务 + CoT引导 = 高质量输出\n```\n\n**实战案例**：\n\n| 场景 | 角色 | 结构 | 思维链 |\n|------|------|------|--------|\n| 市场分析 | 资深分析师 | 框架+要求 | 要求分点推理 |\n| 代码审查 | 架构师 | 任务+示例 | 逐步指出问题 |\n| 商业谈判 | 谈判专家 | 目标+限制 | 列出各方诉求 |\n\n**叠加顺序建议**：\n1. 先定角色（确定身份）\n2. 再结构化（明确任务）\n3. 最后加CoT（优化推理）\n\n不要贪多，3个技巧足够应付90%场景。",
+          "imageUrl": null,
+          "visualization": null,
+          "coveredConceptIds": []
+        },
+        {
+          "id": "card-6",
+          "title": "避坑指南：提示词的常见错误",
+          "content": "**新手常犯的5个错误**：\n\n1. **任务模糊**：\"帮我看看这个\" → AI不知道看什么\n2. **角色缺失**：没给身份，AI用通用模式回答\n3. **限制过多**：把所有细节都塞进提示词，反而限制创意\n4. **忽略迭代**：一次不行就放弃，不调整重新问\n5. **迷信模板**：生搬硬套，不根据场景调整\n\n**正确心态**：\n- 提示词是\"对话\"而非\"命令\"\n- 80%的质量来自20%的关键指令\n- 测试3-5次优化比一次写完美更高效\n\n**迭代优化技巧**：\n1. 先跑通流程\n2. 识别问题点\n3. 针对性加限制\n4. 再次测试",
+          "imageUrl": null,
+          "visualization": null,
+          "coveredConceptIds": []
+        },
+        {
+          "id": "card-7",
+          "title": "实战模板库：拿来即用的提示词",
+          "content": "**4个高频场景模板**：\n\n**1. 文章润色**\n```\n角色：你是一位资深文字编辑\n任务：润色以下段落\n要求：保持原意，提升可读性，标注修改处\n[粘贴原文]\n```\n\n**2. 代码Debug**\n```\n角色：资深Python开发者\n任务：找出bug并修复\n要求：先解释原因，再给出修复代码\n[粘贴代码]\n```\n\n**3. 方案策划**\n```\n角色：战略咨询顾问\n任务：制定[主题]推广方案\n要求：分阶段，附预算估算，SWOT分析\n```\n\n**4. 学习辅导**\n```\n角色：耐心的高校教师\n任务：讲解[概念]\n要求：用生活案例类比，确认理解后再深入\n```\n\n收藏模板，根据实际需求微调使用。",
+          "imageUrl": null,
+          "visualization": null,
+          "coveredConceptIds": []
+        },
+        {
+          "id": "card-8",
+          "title": "本章小结：提示词工程的三层能力",
+          "content": "**提示词工程进阶的终极目标**：从\"能问到会问\"，从\"能用到用好\"。\n\n**三层能力模型**：\n\n| 层级 | 能力 | 表现 |\n|------|------|------|\n| 基础层 | 结构化表达 | 任务清晰、要求明确 |\n| 进阶层 | 角色+情境 | 身份准确、背景完整 |\n| 高阶层 | 思维链引导 | 逻辑严密、推理可信 |\n\n**持续提升建议**：\n1. 建立自己的提示词模板库\n2. 每次交互后记录\"什么有效\"\n3. 关注AI输出质量与提示词的关联\n4. 复杂任务先用CoT拆解步骤\n\n**记住**：好提示词 = 清晰目标 + 必要背景 + 适当约束 + 迭代优化。",
+          "imageUrl": null,
+          "visualization": null,
+          "coveredConceptIds": []
         }
       ],
       "questions": [
         {
           "id": "q-1",
           "type": "single",
-          "question": "以下哪项最能描述AI幻觉的本质？",
+          "question": "结构化提示词的四要素框架中，哪个要素是用来给AI提供参考案例以提升输出准确性的？",
           "options": [
-            "模型故意编造信息以欺骗用户",
-            "模型生成流畅且看似合理，但实际包含错误或不存在的内容",
-            "模型在遇到不确定问题时直接回答“不知道”",
-            "模型无法处理长文本而中断输出"
+            "任务",
+            "背景",
+            "要求",
+            "示例"
           ],
-          "answer": "模型生成流畅且看似合理，但实际包含错误或不存在的内容",
-          "explanation": "AI幻觉的核心特征是生成看似合理却错误的语言。",
-          "concept": "concept-幻觉与校验",
+          "answer": "示例",
+          "explanation": "结构化提示词的四要素是：任务（明确要做什么）、背景（提供必要的上下文信息）、要求（规定格式、风格、字数等限制）、示例（给一个参考案例，即few-shot）。示例要素通过提供参考案例，帮助AI理解期望的输出格式和质量，从而提升准确性。",
+          "concept": null,
           "difficulty": 1,
           "dimension": "understanding",
-          "cardId": "card-1",
-          "targetConceptId": "concept-幻觉与校验"
+          "cardId": null,
+          "targetConceptId": null
         },
         {
           "id": "q-2",
-          "type": "multiple",
-          "question": "针对AI输出的关键信息，推荐采用哪些核实步骤？",
+          "type": "single",
+          "question": "以下哪个角色设定更精准有效？",
           "options": [
-            "仅依赖模型的首次回答",
-            "交叉验证信息源",
-            "直接忽略模型的所有输出",
-            "询问模型对自己答案的确信程度",
-            "检查推理过程中的前提和逻辑"
+            "你是一个营销专家",
+            "你是一位资深文案",
+            "你是一位有10年经验的品牌文案专家，擅长用讲故事的方式说服用户，风格类似李奥·贝纳",
+            "你是一个写作很厉害的人"
           ],
-          "answer": [
-            "交叉验证信息源",
-            "询问模型对自己答案的确信程度",
-            "检查推理过程中的前提和逻辑"
-          ],
-          "explanation": "通过多源核实、置信度询问和逻辑检查可有效降低幻觉风险。",
-          "concept": "concept-幻觉与校验",
+          "answer": "你是一位有10年经验的品牌文案专家，擅长用讲故事的方式说服用户，风格类似李奥·贝纳",
+          "explanation": "有效的角色设定需要包含核心公式的三个维度：角色（职业身份）、专业背景（经验年限）、输出风格（风格特点+代表人物）。选项\"你是一位有10年经验的品牌文案专家，擅长用讲故事的方式说服用户，风格类似李奥·贝纳\"完整包含了这三个维度，而其他选项过于模糊笼统，无法精准激活AI的相关知识图谱。",
+          "concept": null,
           "difficulty": 1,
           "dimension": "understanding",
-          "cardId": "card-1",
-          "targetConceptId": "concept-幻觉与校验"
+          "cardId": null,
+          "targetConceptId": null
+        },
+        {
+          "id": "q-3",
+          "type": "multiple",
+          "question": "关于Chain of Thought（思维链）的用法，哪些说法是正确的？",
+          "options": [
+            "Zero-shot CoT是在问题后加\"Let's think step by step\"",
+            "Few-shot CoT是先给一个推理示例再问实际问题",
+            "Chain of Thought可以大幅提升复杂任务的准确率",
+            "Chain of Thought只适用于数学计算场景"
+          ],
+          "answer": "[\"Zero-shot CoT是在问题后加\\\"Let's think step by step\\\"\", \"Few-shot CoT是先给一个推理示例再问实际问题\", \"Chain of Thought可以大幅提升复杂任务的准确率\"]",
+          "explanation": "Chain of Thought有两种用法：Zero-shot CoT（在问题后加\"Let's think step by step\"）和Few-shot CoT（先给推理示例再问实际问题）。它通过让AI展示推理过程来提升准确率，从60%提升至85%+，适用于数学题、逻辑分析、方案策划等多种场景，不限于数学计算。",
+          "concept": null,
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": null,
+          "targetConceptId": null
+        },
+        {
+          "id": "q-4",
+          "type": "single",
+          "question": "在组合使用三大技巧时，正确的叠加顺序是什么？",
+          "options": [
+            "先结构化，再加角色，最后思维链",
+            "先定角色，再结构化，最后加思维链",
+            "先加思维链，再定角色，再结构化",
+            "三个技巧同时使用，不需要顺序"
+          ],
+          "answer": "先定角色，再结构化，最后加思维链",
+          "explanation": "组合公式为：角色设定 + 结构化任务 + CoT引导。推荐叠加顺序是：1.先定角色确定身份，2.再结构化明确任务，3.最后加CoT优化推理。这个顺序符合从身份定位到任务明确再到推理优化的逻辑，能最大化发挥组合效果。",
+          "concept": null,
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": null,
+          "targetConceptId": null
+        },
+        {
+          "id": "q-5",
+          "type": "multiple",
+          "question": "提示词工程中，新手常犯的错误包括哪些？",
+          "options": [
+            "任务模糊，如\"帮我看看这个\"",
+            "不给AI设定角色，使用通用模式回答",
+            "限制过多，把所有细节都塞进提示词",
+            "一次效果不好就放弃，不调整重新问"
+          ],
+          "answer": "[\"任务模糊，如\\\"帮我看看这个\\\"\", \"不给AI设定角色，使用通用模式回答\", \"限制过多，把所有细节都塞进提示词\", \"一次效果不好就放弃，不调整重新问\"]",
+          "explanation": "避坑指南中明确指出新手常犯的5个错误：1.任务模糊（如\"帮我看看这个\"导致AI不知道看什么）；2.角色缺失（没给身份导致AI用通用模式回答）；3.限制过多（把所有细节都塞进去反而限制创意）；4.忽略迭代（一次不行就放弃）；5.迷信模板（生搬硬套不调整）。以上四个选项都是新手常见的错误。",
+          "concept": null,
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": null,
+          "targetConceptId": null
         }
-      ]
+      ],
+      "validatorSummary": null
     },
-    "4": {
-      "courseId": "system-ai-for-everyone",
-      "nodeIndex": 4,
-      "title": "普通人该守的 AI 安全边界",
-      "teachingGoal": "从隐私保护到信息辨别，总结普通人使用 AI 时的安全边界与红线意识。包括：什么信息不能丢给 AI、遇到敏感内容如何处理、如何避免过度依赖 AI 做重大决策。",
-      "teachConceptIds": [
-        "concept-幻觉与校验"
-      ],
-      "assessmentTargetIds": [
-        "concept-幻觉与校验"
-      ],
+    "2": {
+      "courseId": "ai实战进阶课",
+      "nodeIndex": 2,
+      "title": "Agent与工具调用",
+      "teachingGoal": "理解Agent架构，掌握工具调用和工作流设计方法",
+      "teachConceptIds": [],
+      "assessmentTargetIds": [],
       "cards": [
         {
           "id": "card-1",
-          "title": "为什么AI也有风险",
-          "content": "AI像一位数字助手，能帮你处理信息、回答问题。但它处理的数据会经过云端服务器，这些信息可能被存储、分析，甚至被滥用。**隐私一旦泄露，很难完全追回**。所以在享受AI便利时，必须建立基本的安全边界意识。",
+          "title": "Agent：让AI从「回答者」变成「执行者」",
+          "content": "**一句话理解Agent**：Agent = 大脑（LLM）+ 工具（Tools）+ 记忆（Memory）。它不只是回答问题，而是能自主规划、调用工具、完成任务闭环。\n\n传统AI是被动的问答机器，而Agent是主动的行动主体。你告诉它\"帮我分析竞品并生成报告\"，它会自己拆解任务、搜索信息、调用工具、整合输出——整个过程无需人工干预。\n\n这就是Agent的核心价值：**将AI从「建议者」升级为「执行者」，让人从操作者变成监督者**。",
           "imageUrl": null,
-          "coveredConceptIds": [
-            "concept-幻觉与校验"
-          ]
+          "visualization": null,
+          "coveredConceptIds": []
         },
         {
           "id": "card-2",
-          "title": "这四类信息绝不能给AI",
-          "content": "以下信息一旦泄露风险极高，建议直接拒绝提供：\n\n1. **个人身份信息**：身份证、护照、驾照照片及号码\n2. **财务信息**：银行卡号、密码、验证码、收入证明\n3. **健康信息**：病历、检查报告、处方单\n4. **工作敏感信息**：内部文件、客户名单、商业合同",
+          "title": "Agent的三大核心组件",
+          "content": "每个Agent都离不开这三个组件的协作：\n\n1. **感知（Perception）**：接收用户指令和外部信息，理解任务意图\n2. **规划（Planning）**：将大任务拆解为可执行的子步骤，决定「先做什么、后做什么」\n3. **行动（Action）**：调用工具执行具体操作，获取结果后继续下一步\n\n> **实战提示**：规划能力是Agent的「智商担当」。一个拆解能力强的Agent，才能处理复杂任务。GPT-4、Claude等模型在规划层面已相对成熟，但不同模型仍有差异，选型时需测试其任务拆解能力。",
           "imageUrl": null,
-          "visualization": {
-            "type": "table",
-            "title": "高风险信息分类",
-            "columns": [
-              "禁止类型",
-              "典型内容",
-              "潜在危害"
-            ],
-            "rows": [
-              [
-                "个人身份信息",
-                "身份证、护照照片",
-                "身份盗用"
-              ],
-              [
-                "财务信息",
-                "银行卡号、密码",
-                "资金被盗"
-              ],
-              [
-                "健康信息",
-                "病历、检查报告",
-                "隐私泄露"
-              ],
-              [
-                "工作敏感信息",
-                "内部文件、客户名单",
-                "商业秘密泄露"
-              ]
-            ]
-          },
-          "coveredConceptIds": [
-            "concept-幻觉与校验"
-          ]
+          "visualization": null,
+          "coveredConceptIds": []
         },
         {
           "id": "card-3",
-          "title": "遇到敏感内容怎么办",
-          "content": "当AI主动询问或要求上传以下内容时，应立即拒绝：要求上传身份证照片、让你输入银行卡密码、要求上传医疗报告、要求描述公司内部工作。**如果不确定，直接说「不」**，并考虑向专业人士咨询。",
+          "title": "工具调用原理：模型如何「看见」并使用工具",
+          "content": "模型调用工具的本质是**结构化输出 + 意图识别**的结合：\n\n1. 用户输入 → 模型理解意图\n2. 模型判断是否需要调用工具\n3. 若需要，按预设格式输出工具调用指令\n4. 系统执行工具，返回结果给模型\n5. 模型整合结果，生成最终回答\n\n关键点：**模型本身不知道工具怎么用**——它只是在输出时按照你定义的格式「喊出」要调用的工具名和参数。真正的执行由外部系统完成。\n\n这意味着工具定义的质量直接决定调用效果。",
           "imageUrl": null,
-          "coveredConceptIds": [
-            "concept-幻觉与校验"
-          ]
+          "visualization": null,
+          "coveredConceptIds": []
         },
         {
           "id": "card-4",
-          "title": "AI不能替你做的决定",
-          "content": "涉及法律、医疗、投资的重大决策时，AI只能提供参考。合同条款让律师把关，医疗方案听医生建议，投资决策找理财顾问。**AI是助手，不是决策者**，任何后果仍需自己承担。",
+          "title": "工具定义规范：Function Calling的核心要素",
+          "content": "以OpenAI的Function Calling为例，工具定义包含四个要素：\n\n| 要素 | 作用 | 示例 |\n|------|------|------|\n| name | 工具唯一标识 | \"search_web\" |\n| description | 帮助模型判断何时调用 | \"搜索互联网获取最新信息\" |\n| parameters | 输入参数schema | 类型、是否必填、说明 |\n| returns | 输出说明（可选） | \"搜索结果列表\" |\n\n**实战技巧**：\n- description要足够具体，模型靠它判断是否需要调用\n- 参数说明（description）要清晰，避免模型填错参数值\n- 优先使用标准类型（string/number/boolean），复杂嵌套会增加错误率",
           "imageUrl": null,
-          "visualization": {
-            "type": "keyPoints",
-            "title": "需要谨慎的决策类型",
-            "items": [
-              "法律诉讼与合同签署",
-              "医疗方案与用药选择",
-              "重大投资与资产配置"
-            ]
-          },
-          "coveredConceptIds": [
-            "concept-幻觉与校验"
-          ]
+          "visualization": null,
+          "coveredConceptIds": []
+        },
+        {
+          "id": "card-5",
+          "title": "工作流设计：Agent的编排模式",
+          "content": "多Agent协作时，需要选择合适的编排模式：\n\n**1. 串行模式**：任务链式传递，A→B→C\n- 适用场景：线性流程，如\"收集→分析→报告\"\n\n**2. 并行模式**：多个Agent同时执行，汇总结果\n- 适用场景：多路独立任务，如\"同时搜索多个竞品\"\n\n**3. 条件路由**：根据中间结果决定下一步\n- 适用场景：需要判断的场景，如\"如果价格低则采购，否则通知主管\"\n\n**4. 循环反馈**：结果反馈给上游Agent迭代优化\n- 适用场景：质量要求高的任务，如\"生成→评审→修改\"\n\n> **选择原则**：简单任务用串行，复杂任务按需组合。避免过度设计。",
+          "imageUrl": null,
+          "visualization": null,
+          "coveredConceptIds": []
+        },
+        {
+          "id": "card-6",
+          "title": "实战避坑：Agent落地的关键注意点",
+          "content": "**1. 工具不是越多越好**\n太多工具会干扰模型判断，优先保留高频、核心的工具。\n\n**2. 错误处理必须预设**\n工具调用可能失败（超时、无权限、返回异常），必须设计降级方案：重试、跳过、或返回人工处理。\n\n**3. 状态管理要清晰**\nAgent执行是多次交互的集合，需要用Memory记录上下文，否则会\"失忆\"。\n\n**4. 幻觉问题在工具调用中更危险**\n模型可能编造不存在的工具调用结果，必要时对工具输出做校验。\n\n**5. 成本和延迟控制**\n每次工具调用都有成本和延迟，复杂工作流要评估ROI，避免\"杀鸡用牛刀\"。",
+          "imageUrl": null,
+          "visualization": null,
+          "coveredConceptIds": []
+        },
+        {
+          "id": "card-7",
+          "title": "结构化总结：Agent知识图谱",
+          "content": "**Agent = 感知 + 规划 + 行动 + 记忆**\n\n**工具调用核心**：模型输出调用指令 → 外部系统执行 → 结果返回 → 模型整合\n\n**工具定义关键**：清晰的description + 准确的parameters + 合理的返回值设计\n\n**工作流选择**：\n- 线性流程 → 串行\n- 独立任务 → 并行\n- 条件分支 → 路由\n- 迭代优化 → 循环\n\n**落地三原则**：\n1. 工具精简，聚焦核心\n2. 错误预设，降级方案\n3. 状态管理，避免失忆\n\n**下一步**：选择一个具体场景（如自动客服、数据分析助手），从单Agent单工具开始实践，逐步扩展复杂度。",
+          "imageUrl": null,
+          "visualization": null,
+          "coveredConceptIds": []
         }
       ],
       "questions": [
         {
           "id": "q-1",
           "type": "single",
-          "question": "小李在手机上使用AI助手时，AI突然要求他上传身份证照片来验证身份。下列做法正确的是？",
+          "question": "关于Agent的核心定义，以下说法最准确的是？",
           "options": [
-            "按照要求上传身份证照片完成验证",
-            "直接拒绝上传，并向官方渠道核实这个请求是否正当",
-            "上传一张模糊的照片试试看",
-            "把身份证号码打字发给AI代替照片"
+            "Agent是一种能回答复杂问题的AI模型",
+            "Agent是大脑（LLM）+ 工具（Tools）+ 记忆（Memory）的组合，能自主规划、调用工具、完成任务闭环",
+            "Agent就是指能够进行对话交互的聊天机器人",
+            "Agent是专门用于搜索互联网信息的工具"
           ],
-          "answer": "直接拒绝上传，并向官方渠道核实这个请求是否正当",
-          "explanation": "正确答案来自本节知识点，请回看相关卡片后再试一次。",
-          "concept": "concept-幻觉与校验",
+          "answer": "B",
+          "explanation": "根据学习内容，Agent的定义是：Agent = 大脑（LLM）+ 工具（Tools）+ 记忆（Memory）。它不只是回答问题，而是能自主规划、调用工具、完成任务闭环。核心价值在于将AI从「建议者」升级为「执行者」，让人从操作者变成监督者。",
+          "concept": null,
           "difficulty": 1,
           "dimension": "understanding",
-          "cardId": "card-1",
-          "targetConceptId": "concept-幻觉与校验"
+          "cardId": null,
+          "targetConceptId": null
         },
         {
           "id": "q-2",
           "type": "multiple",
-          "question": "以下哪些信息是【绝不能给AI】的敏感信息？（多选）",
+          "question": "Agent的三大核心组件包括哪些？",
           "options": [
-            "身份证照片及号码",
-            "银行卡密码和验证码",
-            "医院检查报告",
-            "公司内部会议纪要"
+            "感知（Perception）",
+            "规划（Planning）",
+            "行动（Action）",
+            "存储（Storage）"
           ],
-          "answer": [
-            "身份证照片及号码",
-            "银行卡密码和验证码",
-            "医院检查报告",
-            "公司内部会议纪要"
-          ],
-          "explanation": "正确答案来自本节知识点，请回看相关卡片后再试一次。",
-          "concept": "concept-幻觉与校验",
+          "answer": "ABC",
+          "explanation": "每个Agent都离不开三个组件的协作：1. 感知（Perception）：接收用户指令和外部信息，理解任务意图；2. 规划（Planning）：将大任务拆解为可执行的子步骤，决定先后顺序；3. 行动（Action）：调用工具执行具体操作。存储不是三大核心组件之一，记忆（Memory）是独立组件。",
+          "concept": null,
           "difficulty": 1,
           "dimension": "understanding",
-          "cardId": "card-1",
-          "targetConceptId": "concept-幻觉与校验"
+          "cardId": null,
+          "targetConceptId": null
+        },
+        {
+          "id": "q-3",
+          "type": "single",
+          "question": "关于工具调用的本质，以下说法正确的是？",
+          "options": [
+            "模型本身知道工具怎么用，能够直接执行工具",
+            "模型只是在输出时按照定义的格式输出工具调用指令，真正的执行由外部系统完成",
+            "工具调用是通过API直接连接模型和数据库",
+            "模型会自动学习并掌握所有工具的使用方法"
+          ],
+          "answer": "B",
+          "explanation": "根据学习内容，模型本身不知道工具怎么用，它只是在输出时按照你定义的格式「喊出」要调用的工具名和参数。真正的执行由外部系统完成。这是理解工具调用的关键点：模型输出调用指令 → 外部系统执行 → 结果返回 → 模型整合。",
+          "concept": null,
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": null,
+          "targetConceptId": null
+        },
+        {
+          "id": "q-4",
+          "type": "multiple",
+          "question": "在Function Calling中，工具定义包含哪些核心要素？",
+          "options": [
+            "name（工具唯一标识）",
+            "description（帮助模型判断何时调用）",
+            "parameters（输入参数schema）",
+            "code（工具的执行代码）"
+          ],
+          "answer": "ABC",
+          "explanation": "以OpenAI的Function Calling为例，工具定义包含四个要素：name（工具唯一标识）、description（帮助模型判断何时调用）、parameters（输入参数schema）、returns（输出说明，可选）。工具的执行代码不在工具定义中，真正的执行由外部系统完成。",
+          "concept": null,
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": null,
+          "targetConceptId": null
+        },
+        {
+          "id": "q-5",
+          "type": "single",
+          "question": "如果要实现一个「生成报告→评审→修改→再次评审」的迭代优化流程，应该选择哪种工作流编排模式？",
+          "options": [
+            "串行模式",
+            "并行模式",
+            "循环反馈模式",
+            "条件路由模式"
+          ],
+          "answer": "C",
+          "explanation": "根据学习内容，循环反馈模式适用于结果反馈给上游Agent迭代优化的场景，如「生成→评审→修改」。这正是题目中描述的迭代优化流程。串行模式适用于线性流程，并行模式适用于多路独立任务，条件路由适用于需要判断的场景。",
+          "concept": null,
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": null,
+          "targetConceptId": null
+        },
+        {
+          "id": "q-6",
+          "type": "single",
+          "question": "关于Agent落地实践的说法，以下哪个是错误的？",
+          "options": [
+            "工具不是越多越好，太多会干扰模型判断",
+            "工具调用失败时必须预设降级方案",
+            "Agent执行不需要记录上下文，因为它能记住所有历史",
+            "每次工具调用都有成本和延迟，复杂工作流要评估ROI"
+          ],
+          "answer": "C",
+          "explanation": "根据实战避坑提示，状态管理要清晰，Agent执行是多次交互的集合，需要用Memory记录上下文，否则会「失忆」。其他选项都是正确的：工具要精简聚焦核心；错误处理必须预设降级方案（重试、跳过或人工处理）；成本和延迟控制也很重要。",
+          "concept": null,
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": null,
+          "targetConceptId": null
+        },
+        {
+          "id": "q-7",
+          "type": "multiple",
+          "question": "在设计Agent时，以下哪些是工具定义的最佳实践？",
+          "options": [
+            "description要足够具体，帮助模型判断何时调用",
+            "参数说明要清晰，避免模型填错参数值",
+            "优先使用标准类型（string/number/boolean），复杂嵌套会增加错误率",
+            "尽量定义更多工具以覆盖各种场景"
+          ],
+          "answer": "ABC",
+          "explanation": "工具定义的最佳实践包括：description要足够具体，模型靠它判断是否需要调用；参数说明要清晰，避免模型填错参数值；优先使用标准类型，复杂嵌套会增加错误率。但工具不是越多越好，太多会干扰模型判断，应优先保留高频、核心的工具。",
+          "concept": null,
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": null,
+          "targetConceptId": null
         }
-      ]
+      ],
+      "validatorSummary": null
+    },
+    "3": {
+      "courseId": "ai实战进阶课",
+      "nodeIndex": 3,
+      "title": "RAG与知识库实战",
+      "teachingGoal": "掌握RAG架构、向量检索和知识库构建的核心技术",
+      "teachConceptIds": [],
+      "assessmentTargetIds": [],
+      "cards": [
+        {
+          "id": "card-1",
+          "title": "一句话理解 RAG",
+          "content": "**RAG = 让 AI 在回答前先\"查资料\"**。传统大模型像闭卷考试，只能靠训练记忆回答；RAG 则是开卷考试，允许模型实时检索外部知识库，从而大幅降低幻觉、提升回答准确性。\n\n对于需要处理私有知识、实时信息的场景（如企业文档、实时数据），RAG 是目前最主流的解决方案。",
+          "imageUrl": null,
+          "visualization": null,
+          "coveredConceptIds": []
+        },
+        {
+          "id": "card-2",
+          "title": "RAG 完整工作流程",
+          "content": "RAG 系统由三大环节组成：\n\n1. **索引（Indexing）**：将文档切分、嵌入后存入向量数据库\n2. **检索（Retrieval）**：将用户问题转为向量，从库中找回最相关的知识片段\n3. **生成（Generation）**：将检索结果与原问题一起发给大模型，生成最终回答\n\n> 💡 **核心思想**：先把知识\"存\"好，提问时\"找\"出最相关的知识，最后\"用\"这些知识回答。",
+          "imageUrl": null,
+          "visualization": null,
+          "coveredConceptIds": []
+        },
+        {
+          "id": "card-3",
+          "title": "向量检索：让机器读懂\"语义\"",
+          "content": "传统关键词匹配只能找到字面相同的内容，向量检索则能理解语义。\n\n- **Embedding**：将文本转为固定长度的数字向量，语义相近的文本向量也\"靠近\"\n- **相似度计算**：用余弦相似度或点积判断两段文本的关联程度\n- **向量数据库**：Milvus、Pinecone、Chroma 等专门存储和检索向量\n\n| 数据库 | 特点 | 适用场景 |\n|--------|------|----------|\n| Milvus | 开源、亿级向量 | 大规模企业部署 |\n| Pinecone | 托管服务、低延迟 | 快速上线 |\n| Chroma | 轻量、本地运行 | 原型验证 |\n\n**Embedding 模型选择**也很关键，中文场景常用 BGE、text2vec 系列模型。",
+          "imageUrl": null,
+          "visualization": null,
+          "coveredConceptIds": []
+        },
+        {
+          "id": "card-4",
+          "title": "知识库构建：文档处理的艺术",
+          "content": "知识库质量直接决定 RAG 效果。核心步骤：\n\n1. **文档解析**：PDF/Word/HTML 等格式转文本，保留标题、表格结构\n2. **Chunk 策略**：\n   - 固定长度分块（如 500 token）简单但可能切断语义\n   - 按语义段落分块效果更好\n   - Overlap（重叠）技术减少边界丢失\n3. **元数据增强**：保存来源、时间、标题等信息，便于后续溯源\n\n> ⚠️ **常见误区**：Chunk 不是越小越好。太短丢失上下文，太长引入噪声。需要根据实际场景调优。",
+          "imageUrl": null,
+          "visualization": null,
+          "coveredConceptIds": []
+        },
+        {
+          "id": "card-5",
+          "title": "检索优化：召回率的实战技巧",
+          "content": "检索是 RAG 的瓶颈环节，优化思路：\n\n**Query 优化**\n- **Query 改写**：用户问题口语化，可先让模型改写为检索友好的表述\n- **HyDE 方案**：让大模型先根据问题生成一个\"假设答案\"，再检索\n\n**多路召回**\n- 向量检索 + 关键词检索（BM25）并用，取并集\n- 不同 Embedding 模型交叉检索\n\n**重排序（Rerank）**\n- 用 Cross-Encoder 如 BAAI/bge-reranker-base 对初筛结果重新排序\n- 将最相关结果置于前列，提升生成质量\n\n> 💡 **实战经验**：不要一味追求高召回率，Top-K 结果的质量比数量更重要。",
+          "imageUrl": null,
+          "visualization": null,
+          "coveredConceptIds": []
+        },
+        {
+          "id": "card-6",
+          "title": "生成阶段的关键设计",
+          "content": "检索到的知识如何高效利用？\n\n**Prompt 设计模板**：\n```\n你是一个助手。请根据以下参考内容回答用户问题。\n如果参考内容不相关，请说明\"未找到相关信息\"。\n\n参考内容：\n{context}\n\n用户问题：{question}\n```\n\n**上下文压缩**：\n- 检索结果可能很长，直接塞入 prompt 会超出窗口\n- 用 LLM 对上下文做摘要压缩，保留关键信息\n\n**溯源机制**：\n- 让模型回答时标注信息来源\n- 提升用户信任度，也便于人工校验\n\n> ⚠️ **警惕**：如果检索结果噪声太多，模型可能被误导，比不用 RAG 效果更差。",
+          "imageUrl": null,
+          "visualization": null,
+          "coveredConceptIds": []
+        },
+        {
+          "id": "card-7",
+          "title": "实战应用场景",
+          "content": "RAG 在这些场景有成熟落地：\n\n| 场景 | 特点 | 核心挑战 |\n|------|------|----------|\n| 企业内部知识库 | 文档量大、更新频繁 | 权限控制、增量索引 |\n| 客服机器人 | 需实时响应、多轮对话 | 对话状态管理、意图识别 |\n| 文档问答 | 长文档、结构化表格 | 表格理解、跨文档推理 |\n| 代码助手 | 需理解代码结构 | 代码切片、依赖关系 |\n\n**医疗/法律等专业场景**对准确性要求极高，通常需要：\n- 专业知识图谱辅助\n- 多轮置信度校验\n- 人工复核机制",
+          "imageUrl": null,
+          "visualization": null,
+          "coveredConceptIds": []
+        },
+        {
+          "id": "card-8",
+          "title": "RAG 知识库实战总结",
+          "content": "**核心公式**：RAG 效果 = 知识库质量 × 检索精度 × 生成能力\n\n**三大工程要点**：\n1. **知识入库**：文档解析要干净，Chunk 策略要适配内容类型\n2. **检索优化**：多路召回 + 重排序，宁精勿滥\n3. **生成控制**：Prompt 引导 + 溯源 + 置信度检查\n\n**进阶方向**：\n- GraphRAG：引入知识图谱增强推理能力\n- Agentic RAG：让模型自主决定检索策略\n- Streaming RAG：边检索边生成，提升响应体验\n\n> 🚀 **下一步建议**：选择一个具体场景（如本地文档问答），从 0 到 1 搭建一套完整 RAG Pipeline，在实战中深化理解。",
+          "imageUrl": null,
+          "visualization": null,
+          "coveredConceptIds": []
+        }
+      ],
+      "questions": [
+        {
+          "id": "q-1",
+          "type": "single",
+          "question": "以下关于RAG的描述，哪个是正确的？",
+          "options": [
+            "RAG允许模型实时检索外部知识库，类似开卷考试",
+            "RAG将文档切分后直接存入向量数据库，无需嵌入",
+            "RAG主要依靠模型自身的记忆来回答问题",
+            "RAG只能用于处理公开信息，不能处理私有知识"
+          ],
+          "answer": "RAG允许模型实时检索外部知识库，类似开卷考试",
+          "explanation": "RAG（检索增强生成）的核心理念是通过检索外部知识库来增强生成效果。传统大模型像闭卷考试只能依靠训练记忆，而RAG允许模型在回答前先检索外部知识，类似开卷考试，从而大幅降低幻觉、提升回答准确性。RAG特别适合处理私有知识和实时信息。",
+          "concept": null,
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": null,
+          "targetConceptId": null
+        },
+        {
+          "id": "q-2",
+          "type": "single",
+          "question": "在向量数据库选型中，哪个数据库最适合用于原型验证？",
+          "options": [
+            "Milvus",
+            "Pinecone",
+            "Chroma",
+            "MySQL"
+          ],
+          "answer": "Chroma",
+          "explanation": "Chroma是一款轻量级、适合本地运行的向量数据库，主要用于原型验证和快速迭代。Milvus是开源的，适合亿级向量的大规模企业部署；Pinecone是托管服务，强调低延迟，适合快速上线生产环境。MySQL是传统关系型数据库，不适合向量检索。",
+          "concept": null,
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": null,
+          "targetConceptId": null
+        },
+        {
+          "id": "q-3",
+          "type": "multiple",
+          "question": "以下哪些属于检索优化的实战技巧？",
+          "options": [
+            "Query改写：将用户口语化问题改写为检索友好表述",
+            "HyDE方案：先让大模型生成假设答案再检索",
+            "多路召回：向量检索+关键词检索并用",
+            "重排序：用Cross-Encoder对初筛结果重新排序"
+          ],
+          "answer": "Query改写：将用户口语化问题改写为检索友好表述,HyDE方案：先让大模型生成假设答案再检索,多路召回：向量检索+关键词检索并用,重排序：用Cross-Encoder对初筛结果重新排序",
+          "explanation": "检索是RAG的瓶颈环节，优化技巧包括：1) Query改写，将用户问题改写为更适合检索的表述；2) HyDE方案，先生成假设答案再检索；3) 多路召回，结合向量检索和BM25关键词检索；4) 重排序，使用Cross-Encoder如BAAI/bge-reranker-base对结果重新排序，提升Top-K结果质量。",
+          "concept": null,
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": null,
+          "targetConceptId": null
+        },
+        {
+          "id": "q-4",
+          "type": "single",
+          "question": "关于Chunk策略，以下说法正确的是？",
+          "options": [
+            "Chunk越小越好，可以精确匹配",
+            "Chunk越大越好，保留更多上下文",
+            "Chunk策略需要根据实际场景调优，不是越小越好",
+            "固定长度分块效果永远优于语义分块"
+          ],
+          "answer": "Chunk策略需要根据实际场景调优，不是越小越好",
+          "explanation": "Chunk策略是知识库构建的关键环节。常见误区是认为Chunk越小越好，实际上太短会丢失上下文语义关联。需要根据实际场景调优：固定长度分块简单但可能切断语义，按语义段落分块效果更好，同时可以采用Overlap（重叠）技术减少边界信息丢失。",
+          "concept": null,
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": null,
+          "targetConceptId": null
+        },
+        {
+          "id": "q-5",
+          "type": "multiple",
+          "question": "RAG系统的三大核心环节包括哪些？",
+          "options": [
+            "索引（Indexing）：将文档切分、嵌入后存入向量数据库",
+            "检索（Retrieval）：将用户问题转为向量，从库中找回相关片段",
+            "生成（Generation）：将检索结果与原问题发给大模型生成回答",
+            "训练（Training）：在大规模语料上微调模型参数"
+          ],
+          "answer": "索引（Indexing）：将文档切分、嵌入后存入向量数据库,检索（Retrieval）：将用户问题转为向量，从库中找回相关片段,生成（Generation）：将检索结果与原问题发给大模型生成回答",
+          "explanation": "RAG系统由三大核心环节组成：1) 索引环节，将文档解析、切分、嵌入后存入向量数据库；2) 检索环节，将用户问题转为向量，从向量数据库中检索最相关的知识片段；3) 生成环节，将检索结果与原问题组合成Prompt，发送给大模型生成最终回答。训练不是RAG的核心环节，RAG侧重于检索增强而非模型微调。",
+          "concept": null,
+          "difficulty": 1,
+          "dimension": "understanding",
+          "cardId": null,
+          "targetConceptId": null
+        }
+      ],
+      "validatorSummary": null
     }
   }
 }

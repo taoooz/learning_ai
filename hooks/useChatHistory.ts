@@ -7,7 +7,6 @@ import {
   detectAssistantExplanationStyle,
   detectChatLearningPreferences,
 } from '@/lib/memory/aggregator';
-import { generateId } from '@/lib/quiz-utils';
 
 const CHAT_HISTORY_PREFIX = 'chatHistory_';
 const EXPIRATION_DAYS = 7;
@@ -178,7 +177,7 @@ export function useChatHistory(courseId: string) {
     const messages = getMessages();
     const newMessage: ChatMessage = {
       ...message,
-      id: generateId(),
+      id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
       timestamp: Date.now(),
     };
 

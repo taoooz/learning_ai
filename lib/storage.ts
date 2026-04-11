@@ -129,7 +129,6 @@ export function saveStoredData(data: StoredData): void {
           ...existing,
           treeView: {
             ...existing.treeView,
-            difficultySummary: course.difficultySummary,
             totalNodes: course.totalNodes,
             nodes: course.nodes.map((node) => ({
               index: node.index,
@@ -144,8 +143,6 @@ export function saveStoredData(data: StoredData): void {
         topic: course.topic,
         learnerPositioning: {
           estimatedLevel: 'beginner',
-          difficultySummary: course.difficultySummary,
-          whyThisCourseFits: '',
         },
         courseGoal: course.topic,
         globalConcepts: [],

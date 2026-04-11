@@ -13,7 +13,6 @@ export async function POST(request: NextRequest) {
     const { course, messages, contextInfo, conversationSummary } = await request.json() as {
       course: {
         topic: string;
-        difficultySummary?: string;
       };
       messages: ChatMessage[];
       contextInfo?: {

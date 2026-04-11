@@ -123,9 +123,9 @@ export default function CoursePage() {
             <h1 data-course-title className="mb-2 text-[28px] font-bold leading-tight tracking-tight text-primary">
               {course.topic}
             </h1>
-            {(course.courseGoal || course.difficultySummary) && (
+            {course.courseGoal && (
               <p className="text-[15px] leading-relaxed text-secondary">
-                {course.courseGoal || course.difficultySummary}
+                {course.courseGoal}
               </p>
             )}
           </div>

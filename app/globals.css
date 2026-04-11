@@ -16,8 +16,8 @@
 
   /* Text Colors - 清晰灰阶 */
   --color-text-primary: #1F1F1F;    /* 标题/一级文字 - 近黑色 */
-  --color-text-secondary: #8A8A8A;   /* 正文/二级文字 */
-  --color-text-tertiary: #666666;   /* 辅助文字 */
+  --color-text-secondary: #5C5C5C;   /* 正文/二级文字 */
+  --color-text-tertiary: #707070;   /* 辅助文字 */
   --color-text-disabled: #999999;    /* 禁用/次要 */
   --color-text-placeholder: #BDBDBD; /* placeholder */
 

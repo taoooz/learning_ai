@@ -59,8 +59,6 @@ function TocPageContent() {
           topic: result.courseName || outline.topic,
           learnerPositioning: {
             estimatedLevel: outline.learnerPositioning.estimatedLevel,
-            difficultySummary: outline.learnerPositioning.difficultySummary,
-            whyThisCourseFits: outline.learnerPositioning.whyThisCourseFits,
           },
           courseGoal: result.courseDescription || outline.learningGoal,
           globalConcepts: [],
@@ -111,10 +109,10 @@ function TocPageContent() {
             <h3 className="mb-2 text-[20px] font-bold text-primary">{error}</h3>
             <p className="mb-6 text-sm text-secondary">请稍后再试</p>
             <button
-              onClick={() => router.push('/generate')}
+              onClick={() => router.push('/')}
               className="inline-flex min-h-12 items-center justify-center rounded-full bg-accent px-6 py-3 text-[15px] font-semibold text-white shadow-[0_4px_16px_rgba(255,138,0,0.20)] transition-all hover:shadow-[0_6px_20px_rgba(255,138,0,0.25)] active:scale-[0.985]"
             >
-              重新开始
+              返回首页
             </button>
           </div>
         </div>

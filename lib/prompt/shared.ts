@@ -1,12 +1,10 @@
 import type {
-  KnowledgeGap,
   PlanningMemoryPayload,
   TeachingMemoryPayload,
   UserProfile,
 } from '../../types/course';
 
 export interface NodeGenerationContext {
-  difficultySummary?: string;
   previousNodeTitle?: string;
   nextNodeTitle?: string;
   currentNodeGoal?: string;
@@ -15,7 +13,7 @@ export interface NodeGenerationContext {
 }
 
 export interface PersonalizationSignals {
-  mustAddressGaps: KnowledgeGap[];
+  mustAddressGaps: { concept: string; status: string }[];
   reviewOnlyItems: string[];
   analogyOnlyItems: string[];
 }

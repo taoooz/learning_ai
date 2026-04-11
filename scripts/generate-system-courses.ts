@@ -12,10 +12,9 @@ import {
   resolveConceptNameFromBlueprint,
 } from '@/lib/course-blueprint';
 import { callMiniMax, parseJSONResponse } from '@/lib/minimax';
-import { buildNodeLessonPrompt } from '@/lib/prompt';
 import { validateCourseBlueprint } from '@/lib/validation/course-validator';
 import { validateNodeLesson } from '@/lib/validation/node-validator';
-import type { CourseBlueprint, CourseBlueprintPromptPayload, NodeLesson, NodeLessonPromptPayload, StoredCourseBundle } from '@/types/course';
+import type { CourseBlueprint, CourseBlueprintPromptPayload, NodeLesson, StoredCourseBundle } from '@/types/course';
 
 const OUTPUT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'data', 'system-courses', 'generated');
 const BLUEPRINT_ATTEMPTS = [
@@ -33,8 +32,6 @@ const LESSON_REFINE_MAX_TOKENS = 2600;
 const JSON_REPAIR_MAX_TOKENS = 2400;
 
 interface SystemCourseOutline {
-  difficultySummary: string;
-  whyThisCourseFits: string;
   courseGoal: string;
   concepts: string[];
   nodes: Array<{
@@ -96,8 +93,6 @@ function buildSystemCourseOutlinePrompt(entry: (typeof SYSTEM_COURSE_CATALOG)[nu
 
 输出结构：
 {
-  "difficultySummary": "一句中文",
-  "whyThisCourseFits": "一句中文",
   "courseGoal": "一句中文",
   "concepts": ["概念名"],
   "nodes": [
@@ -132,8 +127,6 @@ function buildMinimalSystemCourseOutlinePrompt(entry: (typeof SYSTEM_COURSE_CATA
 
 输出：
 {
-  "difficultySummary": "一句中文",
-  "whyThisCourseFits": "一句中文",
   "courseGoal": "一句中文",
   "concepts": ["概念名"],
   "nodes": [
@@ -231,8 +224,6 @@ function convertOutlineToBlueprint(entry: (typeof SYSTEM_COURSE_CATALOG)[number]
     topic: entry.title,
     learnerPositioning: {
       estimatedLevel: 'beginner',
-      difficultySummary: outline.difficultySummary,
-      whyThisCourseFits: outline.whyThisCourseFits,
     },
     courseGoal: outline.courseGoal,
     globalConcepts: conceptList.map((name) => ({
@@ -292,8 +283,6 @@ function normalizeBlueprintDraft(raw: Partial<CourseBlueprint>, entry: (typeof S
     topic: raw.topic || entry.title,
     learnerPositioning: {
       estimatedLevel: raw.learnerPositioning?.estimatedLevel || 'beginner',
-      difficultySummary: raw.learnerPositioning?.difficultySummary || entry.generation.learnerDescription,
-      whyThisCourseFits: raw.learnerPositioning?.whyThisCourseFits || entry.generation.learnerGoal,
     },
     courseGoal: raw.courseGoal || entry.generation.learnerGoal,
     globalConcepts: Array.isArray(raw.globalConcepts) ? raw.globalConcepts : [],
@@ -354,7 +343,6 @@ function normalizeLessonDraft(raw: Partial<NodeLesson>, blueprint: CourseBluepri
         question: question.question || '',
         options: question.options,
         answer: question.answer || '',
-        explanation: question.explanation || '',
         concept: question.concept,
         difficulty: question.difficulty,
         dimension: question.dimension,
@@ -376,7 +364,7 @@ ${JSON.stringify(lesson, null, 2)}
 ${issues.map((issue) => `- ${issue}`).join('\n')}
 
 修复要求：
-- 保留已写好的高质量解释
+- 保留已写好的高质量内容
 - 逐条修复 issues
 - 输出仍必须符合 NodeLesson 结构
 
@@ -401,19 +389,79 @@ function createCoursePromptPayload(entry: (typeof SYSTEM_COURSE_CATALOG)[number]
   };
 }
 
-function createNodePromptPayload(
-  blueprint: CourseBlueprint,
-  lessonIndex: number,
+function buildNodeLessonPrompt(
+  topic: string,
+  nodeTitle: string,
+  teachingGoal: string,
   entry: (typeof SYSTEM_COURSE_CATALOG)[number],
-): NodeLessonPromptPayload {
-  const node = blueprint.nodes[lessonIndex];
-  return {
-    nodeTitle: node.title,
-    teachingGoal: node.teachingGoal,
-    analogyFacts: entry.generation.analogyFacts,
-    preferredExplanationStyles: entry.generation.preferredExplanationStyles,
-    recentRelevantQuestions: entry.generation.recentRelevantQuestions,
-  };
+): string {
+  const sections: string[] = [];
+
+  if (entry.generation.analogyFacts.length) {
+    sections.push(`## 可用类比\n${entry.generation.analogyFacts.map((item) => `- ${item.text}`).join('\n')}`);
+  }
+
+  if (entry.generation.preferredExplanationStyles.length) {
+    sections.push(`## 偏好解释方式\n${entry.generation.preferredExplanationStyles.map((item) => `- ${item}`).join('\n')}`);
+  }
+
+  if (entry.generation.recentRelevantQuestions.length) {
+    sections.push(`## 最近相关提问\n${entry.generation.recentRelevantQuestions.map((item) => `- ${item}`).join('\n')}`);
+  }
+
+  const contextSection = sections.length ? `\n${sections.join('\n\n')}\n` : '';
+
+  return `你是 AI 导师，请生成一节 NodeLesson。
+
+主题：${topic}
+当前节点：${nodeTitle}
+节点目标：${teachingGoal}
+${contextSection}
+## 内容要求
+- 根据提供的课程、用户信息生成该节点课程内容
+- 优先判断该节课需要的知识及问题卡片数量。知识建议在 5~8 条，问题 2~5 个。
+- 知识卡片内容应循序渐进，尽量避免重复内容
+- 每张知识卡片包含 title、content（Markdown，建议 150-400字）
+- 知识卡片可根据需要添加 visualization 字段来辅助理解
+- 问题必须基于前面知识卡片中的内容来出，确保与知识强相关
+- 问题卡片间尽量避免重复内容
+- 问题类型：single（单选）、multiple（多选）、sorting（排序）
+
+## 可视化类型说明
+- flowchart: 流程图，使用 Mermaid 语法，如 "graph TD; A-->B"
+- timeline: 时间线，包含 events 数组，每项有 time/title/description
+- comparison: 对比表，包含 columns（列标题）和 rows（行数据）
+
+## 输出 JSON
+{
+  "courseId": "课程 ID",
+  "nodeIndex": 0,
+  "title": "${nodeTitle}",
+  "teachingGoal": "${teachingGoal}",
+  "cards": [{
+    "id": "card-1",
+    "title": "标题",
+    "content": "Markdown 内容",
+    "visualization": {
+      "type": "flowchart|timeline|comparison",
+      "title": "可选标题",
+      "mermaidCode": "Mermaid 语法（flowchart 类型时）",
+      "events": [{"time": "时间", "title": "事件", "description": "描述"}],
+      "columns": ["列1", "列2"],
+      "rows": [["行1列1", "行1列2"], ["行2列1", "行2列2"]]
+    }
+  }],
+  "questions": [{
+    "id": "q-1",
+    "type": "single|multiple|sorting",
+    "question": "题干",
+    "options": ["A", "B"],
+    "answer": "答案",
+    "explanation": "解析"
+  }]
+}
+
+只返回 JSON。`;
 }
 
 async function generateBlueprint(entry: (typeof SYSTEM_COURSE_CATALOG)[number]): Promise<CourseBlueprint> {
@@ -466,7 +514,7 @@ async function generateLesson(
   const assessmentTargetIds = getNodeAssessmentTargetIds(node);
   const personalizationHooks = getNodePersonalizationHooks(node);
   console.log(`[generate:system-courses] lesson start ${entry.courseId}#${nodeIndex} ${node.title}`);
-  const prompt = buildNodeLessonPrompt(entry.title, createNodePromptPayload(blueprint, nodeIndex, entry));
+  const prompt = buildNodeLessonPrompt(entry.title, node.title, node.teachingGoal, entry);
   const draftContent = await callWithAttempts(prompt, LESSON_ATTEMPTS, `${entry.courseId} node-${nodeIndex}`);
   const draftLesson = normalizeLessonDraft(await parseOrRepairJson<Partial<NodeLesson>>(draftContent, 'NodeLesson'), blueprint, nodeIndex);
   const patchedLesson: NodeLesson = draftLesson;
