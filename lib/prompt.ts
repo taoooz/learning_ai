@@ -90,7 +90,8 @@ export function selectPersonalizationSignals(topic: string, userMemory?: UserMem
     .map((item) => `${item.concept}（${item.source === 'assessment' ? '高置信度测验信号' : '复习提醒'}）`);
 
   const analogyCandidates = [
-    ...(userMemory.profile.insights?.knowledgeBackground || []),
+    ...(userMemory.profile.insights?.workSummary || []),
+    ...(userMemory.profile.insights?.educationSummary || []),
     ...(userMemory.profile.insights?.analogyExperiences || []),
   ];
 
@@ -329,15 +330,16 @@ export function buildCourseTreePrompt(
     : buildMemorySection(topic, userMemory);
 
   if (userProfile?.insights) {
-    const { knowledgeBackground, analogyExperiences } = userProfile.insights;
+    const { workSummary, educationSummary, analogyExperiences } = userProfile.insights;
+    const backgroundItems = [...(workSummary || []), ...(educationSummary || [])];
     insightSection = `
 ## 用户洞察
 
 知识背景：
-${knowledgeBackground?.length ? knowledgeBackground.map(k => `- ${k}`).join('\n') : '暂无相关背景'}
+${backgroundItems.length ? backgroundItems.map((k: string) => `- ${k}`).join('\n') : '暂无相关背景'}
 
 类比经历：
-${analogyExperiences?.length ? analogyExperiences.map(a => `- ${a}`).join('\n') : '暂无相关经历'}
+${analogyExperiences?.length ? analogyExperiences.map((a: string) => `- ${a}`).join('\n') : '暂无相关经历'}
 `;
   }
 
