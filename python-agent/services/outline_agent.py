@@ -28,7 +28,7 @@ def stream_outline_with_tools(
     topic: str,
     user_profile: dict,
     user_memory: dict,
-    max_tokens: int = 2000,
+    max_tokens: int = 4000,
 ) -> Generator[str, None, None]:
     """Agent 版 outline 生成（带搜索能力）
 
@@ -59,7 +59,7 @@ def stream_outline_with_tools(
             tool_functions=TOOL_FUNCTIONS,
             max_tokens=max_tokens,
             reasoning_split=True,
-            max_iterations=3,
+            max_iterations=5,
         ):
             agent_events.append(event)
 
@@ -80,7 +80,9 @@ def stream_outline_with_tools(
                 pass
 
             elif event["type"] == "content_delta":
-                yield f"data: {json.dumps({'type': 'content_delta', 'content': event['content']}, ensure_ascii=False)}\n\n"
+                content = event["content"]
+                if content:
+                    yield f"data: {json.dumps({'type': 'content_delta', 'content': content}, ensure_ascii=False)}\n\n"
 
             elif event["type"] == "done":
                 pass
@@ -187,7 +189,7 @@ def stream_answer_with_tools(
             tool_functions=TOOL_FUNCTIONS,
             max_tokens=max_tokens,
             reasoning_split=True,
-            max_iterations=3,
+            max_iterations=5,
         ):
             agent_events.append(event)
 
@@ -205,7 +207,9 @@ def stream_answer_with_tools(
                     yield f"data: {json.dumps({'type': 'thinking', 'message': f'正在读取：{url}'}, ensure_ascii=False)}\n\n"
 
             elif event["type"] == "content_delta":
-                yield f"data: {json.dumps({'type': 'content_delta', 'content': event['content']}, ensure_ascii=False)}\n\n"
+                content = event["content"]
+                if content:
+                    yield f"data: {json.dumps({'type': 'content_delta', 'content': content}, ensure_ascii=False)}\n\n"
 
     except Exception as e:
         print(f"[Outline Answer Agent] Error: {e}")

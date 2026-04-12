@@ -3,9 +3,51 @@ MiniMax Agent 客户端 — 支持 function calling 的 Agent 循环
 基于 MiniMaxClient 扩展，增加 tools 调用能力
 """
 import json
+import re
 import httpx
 from typing import Iterator, Optional, Callable, Any
 from lib.minimax import MiniMaxClient
+
+
+def _clean_tool_xml(content: str) -> str:
+    """清理 content 中的 XML 格式工具调用标签
+
+    MiniMax 模型有时会在 content 中输出工具调用的 XML，
+    格式可能不完整或有错误（缺少闭合引号、缺少闭合标签等）。
+    """
+    # 1. 先清理有完整闭合标签的 <minimax:tool_call>...</minimax:tool_call>
+    content = re.sub(r'<minimax:tool_call>.*?</minimax:tool_call>', '', content, flags=re.DOTALL)
+    # 2. 清理没有闭合标签的 <minimax:tool_call>（从标签到内容末尾）
+    content = re.sub(r'<minimax:tool_call>.*', '', content, flags=re.DOTALL)
+    # 3. 清理有完整闭合标签的 <invoke name="...">...</invoke>
+    content = re.sub(r'<invoke\s+name=["\'][^"\']*["\']\s*>.*?</invoke\s*>', '', content, flags=re.DOTALL)
+    # 4. 清理格式错误的 <invoke>（name 缺少闭合引号）
+    content = re.sub(r'<invoke\s+name="[^"]*>.*?</invoke\s*>', '', content, flags=re.DOTALL)
+    content = re.sub(r"<invoke\s+name='[^']*>.*?</invoke\s*>", '', content, flags=re.DOTALL)
+    # 5. 清理没有闭合标签的 <invoke>（从标签到内容末尾）
+    content = re.sub(r'<invoke\s+[^>]*>.*', '', content, flags=re.DOTALL)
+    return content.strip()
+
+
+def _extract_tool_calls_from_content(content: str) -> list[dict] | None:
+    """从 content 中解析模型错误输出的 <invoke> 格式工具调用
+
+    MiniMax 有时会在 content 中输出 XML 格式的工具调用而不是通过 tool_calls 返回，
+    例如: <minimax:tool_call><invoke name="web_search"><parameter name="query">...</parameter></invoke></minimax:tool_call>
+    """
+    tool_calls = []
+
+    # 匹配所有 invoke 块
+    for m in re.finditer(r'<invoke\s+name=["\'](\w+)["\']\s*>(.*?)</invoke\s*>', content, re.DOTALL):
+        tool_name = m.group(1)
+        body = m.group(2)
+        # 提取 <parameter name="xxx">yyy</parameter> 中的参数
+        params = {}
+        for pm in re.finditer(r'<parameter\s+name=["\'](\w+)["\']>(.*?)</parameter>', body, re.DOTALL):
+            params[pm.group(1)] = pm.group(2)
+        tool_calls.append({"name": tool_name, "arguments": params})
+
+    return tool_calls if tool_calls else None
 
 
 class AgentClient(MiniMaxClient):
@@ -48,10 +90,10 @@ class AgentClient(MiniMaxClient):
             reasoning = self._extract_reasoning(message, reasoning_split)
             tool_calls = message.get("tool_calls", [])
 
-            # 将 assistant 完整响应加入历史
+            # 先将 assistant 完整响应加入历史
             messages.append(self._build_assistant_message(message, reasoning_split))
 
-            # 执行工具并追加结果
+            # 再执行工具并追加结果
             for tc in tool_calls:
                 func_name = tc["function"]["name"]
                 func_args = json.loads(tc["function"]["arguments"])
@@ -61,9 +103,9 @@ class AgentClient(MiniMaxClient):
                 if func_name in tool_functions:
                     try:
                         result = str(tool_functions[func_name](**func_args))
-                        # 截断过长结果
-                        if len(result) > 3000:
-                            result = result[:3000] + "\n...(结果已截断)"
+                        # 截断过长结果，减少 token 消耗
+                        if len(result) > 1500:
+                            result = result[:1500] + "\n...(结果已截断)"
                     except Exception as e:
                         result = f"工具执行失败: {e}"
                 else:
@@ -112,11 +154,53 @@ class AgentClient(MiniMaxClient):
                 yield {"type": "thinking", "message": reasoning}
 
             if not self._has_tool_calls(response):
-                # 无工具调用，yield 内容
+                # 检查 content 中是否包含 <invoke> 格式的工具调用
                 content = message.get("content", "")
-                # 去除可能的 thinking 标签（当 reasoning_split=False 时）
-                import re
-                content = re.sub(r'Thinking.*?Thinking', '', content, flags=re.DOTALL).strip()
+
+                # 尝试从 content 中解析 <invoke> 格式的工具调用
+                extracted_calls = _extract_tool_calls_from_content(content)
+
+                if extracted_calls:
+                    # 从 content 中去除 invoke XML
+                    clean_content = _clean_tool_xml(content)
+
+                    # 将 assistant message 加入历史
+                    messages.append({"role": "assistant", "content": clean_content})
+
+                    # 执行工具调用并追加 tool results
+                    for call_info in extracted_calls:
+                        func_name = call_info["name"]
+                        func_args = call_info["arguments"]
+                        yield {"type": "tool_call", "tool": func_name, "args": func_args}
+
+                        result = ""
+                        if func_name in tool_functions:
+                            try:
+                                result = str(tool_functions[func_name](**func_args))
+                                if len(result) > 1500:
+                                    result = result[:1500] + "\n...(结果已截断)"
+                            except Exception as e:
+                                result = f"工具执行失败: {e}"
+                        else:
+                            result = f"未知工具: {func_name}"
+
+                        yield {"type": "tool_result", "tool": func_name, "result": result}
+
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": f"extracted_{func_name}",
+                            "content": result,
+                        })
+
+                    iteration += 1
+                    if iteration < max_iterations:
+                        continue
+                    else:
+                        yield {"type": "done"}
+                        return
+
+                # 无工具调用，yield 最终内容
+                content = _clean_tool_xml(content)
                 if content:
                     yield {"type": "content_delta", "content": content}
                 yield {"type": "done"}
@@ -124,6 +208,11 @@ class AgentClient(MiniMaxClient):
 
             # 处理 tool_calls
             tool_calls = message.get("tool_calls", [])
+
+            # 先将 assistant message 加入历史（必须在 tool results 之前）
+            messages.append(self._build_assistant_message(message, reasoning_split))
+
+            # 再追加所有 tool results
             for tc in tool_calls:
                 func_name = tc["function"]["name"]
                 func_args = json.loads(tc["function"]["arguments"])
@@ -133,8 +222,8 @@ class AgentClient(MiniMaxClient):
                 if func_name in tool_functions:
                     try:
                         result = str(tool_functions[func_name](**func_args))
-                        if len(result) > 3000:
-                            result = result[:3000] + "\n...(结果已截断)"
+                        if len(result) > 1500:
+                            result = result[:1500] + "\n...(结果已截断)"
                     except Exception as e:
                         result = f"工具执行失败: {e}"
                 else:
@@ -149,9 +238,6 @@ class AgentClient(MiniMaxClient):
                     "content": result,
                 })
 
-            # 将 assistant 完整响应加入历史
-            messages.append(self._build_assistant_message(message, reasoning_split))
-
             iteration += 1
 
         # 超过最大迭代次数，获取最终响应
@@ -164,8 +250,8 @@ class AgentClient(MiniMaxClient):
         if final_reasoning:
             yield {"type": "thinking", "message": final_reasoning}
 
-        # 提取最终内容
-        content = final_message.get("content", "")
+        # 提取最终内容（清理可能的 XML 格式工具调用）
+        content = _clean_tool_xml(final_message.get("content", ""))
         if content:
             yield {"type": "content_delta", "content": content}
 
@@ -198,8 +284,12 @@ class AgentClient(MiniMaxClient):
                     f"{self.base_url}/chat/completions",
                     headers=self._get_headers(),
                     json=payload,
-                    timeout=60.0,
+                    timeout=90.0,
                 )
+                if response.status_code >= 400:
+                    import sys
+                    sys.stderr.write(f"[ERROR] MiniMax API error: status={response.status_code}, body={response.text[:300]}\n")
+                    sys.stderr.flush()
                 response.raise_for_status()
                 return response.json()
 

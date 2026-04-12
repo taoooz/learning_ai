@@ -1,50 +1,40 @@
 """
-搜索工具 — 使用 Jina Reader API（免费无 Key）
+搜索工具 — ddgs (DuckDuckGo 搜索库) + Jina Reader
 提供 web_search 和 read_url 两个工具函数
 """
-import requests
+import httpx
+from ddgs import DDGS
 
 JINA_READER = "https://r.jina.ai/"
-JINA_SEARCH = "https://s.jina.ai/"
 
 
 def web_search(query: str, max_results: int = 5) -> str:
-    """搜索互联网，返回 Markdown 格式结果摘要
-
-    Args:
-        query: 搜索关键词
-        max_results: 最大结果数（预留，当前由 API 控制）
-    """
+    """搜索互联网，返回相关结果摘要（DuckDuckGo via ddgs 库）"""
     try:
-        response = requests.get(
-            f"{JINA_SEARCH}{query}",
-            headers={
-                "Accept": "text/markdown",
-                "X-Return-Format": "markdown",
-            },
-            timeout=15,
-        )
-        if response.status_code == 200:
-            text = response.text.strip()
-            # 截取前 3000 字符避免 prompt 过长
-            if len(text) > 3000:
-                text = text[:3000] + "\n...(搜索结果已截断)"
-            return text
-        return f"搜索失败：HTTP {response.status_code}"
-    except requests.exceptions.Timeout:
-        return "搜索超时，请稍后重试"
+        results = []
+        with DDGS() as ddgs:
+            for r in ddgs.text(query, max_results=max_results):
+                title = r.get("title", "")
+                href = r.get("href", "")
+                body = r.get("body", "")
+                if title and body:
+                    results.append(f"- {title}\n  {body[:200]}\n  来源: {href}")
+
+        if results:
+            result_text = "\n\n".join(results)
+            if len(result_text) > 3000:
+                result_text = result_text[:3000] + "\n...(搜索结果已截断)"
+            return result_text
+
+        return "未找到相关结果"
     except Exception as e:
         return f"搜索出错：{e}"
 
 
 def read_url(url: str) -> str:
-    """读取指定网页内容，返回 Markdown 格式
-
-    Args:
-        url: 网页 URL
-    """
+    """读取指定网页内容，返回 Markdown 格式（Jina Reader API）"""
     try:
-        response = requests.get(
+        response = httpx.get(
             f"{JINA_READER}{url}",
             headers={
                 "Accept": "text/markdown",
@@ -52,13 +42,12 @@ def read_url(url: str) -> str:
             },
             timeout=15,
         )
-        if response.status_code == 200:
-            text = response.text.strip()
-            if len(text) > 4000:
-                text = text[:4000] + "\n...(网页内容已截断)"
-            return text
-        return f"读取失败：HTTP {response.status_code}"
-    except requests.exceptions.Timeout:
+        response.raise_for_status()
+        text = response.text.strip()
+        if len(text) > 4000:
+            text = text[:4000] + "\n...(网页内容已截断)"
+        return text
+    except httpx.TimeoutException:
         return "读取超时，请稍后重试"
     except Exception as e:
         return f"读取出错：{e}"

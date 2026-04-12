@@ -152,6 +152,12 @@ def build_initial_prompt(topic: str, user_profile: dict, user_memory: dict) -> s
     return f"""<critical_rules>
 当前日期：{today}
 
+## 工具使用要求
+- 你可以使用 web_search 工具搜索互联网信息
+- 你可以使用 read_url 工具读取指定网页的完整内容
+- 需要搜索时，**必须**调用工具（miniMax API 会自动处理），不要在回复内容中输出工具调用的 XML 格式
+- 不要说"让我搜索一下"之类的话，直接调用工具即可
+
 ## 重要提示
 - 第一步的分析结论要在第二步的 direction、keypoint、object 中体现，不要单独输出分析过程
 - 严格按照输出格式返回内容，不要输出其他格式、不要添加额外说明
