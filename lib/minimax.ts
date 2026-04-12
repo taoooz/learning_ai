@@ -3,57 +3,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { buildSearchResultsSection, buildPageFetchSection } from './prompt';
-
 export interface MiniMaxCallOptions {
   maxTokens?: number;
   signal?: AbortSignal;
-}
-
-export interface SearchNeededResponse {
-  needsSearch: true;
-  searchQueries: string[];
-}
-
-export interface PageFetchNeededResponse {
-  needsPageFetch: true;
-  urls: string[];
-}
-
-export function isSearchNeededResponse(content: string): boolean {
-  try {
-    const parsed = parseJSONResponse<{ needsSearch?: boolean }>(content);
-    return parsed.needsSearch === true;
-  } catch {
-    return false;
-  }
-}
-
-export function isPageFetchNeededResponse(content: string): boolean {
-  try {
-    const parsed = parseJSONResponse<{ needsPageFetch?: boolean }>(content);
-    return parsed.needsPageFetch === true;
-  } catch {
-    return false;
-  }
-}
-
-export function extractSearchQueries(content: string): string[] {
-  try {
-    const parsed = parseJSONResponse<SearchNeededResponse>(content);
-    return parsed.searchQueries || [];
-  } catch {
-    return [];
-  }
-}
-
-export function extractPageUrls(content: string): string[] {
-  try {
-    const parsed = parseJSONResponse<PageFetchNeededResponse>(content);
-    return parsed.urls || [];
-  } catch {
-    return [];
-  }
 }
 
 let cachedApiKeyFromFile: string | null | undefined;
@@ -82,45 +34,6 @@ function readApiKeyFromEnvFile(): string | null {
 
 function getMiniMaxApiKey(): string | null {
   return process.env.MINIMAX_API_KEY || readApiKeyFromEnvFile();
-}
-
-export async function callMiniMaxChatStream(
-  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
-  maxTokens: number = 1500
-): Promise<Response> {
-  const apiKey = getMiniMaxApiKey();
-
-  if (!apiKey) {
-    throw new Error('MINIMAX_API_KEY is not set');
-  }
-
-  const response = await fetch('https://api.minimaxi.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'MiniMax-M2.7',
-      messages,
-      stream: true,
-      max_tokens: maxTokens,
-      reasoning_split: true,  // 将思考过程分离到 delta.reasoning_details
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`MiniMax API error: ${response.status}`);
-  }
-
-  // 返回 SSE 流
-  return new Response(response.body, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-    },
-  });
 }
 
 export async function callMiniMax(prompt: string, options: MiniMaxCallOptions = {}): Promise<string> {
@@ -166,24 +79,14 @@ export async function callMiniMax(prompt: string, options: MiniMaxCallOptions = 
     throw new Error('No response from MiniMax');
   }
 
-  const content = data.choices[0].message.content;
-  if (!content || typeof content !== 'string') {
-    throw new Error('MiniMax returned empty or non-string content');
-  }
-
-  return content;
+  return data.choices[0].message.content;
 }
 
 export function parseJSONResponse<T>(content: string): T {
-  // Pre-processing: Strip thinking tags and markdown code blocks
+  // Pre-processing: Extract from markdown code blocks if present
   let extractedContent = content
     .replace(/^```json\s*/i, '')  // Remove opening ```json
     .replace(/\s*```$/, '');      // Remove closing ```
-
-  // Remove thinking tags (both Chinese and English variants)
-  extractedContent = extractedContent
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .trim();
 
   // Find the first opening brace
   const firstBrace = extractedContent.indexOf('{');
@@ -274,83 +177,4 @@ export function parseJSONResponse<T>(content: string): T {
   }
 
   throw new Error(`Invalid JSON: ${extractedContent.substring(firstBrace, firstBrace + 200)}`);
-}
-
-export async function callMiniMaxWithSearch(
-  basePrompt: string,
-  searchResults?: string,
-  pageContents?: string,
-  callCount: number = 1,
-  options: MiniMaxCallOptions = {},
-): Promise<string> {
-  // 构建当前轮次的 prompt
-  let currentPrompt = basePrompt;
-  if (pageContents) {
-    currentPrompt = `${currentPrompt}\n\n${buildPageFetchSection(pageContents)}`;
-  } else if (searchResults) {
-    currentPrompt = `${currentPrompt}\n\n${buildSearchResultsSection(searchResults)}`;
-  }
-
-  // 调用 API
-  const content = await callMiniMax(currentPrompt, options);
-
-  // 判断是否需要继续
-  if (callCount >= 3) {
-    // 超过最大调用次数，直接返回
-    return content;
-  }
-
-  if (isSearchNeededResponse(content)) {
-    const queries = extractSearchQueries(content);
-    if (queries.length === 0) {
-      return content;
-    }
-
-    // 执行搜索
-    const { searchWeb, formatSearchResults } = await import('./search');
-    const searchResultsList = await Promise.all(queries.map(q => searchWeb(q)));
-
-    // 处理搜索结果，过滤不可用的情况
-    const availableResults = searchResultsList.filter((r): r is import('./search').SearchResult[] => !('unavailable' in r));
-    const unavailableReasons = searchResultsList
-      .filter((r): r is import('./search').SearchUnavailable => 'unavailable' in r)
-      .map(r => r.message);
-
-    if (unavailableReasons.length > 0) {
-      console.warn('Search unavailable:', unavailableReasons.join('; '));
-    }
-
-    const allResults = availableResults.flat();
-    const formattedResults = formatSearchResults(allResults);
-
-    // 递归调用，注入搜索结果
-    return callMiniMaxWithSearch(basePrompt, formattedResults, undefined, callCount + 1, options);
-  }
-
-  if (isPageFetchNeededResponse(content)) {
-    const urls = extractPageUrls(content);
-    if (urls.length === 0) {
-      return content;
-    }
-
-    // 限制最多3个 URL
-    const urlsToFetch = urls.slice(0, 3);
-
-    // 并行抓取页面内容
-    const { fetchPageContent } = await import('./search');
-    const pageContentsList = await Promise.all(
-      urlsToFetch.map(url => fetchPageContent(url))
-    );
-    const combinedPageContents = pageContentsList.filter(c => c).join('\n\n---\n\n');
-
-    if (!combinedPageContents) {
-      return content;
-    }
-
-    // 递归调用，注入页面内容
-    return callMiniMaxWithSearch(basePrompt, undefined, combinedPageContents, callCount + 1, options);
-  }
-
-  // 不需要继续，返回内容
-  return content;
 }

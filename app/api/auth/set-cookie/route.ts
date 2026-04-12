@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
 
     const response = NextResponse.json({ success: true })
     response.cookies.set('ai-learning-auth', inviteCode, {
-      httpOnly: false, // 前端 JS 可读取
+      httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 30, // 30 天

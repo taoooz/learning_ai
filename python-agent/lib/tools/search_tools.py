@@ -1,37 +1,48 @@
 """
-搜索工具 — ddgs (DuckDuckGo) + Jina Reader 读取网页
+搜索工具 — 使用 Jina Reader API（免费无 Key）
+提供 web_search 和 read_url 两个工具函数
 """
 import requests
-from ddgs import DDGS
+
+JINA_READER = "https://r.jina.ai/"
+JINA_SEARCH = "https://s.jina.ai/"
 
 
 def web_search(query: str, max_results: int = 5) -> str:
-    """使用 ddgs (DuckDuckGo) 搜索"""
+    """搜索互联网，返回 Markdown 格式结果摘要
+
+    Args:
+        query: 搜索关键词
+        max_results: 最大结果数（预留，当前由 API 控制）
+    """
     try:
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=max_results))
-
-        if not results:
-            return "未找到相关搜索结果"
-
-        parts = []
-        for r in results:
-            title = r.get("title", "")
-            url = r.get("href", "")
-            snippet = r.get("body", "")[:150]
-            parts.append(f"- {title}\n  {url}\n  {snippet}")
-
-        text = "\n\n".join(parts)
-        if len(text) > 3000:
-            text = text[:3000] + "\n...(搜索结果已截断)"
-        return text
+        response = requests.get(
+            f"{JINA_SEARCH}{query}",
+            headers={
+                "Accept": "text/markdown",
+                "X-Return-Format": "markdown",
+            },
+            timeout=15,
+        )
+        if response.status_code == 200:
+            text = response.text.strip()
+            # 截取前 3000 字符避免 prompt 过长
+            if len(text) > 3000:
+                text = text[:3000] + "\n...(搜索结果已截断)"
+            return text
+        return f"搜索失败：HTTP {response.status_code}"
+    except requests.exceptions.Timeout:
+        return "搜索超时，请稍后重试"
     except Exception as e:
         return f"搜索出错：{e}"
 
 
 def read_url(url: str) -> str:
-    """读取指定网页内容，返回 Markdown 格式"""
-    JINA_READER = "https://r.jina.ai/"
+    """读取指定网页内容，返回 Markdown 格式
+
+    Args:
+        url: 网页 URL
+    """
     try:
         response = requests.get(
             f"{JINA_READER}{url}",
@@ -53,7 +64,7 @@ def read_url(url: str) -> str:
         return f"读取出错：{e}"
 
 
-# OpenAI 格式的工具定义
+# OpenAI 格式的工具定义，用于 MiniMax function calling
 SEARCH_TOOLS = [
     {
         "type": "function",
@@ -91,6 +102,7 @@ SEARCH_TOOLS = [
     },
 ]
 
+# 工具名 -> 执行函数的映射
 TOOL_FUNCTIONS = {
     "web_search": web_search,
     "read_url": read_url,

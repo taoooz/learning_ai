@@ -80,45 +80,6 @@ class AgentClient(MiniMaxClient):
         # 超过最大迭代次数，再做一次无 tools 调用获取最终结果
         return self._call_llm(messages, [], model, max_tokens, reasoning_split)
 
-    def _call_llm_streaming(
-        self,
-        messages: list[dict],
-        tools: list[dict] | None,
-        model: str,
-        max_tokens: int,
-        reasoning_split: bool,
-    ) -> Iterator[dict]:
-        """流式 LLM 调用，逐 token yield MiniMax SSE chunk"""
-        payload: dict[str, Any] = {
-            "model": model,
-            "messages": messages,
-            "max_tokens": max_tokens,
-            "stream": True,
-            "reasoning_split": reasoning_split,
-        }
-        if tools:
-            payload["tools"] = tools
-
-        with httpx.Client() as client:
-            with client.stream(
-                "POST",
-                f"{self.base_url}/chat/completions",
-                headers=self._get_headers(),
-                json=payload,
-                timeout=httpx.Timeout(connect=10.0, read=300.0, write=10.0, pool=10.0),
-            ) as response:
-                response.raise_for_status()
-                for line in response.iter_lines():
-                    if not line or not line.startswith("data: "):
-                        continue
-                    data = line[6:]
-                    if data == "[DONE]":
-                        break
-                    try:
-                        yield json.loads(data)
-                    except json.JSONDecodeError:
-                        continue
-
     def stream_chat_with_tools(
         self,
         messages: list[dict],
@@ -129,81 +90,41 @@ class AgentClient(MiniMaxClient):
         reasoning_split: bool = True,
         max_iterations: int = 3,
     ) -> Iterator[dict]:
-        """支持 tools 的流式调用，逐 token yield 事件
+        """支持 tools 的流式调用，yield SSE 事件
 
         事件类型:
-            - thinking: 思考过程（逐 token）
+            - thinking: 思考过程
             - tool_call: 工具调用信息
             - tool_result: 工具执行结果
-            - content_delta: 内容增量（逐 token）
+            - content_delta: 内容增量
             - done: 完成标记
         """
         iteration = 0
         while iteration < max_iterations:
-            # 流式 LLM 调用
-            chunks = self._call_llm_streaming(messages, tools, model, max_tokens, reasoning_split)
+            # 首次 LLM 调用（非流式，因为需要检查 finish_reason）
+            response = self._call_llm(messages, tools, model, max_tokens, reasoning_split)
+            choice = response.get("choices", [{}])[0]
+            message = choice.get("message", {})
 
-            # 积累 tool_calls，同时逐 token yield thinking/content
-            tool_calls_acc: dict[int, dict] = {}
-            content_parts = []
-            reasoning_details_raw = []
-            finish_reason = None
+            # 提取并 yield thinking
+            reasoning = self._extract_reasoning(message, reasoning_split)
+            if reasoning:
+                yield {"type": "thinking", "message": reasoning}
 
-            for chunk in chunks:
-                choice = chunk.get("choices", [{}])[0]
-                delta = choice.get("delta", {})
-
-                if choice.get("finish_reason"):
-                    finish_reason = choice["finish_reason"]
-
-                # reasoning_details → 逐 token yield thinking
-                if delta.get("reasoning_details"):
-                    for rd in delta["reasoning_details"]:
-                        text = rd.get("text", "")
-                        if text:
-                            reasoning_details_raw.append(rd)
-                            yield {"type": "thinking", "message": text}
-
-                # content → 逐 token yield content_delta
-                if delta.get("content"):
-                    content_parts.append(delta["content"])
-                    yield {"type": "content_delta", "content": delta["content"]}
-
-                # tool_calls → 增量拼接
-                if delta.get("tool_calls"):
-                    for tc_delta in delta["tool_calls"]:
-                        idx = tc_delta.get("index", 0)
-                        if idx not in tool_calls_acc:
-                            tool_calls_acc[idx] = {
-                                "id": tc_delta.get("id", ""),
-                                "type": "function",
-                                "function": {"name": "", "arguments": ""},
-                            }
-                        acc = tool_calls_acc[idx]
-                        if tc_delta.get("id"):
-                            acc["id"] = tc_delta["id"]
-                        if tc_delta.get("function"):
-                            fn = tc_delta["function"]
-                            if fn.get("name"):
-                                acc["function"]["name"] += fn["name"]
-                            if fn.get("arguments"):
-                                acc["function"]["arguments"] += fn["arguments"]
-
-            # 无 tool_calls → 完成
-            if not tool_calls_acc:
+            if not self._has_tool_calls(response):
+                # 无工具调用，yield 内容
+                content = message.get("content", "")
+                # 去除可能的 thinking 标签（当 reasoning_split=False 时）
+                import re
+                content = re.sub(r'Thinking.*?Thinking', '', content, flags=re.DOTALL).strip()
+                if content:
+                    yield {"type": "content_delta", "content": content}
                 yield {"type": "done"}
                 return
 
-            # 构建 assistant 消息加入历史
-            msg_to_add: dict[str, Any] = {"role": "assistant", "content": "".join(content_parts)}
-            if reasoning_details_raw:
-                msg_to_add["reasoning_details"] = reasoning_details_raw
-            sorted_tcs = [tool_calls_acc[i] for i in sorted(tool_calls_acc)]
-            msg_to_add["tool_calls"] = sorted_tcs
-            messages.append(msg_to_add)
-
-            # 执行工具
-            for tc in sorted_tcs:
+            # 处理 tool_calls
+            tool_calls = message.get("tool_calls", [])
+            for tc in tool_calls:
                 func_name = tc["function"]["name"]
                 func_args = json.loads(tc["function"]["arguments"])
                 yield {"type": "tool_call", "tool": func_name, "args": func_args}
@@ -221,14 +142,32 @@ class AgentClient(MiniMaxClient):
 
                 yield {"type": "tool_result", "tool": func_name, "result": result}
 
+                # 追加 tool 结果到 messages
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tc["id"],
-                    "name": func_name,
                     "content": result,
                 })
 
+            # 将 assistant 完整响应加入历史
+            messages.append(self._build_assistant_message(message, reasoning_split))
+
             iteration += 1
+
+        # 超过最大迭代次数，获取最终响应
+        final_response = self._call_llm(messages, [], model, max_tokens, reasoning_split)
+        final_choice = final_response.get("choices", [{}])[0]
+        final_message = final_choice.get("message", {})
+
+        # 提取最终 thinking
+        final_reasoning = self._extract_reasoning(final_message, reasoning_split)
+        if final_reasoning:
+            yield {"type": "thinking", "message": final_reasoning}
+
+        # 提取最终内容
+        content = final_message.get("content", "")
+        if content:
+            yield {"type": "content_delta", "content": content}
 
         yield {"type": "done"}
 

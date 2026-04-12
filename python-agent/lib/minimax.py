@@ -1,7 +1,7 @@
 import os
 import json
 import httpx
-from typing import AsyncIterator, Iterator
+from typing import AsyncIterator
 
 
 class MiniMaxClient:
@@ -65,38 +65,6 @@ class MiniMaxClient:
                         if data == "[DONE]":
                             break
                         yield json.loads(data)
-
-    def stream_chat_sync(
-        self,
-        messages: list[dict],
-        model: str = "MiniMax-M2.7",
-        max_tokens: int = 1500,
-    ) -> Iterator[dict]:
-        """同步流式调用 chat API"""
-        with httpx.Client() as client:
-            with client.stream(
-                "POST",
-                f"{self.base_url}/chat/completions",
-                headers=self._get_headers(),
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "stream": True,
-                    "max_tokens": max_tokens,
-                },
-                timeout=httpx.Timeout(connect=10.0, read=300.0, write=10.0, pool=10.0),
-            ) as response:
-                response.raise_for_status()
-                for line in response.iter_lines():
-                    if not line or not line.startswith("data: "):
-                        continue
-                    data = line[6:]
-                    if data == "[DONE]":
-                        break
-                    try:
-                        yield json.loads(data)
-                    except json.JSONDecodeError:
-                        continue
 
 
 def parse_json_response(content: str) -> dict:

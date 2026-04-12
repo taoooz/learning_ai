@@ -4,7 +4,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sse_starlette.sse import EventSourceResponse, ServerSentEvent
+from sse_starlette.sse import EventSourceResponse
 
 # 加载 .env
 env_path = Path(__file__).parent / ".env"
@@ -218,17 +218,17 @@ async def generate_outline_agent(req: OutlineRequest):
     """Agent 版 outline 生成（带搜索能力，流式）"""
     def event_generator():
         try:
-            for event in stream_outline_with_tools(
+            yield from stream_outline_with_tools(
                 topic=req.topic,
                 user_profile=req.userProfile,
                 user_memory=req.userMemory,
-            ):
-                yield ServerSentEvent(data=json.dumps(event, ensure_ascii=False))
+            )
         except Exception as e:
             print(f"[Outline Agent API] Error: {e}")
             import traceback
             traceback.print_exc()
-            yield ServerSentEvent(data=json.dumps({"type": "error", "message": str(e)}, ensure_ascii=False))
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
 
     return EventSourceResponse(event_generator(), media_type="text/event-stream")
 
@@ -238,16 +238,16 @@ async def answer_outline_agent(req: OutlineAnswerRequest):
     """Agent 版 outline 多轮回答（带搜索能力，流式）"""
     def event_generator():
         try:
-            for event in stream_answer_with_tools(
+            yield from stream_answer_with_tools(
                 session_id=req.sessionId,
                 answer=req.answer,
-            ):
-                yield ServerSentEvent(data=json.dumps(event, ensure_ascii=False))
+            )
         except Exception as e:
             print(f"[Outline Answer Agent API] Error: {e}")
             import traceback
             traceback.print_exc()
-            yield ServerSentEvent(data=json.dumps({"type": "error", "message": str(e)}, ensure_ascii=False))
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
 
     return EventSourceResponse(event_generator(), media_type="text/event-stream")
 

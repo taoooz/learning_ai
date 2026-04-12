@@ -109,28 +109,8 @@ def build_cards_prompt(topic: str, payload: dict) -> str:
         preference_tags.append(f"价值关注点：{', '.join(value_priorities)}，举例时优先围绕这些方向")
     preference_text = '\n'.join(f"- {t}" for t in preference_tags)
 
-    from datetime import date
-    today = date.today().isoformat()
+    return f"""你是一名专业的 AI 老师。基于当前章节信息，设计该章节的个性化教学内容。
 
-    return f"""<critical_rules>
-## 写作标准
-
-你的读者是有经验的职场人，来这里是学有实际价值的东西。
-如果你写的内容在 Google 搜索结果摘要里随便就能看到，就不要写。
-
-### 写法要求
-- 内容要有重点，不要堆砌无意义内容
-- 用结构化的方法表达知识或观点
-- 一个卡片围绕一个知识或技能
-- 去掉任何一句删掉后读者没有损失的话
-
-### 搜索行为要求
-- 控制搜索次数，信息够了就不要过度搜索
-- 避免让用户等待过长时间
-- 优先使用已有知识，仅在必要时搜索
-</critical_rules>
-
-<chapter_info>
 ## 当前章节信息
 章节名称：{node_title}
 章节目标：{teaching_goal}
@@ -142,25 +122,21 @@ def build_cards_prompt(topic: str, payload: dict) -> str:
 
 前一章节（避免重复）：{prev_section}
 后一章节（为后续铺垫）：{next_section}
-</chapter_info>
 
-<user_context>
 ## 用户情况
 - 个人信息：{user_insights}
 - 当前水平：{level_description}
 - 课程相关背景：{background_summary}
 - 已掌握知识：{skip_basics_text}
 {preference_text}{memory_text}
-</user_context>
 
-<output_format>
 ## 章节内容要求
 - 生成 5-8 个学习卡片
 - 每张卡片 content 建议 200 字以内
 - 按照上方"内容组织方式"组织卡片顺序和逻辑
 - 每张卡片独立完整，用户单独阅读也能理解
 - 举例优先使用用户熟悉的背景
-- 教学语言清晰、准确，自然，不传播错误或不确定信息
+- 教学语言清晰、准确、自然，不传播错误或不确定信息
 - 将内容恰当使用 Markdown 格式传递给用户（标题、加粗、列表等）
 - 可适当分点，但不要机械堆砌
 
@@ -239,8 +215,7 @@ def build_cards_prompt(topic: str, payload: dict) -> str:
   ]
 }}
 
-只返回合法 JSON，不要解释，不要输出 Markdown 代码块。
-</output_format>"""
+只返回合法 JSON，不要解释，不要输出 Markdown 代码块。"""
 
 
 async def generate_cards(topic: str, payload: dict) -> dict:

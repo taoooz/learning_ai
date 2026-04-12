@@ -1,73 +1,126 @@
-import { NextRequest } from 'next/server';
-import { validateOutlineRequest } from '@/lib/validation/api-schemas';
+import { NextRequest, NextResponse } from 'next/server';
+import { PYTHON_AGENT_URL } from '@/lib/agent-config';
 
-// Python Agent 服务地址
-const PYTHON_AGENT_URL = process.env.PYTHON_AGENT_URL || 'http://localhost:8000';
+/**
+ * 消费 Python Agent 的 SSE 流，解析事件并返回结构化 JSON
+ */
+async function consumeSSEStream(response: Response): Promise<{
+  sessionId: string | null;
+  parsed: { questions?: any[]; outline?: any };
+}> {
+  const text = await response.text();
 
-export const runtime = 'nodejs';
+  let sessionId: string | null = null;
+  let fullContent = '';
+  let parsed = { questions: [] as any[], outline: null as any };
+
+  // 逐行解析 SSE 事件
+  const lines = text.split('\n');
+  for (const line of lines) {
+    if (!line.startsWith('data: ')) continue;
+    const data = line.slice(6).trim();
+    if (data === '[DONE]') continue;
+
+    try {
+      const event = JSON.parse(data);
+
+      switch (event.type) {
+        case 'session_created':
+          sessionId = event.sessionId;
+          break;
+        case '__full_content__':
+          parsed = event.parsed || {};
+          break;
+      }
+    } catch {
+      // 跳过无法解析的行
+    }
+  }
+
+  return { sessionId, parsed };
+}
+
+/**
+ * 将 Python Agent 的 parsed 结果转换为前端期望的 OutlineResponse 格式
+ */
+function buildResponseData(
+  sessionId: string | null,
+  parsed: { questions?: any[]; outline?: any }
+) {
+  const result: Record<string, any> = {};
+
+  if (sessionId) {
+    result.sessionId = sessionId;
+  }
+
+  if (parsed.questions && parsed.questions.length > 0) {
+    // 有问题 → 前端期望 type: 'questions'
+    result.type = 'questions';
+    result.questions = parsed.questions.map((q: any) => ({
+      id: q.id,
+      question: q.question,
+      options: q.options,
+    }));
+  } else if (parsed.outline) {
+    // 有 outline → 前端期望 type: 'confirmation'
+    result.type = 'confirmation';
+    result.blueprint = {
+      learningDirection: parsed.outline.learningDirection,
+      learningGoal: parsed.outline.learningGoal,
+      learnerPositioning: {
+        estimatedLevel: parsed.outline.estimatedLevel,
+        difficultySummary: '',
+        backgroundSummary: parsed.outline.backgroundSummary || '',
+        skipBasics: parsed.outline.skipBasics || [],
+        whyThisCourseFits: '',
+      },
+    };
+  } else {
+    result.type = 'reconsider';
+    result.message = '让我重新思考一下...';
+  }
+
+  return result;
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const { topic, userProfile, userMemory, userMessage, sessionId } = validateOutlineRequest(await request.json());
+    const body = await request.json();
+    const { topic, userProfile, userMemory, userMessage, sessionId } = body;
 
-    // 如果有 sessionId，说明是继续对话，调用 answer 端点
-    const endpoint = sessionId
-      ? `${PYTHON_AGENT_URL}/api/agents/outline/answer_agent`
-      : `${PYTHON_AGENT_URL}/api/agents/outline/generate_agent`;
+    let agentUrl: string;
+    let agentBody: Record<string, any>;
 
-    const requestBody = sessionId
-      ? { sessionId, answer: userMessage }
-      : { topic, userProfile: userProfile ?? {}, userMemory: userMemory ?? {} };
+    if (sessionId) {
+      agentUrl = `${PYTHON_AGENT_URL}/api/agents/outline/answer_agent`;
+      agentBody = { sessionId, answer: userMessage };
+    } else {
+      agentUrl = `${PYTHON_AGENT_URL}/api/agents/outline/generate_agent`;
+      agentBody = { topic, userProfile: userProfile || {}, userMemory: userMemory || {} };
+    }
 
-    console.log('[Outline API] Calling Python Agent:', endpoint);
-
-    const response = await fetch(endpoint, {
+    const response = await fetch(agentUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
+      body: JSON.stringify(agentBody),
     });
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      console.error('[Outline API] Python Agent error:', response.status, errorText);
-      return new Response(
-        JSON.stringify({ error: `Agent 服务调用失败 (${response.status})` }),
-        { status: response.status, headers: { 'Content-Type': 'application/json' } }
-      );
+      throw new Error(`Python Agent error: ${response.status}`);
     }
 
-    const upstreamContentType = response.headers.get('content-type') || '';
-    console.log('[Outline API] Upstream content-type:', upstreamContentType);
+    // 消费 SSE 流，提取结构化数据
+    const { sessionId: newSessionId, parsed } = await consumeSSEStream(response);
 
-    // 上游返回 SSE → 直接透传
-    if (upstreamContentType.includes('text/event-stream')) {
-      console.log('[Outline API] → SSE passthrough');
-      return new Response(response.body, {
-        headers: {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive',
-        },
-      });
-    }
+    // 转换为前端期望的 JSON 格式
+    const data = buildResponseData(newSessionId, parsed);
 
-    // 上游返回 JSON → 包装为单条 SSE 事件，前端无需区分
-    // （兼容 Python Agent 尚未改造为 SSE 的过渡阶段）
-    const json = await response.json();
-    console.log('[Outline API] → JSON wrapped as SSE. Keys:', Object.keys(json), '| type:', (json as any).type);
-    const ssePayload = `data: ${JSON.stringify(json)}\n\n`;
-    return new Response(ssePayload, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
-    });
+    return NextResponse.json(data);
   } catch (error) {
-    console.error('[Outline API] Error:', error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Agent 服务调用失败' }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    console.error('Agent proxy error:', error);
+    return NextResponse.json(
+      { error: 'Agent 服务调用失败，请确保 Python Agent 服务已启动' },
+      { status: 500 }
     );
   }
 }

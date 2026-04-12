@@ -41,3 +41,5 @@ next-env.d.ts
 
 # local worktrees
 .worktrees/
+__pycache__/
+*.pyc

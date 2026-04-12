@@ -34,7 +34,7 @@ def generate_cards_with_tools(topic: str, payload: dict) -> dict:
         tool_functions=TOOL_FUNCTIONS,
         max_tokens=6000,
         reasoning_split=True,
-        max_iterations=5,
+        max_iterations=3,
     )
 
     # 从最终响应中提取内容
@@ -44,13 +44,6 @@ def generate_cards_with_tools(topic: str, payload: dict) -> dict:
 
     # 去除可能的 thinking 标签
     content = re.sub(r'Thinking.*?Thinking', '', content, flags=re.DOTALL).strip()
-
-    # 去除模型在 content 中输出的 tool call 格式
-    # MiniMax M2.7 有时会输出 <invoke>web_search>...</invoke> 而不是正确使用 tool_calls 字段
-    content = re.sub(r'<invoke>\w+>.*?</invoke>', '', content, flags=re.DOTALL).strip()
-    content = re.sub(r'<invoke_.*?</invoke_>', '', content, flags=re.DOTALL).strip()
-    # 也处理没有结束标签的残缺输出
-    content = re.sub(r'<invoke>\w+>[^<]*', '', content).strip()
 
     # 解析 JSON
     from lib.minimax import parse_json_response
