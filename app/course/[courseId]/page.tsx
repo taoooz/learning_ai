@@ -53,15 +53,16 @@ export default function CoursePage() {
 
   // 所有章节完成时弹出庆祝弹窗
   useEffect(() => {
-    if (!course) return;
-    const allCompleted = course.nodes.length > 0 && course.nodes.every(n => n.status === 'completed');
+    const courseData = courses.find(c => c.courseId === courseId) || currentCourse;
+    if (!courseData) return;
+    const allCompleted = courseData.nodes.length > 0 && courseData.nodes.every(n => n.status === 'completed');
     if (allCompleted && !celebrationShownRef.current) {
       celebrationShownRef.current = true;
       // 短暂延迟，等页面渲染完成
       const timer = setTimeout(() => setShowCelebration(true), 500);
       return () => clearTimeout(timer);
     }
-  }, [course]);
+  }, [courses, currentCourse, courseId]);
 
   if (isLoading) {
     return (

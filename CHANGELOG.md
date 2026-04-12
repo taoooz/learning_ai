@@ -1,5 +1,22 @@
 # 项目迭代日志
 
+## 2026-04-12
+
+### feat: 连续学习天数（Streak Fire）系统
+
+- 新增 `useStreak` hook，管理 localStorage 中的连续学习天数数据
+- CourseHeaderBar 新增 `streak` prop，在标题栏右侧渲染火焰图标 + 天数
+- ProgressContext.markCompleted 中自动记录学习打卡
+- 火焰颜色分 3 级：1-2 天浅橙、3-6 天橙色、7+ 天红金色
+- 今日未打卡时火焰显示为灰色
+
+### feat: 课程完成庆祝弹窗
+
+- 课程全部章节完成时自动弹出底部 Sheet
+- 显示奖杯 emoji + CSS 粒子动画
+- 展示章节完成数和连续学习天数
+- 支持拖拽下滑关闭、点击遮罩关闭
+
 ## 2026-04-11
 
 ### feat: Cards 生成切换 Agent 版 + 补充个性化字段
