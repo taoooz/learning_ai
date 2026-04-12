@@ -84,3 +84,26 @@ export function useStreak() {
 
   return { streakData, studiedToday, recordStudy, isLoading };
 }
+
+/** 记录学习（非 hook 版本，供 ProgressContext 等非组件调用） */
+export function recordStudyStandalone(): StreakData {
+  const prev = readStreak();
+  const today = getToday();
+  if (prev.lastStudyDate === today) return prev;
+
+  let newStreak: number;
+  if (prev.lastStudyDate === '') {
+    newStreak = 1;
+  } else {
+    const diff = getDaysDiff(today, prev.lastStudyDate);
+    newStreak = diff === 1 ? prev.currentStreak + 1 : 1;
+  }
+
+  const updated: StreakData = {
+    currentStreak: newStreak,
+    bestStreak: Math.max(prev.bestStreak, newStreak),
+    lastStudyDate: today,
+  };
+  writeStreak(updated);
+  return updated;
+}

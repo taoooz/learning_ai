@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { markNodeCompleted, getStoredCourseBundle, getStoredData } from '@/lib/storage';
+import { recordStudyStandalone } from '@/hooks/useStreak';
 import { createMemoryRepository } from '@/lib/memory/repository';
 
 interface ProgressContextType {
@@ -34,6 +35,7 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
   }, [refreshProgress]);
 
   const markCompleted = useCallback((courseId: string, nodeIndex: number) => {
+    recordStudyStandalone();
     markNodeCompleted(courseId, nodeIndex);
     const bundle = getStoredCourseBundle(courseId);
     const node = bundle?.blueprint.nodes[nodeIndex];
