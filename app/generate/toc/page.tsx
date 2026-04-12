@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
+import { flushSync } from 'react-dom';
 import { useCourse } from '@/contexts/CourseContext';
 import { type TocStreamEvent } from '@/contexts/CourseContext';
 import { CourseHeaderBar } from '@/components/CourseHeaderBar';
@@ -33,11 +34,19 @@ function TocPageContent() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleTocEvent = useCallback((event: TocStreamEvent) => {
-    if (event.type === 'course_name') setCourseName(event.value);
-    else if (event.type === 'course_description') setCourseDescription(event.value);
-    else if (event.type === 'node') setStreamNodes(prev => [...prev, event.node]);
-    else if (event.type === 'complete') setIsComplete(true);
-    else if (event.type === 'error') setError(event.message);
+    console.log('[handleTocEvent]', event.type, event.type === 'node' ? JSON.stringify(event.node) : '');
+    if (event.type === 'course_name') {
+      flushSync(() => setCourseName(event.value));
+    } else if (event.type === 'course_description') {
+      flushSync(() => setCourseDescription(event.value));
+    } else if (event.type === 'node') {
+      console.log('[handleTocEvent] setting node:', event.node.index, event.node.title);
+      flushSync(() => setStreamNodes(prev => [...prev, event.node]));
+    } else if (event.type === 'complete') {
+      flushSync(() => setIsComplete(true));
+    } else if (event.type === 'error') {
+      flushSync(() => setError(event.message));
+    }
   }, []);
 
   useEffect(() => {
@@ -233,22 +242,22 @@ function TocPageContent() {
             )}
 
             {/* 章节列表 */}
-            <div className="space-y-2">
+            <div className="space-y-3">
               {streamNodes.map((node, idx) => (
                 <motion.div
                   key={node.index}
                   initial={{ opacity: 0, x: -12 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-                  className="flex items-center gap-3 rounded-xl bg-white/70 px-4 py-3"
+                  className="flex items-center gap-3 rounded-xl bg-white/70 px-4 py-3.5"
                 >
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent/10">
-                    <span className="text-[12px] font-bold text-accent">{idx + 1}</span>
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent/10">
+                    <span className="text-[13px] font-bold text-accent">{idx + 1}</span>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h4 className="truncate text-[14px] font-semibold text-primary">{node.title}</h4>
+                    <h4 className="truncate text-[15px] font-semibold text-primary">{node.title}</h4>
                     {node.description && (
-                      <p className="mt-0.5 text-[12px] text-secondary/70 line-clamp-1">{node.description}</p>
+                      <p className="mt-0.5 text-[13px] text-secondary/70 line-clamp-2">{node.description}</p>
                     )}
                   </div>
                   {isComplete && (

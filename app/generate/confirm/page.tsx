@@ -82,7 +82,7 @@ function ConfirmPageContent() {
             setStreamingState(prev => ({
               ...prev,
               isThinking: true,
-              thinkingMessage: message,
+              thinkingMessage: prev.thinkingMessage + message,
             }));
           },
           onContentDelta: (content) => {
@@ -182,7 +182,7 @@ function ConfirmPageContent() {
           setStreamingState(prev => ({
             ...prev,
             isThinking: true,
-            thinkingMessage: message,
+            thinkingMessage: prev.thinkingMessage + message,
           }));
         },
         onContentDelta: (content) => {

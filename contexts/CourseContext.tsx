@@ -150,6 +150,7 @@ export function buildNodeInfoPayload(bundle: StoredCourseBundle, nodeIndex: numb
     frame: node.frame,
     prevNode: prevNode ? { title: prevNode.title, concepts: prevNode.teachConceptIds || [] } : undefined,
     nextNode: nextNode ? { title: nextNode.title, concepts: nextNode.teachConceptIds || [] } : undefined,
+    skipBasics: bundle.blueprint.learnerPositioning.skipBasics || [],
   };
 }
 
@@ -237,6 +238,10 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
         insights: fullProfile.insights,
       } : null;
 
+      // 如果是全新对话（没有 userMessage），清除 sessionId，避免误用旧 session 调用 answer_agent
+      const isNewConversation = !userMessage;
+      const sessionIdForRequest = isNewConversation ? undefined : agentSessionIdRef.current;
+
       const response = await fetch('/api/agents/outline', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -244,7 +249,7 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
           topic,
           userProfile: slimProfile,
           userMemory: planningPayload,
-          sessionId: agentSessionIdRef.current,
+          sessionId: sessionIdForRequest,
           userMessage,
         }),
         signal: abortController.signal,
@@ -421,24 +426,9 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
               nodes.push(event.node);
               options?.onEvent?.({ type: 'node', node: event.node });
               break;
-            case 'complete': {
-              // 从 complete 事件提取最终结果（权威数据源）
-              if (event.result) {
-                if (event.result.courseName) courseName = event.result.courseName;
-                if (event.result.courseDescription) courseDescription = event.result.courseDescription;
-                if (Array.isArray(event.result.nodes)) {
-                  const existingIndices = new Set(nodes.map(n => n.index));
-                  for (const n of event.result.nodes) {
-                    if (!existingIndices.has(n.index)) {
-                      nodes.push(n);
-                      options?.onEvent?.({ type: 'node', node: n });
-                    }
-                  }
-                }
-              }
-              options?.onEvent?.({ type: 'complete', result: event.result ?? { courseName: '', courseDescription: '', nodes: [] } });
+            case 'complete':
+              options?.onEvent?.({ type: 'complete' });
               break;
-            }
             case 'error':
               options?.onEvent?.({ type: 'error', message: event.message });
               throw new Error(event.message);

@@ -2,6 +2,55 @@
 
 ## 2026-04-11
 
+### feat: Cards 生成切换 Agent 版 + 补充个性化字段
+
+- Cards API 端点从 `/api/agents/cards/generate`（基础版）切换到 `/api/agents/cards/generate_agent`（Agent 版，支持联网搜索）
+- 传递 `skipBasics`（跳过已掌握基础）字段
+- 传递 `learningStyle`、`technicalLevel`、`valuePriorities`（用户画像洞察）字段
+
+### fix: 修复 outline 思考内容片段间断行
+
+- 前端 `onThinking` 改为累积式拼接，thinking 片段紧跟上一段文本显示
+
+### fix: 修复 Agent 版 Cards 生成 400 Bad Request
+
+- `chat_with_tools` 第二轮迭代时不再将 `reasoning_details` 传入 messages（MiniMax API 不接受该字段）
+
+### style: 调大 TOC 章节卡片
+
+- 卡片间距、内边距、标题/描述字号均增大，描述从 1 行扩展到 2 行
+
+### fix: 修复 Questions 生成只返回思考内容
+
+- 删除 `questions_service.py` prompt 中不属于普通版的工具说明
+- `max_tokens` 从 2000 增到 4000
+
+### improve: 优化首页推荐课程内容
+
+- Prompt 要求推荐具体务实的学习主题，而非泛泛的"XX入门"
+- 推荐内容要可直接作为 topic 输入，说出学什么、解决什么问题
+- 更新 fallback 默认推荐为更务实的方向
+- 点击推荐后直接用 title 作为 topic，不再拼接 reason
+
+### fix: 修复 outline 生成时分析文本泄漏到卡片正文
+
+**根因：** MiniMax `reasoning_split=False` 时，模型在 `💭...🔚` 思考标签之外还会输出分析文本（如"## 第一步：分析"等），这些内容被前端 `extractThinkingAndVisibleContent` 当作 visibleContent 展示在卡片正文中。
+
+**修复：**
+- `outline_agent.py`：恢复 `reasoning_split=True`，thinking 由 `reasoning_details` 结构化字段提供
+- `outline_agent.py`：不再转发 `content_delta`，结构化内容由循环结束后解析为 `questions`/`blueprint` 事件发送
+- `contentParser.ts`：`extractThinkingAndVisibleContent` 增加 `Thinking...Thinking` 和 `<think...</think` 格式支持（防御性改进）
+
+### fix: 修复 TOC 生成结果一次性展示而非流式出现
+
+**根因：** `toc_agent.py` 在 Agent 循环中只 forward `thinking` 事件，将所有 `content_delta` 存入列表。等 Agent 循环结束后才拼接完整内容并一次性解析 yield `course_name`、`description`、所有 `node` 事件。前端在同一执行帧中处理完所有事件，无法逐帧渲染。
+
+**修复：**
+- `toc_agent.py`：改为实时增量拼接 `content_delta`，每个 chunk 到达时立即尝试提取并 yield
+- `toc_service.py` / `toc_agent.py`：`complete` 事件不再携带冗余的完整数据，仅作完成信号
+- `contexts/CourseContext.tsx`：精简 `complete` 处理，去掉 fallback 补发逻辑
+- `tocSseParser.ts`：`TocSSEEvent` 的 `complete` 类型移除 `result` 字段
+
 ### fix: 修复 SSE 双重前缀导致 outline 流式内容无法渲染
 
 **根因：** Python Agent 的 outline_agent/toc_agent/main.py 手动拼接 `data: {...}\n\n` 字符串，再由 `sse-starlette` 的 `EventSourceResponse` 自动加 `data: ` 前缀，导致线路上出现 `data: data: {...}` 双重前缀。前端 `processBufferLines` 只 strip 一次前缀，JSON.parse 全部失败。

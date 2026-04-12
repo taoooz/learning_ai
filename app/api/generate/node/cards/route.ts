@@ -31,9 +31,8 @@ export async function POST(request: NextRequest) {
     });
 
     // 从 V3 profile 提取用户洞察
-    const insights = extractUserInsights(
-      (userMemory as { profile?: { insights?: LearningInsight } } | null)?.profile?.insights
-    );
+    const profileInsights = (userMemory as { profile?: { insights?: LearningInsight } } | null)?.profile?.insights;
+    const insights = extractUserInsights(profileInsights);
 
     // 构建 payload
     const payload = {
@@ -48,11 +47,15 @@ export async function POST(request: NextRequest) {
       prevNode: nodeInfo.prevNode,
       nextNode: nodeInfo.nextNode,
       teachingMemory: teachingPayload,
+      skipBasics: nodeInfo.skipBasics || [],
+      learningStyle: profileInsights?.learningStyle || '',
+      technicalLevel: profileInsights?.technicalLevel || '',
+      valuePriorities: profileInsights?.valuePriorities || [],
     };
 
-    console.log('[Cards API] Calling Python Agent');
+    console.log('[Cards API] Calling Python Agent (Agent version)');
 
-    const response = await fetch(`${PYTHON_AGENT_URL}/api/agents/cards/generate`, {
+    const response = await fetch(`${PYTHON_AGENT_URL}/api/agents/cards/generate_agent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ topic, payload }),
