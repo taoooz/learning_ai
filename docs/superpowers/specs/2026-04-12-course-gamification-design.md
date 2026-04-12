@@ -8,7 +8,6 @@
 
 **包含：**
 - 连续学习天数（Streak Fire），集成到 CourseHeaderBar
-- 学习进度里程碑动画
 - 课程完成庆祝弹窗
 
 **不包含：**
@@ -82,27 +81,7 @@ interface CourseHeaderBarProps {
 
 ---
 
-## 2. 进度里程碑动画
-
-### 进度条增强
-
-位置：课程目录页顶部，课程标题下方。
-
-- 进度条颜色根据完成比例渐变：0% 橙色 → 100% 绿色
-- 进度条宽度使用 `layoutId` 实现章节完成时的平滑过渡
-- 进度 100% 时触发 pulse 动画（0.5s，1 次）
-
-### 章节卡片状态变化
-
-已完成章节（`status: 'completed'`）：
-- 左侧序号圆圈变为绿色对勾
-- 卡片整体降低透明度（`opacity: 0.7`），让未完成章节更突出
-
-首次完成章节时：卡片有一个短暂的 scale bounce 动画（`scale: [1, 1.02, 1]`，持续 0.3s）。
-
----
-
-## 3. 课程完成庆祝弹窗
+## 2. 课程完成庆祝弹窗
 
 ### 触发条件
 
@@ -147,6 +126,5 @@ interface CourseHeaderBarProps {
 |------|------|
 | `hooks/useStreak.ts` | 新建，streak 管理 hook |
 | `components/CourseHeaderBar.tsx` | 新增 `streak` prop，渲染火焰元素 |
-| `app/course/[courseId]/page.tsx` | 集成 streak、进度条增强、庆祝弹窗 |
-| `components/CourseNode.tsx` | 已完成章节样式调整、完成动画 |
+| `app/course/[courseId]/page.tsx` | 集成 streak、庆祝弹窗 |
 | `components/CourseCelebrationSheet.tsx` | 新建，庆祝弹窗组件 |
