@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
       currentQuestion: contextInfo?.currentQuestion,
     });
 
-    const context = buildChatContext(course, userMemory, messages, contextInfo, conversationSummary, chatMemoryPayload);
+    const context = buildChatContext(course, messages, contextInfo, conversationSummary, chatMemoryPayload);
 
     // 构建 AI 消息
     const aiMessages = [
