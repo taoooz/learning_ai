@@ -487,6 +487,66 @@ export interface StreamingOutlineState {
   error: string | null;
 }
 
+// UserMemory 子类型
+export interface KnowledgeGap {
+  concept: string;
+  topic: string;
+  confidence?: number;
+  source?: string;
+  severity?: 'high' | 'medium' | 'low';
+}
+
+export interface ConceptMasteryItem {
+  concept: string;
+  topic: string;
+  accuracy: number;
+  needsReview: boolean;
+  source?: string;
+  confidence?: number;
+}
+
+export interface QuestionPattern {
+  question: string;
+  topic: string;
+  timestamp: number;
+}
+
+export interface LearningRecord {
+  courseId: string;
+  topic: string;
+  nodesCompleted: number;
+  totalNodes: number;
+  completedAt?: number;
+}
+
+export interface ExtractedInsights {
+  knowledgeGaps: KnowledgeGap[];
+  conceptMastery: ConceptMasteryItem[];
+  questionPatterns: QuestionPattern[];
+}
+
+export interface UserMemory {
+  profile: UserProfile;
+  learningHistory: LearningRecord[];
+  extractedInsights: ExtractedInsights;
+  lastUpdated: number;
+  version: number;
+}
+
+// MemoryStoreV2 中间格式（V1 → V3 转换层）
+export interface MemoryStoreV2 {
+  version: 2;
+  profile: {
+    stableFacts: MemoryStableFact[];
+    signals: unknown[];
+    topicStates: TopicState[];
+    conceptStates: ConceptState[];
+  };
+  summaries: unknown[];
+  states: unknown[];
+  updatedAt: number;
+}
+
 // 对话摘要（过期对话生成）
 export interface ConversationSummary {
   courseId: string;

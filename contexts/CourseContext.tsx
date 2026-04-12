@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { CourseTree, GenerationStatus, NodeLesson, StoredCourseBundle, OutlineLearnerPositioning } from '@/types/course';
+import { CourseTree, GenerationStatus, NodeLesson, StoredCourseBundle, OutlineLearnerPositioning, LearningCard, Question } from '@/types/course';
 import {
   activateSystemCourse,
   addCourseBundle,
@@ -70,6 +70,85 @@ function getGenerationErrorMessage(data: unknown, fallback: string): string {
   }
 
   return fallback;
+}
+
+export function shouldEnterLearningPhase(node?: { cards?: Array<unknown>; questions?: Array<unknown> }): boolean {
+  return Array.isArray(node?.cards) && node.cards.length > 0;
+}
+
+export function hasResolvedQuestions(node?: { questions?: Array<unknown> }): boolean {
+  return Array.isArray(node?.questions);
+}
+
+export function buildLearningSteps(cards?: LearningCard[], questions?: Question[]) {
+  if (!Array.isArray(cards) || cards.length === 0) {
+    return [];
+  }
+
+  return [
+    ...cards.map((card) => ({
+      id: `card-${card.id}`,
+      type: 'card' as const,
+      card,
+    })),
+    ...(questions ?? []).map((question) => ({
+      id: `question-${question.id}`,
+      type: 'question' as const,
+      question,
+    })),
+  ];
+}
+
+export function getPendingNextNodeIndex(
+  nodes: Array<{ cards?: Array<unknown> }>,
+  currentNodeIndex: number,
+): number | null {
+  const nextIndex = currentNodeIndex + 1;
+  if (nextIndex >= nodes.length) {
+    return null;
+  }
+
+  return Array.isArray(nodes[nextIndex]?.cards) && nodes[nextIndex].cards.length > 0
+    ? null
+    : nextIndex;
+}
+
+export function buildNodeContentPatch(input: {
+  courseId: string;
+  nodeIndex: number;
+  cards: NodeLesson['cards'];
+  questions?: NodeLesson['questions'];
+}): Pick<NodeLesson, 'courseId' | 'nodeIndex' | 'cards' | 'questions'> {
+  return {
+    courseId: input.courseId,
+    nodeIndex: input.nodeIndex,
+    cards: input.cards,
+    questions: input.questions ?? [],
+  };
+}
+
+export function buildNodeInfoPayload(bundle: StoredCourseBundle, nodeIndex: number) {
+  const node = bundle.blueprint.nodes[nodeIndex];
+  const prevNode = nodeIndex > 0 ? bundle.blueprint.nodes[nodeIndex - 1] : undefined;
+  const nextNode = nodeIndex < bundle.blueprint.nodes.length - 1 ? bundle.blueprint.nodes[nodeIndex + 1] : undefined;
+  const learnerPositioning = bundle.blueprint.learnerPositioning as typeof bundle.blueprint.learnerPositioning & {
+    backgroundSummary?: string;
+  };
+
+  return {
+    title: node.title,
+    teachingGoal: node.teachingGoal,
+    teachConceptIds: node.teachConceptIds || [],
+    prerequisiteConceptIds: node.prerequisiteConceptIds || [],
+    courseName: bundle.blueprint.topic,
+    courseDescription: bundle.blueprint.courseGoal,
+    estimatedLevel: bundle.blueprint.learnerPositioning.estimatedLevel,
+    backgroundSummary: learnerPositioning.backgroundSummary,
+    frame: node.frame,
+    prevNode: prevNode ? { title: prevNode.title, concepts: prevNode.teachConceptIds || [] } : undefined,
+    nextNode: nextNode ? { title: nextNode.title, concepts: nextNode.teachConceptIds || [] } : undefined,
+    skipBasics: bundle.blueprint.learnerPositioning.skipBasics || [],
+  };
 }
 
 export function CourseProvider({ children }: { children: React.ReactNode }) {
