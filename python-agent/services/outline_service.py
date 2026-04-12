@@ -146,8 +146,19 @@ def build_initial_prompt(topic: str, user_profile: dict, user_memory: dict) -> s
         if recent_text:
             recent_section = f"\n\n## 近期相关课程\n{recent_text}"
 
-    return f"""你是一名专业的老师，擅长根据基础信息，为用户设计个性化学习计划。
+    from datetime import date
+    today = date.today().isoformat()
 
+    return f"""<critical_rules>
+当前日期：{today}
+
+## 重要提示
+- 第一步的分析结论要在第二步的 direction、keypoint、object 中体现，不要单独输出分析过程
+- 严格按照输出格式返回内容，不要输出其他格式、不要添加额外说明
+- 需要提问时，每次仅提出 1 个问题，累计最多 3 个
+</critical_rules>
+
+<user_context>
 # 基础信息
 
 ## 1. 用户学习诉求
@@ -155,10 +166,10 @@ def build_initial_prompt(topic: str, user_profile: dict, user_memory: dict) -> s
 
 ## 2. 用户画像
 {profile_section}{recent_section}
+</user_context>
 
-# 任务要求
-
-结合 用户学习诉求 和 基础信息，完成以下两步后按格式输出。
+<output_format>
+结合用户学习诉求和基础信息，完成以下两步后按格式输出。
 
 ## 第一步：分析
 
@@ -211,11 +222,7 @@ def build_initial_prompt(topic: str, user_profile: dict, user_memory: dict) -> s
 <div slot="background">用户相关背景</div>
 <div slot="knowledge">已掌握1：xxx；已掌握2：xxx</div>
 </outline>
-
-# 重要提示
-- 第一步的分析结论要在第二步的 direction、keypoint、object 中体现，不要单独输出分析过程
-- 严格按照输出格式返回内容，不要输出其他格式、不要添加额外说明
-- 需要提问时，每次仅提出 1 个问题，累计最多 3 个"""
+</output_format>"""
 
 
 async def stream_llm_and_parse(messages: list[dict] | str, max_tokens: int = 1000):

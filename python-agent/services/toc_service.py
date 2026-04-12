@@ -105,10 +105,26 @@ def build_toc_prompt(blueprint: dict, planning_payload: dict = None, user_profil
         if recent_text:
             recent_section = f"\n\n{recent_text}"
 
-    return f"""你是一名专业的 AI 老师，擅长根据学习计划与用户学习记忆生成个性化课程章节结构，用于指导后续章节内容创作。
+    from datetime import date
+    today = date.today().isoformat()
 
-# 基本信息
+    return f"""<critical_rules>
+当前日期：{today}
 
+## 目录设计原则
+- 每个章节有明确的定位
+- 章节间有清晰的逻辑衔接（递进、并列或对比关系由课程框架决定）
+- 尽量避免与用户近期学习的课程重复
+- 课程设计结合用户个人情况，避免泛泛而谈
+- 学习计划中标记为已掌握的知识点，不需要单独成章，可作为复习提及
+
+## 章节描述质量要求
+- 建议包含至少 2 个具体知识点或技能
+- 建议说明读者学完后能做的一件具体的事
+- 建议避免"深入了解""掌握核心""全面了解"等空泛表述
+</critical_rules>
+
+<learning_plan>
 ## 1. 用户学习诉求
 {topic}
 
@@ -117,11 +133,9 @@ def build_toc_prompt(blueprint: dict, planning_payload: dict = None, user_profil
 
 ## 3. 用户画像
 {profile_section}{recent_section}
+</learning_plan>
 
-# 任务要求
-
-基于基础信息，完成以下两步后按格式输出。
-
+<output_format>
 ## 第一步：分析
 
 ### 1.1 课程内容框架（单选）
@@ -152,21 +166,15 @@ def build_toc_prompt(blueprint: dict, planning_payload: dict = None, user_profil
      g. timeline_evolution（脉络演进）：围绕发展阶段→关键节点→驱动因素→未来趋势组织内容
      h. exploration_deduction（探究发现）：围绕核心疑问→假设推导→规律总结→延伸探索组织内容
 
-## 目录设计原则
-- 每个章节有明确的定位
-- 章节间有清晰的逻辑衔接（递进、并列或对比关系由课程框架决定）
-- 尽量避免与用户近期学习的课程重复
-- 课程设计结合用户个人情况，避免泛泛而谈
-- 学习计划中标记为已掌握的知识点，不需要单独成章，可作为复习提及
-
-# 输出格式
+## 输出格式
 {{
   "courseName": "课程名称",
   "courseDescription": "课程描述",
   "nodes": [{{"index": 1, "title": "章节标题", "description": "章节描述", "frame": "what_why_how"}}]
 }}
 
-只返回 JSON。"""
+只返回 JSON。
+</output_format>"""
 
 
 async def generate_toc(blueprint: dict, planning_payload: dict = None, user_profile: dict = None) -> dict:
