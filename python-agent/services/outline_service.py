@@ -147,6 +147,8 @@ def build_initial_prompt(topic: str, user_profile: dict, user_memory: dict) -> s
             recent_section = f"\n\n## 近期相关课程\n{recent_text}"
 
     return f"""<critical_rules>
+当前日期：{today}
+
 你是一名专业的老师，擅长根据基础信息，为用户设计个性化学习计划。
 
 ## 任务要求

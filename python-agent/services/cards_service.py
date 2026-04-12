@@ -109,6 +109,9 @@ def build_cards_prompt(topic: str, payload: dict) -> str:
         preference_tags.append(f"价值关注点：{', '.join(value_priorities)}，举例时优先围绕这些方向")
     preference_text = '\n'.join(f"- {t}" for t in preference_tags)
 
+    from datetime import date
+    today = date.today().isoformat()
+
     return f"""<critical_rules>
 ## 写作标准
 
@@ -120,6 +123,11 @@ def build_cards_prompt(topic: str, payload: dict) -> str:
 - 用结构化的方法表达知识或观点
 - 一个卡片围绕一个知识或技能
 - 去掉任何一句删掉后读者没有损失的话
+
+### 搜索行为要求
+- 控制搜索次数，信息够了就不要过度搜索
+- 避免让用户等待过长时间
+- 优先使用已有知识，仅在必要时搜索
 </critical_rules>
 
 <chapter_info>

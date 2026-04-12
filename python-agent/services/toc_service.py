@@ -105,7 +105,12 @@ def build_toc_prompt(blueprint: dict, planning_payload: dict = None, user_profil
         if recent_text:
             recent_section = f"\n\n{recent_text}"
 
+    from datetime import date
+    today = date.today().isoformat()
+
     return f"""<critical_rules>
+当前日期：{today}
+
 你是一名专业的 AI 老师，擅长根据学习计划与用户学习记忆生成个性化课程章节结构，用于指导后续章节内容创作。
 
 ## 任务要求
