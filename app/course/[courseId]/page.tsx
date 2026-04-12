@@ -4,6 +4,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useCourse } from '@/contexts/CourseContext';
+import { useStreak } from '@/hooks/useStreak';
 import { CourseHeaderBar } from '@/components/CourseHeaderBar';
 import { CourseTree } from '@/components/CourseTree';
 import { ChatLauncher, ChatWidget } from '@/components/ui/ChatWidget';
@@ -15,6 +16,7 @@ export default function CoursePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [showTitleInBar, setShowTitleInBar] = useState(false);
+  const { streakData, studiedToday } = useStreak();
 
   const courseId = params.courseId as string;
 
@@ -110,6 +112,7 @@ export default function CoursePage() {
           title={showTitleInBar ? course.topic : ""}
           backLabel="首页"
           onBack={() => router.push('/')}
+          streak={streakData.currentStreak > 0 ? { count: streakData.currentStreak, studiedToday } : undefined}
           trailing={(
             <div className="rounded-full bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent">
               {progressPercent}% 完成
