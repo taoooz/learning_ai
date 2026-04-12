@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
 
     // 构建上下文
     const memoryRepository = createMemoryRepository({
-      initialMemory: userMemory,
+      initialMemory: userMemory as MemoryStoreV3 | null,
       getProfile: () => null,
     });
     const chatMemoryPayload = memoryRepository.getChatPayload({
