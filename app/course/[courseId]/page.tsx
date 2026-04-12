@@ -8,6 +8,7 @@ import { useStreak } from '@/hooks/useStreak';
 import { CourseHeaderBar } from '@/components/CourseHeaderBar';
 import { CourseTree } from '@/components/CourseTree';
 import { ChatLauncher, ChatWidget } from '@/components/ui/ChatWidget';
+import { CourseCelebrationSheet } from '@/components/CourseCelebrationSheet';
 
 export default function CoursePage() {
   const params = useParams();
@@ -17,6 +18,8 @@ export default function CoursePage() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [showTitleInBar, setShowTitleInBar] = useState(false);
   const { streakData, studiedToday } = useStreak();
+  const [showCelebration, setShowCelebration] = useState(false);
+  const celebrationShownRef = useRef(false);
 
   const courseId = params.courseId as string;
 
@@ -47,6 +50,18 @@ export default function CoursePage() {
       console.warn('[CoursePage] Preload node 0 failed:', error);
     });
   }, [courseId, courses, currentCourse, generateNodeContent]);
+
+  // 所有章节完成时弹出庆祝弹窗
+  useEffect(() => {
+    if (!course) return;
+    const allCompleted = course.nodes.length > 0 && course.nodes.every(n => n.status === 'completed');
+    if (allCompleted && !celebrationShownRef.current) {
+      celebrationShownRef.current = true;
+      // 短暂延迟，等页面渲染完成
+      const timer = setTimeout(() => setShowCelebration(true), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [course]);
 
   if (isLoading) {
     return (
@@ -136,6 +151,12 @@ export default function CoursePage() {
           <CourseTree course={course} />
         </section>
       </div>
+
+      <CourseCelebrationSheet
+        isOpen={showCelebration}
+        onClose={() => setShowCelebration(false)}
+        course={course}
+      />
 
       <ChatLauncher onClick={() => setIsChatOpen(true)} />
 
