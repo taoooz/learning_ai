@@ -32,9 +32,9 @@ def generate_cards_with_tools(topic: str, payload: dict) -> dict:
         messages=messages,
         tools=SEARCH_TOOLS,
         tool_functions=TOOL_FUNCTIONS,
-        max_tokens=6000,
+        max_tokens=8000,
         reasoning_split=True,
-        max_iterations=5,
+        max_iterations=8,
     )
 
     # 从最终响应中提取内容

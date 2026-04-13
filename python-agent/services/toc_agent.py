@@ -19,7 +19,7 @@ def stream_toc_with_tools(
     blueprint: dict,
     planning_payload: dict = None,
     user_profile: dict = None,
-    max_tokens: int = 2000,
+    max_tokens: int = 4000,
 ) -> Generator[str, None, None]:
     """Agent 版 TOC 生成（带搜索能力）
 
@@ -48,7 +48,7 @@ def stream_toc_with_tools(
             tool_functions=TOOL_FUNCTIONS,
             max_tokens=max_tokens,
             reasoning_split=True,
-            max_iterations=3,
+            max_iterations=5,
         ):
             agent_events.append(event)
 

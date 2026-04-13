@@ -28,7 +28,7 @@ def stream_outline_with_tools(
     topic: str,
     user_profile: dict,
     user_memory: dict,
-    max_tokens: int = 4000,
+    max_tokens: int = 6000,
 ) -> Generator[str, None, None]:
     """Agent 版 outline 生成（带搜索能力）
 
@@ -59,7 +59,7 @@ def stream_outline_with_tools(
             tool_functions=TOOL_FUNCTIONS,
             max_tokens=max_tokens,
             reasoning_split=True,
-            max_iterations=5,
+            max_iterations=8,
         ):
             agent_events.append(event)
 
@@ -150,7 +150,7 @@ def stream_outline_with_tools(
 def stream_answer_with_tools(
     session_id: str,
     answer: str,
-    max_tokens: int = 1500,
+    max_tokens: int = 4000,
 ) -> Generator[str, None, None]:
     """Agent 版 outline 多轮回答（带搜索能力）
 
@@ -189,7 +189,7 @@ def stream_answer_with_tools(
             tool_functions=TOOL_FUNCTIONS,
             max_tokens=max_tokens,
             reasoning_split=True,
-            max_iterations=5,
+            max_iterations=8,
         ):
             agent_events.append(event)
 
