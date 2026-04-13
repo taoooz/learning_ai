@@ -1,85 +1,40 @@
-// app/api/generate/node/cards/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { createMemoryRepository } from '@/lib/memory/repository';
-import { validateCardsRequest } from '@/lib/validation/api-schemas';
-import type { LearningInsight } from '@/types/course';
-
-// Python Agent 服务地址
-const PYTHON_AGENT_URL = process.env.PYTHON_AGENT_URL || 'http://localhost:8000';
-
-function extractUserInsights(insights: LearningInsight | null | undefined): string {
-  if (!insights) return '暂无';
-  const { workSummary, analogyExperiences, summary } = insights;
-  const parts = [];
-  if (workSummary?.length) parts.push(`工作背景：${workSummary.join('、')}`);
-  if (analogyExperiences?.length) parts.push(`类比经历：${analogyExperiences.join('、')}`);
-  if (summary) parts.push(`总结：${summary}`);
-  return parts.join('；') || '暂无';
-}
+import { PYTHON_AGENT_URL } from '@/lib/agent-config';
 
 export async function POST(request: NextRequest) {
+  const { topic, nodeInfo, learnerBackground, prevNodeSummary, nextNodeSummary } = await request.json();
+
+  // 转换为 Python Agent 期望的参数格式
+  const agentBody = {
+    topic: topic || '',
+    payload: {
+      nodeTitle: nodeInfo?.title || '',
+      teachingGoal: nodeInfo?.teachingGoal || '',
+      courseName: topic || '',
+      backgroundSummary: learnerBackground?.backgroundSummary || '',
+      skipBasics: learnerBackground?.skipBasics || [],
+      prevNode: prevNodeSummary ? { title: prevNodeSummary.title, concepts: prevNodeSummary.concepts || [] } : null,
+      nextNode: nextNodeSummary ? { title: nextNodeSummary.title, concepts: nextNodeSummary.concepts || [] } : null,
+    },
+  };
+
   try {
-    const { topic, nodeInfo, userMemory } = validateCardsRequest(await request.json());
-
-    // 获取教学记忆
-    const memoryRepository = createMemoryRepository({ initialMemory: userMemory });
-    const teachingPayload = memoryRepository.getTeachingPayload({
-      topic,
-      nodeTitle: nodeInfo.title || '',
-      nodeConcepts: nodeInfo.teachConceptIds || [],
-      prerequisiteConcepts: nodeInfo.prerequisiteConceptIds || [],
-    });
-
-    // 从 V3 profile 提取用户洞察
-    const profileInsights = (userMemory as { profile?: { insights?: LearningInsight } } | null)?.profile?.insights;
-    const insights = extractUserInsights(profileInsights);
-
-    // 构建 payload
-    const payload = {
-      nodeTitle: nodeInfo.title || '',
-      teachingGoal: nodeInfo.teachingGoal || '',
-      courseName: nodeInfo.courseName,
-      courseDescription: nodeInfo.courseDescription,
-      userInsights: insights,
-      estimatedLevel: nodeInfo.estimatedLevel,
-      backgroundSummary: nodeInfo.backgroundSummary,
-      frame: nodeInfo.frame,
-      prevNode: nodeInfo.prevNode,
-      nextNode: nodeInfo.nextNode,
-      teachingMemory: teachingPayload,
-      skipBasics: nodeInfo.skipBasics || [],
-      learningStyle: profileInsights?.learningStyle || '',
-      technicalLevel: profileInsights?.technicalLevel || '',
-      valuePriorities: profileInsights?.valuePriorities || [],
-    };
-
-    console.log('[Cards API] Calling Python Agent (Agent version)');
-
     const response = await fetch(`${PYTHON_AGENT_URL}/api/agents/cards/generate_agent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic, payload }),
+      body: JSON.stringify(agentBody),
     });
 
     if (!response.ok) {
-      const responseText = await response.text();
-      let parsedDetail = responseText;
-      try {
-        const parsed = JSON.parse(responseText) as { detail?: string; error?: string; message?: string };
-        parsedDetail = parsed.detail || parsed.error || parsed.message || responseText;
-      } catch {
-        // keep raw text
-      }
-      console.error('[Cards API] Python Agent error:', response.status, parsedDetail);
-      throw new Error(`Python Agent error: ${response.status}${parsedDetail ? ` - ${parsedDetail}` : ''}`);
+      throw new Error(`Python Agent error: ${response.status}`);
     }
 
-    const result = await response.json();
-    return NextResponse.json(result);
+    const data = await response.json();
+    return NextResponse.json(data);
   } catch (error) {
-    console.error('[Cards API] Error:', error);
+    console.error('[Cards Agent proxy] Error:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Cards generation failed' },
+      { error: error instanceof Error ? error.message : '卡片生成失败' },
       { status: 500 }
     );
   }

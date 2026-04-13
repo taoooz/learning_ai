@@ -324,3 +324,19 @@ select:focus-visible {
     scroll-behavior: auto !important;
   }
 }
+
+/* === Course Celebration Animation === */
+@keyframes confetti {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--confetti-x), var(--confetti-y)) scale(0);
+    opacity: 0;
+  }
+}
+
+.animate-confetti {
+  animation: confetti 0.8s ease-out forwards;
+}

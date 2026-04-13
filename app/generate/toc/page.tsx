@@ -1,11 +1,9 @@
 'use client';
 
-import { Suspense, useEffect, useState, useRef, useCallback } from 'react';
+import { Suspense, useEffect, useState, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { flushSync } from 'react-dom';
 import { useCourse } from '@/contexts/CourseContext';
-import { type TocStreamEvent } from '@/contexts/CourseContext';
 import { CourseHeaderBar } from '@/components/CourseHeaderBar';
 import { createStoredCourseBundleFromBlueprint } from '@/lib/course-blueprint';
 import type { CourseBlueprint, StoredCourseBundle, OutlineLearnerPositioning } from '@/types/course';
@@ -24,7 +22,7 @@ function TocPageContent() {
   const { generateToc, addCourse, generateNodeContent } = useCourse();
   const [error, setError] = useState<string | null>(null);
 
-  // 流式展示状态
+  // 展示状态
   const [courseName, setCourseName] = useState('');
   const [courseDescription, setCourseDescription] = useState('');
   const [streamNodes, setStreamNodes] = useState<Array<{ index: number; title: string; description: string }>>([]);
@@ -32,22 +30,6 @@ function TocPageContent() {
 
   const hasRequestedRef = useRef(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-
-  const handleTocEvent = useCallback((event: TocStreamEvent) => {
-    console.log('[handleTocEvent]', event.type, event.type === 'node' ? JSON.stringify(event.node) : '');
-    if (event.type === 'course_name') {
-      flushSync(() => setCourseName(event.value));
-    } else if (event.type === 'course_description') {
-      flushSync(() => setCourseDescription(event.value));
-    } else if (event.type === 'node') {
-      console.log('[handleTocEvent] setting node:', event.node.index, event.node.title);
-      flushSync(() => setStreamNodes(prev => [...prev, event.node]));
-    } else if (event.type === 'complete') {
-      flushSync(() => setIsComplete(true));
-    } else if (event.type === 'error') {
-      flushSync(() => setError(event.message));
-    }
-  }, []);
 
   useEffect(() => {
     const outlineData = sessionStorage.getItem('pendingOutline');
@@ -59,10 +41,14 @@ function TocPageContent() {
     hasRequestedRef.current = true;
 
     const outline: PendingOutline = JSON.parse(outlineData);
-    let errorHandled = false;
 
-    generateToc(outline, { onEvent: handleTocEvent })
+    generateToc(outline)
       .then(async (result) => {
+        setCourseName(result.courseName);
+        setCourseDescription(result.courseDescription);
+        setStreamNodes(result.nodes.map((n) => ({ index: n.index, title: n.title, description: n.description })));
+        setIsComplete(true);
+
         const blueprint: CourseBlueprint = {
           courseId: `course-${Date.now()}`,
           topic: result.courseName || outline.topic,
@@ -75,7 +61,6 @@ function TocPageContent() {
             index: n.index,
             title: n.title,
             teachingGoal: n.description,
-            frame: n.frame,
             teachConceptIds: [],
             prerequisiteConceptIds: [],
             bridgeFromPreviousNode: '',
@@ -93,15 +78,13 @@ function TocPageContent() {
       })
       .catch((err) => {
         console.error('[TOC Page] Failed to generate TOC:', err);
-        if (!errorHandled) {
-          setError(err instanceof Error ? err.message : '生成目录失败，请稍后再试');
-        }
+        setError(err instanceof Error ? err.message : '生成目录失败，请稍后再试');
       });
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [generateToc, addCourse, generateNodeContent, handleTocEvent, router]);
+  }, [generateToc, addCourse, generateNodeContent, router]);
 
   // 错误状态
   if (error) {

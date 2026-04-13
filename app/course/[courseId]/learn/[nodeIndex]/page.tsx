@@ -15,7 +15,7 @@ import { ChatLauncher, ChatWidget } from '@/components/ui/ChatWidget';
 import { CardVisualization } from '@/components/ui/CardVisualization';
 import { EnhancedLoadingScreen } from '@/components/learning/EnhancedLoadingScreen';
 import { useUserMemory } from '@/hooks/useUserMemory';
-import { getStoredDataV2 } from '@/lib/storage';
+import { getStoredCourseBundle, getStoredDataV2, updateNodeLesson } from '@/lib/storage';
 
 type LearningPhase = 'loading' | 'learning' | 'complete';
 type LearnStep =
@@ -40,6 +40,49 @@ function extractQuestionConcept(question: Question): string {
     return match?.[1] || '当前知识点';
   }
   return question.concept.trim();
+}
+
+function formatAnswerDisplay(question: Question): string {
+  const answer = question.answer;
+  const options = question.options || [];
+
+  // 单选题：直接显示答案
+  if (question.type === 'single') {
+    const answerKey = Array.isArray(answer) ? answer[0] : answer;
+    if (options.length > 0) {
+      const optionText = options.find(opt => extractAnswerKey(opt) === answerKey);
+      if (optionText) {
+        return `${answerKey}. ${optionText.replace(/^[A-D][.、：:]\s*/, '')}`;
+      }
+    }
+    return answerKey;
+  }
+
+  // 多选题：显示 "A、C" 或 "A. xxx：C. yyy"
+  if (question.type === 'multiple' && Array.isArray(answer)) {
+    if (options.length > 0) {
+      const parts = answer.map(key => {
+        const optionText = options.find(opt => extractAnswerKey(opt) === key);
+        if (optionText) {
+          return `${key}. ${optionText.replace(/^[A-D][.、：:]\s*/, '')}`;
+        }
+        return key;
+      });
+      return parts.join('：');
+    }
+    return answer.join('、');
+  }
+
+  // 填空题
+  if (question.type === 'fill_blank' && Array.isArray(answer)) {
+    return answer.join('、');
+  }
+
+  // fallback
+  if (Array.isArray(answer)) {
+    return answer.join('、');
+  }
+  return String(answer);
 }
 
 function checkIsCorrect(question: Question, selectedAnswer: string[], sortOptions: string[]): boolean {
@@ -282,10 +325,25 @@ export default function LearnPage() {
     if (hasResolvedQuestions(currentNode)) return;
     if (hasRequestedQuestionsRef.current === requestKey) return;
 
-    hasRequestedQuestionsRef.current = requestKey;
-    generateNodeQuestions(courseId, nodeIndex).catch((error) => {
-      console.warn('[LearnPage] Questions generation failed:', error);
-    });
+    generateNodeQuestions(courseId, nodeIndex)
+      .then((data) => {
+        hasRequestedQuestionsRef.current = requestKey;
+        // 保存 questions 到存储
+        const bundle = getStoredCourseBundle(courseId);
+        if (bundle) {
+          const existingLesson = bundle.lessons[nodeIndex];
+          if (existingLesson) {
+            updateNodeLesson(courseId, nodeIndex, {
+              ...existingLesson,
+              questions: data.questions,
+            });
+          }
+        }
+      })
+      .catch((error) => {
+        console.warn('[LearnPage] Questions generation failed:', error);
+        // 不设置 ref，允许重试
+      });
   }, [courseId, nodeIndex, generateNodeQuestions, node?.cards, node?.questions, phase]);
 
   // 当前节点可学习后，再预加载下一个节点知识
@@ -672,7 +730,7 @@ export default function LearnPage() {
                   </div>
                   {!isCorrect && (
                     <p className="mb-5 text-[15px] leading-relaxed text-secondary">
-                      正确答案是：<span className="font-medium text-primary">{currentStep.question.answer}</span>
+                      正确答案是：<span className="font-medium text-primary">{formatAnswerDisplay(currentStep.question)}</span>
                     </p>
                   )}
                   

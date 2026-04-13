@@ -4,9 +4,11 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useCourse } from '@/contexts/CourseContext';
+import { useStreak } from '@/hooks/useStreak';
 import { CourseHeaderBar } from '@/components/CourseHeaderBar';
 import { CourseTree } from '@/components/CourseTree';
 import { ChatLauncher, ChatWidget } from '@/components/ui/ChatWidget';
+import { CourseCelebrationSheet } from '@/components/CourseCelebrationSheet';
 
 export default function CoursePage() {
   const params = useParams();
@@ -15,6 +17,9 @@ export default function CoursePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [showTitleInBar, setShowTitleInBar] = useState(false);
+  const { streakData, studiedToday } = useStreak();
+  const [showCelebration, setShowCelebration] = useState(false);
+  const celebrationShownRef = useRef(false);
 
   const courseId = params.courseId as string;
 
@@ -45,6 +50,19 @@ export default function CoursePage() {
       console.warn('[CoursePage] Preload node 0 failed:', error);
     });
   }, [courseId, courses, currentCourse, generateNodeContent]);
+
+  // 所有章节完成时弹出庆祝弹窗
+  useEffect(() => {
+    const courseData = courses.find(c => c.courseId === courseId) || currentCourse;
+    if (!courseData) return;
+    const allCompleted = courseData.nodes.length > 0 && courseData.nodes.every(n => n.status === 'completed');
+    if (allCompleted && !celebrationShownRef.current) {
+      celebrationShownRef.current = true;
+      // 短暂延迟，等页面渲染完成
+      const timer = setTimeout(() => setShowCelebration(true), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [courses, currentCourse, courseId]);
 
   if (isLoading) {
     return (
@@ -110,6 +128,7 @@ export default function CoursePage() {
           title={showTitleInBar ? course.topic : ""}
           backLabel="首页"
           onBack={() => router.push('/')}
+          streak={streakData.currentStreak > 0 ? { count: streakData.currentStreak, studiedToday } : undefined}
           trailing={(
             <div className="rounded-full bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent">
               {progressPercent}% 完成
@@ -133,6 +152,12 @@ export default function CoursePage() {
           <CourseTree course={course} />
         </section>
       </div>
+
+      <CourseCelebrationSheet
+        isOpen={showCelebration}
+        onClose={() => setShowCelebration(false)}
+        course={course}
+      />
 
       <ChatLauncher onClick={() => setIsChatOpen(true)} />
 
