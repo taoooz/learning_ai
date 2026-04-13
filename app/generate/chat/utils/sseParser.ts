@@ -2,7 +2,7 @@
  * SSE 事件解析工具
  */
 
-export type SSEEvent = 
+export type SSEEvent =
   | { type: 'thinking'; message: string }
   | { type: 'content_delta'; content: string }
   | { type: 'question_start'; questionNumber: number }
@@ -10,7 +10,9 @@ export type SSEEvent =
   | { type: 'blueprint_start' }
   | { type: 'blueprint_field'; field: string; value: any }
   | { type: 'confirmation'; sessionId?: string; blueprint: any }
-  | { type: 'session_created'; sessionId: string };
+  | { type: 'session_created'; sessionId: string }
+  | { type: 'error'; message: string }
+  | { type: 'complete'; result: any };
 
 /**
  * 解析 SSE 数据行

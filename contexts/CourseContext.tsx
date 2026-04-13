@@ -25,17 +25,10 @@ interface CourseContextType {
   generateNodeContent: (courseId: string, nodeIndex: number) => Promise<void>;
   preloadNextNode: (courseId: string, currentNodeIndex: number) => void;
   updateNodeContent: (courseId: string, nodeIndex: number, lesson: NodeLesson) => void;
+  updateNodeQuestions: (courseId: string, nodeIndex: number, questions: NodeLesson['questions']) => void;
   deleteCourse: (courseId: string) => void;
   addCourse: (bundle: StoredCourseBundle) => void;
-  submitOutlineMessage: (topic: string, userMessage?: string) => Promise<{
-    type: string;
-    blueprint?: {
-      learningDirection: string;
-      learningGoal: string;
-      learnerPositioning: OutlineLearnerPositioning;
-    };
-    questions?: Array<{ id: string; question: string }>;
-  }>;
+  submitOutlineMessage: (topic: string, userMessage?: string) => Promise<Response>;
   generateToc: (outline: {
     topic: string;
     learningDirection: string;
@@ -77,7 +70,8 @@ export function shouldEnterLearningPhase(node?: { cards?: Array<unknown>; questi
 }
 
 export function hasResolvedQuestions(node?: { questions?: Array<unknown> }): boolean {
-  return Array.isArray(node?.questions);
+  // 必须有非空数组才视为已生成，空数组视为未生成（可重试）
+  return Array.isArray(node?.questions) && node.questions.length > 0;
 }
 
 export function buildLearningSteps(cards?: LearningCard[], questions?: Question[]) {
@@ -188,40 +182,30 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
   const submitOutlineMessage = useCallback(async (topic: string, userMessage?: string) => {
     setGenerationStatus('generating');
     setGenerationError(null);
-    try {
-      // 获取已有的 sessionId（如果存在）
-      const existingSessionId = sessionStorage.getItem('outlineSessionId');
 
-      const response = await fetch('/api/agents/outline', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          topic,
-          userProfile: getUserProfile(),
-          userMemory: getUserMemoryStoreSnapshot(),
-          userMessage,
-          sessionId: existingSessionId,
-        }),
-      });
+    // 获取已有的 sessionId（如果存在）
+    const existingSessionId = sessionStorage.getItem('outlineSessionId');
 
-      const data = await response.json();
+    const response = await fetch('/api/agents/outline', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        topic,
+        userProfile: getUserProfile(),
+        userMemory: getUserMemoryStoreSnapshot(),
+        userMessage,
+        sessionId: existingSessionId,
+      }),
+    });
 
-      if (!response.ok) {
-        throw new Error(getGenerationErrorMessage(data, '大纲生成失败，请稍后再试。'));
-      }
-
-      // 如果返回了新的 sessionId，保存到 sessionStorage
-      if (data.sessionId) {
-        sessionStorage.setItem('outlineSessionId', data.sessionId);
-      }
-
-      setGenerationStatus('success');
-      return data;
-    } catch (error) {
-      setGenerationError(error instanceof Error ? error.message : '大纲生成失败，请稍后再试。');
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      setGenerationError(getGenerationErrorMessage(data, '大纲生成失败，请稍后再试。'));
       setGenerationStatus('error');
-      throw error;
+      throw new Error(getGenerationErrorMessage(data, '大纲生成失败，请稍后再试。'));
     }
+
+    return response;
   }, []);
 
   const generateToc = useCallback(async (outline: {
@@ -417,6 +401,37 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
+  const updateNodeQuestions = useCallback((
+    courseId: string,
+    nodeIndex: number,
+    questions: NodeLesson['questions']
+  ) => {
+    const bundle = getStoredCourseBundle(courseId);
+    if (!bundle) return;
+    const existingLesson = bundle.lessons[nodeIndex];
+    if (!existingLesson) return;
+    // 保留现有 lesson 的所有字段，只更新 questions
+    const lesson: NodeLesson = {
+      ...existingLesson,
+      courseId,
+      nodeIndex,
+      questions: questions || [],
+    };
+    saveNodeLesson(courseId, nodeIndex, lesson);
+    setCurrentCourse(prev => {
+      if (!prev || prev.courseId !== courseId) return prev;
+      const newNodes = [...prev.nodes];
+      newNodes[nodeIndex] = { ...newNodes[nodeIndex], questions };
+      return { ...prev, nodes: newNodes };
+    });
+    setCourses(prev => prev.map(c => {
+      if (c.courseId !== courseId) return c;
+      const newNodes = [...c.nodes];
+      newNodes[nodeIndex] = { ...newNodes[nodeIndex], questions };
+      return { ...c, nodes: newNodes };
+    }));
+  }, []);
+
   const deleteCourse = useCallback((courseId: string) => {
     deleteCourseFromStorage(courseId);
     setCourses(prev => prev.filter(c => c.courseId !== courseId));
@@ -443,6 +458,7 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
       generateNodeContent,
       preloadNextNode,
       updateNodeContent,
+      updateNodeQuestions,
       deleteCourse,
       addCourse,
       submitOutlineMessage,

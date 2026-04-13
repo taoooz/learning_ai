@@ -4,7 +4,45 @@ import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCourse } from '@/contexts/CourseContext';
 import { ConfirmationCard } from '@/components/ConfirmationCard';
+import { parseSSEStream } from '@/app/generate/chat/utils/sseParser';
 import type { OutlineBlueprint, OutlineResponse } from '@/types/course';
+
+/**
+ * 从 SSE 流中提取最终结构化结果（供非流式页面使用）
+ */
+async function consumeOutlineStream(response: Response): Promise<OutlineResponse> {
+  let sessionId: string | null = null;
+  let blueprint: OutlineBlueprint | null = null;
+  let questions: Array<{ id: string; question: string; options?: string[] }> = [];
+
+  for await (const event of parseSSEStream(response)) {
+    switch (event.type) {
+      case 'session_created':
+        sessionId = event.sessionId;
+        break;
+      case 'confirmation':
+        blueprint = event.blueprint as OutlineBlueprint;
+        sessionId = event.sessionId ?? sessionId;
+        break;
+      case 'questions':
+        questions = event.questions ?? [];
+        sessionId = event.sessionId ?? sessionId;
+        break;
+    }
+  }
+
+  if (sessionId) {
+    sessionStorage.setItem('outlineSessionId', sessionId);
+  }
+
+  if (blueprint) {
+    return { type: 'confirmation', blueprint };
+  }
+  if (questions.length > 0) {
+    return { type: 'questions', questions: questions.map(q => ({ ...q, type: 'single' as const })) };
+  }
+  return { type: 'reconsider', message: '让我重新思考一下...' };
+}
 
 function ConfirmPageContent() {
   const router = useRouter();
@@ -33,7 +71,8 @@ function ConfirmPageContent() {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await submitOutlineMessage(topic) as OutlineResponse;
+      const resp = await submitOutlineMessage(topic);
+      const result = await consumeOutlineStream(resp);
       handleResponse(result);
     } catch (err) {
       setError('生成失败，请稍后重试');
@@ -71,7 +110,8 @@ function ConfirmPageContent() {
     try {
       // 将之前所有答案合并发送给模型
       const answerText = newAnswers.join('; ');
-      const result = await submitOutlineMessage(topic, answerText) as OutlineResponse;
+      const resp = await submitOutlineMessage(topic, answerText);
+      const result = await consumeOutlineStream(resp);
       handleResponse(result);
     } catch (err) {
       setError('提交失败，请稍后重试');

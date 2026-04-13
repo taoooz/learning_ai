@@ -15,6 +15,20 @@ from services.outline_service import (
 )
 
 
+def _user_friendly_error(e: Exception) -> str:
+    """将 API 异常转换为用户友好的中文提示"""
+    msg = str(e)
+    if "529" in msg or "overloaded" in msg.lower():
+        return "AI 服务当前繁忙，请稍等几秒后重试"
+    if "ReadTimeout" in msg or "timed out" in msg:
+        return "AI 服务响应超时，请稍后重试"
+    if "500" in msg or "502" in msg or "503" in msg:
+        return "AI 服务暂时不可用，请稍后重试"
+    if "429" in msg or "rate" in msg.lower():
+        return "请求过于频繁，请稍后重试"
+    return "生成过程遇到问题，请稍后重试"
+
+
 def _extract_content_from_agent_events(events: list[dict]) -> str:
     """从 Agent 事件序列中提取最终内容文本"""
     parts = []
@@ -60,6 +74,7 @@ def stream_outline_with_tools(
             max_tokens=max_tokens,
             reasoning_split=True,
             max_iterations=8,
+            max_searches=3,
         ):
             agent_events.append(event)
 
@@ -91,7 +106,8 @@ def stream_outline_with_tools(
         print(f"[Outline Agent] Error during agent loop: {e}")
         import traceback
         traceback.print_exc()
-        yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
+        msg = _user_friendly_error(e)
+        yield f"data: {json.dumps({'type': 'error', 'message': msg}, ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"
         return
 
@@ -190,6 +206,7 @@ def stream_answer_with_tools(
             max_tokens=max_tokens,
             reasoning_split=True,
             max_iterations=8,
+            max_searches=3,
         ):
             agent_events.append(event)
 
@@ -215,7 +232,8 @@ def stream_answer_with_tools(
         print(f"[Outline Answer Agent] Error: {e}")
         import traceback
         traceback.print_exc()
-        yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
+        msg = _user_friendly_error(e)
+        yield f"data: {json.dumps({'type': 'error', 'message': msg}, ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"
         return
 

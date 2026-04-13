@@ -96,7 +96,8 @@ class MiniMaxClient:
 
 
 def parse_json_response(content: str) -> dict:
-    """解析 JSON 响应，处理 markdown 代码块"""
+    """解析 JSON 响应，处理 markdown 代码块和工具调用 XML"""
+    import re
     content = content.strip()
 
     # 移除 markdown 代码块
@@ -104,6 +105,15 @@ def parse_json_response(content: str) -> dict:
         content = content[7:]
     if content.startswith("```"):
         content = content[3:]
+
+    # 清理模型输出的工具调用 XML（MiniMax M2.7 有时在 content 中输出而非使用 tool_calls）
+    content = re.sub(r'<minimax:tool_call>.*?</minimax:tool_call>', '', content, flags=re.DOTALL)
+    content = re.sub(r'<minimax:tool_call>.*', '', content, flags=re.DOTALL)
+    content = re.sub(r'<invoke\s+name=["\'][^"\']*["\']\s*>.*?</invoke\s*>', '', content, flags=re.DOTALL)
+    content = re.sub(r'<invoke\s+[^>]*>.*', '', content, flags=re.DOTALL)
+    # 清理 Thinking 标签
+    content = re.sub(r'Thinking.*?Thinking', '', content, flags=re.DOTALL)
+    content = content.strip()
 
     # 找到第一个 {
     first_brace = content.find("{")

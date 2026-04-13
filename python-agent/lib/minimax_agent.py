@@ -5,78 +5,158 @@ MiniMax Agent 客户端 — 支持 function calling 的 Agent 循环
 import json
 import re
 import httpx
-from typing import Iterator, Optional, Callable, Any
+from typing import Iterator, Callable, Any
 from lib.minimax import MiniMaxClient
 
 
 def _clean_tool_xml(content: str) -> str:
-    """清理 content 中的 XML 格式工具调用标签
-
-    MiniMax 模型有时会在 content 中输出工具调用的 XML，
-    格式可能不完整或有错误（缺少闭合引号、缺少闭合标签等）。
-    """
-    # 1. 先清理有完整闭合标签的 <minimax:tool_call>...</minimax:tool_call>
+    """清理 content 中的 XML 格式工具调用标签"""
     content = re.sub(r'<minimax:tool_call>.*?</minimax:tool_call>', '', content, flags=re.DOTALL)
-    # 2. 清理没有闭合标签的 <minimax:tool_call>（从标签到内容末尾）
     content = re.sub(r'<minimax:tool_call>.*', '', content, flags=re.DOTALL)
-    # 3. 清理有完整闭合标签的 <invoke name="...">...</invoke>
     content = re.sub(r'<invoke\s+name=["\'][^"\']*["\']\s*>.*?</invoke\s*>', '', content, flags=re.DOTALL)
-    # 4. 清理格式错误的 <invoke>（name 缺少闭合引号）
     content = re.sub(r'<invoke\s+name="[^"]*>.*?</invoke\s*>', '', content, flags=re.DOTALL)
     content = re.sub(r"<invoke\s+name='[^']*>.*?</invoke\s*>", '', content, flags=re.DOTALL)
-    # 5. 清理没有闭合标签的 <invoke>（从标签到内容末尾）
     content = re.sub(r'<invoke\s+[^>]*>.*', '', content, flags=re.DOTALL)
     return content.strip()
 
 
 def _extract_tool_calls_from_content(content: str) -> list[dict] | None:
-    """从 content 中解析模型错误输出的 <invoke> 格式工具调用
-
-    MiniMax 有时会在 content 中输出 XML 格式的工具调用而不是通过 tool_calls 返回，
-    例如: <minimax:tool_call><invoke name="web_search"><parameter name="query">...</parameter></invoke></minimax:tool_call>
-    """
+    """从 content 中解析模型错误输出的 <invoke> 格式工具调用"""
     tool_calls = []
-
-    # 匹配所有 invoke 块
     for m in re.finditer(r'<invoke\s+name=["\'](\w+)["\']\s*>(.*?)</invoke\s*>', content, re.DOTALL):
         tool_name = m.group(1)
         body = m.group(2)
-        # 提取 <parameter name="xxx">yyy</parameter> 中的参数
         params = {}
         for pm in re.finditer(r'<parameter\s+name=["\'](\w+)["\']>(.*?)</parameter>', body, re.DOTALL):
             params[pm.group(1)] = pm.group(2)
         tool_calls.append({"name": tool_name, "arguments": params})
-
     return tool_calls if tool_calls else None
 
+
+def _do_streaming_call(
+    client: "AgentClient",
+    payload: dict,
+    max_retries: int = 3,
+) -> Iterator[dict]:
+    """执行一次流式 HTTP 请求，实时 yield thinking/content，最后 yield 完整响应
+
+    Yields:
+        - {"type": "thinking", "message": "..."} — reasoning token 片段
+        - {"type": "response", "response": {...}} — 完整累积的响应 dict
+    """
+    import sys
+
+    for attempt in range(max_retries):
+        full_content = ""
+        full_reasoning = ""
+        tool_calls_accum: dict[int, dict] = {}
+        finish_reason = None
+
+        try:
+            with httpx.Client() as http_client:
+                with http_client.stream("POST", f"{client.base_url}/chat/completions",
+                    headers=client._get_headers(),
+                    json=payload,
+                    timeout=90.0,
+                ) as response:
+                    if response.status_code >= 400:
+                        error_body = ""
+                        for line in response.iter_lines():
+                            error_body += line
+                            if len(error_body) > 300:
+                                break
+                        sys.stderr.write(f"[ERROR] MiniMax API error: status={response.status_code}, body={error_body[:300]}\n")
+                        sys.stderr.flush()
+                        # 529/500/502/503 可重试
+                        if response.status_code in (529, 500, 502, 503) and attempt < max_retries - 1:
+                            wait = 2 ** attempt
+                            sys.stderr.write(f"[RETRY] attempt {attempt+1}/{max_retries} failed ({response.status_code}), waiting {wait}s...\n")
+                            sys.stderr.flush()
+                            import time
+                            time.sleep(wait)
+                            continue  # 重试
+                        response.raise_for_status()
+
+                    for line in response.iter_lines():
+                        if not line.startswith("data: "):
+                            continue
+                        data = line[6:]
+                        if data == "[DONE]":
+                            break
+
+                        try:
+                            chunk = json.loads(data)
+                        except json.JSONDecodeError:
+                            continue
+
+                        choices = chunk.get("choices", [])
+                        if not choices:
+                            continue
+
+                        delta = choices[0].get("delta", {})
+                        finish_reason = choices[0].get("finish_reason", finish_reason)
+
+                        reasoning_content = delta.get("reasoning_content")
+                        if reasoning_content:
+                            full_reasoning += reasoning_content
+                            yield {"type": "thinking", "message": reasoning_content.rstrip('\n')}
+
+                        content = delta.get("content")
+                        if content:
+                            full_content += content
+                            if not any(tag in content for tag in ('<invoke', '</minimax:tool_call>')):
+                                yield {"type": "content_delta", "content": content.rstrip('\n')}
+
+                        delta_tool_calls = delta.get("tool_calls")
+                        if delta_tool_calls:
+                            for tc in delta_tool_calls:
+                                idx = tc.get("index", 0)
+                                if idx not in tool_calls_accum:
+                                    tool_calls_accum[idx] = {
+                                        "id": tc.get("id", ""),
+                                        "type": tc.get("type", "function"),
+                                        "function": {"name": "", "arguments": ""},
+                                    }
+                                func = tc.get("function", {})
+                                if func.get("name"):
+                                    tool_calls_accum[idx]["function"]["name"] = func["name"]
+                                if func.get("arguments"):
+                                    tool_calls_accum[idx]["function"]["arguments"] += func["arguments"]
+
+            # 构建完整响应
+            complete_message: dict[str, Any] = {"role": "assistant", "content": full_content}
+            if tool_calls_accum:
+                complete_message["tool_calls"] = [tool_calls_accum[i] for i in sorted(tool_calls_accum)]
+            reasoning_split = payload.get("reasoning_split", True)
+            if reasoning_split and full_reasoning:
+                complete_message["reasoning_details"] = [{"text": full_reasoning}]
+
+            yield {"type": "response", "response": {
+                "choices": [{"message": complete_message, "finish_reason": finish_reason}]
+            }}
+            return  # 成功完成
+
+        except httpx.HTTPStatusError as e:
+            status = e.response.status_code
+            if status in (529, 500, 502, 503) and attempt < max_retries - 1:
+                wait = 2 ** attempt
+                sys.stderr.write(f"[RETRY] httpx status={status}, attempt {attempt+1}/{max_retries}, waiting {wait}s...\n")
+                sys.stderr.flush()
+                import time
+                time.sleep(wait)
+                continue
+            raise
+
+    # 所有重试都失败（不会执行到这里，raise 已抛出）
+    raise RuntimeError(f"MiniMax API failed after {max_retries} retries")
 
 class AgentClient(MiniMaxClient):
     """支持 function calling 的 MiniMax 客户端"""
 
-    def chat_with_tools(
-        self,
-        messages: list[dict],
-        tools: list[dict],
-        tool_functions: dict[str, Callable],
-        model: str = "MiniMax-M2.7",
-        max_tokens: int = 2000,
-        reasoning_split: bool = True,
-        max_iterations: int = 3,
-    ) -> dict:
-        """同步调用 chat API，自动处理 tool_calls 循环
-
-        Args:
-            messages: 对话历史
-            tools: 工具定义列表（OpenAI 格式）
-            tool_functions: 工具名 -> 执行函数的映射
-            model: 模型名
-            max_tokens: 最大 token
-            reasoning_split: 是否分离思考内容到 reasoning_details
-            max_iterations: 最大工具调用轮次
-
-        Returns:
-            最终 LLM 响应
-        """
+    def chat_with_tools(self, messages, tools, tool_functions,
+                        model="MiniMax-M2.7", max_tokens=2000,
+                        reasoning_split=True, max_iterations=3) -> dict:
+        """同步调用 chat API，自动处理 tool_calls 循环"""
         iteration = 0
         while iteration < max_iterations:
             response = self._call_llm(messages, tools, model, max_tokens, reasoning_split)
@@ -86,40 +166,25 @@ class AgentClient(MiniMaxClient):
             if not self._has_tool_calls(response):
                 return response
 
-            # yield thinking 事件供调用方处理
-            reasoning = self._extract_reasoning(message, reasoning_split)
-            tool_calls = message.get("tool_calls", [])
-
-            # 先将 assistant 完整响应加入历史
             messages.append(self._build_assistant_message(message, reasoning_split))
 
-            # 再执行工具并追加结果
-            for tc in tool_calls:
+            for tc in message.get("tool_calls", []):
                 func_name = tc["function"]["name"]
                 func_args = json.loads(tc["function"]["arguments"])
-                tool_call_id = tc["id"]
-
                 result = ""
                 if func_name in tool_functions:
                     try:
                         result = str(tool_functions[func_name](**func_args))
-                        # 截断过长结果，减少 token 消耗
                         if len(result) > 1500:
                             result = result[:1500] + "\n...(结果已截断)"
                     except Exception as e:
                         result = f"工具执行失败: {e}"
                 else:
                     result = f"未知工具: {func_name}"
-
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call_id,
-                    "content": result,
-                })
+                messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result})
 
             iteration += 1
 
-        # 超过最大迭代次数，再做一次无 tools 调用获取最终结果
         return self._call_llm(messages, [], model, max_tokens, reasoning_split)
 
     def stream_chat_with_tools(
@@ -131,46 +196,83 @@ class AgentClient(MiniMaxClient):
         max_tokens: int = 2000,
         reasoning_split: bool = True,
         max_iterations: int = 3,
+        max_searches: int = 3,
     ) -> Iterator[dict]:
-        """支持 tools 的流式调用，yield SSE 事件
+        """流式 Agent 调用 — thinking 逐 token 实时推送到前端
 
         事件类型:
-            - thinking: 思考过程
+            - thinking: 思考过程（逐 token，实时）
             - tool_call: 工具调用信息
             - tool_result: 工具执行结果
             - content_delta: 内容增量
             - done: 完成标记
         """
         iteration = 0
+        search_count = 0
+        stop_search_instruction_added = False
         while iteration < max_iterations:
-            # 首次 LLM 调用（非流式，因为需要检查 finish_reason）
-            response = self._call_llm(messages, tools, model, max_tokens, reasoning_split)
+            # 搜索次数达上限后不再传 tools，强制模型直接生成最终回答
+            effective_tools = tools if search_count < max_searches else None
+
+            # 搜索配额用完时，追加一次指令明确要求模型停止搜索、直接输出
+            if search_count >= max_searches and not stop_search_instruction_added:
+                messages.append({
+                    "role": "user",
+                    "content": "搜索次数已达上限。请直接基于已有信息生成最终回复，不要再尝试调用搜索工具。",
+                })
+                stop_search_instruction_added = True
+
+            payload: dict[str, Any] = {
+                "model": model,
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "stream": True,
+                "reasoning_split": reasoning_split,
+            }
+            if effective_tools:
+                payload["tools"] = effective_tools
+
+            # 流式调用 — thinking/content token 实时 yield，最后得到完整响应
+            response = None
+            for event in _do_streaming_call(self, payload):
+                if event["type"] in ("thinking", "content_delta"):
+                    yield event  # 实时推送到前端
+                elif event["type"] == "response":
+                    response = event["response"]
+
             choice = response.get("choices", [{}])[0]
             message = choice.get("message", {})
 
-            # 提取并 yield thinking
-            reasoning = self._extract_reasoning(message, reasoning_split)
-            if reasoning:
-                yield {"type": "thinking", "message": reasoning}
-
             if not self._has_tool_calls(response):
-                # 检查 content 中是否包含 <invoke> 格式的工具调用
                 content = message.get("content", "")
 
-                # 尝试从 content 中解析 <invoke> 格式的工具调用
-                extracted_calls = _extract_tool_calls_from_content(content)
+                # 仅在搜索配额未用完时才从 content 中提取 XML 工具调用
+                # 搜索配额用完后，忽略模型误输出的 XML，直接视为最终内容
+                extracted_calls = _extract_tool_calls_from_content(content) if search_count < max_searches else None
 
                 if extracted_calls:
-                    # 从 content 中去除 invoke XML
                     clean_content = _clean_tool_xml(content)
-
-                    # 将 assistant message 加入历史
-                    messages.append({"role": "assistant", "content": clean_content})
-
-                    # 执行工具调用并追加 tool results
+                    # 构造带 tool_calls 的 assistant message，使 MiniMax 能正确关联 tool result
+                    import uuid
+                    synthetic_tool_calls = []
                     for call_info in extracted_calls:
+                        call_id = f"call_{uuid.uuid4().hex[:12]}"
+                        synthetic_tool_calls.append({
+                            "id": call_id,
+                            "type": "function",
+                            "function": {
+                                "name": call_info["name"],
+                                "arguments": json.dumps(call_info["arguments"], ensure_ascii=False),
+                            },
+                        })
+                    messages.append({"role": "assistant", "content": clean_content, "tool_calls": synthetic_tool_calls})
+
+                    for i, call_info in enumerate(extracted_calls):
                         func_name = call_info["name"]
                         func_args = call_info["arguments"]
+                        call_id = synthetic_tool_calls[i]["id"]
+                        if func_name == "web_search":
+                            search_count += 1
                         yield {"type": "tool_call", "tool": func_name, "args": func_args}
 
                         result = ""
@@ -185,10 +287,9 @@ class AgentClient(MiniMaxClient):
                             result = f"未知工具: {func_name}"
 
                         yield {"type": "tool_result", "tool": func_name, "result": result}
-
                         messages.append({
                             "role": "tool",
-                            "tool_call_id": f"extracted_{func_name}",
+                            "tool_call_id": call_id,
                             "content": result,
                         })
 
@@ -199,23 +300,19 @@ class AgentClient(MiniMaxClient):
                         yield {"type": "done"}
                         return
 
-                # 无工具调用，yield 最终内容
-                content = _clean_tool_xml(content)
-                if content:
-                    yield {"type": "content_delta", "content": content}
+                # 无工具调用，content_delta 已在流中推送，直接结束
                 yield {"type": "done"}
                 return
 
             # 处理 tool_calls
             tool_calls = message.get("tool_calls", [])
-
-            # 先将 assistant message 加入历史（必须在 tool results 之前）
             messages.append(self._build_assistant_message(message, reasoning_split))
 
-            # 再追加所有 tool results
             for tc in tool_calls:
                 func_name = tc["function"]["name"]
                 func_args = json.loads(tc["function"]["arguments"])
+                if func_name == "web_search":
+                    search_count += 1
                 yield {"type": "tool_call", "tool": func_name, "args": func_args}
 
                 result = ""
@@ -230,51 +327,38 @@ class AgentClient(MiniMaxClient):
                     result = f"未知工具: {func_name}"
 
                 yield {"type": "tool_result", "tool": func_name, "result": result}
-
-                # 追加 tool 结果到 messages
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc["id"],
-                    "content": result,
-                })
+                messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result})
 
             iteration += 1
 
-        # 超过最大迭代次数，获取最终响应
-        final_response = self._call_llm(messages, [], model, max_tokens, reasoning_split)
-        final_choice = final_response.get("choices", [{}])[0]
-        final_message = final_choice.get("message", {})
-
-        # 提取最终 thinking
-        final_reasoning = self._extract_reasoning(final_message, reasoning_split)
-        if final_reasoning:
-            yield {"type": "thinking", "message": final_reasoning}
-
-        # 提取最终内容（清理可能的 XML 格式工具调用）
-        content = _clean_tool_xml(final_message.get("content", ""))
-        if content:
-            yield {"type": "content_delta", "content": content}
-
-        yield {"type": "done"}
-
-    def _call_llm(
-        self,
-        messages: list[dict],
-        tools: list[dict] | None,
-        model: str,
-        max_tokens: int,
-        reasoning_split: bool,
-    ) -> dict:
-        """底层 LLM 调用"""
-        import concurrent.futures
-
-        payload: dict[str, Any] = {
+        # 超过最大迭代次数，最终调用（无 tools）
+        final_payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
             "max_tokens": max_tokens,
+            "stream": True,
             "reasoning_split": reasoning_split,
         }
-        # 有 tools 时才传入
+        for event in _do_streaming_call(self, final_payload):
+            if event["type"] in ("thinking", "content_delta"):
+                yield event
+            elif event["type"] == "response":
+                final_message = event["response"].get("choices", [{}])[0].get("message", {})
+                # content_delta 已在流中推送，这里不再重复
+
+        yield {"type": "done"}
+
+    # ---- 以下为内部方法 ----
+
+    def _call_llm(self, messages, tools, model, max_tokens, reasoning_split, max_retries=3):
+        """非流式 LLM 调用（自动重试），仅供 chat_with_tools 使用"""
+        import concurrent.futures
+        import time
+
+        payload: dict[str, Any] = {
+            "model": model, "messages": messages,
+            "max_tokens": max_tokens, "reasoning_split": reasoning_split,
+        }
         if tools:
             payload["tools"] = tools
 
@@ -282,9 +366,7 @@ class AgentClient(MiniMaxClient):
             with httpx.Client() as client:
                 response = client.post(
                     f"{self.base_url}/chat/completions",
-                    headers=self._get_headers(),
-                    json=payload,
-                    timeout=90.0,
+                    headers=self._get_headers(), json=payload, timeout=90.0,
                 )
                 if response.status_code >= 400:
                     import sys
@@ -293,45 +375,43 @@ class AgentClient(MiniMaxClient):
                 response.raise_for_status()
                 return response.json()
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future = executor.submit(_call)
-            return future.result()
+        last_error = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(_call)
+                    return future.result()
+            except (httpx.HTTPStatusError, httpx.ConnectError, httpx.ReadTimeout) as e:
+                last_error = e
+                status = getattr(getattr(e, 'response', None), 'status_code', None)
+                if status not in (429, 500, 529, 502, 503) and not isinstance(e, (httpx.ReadTimeout, httpx.ConnectError)):
+                    raise
+                wait = 2 ** attempt
+                print(f"[MiniMax] API error {status or type(e).__name__}, retry {attempt}/{max_retries} in {wait}s...")
+                time.sleep(wait)
+        raise last_error  # type: ignore
 
     def _has_tool_calls(self, response: dict) -> bool:
-        """检查响应是否包含 tool_calls"""
         choices = response.get("choices", [])
         if not choices:
             return False
-        message = choices[0].get("message", {})
-        return bool(message.get("tool_calls"))
+        return bool(choices[0].get("message", {}).get("tool_calls"))
 
     def _extract_reasoning(self, message: dict, reasoning_split: bool) -> str:
-        """提取思考内容"""
         if reasoning_split:
-            # reasoning_split=True 时，思考在 reasoning_details 字段
             details = message.get("reasoning_details", [])
             if details:
                 return details[0].get("text", "")
-        # reasoning_split=False 时，思考在 content 的 thinking 标签中
         content = message.get("content", "")
         if "Thinking" in content:
-            import re
             thinks = re.findall(r'Thinking(.*?)Thinking', content, re.DOTALL)
             return "\n".join(t.strip() for t in thinks if t.strip())
         return ""
 
     def _build_assistant_message(self, message: dict, reasoning_split: bool) -> dict:
-        """构建要加入历史的 assistant message
-
-        必须保留完整信息（含 tool_calls 和 reasoning_details），
-        否则会中断 Interleaved Thinking 链路
-        """
         msg: dict[str, Any] = {"role": "assistant", "content": message.get("content", "")}
-
         if message.get("tool_calls"):
             msg["tool_calls"] = message["tool_calls"]
-
         if reasoning_split and message.get("reasoning_details"):
             msg["reasoning_details"] = message["reasoning_details"]
-
         return msg

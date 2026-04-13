@@ -69,7 +69,8 @@ def stream_toc_with_tools(
         print(f"[TOC Agent] Error during agent loop: {e}")
         import traceback
         traceback.print_exc()
-        yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
+        from services.outline_agent import _user_friendly_error
+        yield f"data: {json.dumps({'type': 'error', 'message': _user_friendly_error(e)}, ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"
         return
 

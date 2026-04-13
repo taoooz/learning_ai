@@ -66,7 +66,7 @@ def _format_teaching_memory(teaching_memory: dict) -> str:
     return '\n'.join(parts)
 
 
-def build_cards_prompt(topic: str, payload: dict) -> str:
+def build_cards_prompt(topic: str, payload: dict, enable_search: bool = True) -> str:
     """构建 system prompt（角色 + 指令 + 章节信息 + 用户情况 + 格式约束）"""
     node_title = payload.get('nodeTitle', '')
     teaching_goal = payload.get('teachingGoal', '')
@@ -112,6 +112,11 @@ def build_cards_prompt(topic: str, payload: dict) -> str:
     from datetime import date
     today = date.today().isoformat()
 
+    search_rules = """\n### 搜索行为要求
+- 控制搜索次数，信息够了就不要过度搜索
+- 避免让用户等待过长时间
+- 优先使用已有知识，仅在必要时搜索""" if enable_search else ""
+
     return f"""<critical_rules>
 当前日期：{today}
 
@@ -125,11 +130,7 @@ def build_cards_prompt(topic: str, payload: dict) -> str:
 - 用结构化的方法表达知识或观点
 - 一个卡片围绕一个知识或技能
 - 去掉任何一句删掉后读者没有损失的话
-
-### 搜索行为要求
-- 控制搜索次数，信息够了就不要过度搜索
-- 避免让用户等待过长时间
-- 优先使用已有知识，仅在必要时搜索
+{search_rules}
 </critical_rules>
 
 <chapter_info>
@@ -248,7 +249,7 @@ def build_cards_prompt(topic: str, payload: dict) -> str:
 async def generate_cards(topic: str, payload: dict) -> dict:
     """生成 Cards"""
     client = get_client()
-    system_prompt = build_cards_prompt(topic, payload)
+    system_prompt = build_cards_prompt(topic, payload, enable_search=False)
 
     content = ""
     for chunk in client.stream_chat_sync(

@@ -4,7 +4,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sse_starlette.sse import EventSourceResponse
+from starlette.responses import StreamingResponse
 
 # 加载 .env
 env_path = Path(__file__).parent / ".env"
@@ -56,9 +56,10 @@ app.add_middleware(
 async def global_exception_handler(request, exc):
     from fastapi.responses import JSONResponse
     print(f"[ERROR] Unhandled exception: {exc}")
+    from services.outline_agent import _user_friendly_error
     return JSONResponse(
         status_code=500,
-        content={"error": "服务器内部错误，请稍后重试"}
+        content={"error": _user_friendly_error(exc)}
     )
 
 
@@ -138,7 +139,7 @@ async def generate_outline(req: OutlineRequest):
 
         yield "data: [DONE]\n\n"
 
-    return EventSourceResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @app.post("/api/agents/outline/answer")
@@ -210,7 +211,7 @@ async def answer_question(req: OutlineAnswerRequest):
 
         yield "data: [DONE]\n\n"
 
-    return EventSourceResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @app.post("/api/agents/outline/generate_agent")
@@ -230,7 +231,7 @@ async def generate_outline_agent(req: OutlineRequest):
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
 
-    return EventSourceResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @app.post("/api/agents/outline/answer_agent")
@@ -249,7 +250,7 @@ async def answer_outline_agent(req: OutlineAnswerRequest):
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
 
-    return EventSourceResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @app.post("/api/agents/toc/generate")
@@ -269,7 +270,7 @@ async def generate_toc_route(request: dict):
 
         yield "data: [DONE]\n\n"
 
-    return EventSourceResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @app.post("/api/agents/cards/generate")
@@ -318,7 +319,7 @@ async def generate_toc_agent_route(request: dict):
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
 
-    return EventSourceResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @app.post("/api/agents/cards/generate_agent")
@@ -366,7 +367,7 @@ async def chat_agent_route(request: dict):
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
 
-    return EventSourceResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 if __name__ == "__main__":
