@@ -1,10 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { PYTHON_AGENT_URL } from '@/lib/agent-config';
 
+/**
+ * TOC SSE 代理 — 直接 pipe Python Agent 的 SSE 流给前端
+ * 前端自行消费 thinking/course_name/course_description/node/complete 事件
+ */
 export async function POST(request: NextRequest) {
-  const { blueprint } = await request.json();
-
   try {
+    const body = await request.json();
+    const { blueprint } = body;
+
     const response = await fetch(`${PYTHON_AGENT_URL}/api/agents/toc/generate_agent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -15,38 +20,18 @@ export async function POST(request: NextRequest) {
       throw new Error(`Python Agent error: ${response.status}`);
     }
 
-    // 消费 SSE 流，提取最终结果
-    const text = await response.text();
-    const lines = text.split('\n');
-
-    let result: any = null;
-
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue;
-      const data = line.slice(6).trim();
-      if (data === '[DONE]') continue;
-
-      try {
-        const event = JSON.parse(data);
-        if (event.type === 'complete' && event.result) {
-          result = event.result;
-        }
-      } catch {
-        // 跳过无法解析的行
-      }
-    }
-
-    if (!result) {
-      throw new Error('TOC generation did not return a complete result');
-    }
-
-    return NextResponse.json(result);
+    return new Response(response.body, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    });
   } catch (error) {
-    console.error('[TOC Agent proxy] Error:', error);
-    // 降级：返回原始错误，不 fallback 到本地 MiniMax
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : '目录生成失败' },
-      { status: 500 }
+    console.error('[TOC proxy] Error:', error);
+    return new Response(
+      JSON.stringify({ error: '目录生成失败，请确保 Python Agent 服务已启动' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } },
     );
   }
 }

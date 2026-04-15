@@ -14,7 +14,7 @@ interface RecommendedCourse {
 interface RecommendationsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  userProfile: any;
+  userProfile: Record<string, any> | null;
   existingCourses: string[];
 }
 

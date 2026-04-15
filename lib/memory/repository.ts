@@ -35,6 +35,14 @@ function getStorage(storage?: StorageLike): StorageLike | null {
   return window.localStorage;
 }
 
+/**
+ * 快速获取当前用户记忆快照（纯函数，非 hook）
+ * 适用于非 React 组件场景（API 路由、Context 初始化等）
+ */
+export function getUserMemoryStoreSnapshot(): MemoryStoreV3 {
+  return createMemoryRepository({ getProfile: getUserProfile }).getMemoryStoreV3();
+}
+
 export function createMemoryRepository(options: CreateMemoryRepositoryOptions = {}) {
   const storage = getStorage(options.storage);
   const getProfile = options.getProfile || getUserProfile;

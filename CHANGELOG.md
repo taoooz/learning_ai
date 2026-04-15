@@ -1,5 +1,71 @@
 # 项目迭代日志
 
+## 2026-04-13
+
+### Bug 修复
+
+- 修复 Blueprint 卡片渲染后消失的问题：`confirmation` handler 现在会检查 `content` 是否包含完整 `<outline>` 标签，缺失时主动用 blueprint 数据生成，确保 OutlineCard 稳定渲染
+- 修复同标签页重新生成课程时触发 `answer_agent` 422 错误：`CourseContext` 改为仅在 `userMessage` 存在时读取 `sessionStorage` 中的 sessionId，避免旧流的竞态写入导致首次生成走错分支
+- 修复节点内容生成 404：`generateNodeContent` 改为调用新的 `/api/generate/node/cards` 接口，适配架构清理后删除旧 `/api/generate/node` 路由的变更
+- `content_delta` handler 加入 `foundBlueprint` 守卫，避免 blueprint 确认后继续追加纯文本
+- 清理调试代码：移除 `route.ts` 的 `console.log`，`main.py` 的 `answer_outline_agent` 恢复使用 Pydantic schema 校验
+- 修复登录页 `LoginContent` Rules of Hooks 错误：`useEffect` 从条件返回之后移到之前，避免 `isLoading` 为 `true` 时 hooks 数量不一致
+- 修复节点内容生成 404 后 cards 重复请求：`generateNodeContent` 加入 `pendingNodeRequests` Map 做请求去重
+- TOC 目录页恢复流式展示：路由改为 SSE 透传，页面直接消费 `course_name/course_description/node` 事件逐步渲染，搜索阶段展示 thinking 提示
+- 修复 outline 生成时 MiniMax thinking 无限循环：`_do_streaming_call` 新增重复检测，同一 thinking chunk 连续出现 3 次即终止流，防止模型退化
+- 修复 TOC Agent 版流式展示：将 batch 解析改为实时流式解析，Agent 循环中每收到 `content_delta` 即尝试增量提取 courseName/description/nodes 并 yield
+- 优化 TOC 完成后的跳转体验：将内联文字提示改为底部悬浮提示条，带 3 秒倒计时，无需滚动到底部即可感知
+
+### 代码架构优化（四阶段）
+
+**阶段一：P0 架构缺陷修复**
+- 重构 `hooks/useUserMemory.ts`：移除 re-export 桶角色，纯函数和 `getUserMemoryStoreSnapshot` 迁移到 `lib/memory/repository.ts`，删除重复的 `userMemory`/`memoryStore` 返回值
+- 新增 `lib/memory/index.ts` 作为 memory 模块统一导出入口
+- 修复 3 个 API 路由（toc/cards/questions）`request.json()` 在 try-catch 外导致的未捕获异常
+- 邀请码从源码硬编码迁移到 `INVITE_CODES` 环境变量，提取 `isValidInviteCodeFormat()` 共享函数
+- Redis 客户端改为单例复用，避免每次请求创建新连接
+
+**阶段二：消除冗余代码**
+- 删除未使用的 `lib/search.ts`
+- 新增 `lib/python-agent.ts` 统一 Python Agent 代理调用（`callPythonAgent`/`callPythonAgentSSE`），消除 3 个路由的重复 fetch 逻辑
+- 重写 `app/api/recommendations/route.ts`：复用 `callMiniMax` + `parseJSONResponse`，移除未使用 import 和 console.log，降级响应标记 `degraded: true`
+- `RecommendationsModal` 的 `any` 类型改为 `Record<string, any> | null`
+
+**阶段三：组件拆分**
+- 新增 `components/ConfirmModal.tsx`（通用确认弹窗）
+- 新增 `components/CourseCard.tsx`（课程卡片 + 删除菜单交互，含独立 useEffect）
+- 新增 `components/SystemCourseRecommendations.tsx`（空状态推荐区域）
+- `app/page.tsx` 从 406 行降至 218 行
+
+**阶段四：API 规范化**
+- 新增 `lib/api-response.ts` 统一 API 响应格式（`apiSuccess`/`apiError`）
+- `profile/insights` 路由改用统一格式，错误消息改为中文
+
+**阶段五：认证 + 响应格式统一**
+- 新增 `requireAuth()` 函数到 `lib/api-response.ts`，统一 cookie 认证检查
+- `recommendations` 和 `profile/insights` 路由添加 `requireAuth` 认证守卫
+- `user`、`recommendations`、`cards`、`questions` 四个路由全部迁移到 `apiSuccess`/`apiError` 响应格式
+- `cards` 路由错误消息区分 `PythonAgentError` 和普通异常
+
+**阶段六：ChatWidget 组件拆分**
+- 拆分 `ChatWidget`（480 行 → 233 行）为 5 个子组件 + 1 个自定义 hook
+- 新增 `components/ui/chat/AssistantGlyph.tsx`（共享图标组件）
+- 新增 `components/ui/chat/ChatHeader.tsx`（头部区域）
+- 新增 `components/ui/chat/ChatEmptyState.tsx`（空状态欢迎卡片）
+- 新增 `components/ui/chat/ChatThinkingIndicator.tsx`（思考动画指示器）
+- 新增 `components/ui/chat/ChatInputForm.tsx`（输入框 + 发送按钮）
+- 新增 `hooks/useChatSubmit.ts`（SSE 流式请求 + 记忆记录逻辑）
+
+**阶段七：类型文件拆分**
+- 拆分 `types/course.ts`（561 行 → 9 行桶文件 + 6 个领域文件）
+- 新增 `types/visualization.ts`（可视化类型：VisualizationType, TimelineEvent, Visualization）
+- 新增 `types/learning-content.ts`（学习内容：LearningCard, Question, NodeLessonCard, NodeLessonQuestion）
+- 新增 `types/outline.ts`（纲要流程：ClarificationQuestion, OutlineBlueprint, OutlineSSEEvent 等）
+- 新增 `types/user-profile.ts`（用户画像：UserProfile, WorkExperience, Education, LearningInsight）
+- 新增 `types/course-core.ts`（课程结构：CourseTree, CourseBlueprint, NodeLesson, StoredData 等）
+- 新增 `types/memory.ts`（记忆系统：MemoryStoreV3, ConceptState, MemoryEvent 等共 22 个类型）
+- `types/course.ts` 保留为桶文件统一导出，35 个导入文件零改动
+
 ## 2026-04-09
 
 ### Agent 搜索能力推广到 TOC/Cards/Questions 阶段

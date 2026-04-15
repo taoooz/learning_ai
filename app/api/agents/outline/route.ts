@@ -10,16 +10,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { topic, userProfile, userMemory, userMessage, sessionId } = body;
 
-    let agentUrl: string;
-    let agentBody: Record<string, any>;
+    // 只有 sessionId 和 userMessage 都存在时才走 answer_agent（多轮回答）
+    // 否则走 generate_agent（新课程生成），忽略可能残留的 sessionId
+    const hasAnswer = !!(sessionId && userMessage);
 
-    if (sessionId) {
-      agentUrl = `${PYTHON_AGENT_URL}/api/agents/outline/answer_agent`;
-      agentBody = { sessionId, answer: userMessage };
-    } else {
-      agentUrl = `${PYTHON_AGENT_URL}/api/agents/outline/generate_agent`;
-      agentBody = { topic, userProfile: userProfile || {}, userMemory: userMemory || {} };
-    }
+    const agentUrl = hasAnswer
+      ? `${PYTHON_AGENT_URL}/api/agents/outline/answer_agent`
+      : `${PYTHON_AGENT_URL}/api/agents/outline/generate_agent`;
+    const agentBody = hasAnswer
+      ? { sessionId, answer: userMessage }
+      : { topic, userProfile: userProfile || {}, userMemory: userMemory || {} };
 
     const response = await fetch(agentUrl, {
       method: 'POST',

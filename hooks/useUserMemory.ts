@@ -1,42 +1,21 @@
 // hooks/useUserMemory.ts
+// React hook 封装 memory repository，提供组件级别的记忆操作方法
+// 纯函数和 re-export 已迁移到 lib/memory/index.ts
+
 import { useCallback } from 'react';
 import {
-  analyzeChatMessageForMemory,
-  detectAssistantExplanationStyle,
-  detectChatLearningPreferences,
-  detectExplicitMasteredConcept,
   normalizeConceptKey,
   type ChatSignalInput,
   type DetectedLearningPreference,
   type DetectedMasteredConcept,
   type QuestionAttemptPayload,
-} from '@/lib/memory/aggregator';
-import {
-  getChatMemoryPayload,
-  getPlanningMemoryPayload,
-  getTeachingMemoryPayload,
-} from '@/lib/memory/memory-agent';
-import { createMemoryRepository } from '@/lib/memory/repository';
-import { getUserProfile } from '@/lib/storage';
+} from '@/lib/memory';
+import { createMemoryRepository } from '@/lib/memory';
 import type { ConversationSummary, MemoryStoreV3 } from '@/types/course';
+import { getUserProfile } from '@/lib/storage';
 
 function getRepository() {
   return createMemoryRepository({ getProfile: getUserProfile });
-}
-
-export {
-  analyzeChatMessageForMemory,
-  detectAssistantExplanationStyle,
-  detectChatLearningPreferences,
-  detectExplicitMasteredConcept,
-  getChatMemoryPayload,
-  getPlanningMemoryPayload,
-  getTeachingMemoryPayload,
-  normalizeConceptKey,
-};
-
-export function getUserMemoryStoreSnapshot(): MemoryStoreV3 {
-  return getRepository().getMemoryStoreV3();
 }
 
 export function useUserMemory() {
@@ -78,7 +57,6 @@ export function useUserMemory() {
   }, [repository]);
 
   const addLearningPreference = useCallback((preference: DetectedLearningPreference): void => {
-    // 写入 V3 profile.preferences
     const store = repository.getMemoryStoreV3();
     const existing = store.profile.preferences.find(
       (item) => item.kind === preference.kind && item.value === preference.value,
@@ -103,7 +81,6 @@ export function useUserMemory() {
 
   const addMasteredConcept = useCallback((mastered: DetectedMasteredConcept): void => {
     const normalizedConcept = normalizeConceptKey(mastered.concept);
-    // 写入 V3 conceptProjection
     repository.appendMemoryEvent({
       type: 'node_completed',
       topic: mastered.topic,
@@ -118,7 +95,6 @@ export function useUserMemory() {
   }, [repository]);
 
   const getConversationSummary = useCallback((courseId: string): ConversationSummary | undefined => {
-    // 从 V3 episodicProjections 读取
     const store = repository.getMemoryStoreV3();
     const episode = store.projections.episodicProjections.find(
       (item) => item.courseId === courseId && item.kind === 'chat',
@@ -149,7 +125,6 @@ export function useUserMemory() {
   }, [repository]);
 
   return {
-    userMemory: memoryStore,
     memoryStore,
     recordQuestionAttempt,
     addConversationSummary,

@@ -1,11 +1,15 @@
 // app/api/profile/insights/route.ts
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { callMiniMax, parseJSONResponse } from '@/lib/minimax';
 import { buildProfileInsightPrompt } from '@/lib/prompt';
 import { saveUserProfile } from '@/lib/storage';
 import { LearningInsight } from '@/types/course';
+import { apiSuccess, apiError, requireAuth } from '@/lib/api-response';
 
 export async function POST(request: NextRequest) {
+  const auth = requireAuth(request);
+  if ('error' in auth) return auth.error;
+
   try {
     const profile = await request.json();
     const prompt = buildProfileInsightPrompt(profile);
@@ -19,12 +23,9 @@ export async function POST(request: NextRequest) {
     };
     saveUserProfile(profileWithInsights);
 
-    return NextResponse.json(profileWithInsights);
+    return apiSuccess(profileWithInsights);
   } catch (error) {
     console.error('Profile insights error:', error);
-    return NextResponse.json(
-      { error: 'Failed to extract insights' },
-      { status: 500 }
-    );
+    return apiError('提取学习洞察失败', 500);
   }
 }

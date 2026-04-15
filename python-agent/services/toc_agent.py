@@ -40,6 +40,35 @@ def stream_toc_with_tools(
     ]
 
     agent_events = []
+    # 实时流式解析状态
+    streaming_content = ""
+    emitted_course_name = None
+    emitted_course_description = None
+    emitted_node_count = 0
+
+    def _try_parse_and_yield():
+        """从当前累积内容中增量解析 TOC 字段并 yield SSE 事件"""
+        nonlocal emitted_course_name, emitted_course_description, emitted_node_count
+        content_clean = re.sub(r'Thinking.*?Thinking', '', streaming_content, flags=re.DOTALL).strip()
+        if not content_clean:
+            return
+
+        course_name = _extract_json_string_field(content_clean, "courseName")
+        if course_name and course_name != emitted_course_name:
+            emitted_course_name = course_name
+            yield f"data: {json.dumps({'type': 'course_name', 'value': course_name}, ensure_ascii=False)}\n\n"
+
+        course_description = _extract_json_string_field(content_clean, "courseDescription")
+        if course_description and course_description != emitted_course_description:
+            emitted_course_description = course_description
+            yield f"data: {json.dumps({'type': 'course_description', 'value': course_description}, ensure_ascii=False)}\n\n"
+
+        nodes = _extract_complete_node_objects(content_clean)
+        while emitted_node_count < len(nodes):
+            node = nodes[emitted_node_count]
+            if isinstance(node, dict) and all(key in node for key in ("index", "title", "description")):
+                yield f"data: {json.dumps({'type': 'node', 'node': {'index': node['index'], 'title': node['title'], 'description': node['description'], 'frame': node.get('frame', 'total_split_total')}}, ensure_ascii=False)}\n\n"
+            emitted_node_count += 1
 
     try:
         for event in client.stream_chat_with_tools(
@@ -54,6 +83,11 @@ def stream_toc_with_tools(
 
             if event["type"] == "thinking":
                 yield f"data: {json.dumps({'type': 'thinking', 'message': event['message']}, ensure_ascii=False)}\n\n"
+
+            elif event["type"] == "content_delta":
+                streaming_content += event["content"]
+                for sse in _try_parse_and_yield():
+                    yield sse
 
             elif event["type"] == "tool_call":
                 tool_name = event["tool"]
@@ -74,40 +108,18 @@ def stream_toc_with_tools(
         yield "data: [DONE]\n\n"
         return
 
-    # 从 agent 事件中提取最终内容
-    full_content = ""
-    for event in agent_events:
-        if event["type"] == "content_delta":
-            full_content += event["content"]
-
-    # 去除可能的 thinking 标签
-    content_clean = re.sub(r'Thinking.*?Thinking', '', full_content, flags=re.DOTALL).strip()
-
-    # 解析并 yield 事件（和 stream_toc_events 输出格式一致）
-    emitted_course_name = None
-    emitted_course_description = None
-    emitted_node_count = 0
-
-    course_name = _extract_json_string_field(content_clean, "courseName")
-    if course_name and course_name != emitted_course_name:
-        emitted_course_name = course_name
-        yield f"data: {json.dumps({'type': 'course_name', 'value': course_name}, ensure_ascii=False)}\n\n"
-
-    course_description = _extract_json_string_field(content_clean, "courseDescription")
-    if course_description and course_description != emitted_course_description:
-        emitted_course_description = course_description
-        yield f"data: {json.dumps({'type': 'course_description', 'value': course_description}, ensure_ascii=False)}\n\n"
-
-    nodes = _extract_complete_node_objects(content_clean)
-    while emitted_node_count < len(nodes):
-        node = nodes[emitted_node_count]
-        if isinstance(node, dict) and all(key in node for key in ("index", "title", "description")):
-            yield f"data: {json.dumps({'type': 'node', 'node': {'index': node['index'], 'title': node['title'], 'description': node['description'], 'frame': node.get('frame', 'total_split_total')}}, ensure_ascii=False)}\n\n"
-        emitted_node_count += 1
-
-    # 完整解析
+    # 最终兜底解析（确保 complete 事件包含完整数据）
+    content_clean = re.sub(r'Thinking.*?Thinking', '', streaming_content, flags=re.DOTALL).strip()
     from lib.minimax import parse_json_response
-    result = parse_json_response(content_clean)
+    try:
+        result = parse_json_response(content_clean)
+    except Exception:
+        # 如果最终解析失败，用已流式 emit 的数据构造结果
+        result = {
+            "courseName": emitted_course_name or blueprint.get("topic", ""),
+            "courseDescription": emitted_course_description or "",
+            "nodes": [],
+        }
     yield f"data: {json.dumps({'type': 'complete', 'result': result}, ensure_ascii=False)}\n\n"
 
     yield "data: [DONE]\n\n"

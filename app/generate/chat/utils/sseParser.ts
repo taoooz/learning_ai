@@ -12,7 +12,10 @@ export type SSEEvent =
   | { type: 'confirmation'; sessionId?: string; blueprint: any }
   | { type: 'session_created'; sessionId: string }
   | { type: 'error'; message: string }
-  | { type: 'complete'; result: any };
+  | { type: 'complete'; result: any }
+  | { type: 'course_name'; value: string }
+  | { type: 'course_description'; value: string }
+  | { type: 'node'; node: { index: number; title: string; description: string } };
 
 /**
  * 解析 SSE 数据行

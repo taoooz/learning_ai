@@ -13,7 +13,7 @@ import {
   SystemCourseRecommendation,
   updateNodeLesson as saveNodeLesson,
 } from '@/lib/storage';
-import { getUserMemoryStoreSnapshot } from '@/hooks/useUserMemory';
+import { getUserMemoryStoreSnapshot } from '@/lib/memory';
 
 interface CourseContextType {
   courses: CourseTree[];
@@ -183,8 +183,8 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     setGenerationStatus('generating');
     setGenerationError(null);
 
-    // 获取已有的 sessionId（如果存在）
-    const existingSessionId = sessionStorage.getItem('outlineSessionId');
+    // 只有回答澄清问题时才传 sessionId，首次生成不传（避免 sessionStorage 脏数据走错分支）
+    const sessionId = userMessage ? sessionStorage.getItem('outlineSessionId') : undefined;
 
     const response = await fetch('/api/agents/outline', {
       method: 'POST',
@@ -194,7 +194,7 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
         userProfile: getUserProfile(),
         userMemory: getUserMemoryStoreSnapshot(),
         userMessage,
-        sessionId: existingSessionId,
+        sessionId,
       }),
     });
 
@@ -334,37 +334,75 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     setCurrentCourse(course);
   }, []);
 
+  // 请求去重：避免同一个节点被并发请求多次
+  const pendingNodeRequests = useRef<Map<string, Promise<void>>>(new Map());
+
   const generateNodeContent = useCallback(async (courseId: string, nodeIndex: number) => {
     const course = coursesRef.current.find(c => c.courseId === courseId);
     if (!course || course.nodes[nodeIndex].cards) return;
+
+    const key = `${courseId}:${nodeIndex}`;
+    const existing = pendingNodeRequests.current.get(key);
+    if (existing) return existing;
+
     const bundle = getStoredCourseBundle(courseId);
     if (!bundle) throw new Error('Course bundle not found');
 
-    try {
-      const response = await fetch('/api/generate/node', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          topic: course.topic,
-          blueprint: bundle.blueprint,
+    const promise = (async () => {
+      try {
+        const nodeInfo = buildNodeInfoPayload(bundle, nodeIndex);
+        const lp = bundle.blueprint.learnerPositioning as typeof bundle.blueprint.learnerPositioning & {
+          backgroundSummary?: string;
+        };
+
+        const response = await fetch('/api/generate/node/cards', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            topic: bundle.blueprint.topic,
+            nodeInfo: {
+              title: nodeInfo.title,
+              teachingGoal: nodeInfo.teachingGoal,
+              teachConceptIds: nodeInfo.teachConceptIds,
+              prerequisiteConceptIds: nodeInfo.prerequisiteConceptIds,
+            },
+            learnerBackground: {
+              backgroundSummary: lp.backgroundSummary || '',
+              skipBasics: lp.skipBasics || [],
+            },
+            prevNodeSummary: nodeInfo.prevNode,
+            nextNodeSummary: nodeInfo.nextNode,
+          }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(getGenerationErrorMessage(data, '这一节内容生成失败，请稍后再试。'));
+        }
+
+        const cards = data.cards || [];
+        const node = bundle.blueprint.nodes[nodeIndex];
+        const lesson: NodeLesson = {
+          courseId,
           nodeIndex,
-          userProfile: getUserProfile(),
-          userMemory: getUserMemoryStoreSnapshot(),
-        }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(getGenerationErrorMessage(data, '这一节内容生成失败，请稍后再试。'));
+          title: node.title,
+          teachingGoal: node.teachingGoal,
+          teachConceptIds: node.teachConceptIds || [],
+          assessmentTargetIds: [],
+          cards,
+          questions: [],
+        };
+        updateNodeContent(courseId, nodeIndex, lesson);
+      } catch (error) {
+        throw (error instanceof Error ? error : new Error('这一节内容生成失败，请稍后再试。'));
+      } finally {
+        pendingNodeRequests.current.delete(key);
       }
+    })();
 
-      const { generationMeta: _generationMeta, ...lessonPayload } = data;
-      const lesson: NodeLesson = lessonPayload;
-      updateNodeContent(courseId, nodeIndex, lesson);
-    } catch (error) {
-      throw (error instanceof Error ? error : new Error('这一节内容生成失败，请稍后再试。'));
-    }
-  }, []); // 移除 courses 依赖，使用 ref
+    pendingNodeRequests.current.set(key, promise);
+    return promise;
+  }, []);
 
   // 预加载下一个节点内容（不阻塞主流程）
   const preloadNextNode = useCallback((courseId: string, currentNodeIndex: number) => {
