@@ -15,7 +15,7 @@ import { ChatLauncher, ChatWidget } from '@/components/ui/ChatWidget';
 import { CardVisualization } from '@/components/ui/CardVisualization';
 import { EnhancedLoadingScreen } from '@/components/learning/EnhancedLoadingScreen';
 import { useUserMemory } from '@/hooks/useUserMemory';
-import { getStoredCourseBundle, getStoredDataV2, updateNodeLesson } from '@/lib/storage';
+import { getStoredDataV2 } from '@/lib/storage';
 
 type LearningPhase = 'loading' | 'learning' | 'complete';
 type LearnStep =
@@ -193,7 +193,7 @@ function LastLineMarker({
 export default function LearnPage() {
   const params = useParams();
   const router = useRouter();
-  const { courses, generateNodeContent, generateNodeQuestions, preloadNextNode } = useCourse();
+  const { courses, generateNodeContent, generateNodeQuestions, preloadNextNode, updateNodeQuestions } = useCourse();
   const { markCompleted } = useProgress();
   const userMemory = useUserMemory();
 
@@ -328,23 +328,14 @@ export default function LearnPage() {
     generateNodeQuestions(courseId, nodeIndex)
       .then((data) => {
         hasRequestedQuestionsRef.current = requestKey;
-        // 保存 questions 到存储
-        const bundle = getStoredCourseBundle(courseId);
-        if (bundle) {
-          const existingLesson = bundle.lessons[nodeIndex];
-          if (existingLesson) {
-            updateNodeLesson(courseId, nodeIndex, {
-              ...existingLesson,
-              questions: data.questions,
-            });
-          }
-        }
+        // 更新 React 状态 + localStorage
+        updateNodeQuestions(courseId, nodeIndex, data.questions);
       })
       .catch((error) => {
         console.warn('[LearnPage] Questions generation failed:', error);
         // 不设置 ref，允许重试
       });
-  }, [courseId, nodeIndex, generateNodeQuestions, node?.cards, node?.questions, phase]);
+  }, [courseId, nodeIndex, generateNodeQuestions, updateNodeQuestions, node?.cards, node?.questions, phase]);
 
   // 当前节点可学习后，再预加载下一个节点知识
   useEffect(() => {

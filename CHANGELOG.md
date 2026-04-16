@@ -66,6 +66,13 @@
 - 新增 `types/memory.ts`（记忆系统：MemoryStoreV3, ConceptState, MemoryEvent 等共 22 个类型）
 - `types/course.ts` 保留为桶文件统一导出，35 个导入文件零改动
 
+**阶段八：CourseContext 精简 + 测试修复**
+- 提取 `CourseContext`（516 行 → 195 行）的 11 个 action 函数到 `hooks/useCourseActions.ts`
+- 新增 `hooks/useCourseActions.ts`：封装所有课程生成/更新/删除逻辑
+- 修复 `tests/course-tree-layout.test.ts`：5 个过时 `useUserMemory` 导入迁移到 `lib/memory/*`
+- 修复 `hasResolvedQuestions` 测试断言与实现不一致的问题
+- 23 个测试全部通过
+
 ## 2026-04-09
 
 ### Agent 搜索能力推广到 TOC/Cards/Questions 阶段

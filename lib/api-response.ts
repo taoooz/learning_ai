@@ -24,6 +24,21 @@ export function apiError(error: string, status = 400): NextResponse<ApiErrorResp
 }
 
 /**
+ * 客户端解包 apiSuccess/apiError 响应
+ * 返回 data 或抛出错误
+ */
+export function unwrapApiResponse<T>(raw: { success?: boolean; data?: T; error?: string }): T {
+  if (raw.success === true && raw.data !== undefined) {
+    return raw.data;
+  }
+  if (raw.success === false && raw.error) {
+    throw new Error(raw.error);
+  }
+  // 兼容未包装的旧格式
+  return raw as unknown as T;
+}
+
+/**
  * 检查请求是否已认证（cookie 中有有效的邀请码）
  * 返回 inviteCode 或 null（未认证时附带 401 响应）
  */

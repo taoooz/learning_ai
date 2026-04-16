@@ -329,19 +329,16 @@ function TocPageContent() {
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
             className="absolute bottom-0 left-0 right-0 z-10 px-5 pb-6 pt-3 bg-gradient-to-t from-background via-background/95 to-transparent"
           >
-            <div className="mx-auto max-w-lg">
-              <div className="flex items-center justify-between rounded-2xl bg-accent/[0.08] border border-accent/20 px-4 py-3 backdrop-blur-sm">
-                <div className="flex items-center gap-2.5">
-                  <svg className="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="mx-auto max-w-sm">
+              <div className="flex items-center justify-between rounded-2xl bg-white/90 border border-black/6 px-4 py-2.5 shadow-[0_8px_24px_rgba(15,23,42,0.06)] backdrop-blur-sm">
+                <div className="flex items-center gap-2">
+                  <svg className="h-4.5 w-4.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span className="text-[14px] font-medium text-primary">课程规划完成</span>
+                  <span className="text-[13px] font-medium text-primary">课程规划完成</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[13px] text-secondary">{countdown}s 后进入</span>
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent/15">
-                    <span className="text-[13px] font-bold text-accent">{countdown}</span>
-                  </div>
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent/12">
+                  <span className="text-[13px] font-bold text-accent">{countdown}</span>
                 </div>
               </div>
             </div>
