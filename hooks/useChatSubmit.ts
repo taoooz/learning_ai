@@ -21,6 +21,7 @@ interface UseChatSubmitParams {
     opts?: { onExpire?: (...args: any[]) => void; onCompact?: (...args: any[]) => void },
   ) => void;
   userMemory: {
+    memoryStore: any;
     getConversationSummary: (courseId: string) => any;
     addLearningPreference: (preference: any) => void;
     addMasteredConcept: (concept: any) => void;
@@ -97,8 +98,9 @@ export function useChatSubmit(params: UseChatSubmitParams) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          course: { topic: course.topic },
+          course,
           messages: limitedMessages,
+          userMemory: userMemory.memoryStore,
           contextInfo: {
             ...contextInfo,
             questionContext: questionContextRef.current,

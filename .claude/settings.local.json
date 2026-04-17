@@ -110,7 +110,9 @@
       "mcp__plugin_claude-mem_mcp-search__search",
       "Bash(node --test:*)",
       "Bash(git push origin feature/agent-outline-generator)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(git rm:*)",
+      "Bash(git reset:*)"
     ]
   },
   "hooks": {
