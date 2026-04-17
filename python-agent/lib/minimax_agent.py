@@ -52,6 +52,11 @@ def _do_streaming_call(
         tool_calls_accum: dict[int, dict] = {}
         finish_reason = None
 
+        # 重复检测：追踪最近 N 个 thinking chunk，检测模型退化循环
+        _recent_thinking_chunks: list[str] = []
+        _repeat_count = 0
+        _MAX_REPEAT = 3  # 同一段文本连续出现 3 次即判定为循环
+
         try:
             with httpx.Client() as http_client:
                 with http_client.stream("POST", f"{client.base_url}/chat/completions",
@@ -100,6 +105,16 @@ def _do_streaming_call(
                         if reasoning_content:
                             full_reasoning += reasoning_content
                             yield {"type": "thinking", "message": reasoning_content.rstrip('\n')}
+
+                            # 重复检测：模型退化循环时同一段文本会反复出现
+                            _recent_thinking_chunks.append(reasoning_content.strip())
+                            if len(_recent_thinking_chunks) > _MAX_REPEAT:
+                                _recent_thinking_chunks.pop(0)
+                            if len(_recent_thinking_chunks) >= _MAX_REPEAT and len(set(_recent_thinking_chunks)) == 1 and _recent_thinking_chunks[0]:
+                                sys.stderr.write(f"[WARN] 检测到 thinking 重复循环，提前终止流: {repr(_recent_thinking_chunks[0][:80])}\n")
+                                sys.stderr.flush()
+                                finish_reason = "stop"
+                                break
 
                         content = delta.get("content")
                         if content:

@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { useCourse } from '@/contexts/CourseContext';
 import { CourseHeaderBar } from '@/components/CourseHeaderBar';
 import { createStoredCourseBundleFromBlueprint } from '@/lib/course-blueprint';
+import { parseSSEStream } from '../chat/utils/sseParser';
 import type { CourseBlueprint, StoredCourseBundle, OutlineLearnerPositioning } from '@/types/course';
 
 interface PendingOutline {
@@ -19,14 +20,15 @@ function TocPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const topic = searchParams.get('topic') || '';
-  const { generateToc, addCourse, generateNodeContent } = useCourse();
+  const { addCourse, generateNodeContent } = useCourse();
   const [error, setError] = useState<string | null>(null);
 
-  // 展示状态
+  // 流式展示状态
   const [courseName, setCourseName] = useState('');
   const [courseDescription, setCourseDescription] = useState('');
   const [streamNodes, setStreamNodes] = useState<Array<{ index: number; title: string; description: string }>>([]);
   const [isComplete, setIsComplete] = useState(false);
+  const [countdown, setCountdown] = useState(3);
 
   const hasRequestedRef = useRef(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -42,29 +44,67 @@ function TocPageContent() {
 
     const outline: PendingOutline = JSON.parse(outlineData);
 
-    generateToc(outline)
-      .then(async (result) => {
-        setCourseName(result.courseName);
-        setCourseDescription(result.courseDescription);
-        setStreamNodes(result.nodes.map((n) => ({ index: n.index, title: n.title, description: n.description })));
+    (async () => {
+      try {
+        const response = await fetch('/api/generate/toc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ blueprint: outline }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.error || '目录生成失败，请稍后再试');
+        }
+
+        let completeResult: any = null;
+
+        for await (const event of parseSSEStream(response)) {
+          switch (event.type) {
+            case 'course_name':
+              setCourseName(event.value);
+              break;
+
+            case 'course_description':
+              setCourseDescription(event.value);
+              break;
+
+            case 'node':
+              setStreamNodes(prev => [...prev, event.node]);
+              break;
+
+            case 'complete':
+              completeResult = event.result;
+              break;
+
+            case 'error':
+              throw new Error(event.message || '目录生成失败');
+          }
+        }
+
         setIsComplete(true);
+
+        // 用 complete 结果（更可靠）或已流式展示的数据构造 blueprint
+        const finalCourseName = completeResult?.courseName || courseName || outline.topic;
+        const finalDescription = completeResult?.courseDescription || courseDescription || outline.learningGoal;
+        const finalNodes = completeResult?.nodes || streamNodes;
 
         const blueprint: CourseBlueprint = {
           courseId: `course-${Date.now()}`,
-          topic: result.courseName || outline.topic,
+          topic: finalCourseName,
           learnerPositioning: {
             estimatedLevel: outline.learnerPositioning.estimatedLevel,
           },
-          courseGoal: result.courseDescription || outline.learningGoal,
+          courseGoal: finalDescription || outline.learningGoal,
           globalConcepts: [],
-          nodes: result.nodes.map((n) => ({
+          nodes: finalNodes.map((n: { index: number; title: string; description: string }) => ({
             index: n.index,
             title: n.title,
             teachingGoal: n.description,
             teachConceptIds: [],
             prerequisiteConceptIds: [],
             bridgeFromPreviousNode: '',
-            status: 'available',
+            status: 'available' as const,
           })),
         };
 
@@ -72,19 +112,29 @@ function TocPageContent() {
         generateNodeContent(blueprint.courseId, 0).catch(() => {});
         sessionStorage.removeItem('pendingOutline');
 
-        timerRef.current = setTimeout(() => {
-          router.push(`/course/${blueprint.courseId}`);
-        }, 1500);
-      })
-      .catch((err) => {
-        console.error('[TOC Page] Failed to generate TOC:', err);
+        // 倒计时跳转
+        let remaining = 3;
+        setCountdown(remaining);
+        const countdownInterval = setInterval(() => {
+          remaining -= 1;
+          if (remaining <= 0) {
+            clearInterval(countdownInterval);
+            router.push(`/course/${blueprint.courseId}`);
+          } else {
+            setCountdown(remaining);
+          }
+        }, 1000);
+        timerRef.current = countdownInterval as unknown as NodeJS.Timeout;
+      } catch (err) {
+        console.error('[TOC Page] Failed:', err);
         setError(err instanceof Error ? err.message : '生成目录失败，请稍后再试');
-      });
+      }
+    })();
 
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [generateToc, addCourse, generateNodeContent, router]);
+  }, [addCourse, generateNodeContent, router]);
 
   // 错误状态
   if (error) {
@@ -119,7 +169,7 @@ function TocPageContent() {
       <CourseHeaderBar title="生成课程" backLabel="返回" onBack={() => router.push('/generate/chat?topic=' + encodeURIComponent(topic))} />
 
       <div className="relative flex-1 overflow-hidden">
-        {/* Loading 层：居中展示，交叉淡出 */}
+        {/* Loading 层 */}
         <motion.div
           animate={{ opacity: hasContent ? 0 : 1 }}
           transition={{ duration: 0.3 }}
@@ -157,11 +207,12 @@ function TocPageContent() {
           </div>
         </motion.div>
 
-        {/* 流式内容层：交叉淡入 */}
+        {/* 流式内容层 */}
         <motion.div
           animate={{ opacity: hasContent ? 1 : 0 }}
           transition={{ duration: 0.3, delay: hasContent ? 0.2 : 0 }}
           className="absolute inset-0 overflow-y-auto pt-[88px] px-5 pb-8"
+          style={{ paddingBottom: isComplete ? '80px' : undefined }}
         >
           <div className="mx-auto max-w-lg">
             {/* 状态指示 */}
@@ -224,7 +275,7 @@ function TocPageContent() {
               </motion.div>
             )}
 
-            {/* 章节列表 */}
+            {/* 章节列表 — 逐个流式出现 */}
             <div className="space-y-3">
               {streamNodes.map((node, idx) => (
                 <motion.div
@@ -267,20 +318,32 @@ function TocPageContent() {
                 </motion.div>
               )}
             </div>
-
-            {/* 完成提示 */}
-            {isComplete && (
-              <motion.div
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: 0.5 }}
-                className="mt-5 flex items-center justify-center"
-              >
-                <span className="text-[13px] text-tertiary">即将进入课程...</span>
-              </motion.div>
-            )}
           </div>
         </motion.div>
+
+        {/* 底部悬浮跳转提示条 */}
+        {isComplete && (
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            className="absolute bottom-0 left-0 right-0 z-10 px-5 pb-6 pt-3 bg-gradient-to-t from-background via-background/95 to-transparent"
+          >
+            <div className="mx-auto max-w-sm">
+              <div className="flex items-center justify-between rounded-2xl bg-white/90 border border-black/6 px-4 py-2.5 shadow-[0_8px_24px_rgba(15,23,42,0.06)] backdrop-blur-sm">
+                <div className="flex items-center gap-2">
+                  <svg className="h-4.5 w-4.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-[13px] font-medium text-primary">课程规划完成</span>
+                </div>
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent/12">
+                  <span className="text-[13px] font-bold text-accent">{countdown}</span>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
       </div>
     </main>
   );

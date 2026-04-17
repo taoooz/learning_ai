@@ -1,22 +1,24 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCourse } from '@/contexts/CourseContext';
 import { useUserProfile } from '@/contexts/UserProfileContext';
+import { CourseCard } from '@/components/CourseCard';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { SystemCourseRecommendations } from '@/components/SystemCourseRecommendations';
 import { RecommendationsModal } from '@/components/RecommendationsModal';
 
 export default function HomePage() {
   const [topic, setTopic] = useState('');
   const [error, setError] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-  const [showDeleteMenu, setShowDeleteMenu] = useState<string | null>(null);
   const [startingSystemCourseId, setStartingSystemCourseId] = useState<string | null>(null);
   const [showRecommendations, setShowRecommendations] = useState(false);
   const router = useRouter();
   const { courses, deleteCourse, systemCourseRecommendations, startSystemCourse } = useCourse();
   const { userProfile } = useUserProfile();
-  const deleteMenuRef = useRef<HTMLDivElement | null>(null);
+
   const hasProfileContent = Boolean(
     userProfile?.targetJob?.trim() ||
     userProfile?.name?.trim() ||
@@ -26,35 +28,9 @@ export default function HomePage() {
     userProfile?.education?.some((item) => item.school.trim() || item.major.trim())
   );
 
-  useEffect(() => {
-    if (!showDeleteMenu) return;
-
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!deleteMenuRef.current) return;
-      if (!deleteMenuRef.current.contains(event.target as Node)) {
-        setShowDeleteMenu(null);
-      }
-    };
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setShowDeleteMenu(null);
-      }
-    };
-
-    window.addEventListener('mousedown', handlePointerDown);
-    window.addEventListener('keydown', handleEscape);
-
-    return () => {
-      window.removeEventListener('mousedown', handlePointerDown);
-      window.removeEventListener('keydown', handleEscape);
-    };
-  }, [showDeleteMenu]);
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!topic.trim()) return;
-
     router.push(`/generate/chat?topic=${encodeURIComponent(topic.trim())}`);
   };
 
@@ -63,44 +39,9 @@ export default function HomePage() {
   };
 
   const handleDelete = (courseId: string) => {
-    setDeleteConfirm(courseId);
-    setShowDeleteMenu(null);
-  };
-
-  const confirmDelete = () => {
-    if (!deleteConfirm) return;
-    deleteCourse(deleteConfirm);
+    deleteCourse(courseId);
     setDeleteConfirm(null);
   };
-
-  const getCourseProgress = (courseId: string) => {
-    const course = courses.find((c) => c.courseId === courseId);
-    if (!course) return { completed: 0, total: 0, percent: 0 };
-
-    const completed = course.nodes.filter((node) => node.status === 'completed').length;
-    const total = course.nodes.length;
-    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
-
-    return { completed, total, percent };
-  };
-
-  const getNextNodeTitle = (courseId: string) => {
-    const course = courses.find((c) => c.courseId === courseId);
-    if (!course) return '继续当前进度';
-
-    const nextNode = course.nodes.find((node) => node.status !== 'completed');
-    return nextNode?.title ?? '复习已完成内容';
-  };
-
-  const sortedCourses = [...courses].reverse();
-  const hasCourses = sortedCourses.length > 0;
-  const examplePrompt = '“我想学 Agent 的一些技术原理，能方便我后面转型 AI 产品经理。目前知道 LLM 是什么，但别的了解有限。”';
-  const coursePalettes = [
-    'bg-[linear-gradient(135deg,rgba(255,138,0,0.12),rgba(255,250,244,0.95)_42%,rgba(255,255,255,0.98))]',
-    'bg-[linear-gradient(135deg,rgba(245,158,11,0.10),rgba(255,248,238,0.95)_42%,rgba(255,255,255,0.98))]',
-    'bg-[linear-gradient(135deg,rgba(251,191,36,0.10),rgba(255,250,242,0.95)_42%,rgba(255,255,255,0.98))]',
-    'bg-[linear-gradient(135deg,rgba(249,115,22,0.10),rgba(255,247,240,0.95)_42%,rgba(255,255,255,0.98))]',
-  ];
 
   const handleSystemCourseClick = (courseId: string) => {
     setStartingSystemCourseId(courseId);
@@ -112,8 +53,13 @@ export default function HomePage() {
     }
   };
 
+  const sortedCourses = [...courses].reverse();
+  const hasCourses = sortedCourses.length > 0;
+  const examplePrompt = '"我想学 Agent 的一些技术原理，能方便我后面转型 AI 产品经理。目前知道 LLM 是什么，但别的了解有限。"';
+
   return (
     <main className="min-h-screen overflow-x-hidden bg-background">
+      {/* 背景装饰 */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-32 right-[-8rem] h-72 w-72 rounded-full bg-gradient-to-br from-accent/16 via-accent/8 to-transparent blur-3xl" />
         <div className="absolute left-[-4rem] top-12 h-56 w-56 rounded-full bg-gradient-to-br from-sky-400/16 via-transparent to-transparent blur-3xl" />
@@ -132,6 +78,7 @@ export default function HomePage() {
         />
       </div>
 
+      {/* 顶部导航 */}
       <div className="fixed inset-x-0 top-0 z-20 pt-4">
         <div className="mx-auto max-w-2xl px-5 pb-2 sm:px-6">
           <div className="rounded-[24px] border border-white/72 bg-surface/80 px-3 py-2.5 shadow-[0_6px_18px_rgba(15,23,42,0.04)] backdrop-blur-md">
@@ -154,8 +101,10 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* 主内容区 */}
       <div className="relative mx-auto flex w-full max-w-2xl flex-col gap-8 px-5 pb-10 pt-[88px] sm:px-6">
 
+        {/* Hero 输入区 */}
         <section className="pt-4">
           <div className="relative max-w-xl">
             <div className="pointer-events-none absolute -left-6 top-8 h-28 w-28 rounded-full bg-gradient-to-br from-sky-400/12 via-transparent to-transparent blur-2xl" />
@@ -166,9 +115,7 @@ export default function HomePage() {
                   className="pointer-events-none absolute -left-1 -right-2 bottom-0 h-[0.72em] -rotate-[2.4deg] rounded-[999px] bg-gradient-to-r from-sky-400/34 via-sky-300/24 to-accent/18 blur-[0.7px]"
                   aria-hidden="true"
                 />
-                <span className="relative">
-                就从这里开始
-                </span>
+                <span className="relative">就从这里开始</span>
               </span>
             </h1>
             <p className="mt-4 text-[15px] leading-relaxed text-secondary">
@@ -186,7 +133,6 @@ export default function HomePage() {
                   placeholder={`例如：${examplePrompt}`}
                   className="w-full resize-none bg-transparent px-5 py-4 text-[15px] leading-relaxed text-primary outline-none placeholder:text-tertiary"
                   rows={4}
-                  disabled={false}
                 />
               </div>
 
@@ -221,180 +167,45 @@ export default function HomePage() {
           )}
         </section>
 
+        {/* 已有课程列表 */}
         {hasCourses && (
           <section>
             <h2 className="mb-5 text-[18px] font-bold text-primary">最近学习</h2>
-
             <div className="grid grid-cols-1 gap-4">
-              {sortedCourses.map((course, index) => {
-                const progress = getCourseProgress(course.courseId);
-                const nextNodeTitle = getNextNodeTitle(course.courseId);
-                const palette = coursePalettes[index % coursePalettes.length];
-
-                return (
-                  <article
-                    key={course.courseId}
-                    className={`rounded-[24px] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.06)] transition-all duration-200 hover:shadow-[0_4px_20px_rgba(0,0,0,0.08)] ${palette}`}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0 flex-1">
-                        <h3 className="text-[20px] font-bold text-primary line-clamp-2">{course.topic}</h3>
-                        <p className="mt-2 text-[15px] text-secondary line-clamp-1">
-                          下一节：{nextNodeTitle}
-                        </p>
-                      </div>
-                      <div className="rounded-2xl bg-white/80 px-3.5 py-2.5 text-right shadow-sm">
-                        <div className="text-[24px] font-bold text-accent">{progress.percent}%</div>
-                        <div className="text-xs text-secondary">进度</div>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 flex items-center gap-3">
-                      <button
-                        onClick={() => handleCourseClick(course.courseId)}
-                        className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-cta px-5 py-3 text-[15px] font-semibold text-cta shadow-[0_4px_16px_rgba(255,138,0,0.15)] transition-all duration-150 hover:shadow-[0_6px_20px_rgba(255,138,0,0.20)] active:scale-[0.985]"
-                      >
-                        继续学习
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </button>
-
-                      <div className="relative">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setShowDeleteMenu(showDeleteMenu === course.courseId ? null : course.courseId);
-                          }}
-                          aria-label={`管理 ${course.topic}`}
-                          className="flex h-12 w-12 items-center justify-center rounded-full text-tertiary transition-all duration-150 hover:bg-white/60 hover:text-primary"
-                        >
-                          <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-                            <circle cx="12" cy="6" r="2" />
-                            <circle cx="12" cy="12" r="2" />
-                            <circle cx="12" cy="18" r="2" />
-                          </svg>
-                        </button>
-
-                        {showDeleteMenu === course.courseId && (
-                          <div
-                            ref={deleteMenuRef}
-                            className="absolute bottom-[3.75rem] right-0 z-10 min-w-[132px] rounded-2xl border border-white/80 bg-white p-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.12)] backdrop-blur-sm"
-                          >
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDelete(course.courseId);
-                              }}
-                              className="flex w-full items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium text-error transition-colors hover:bg-error/10"
-                            >
-                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                              删除主题
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
+              {sortedCourses.map((course, index) => (
+                <CourseCard
+                  key={course.courseId}
+                  course={course}
+                  index={index}
+                  onContinue={handleCourseClick}
+                  onDelete={(id) => setDeleteConfirm(id)}
+                />
+              ))}
             </div>
           </section>
         )}
 
+        {/* 空状态：系统推荐课程 */}
         {!hasCourses && (
-          <section className="pt-1">
-            <div className="rounded-[30px] border border-sky-200/65 bg-[linear-gradient(135deg,rgba(241,248,255,0.96),rgba(248,251,255,0.98)_58%,rgba(255,255,255,0.96))] px-5 py-5 shadow-[0_12px_28px_rgba(56,189,248,0.10)] sm:px-6">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="w-fit rounded-full bg-sky-500/10 px-3 py-1 text-xs font-medium text-sky-700">
-                    系统推荐课程
-                  </div>
-                  <h2 className="mt-3 text-xl font-semibold tracking-tight text-primary">
-                    不知道先学什么的话，可以先从这两门开始
-                  </h2>
-                  <p className="mt-2 text-sm leading-6 text-secondary">
-                    这两门课是系统预先准备好的引导课程。点击后会直接加入你的课程列表，并从第一节开始学。
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-4 grid grid-cols-1 gap-3">
-                {systemCourseRecommendations.map((course, index) => {
-                  const palette = index === 0
-                    ? 'border-sky-200/70 bg-[linear-gradient(135deg,rgba(239,246,255,0.96),rgba(255,255,255,0.98))]'
-                    : 'border-emerald-200/70 bg-[linear-gradient(135deg,rgba(240,253,244,0.96),rgba(255,255,255,0.98))]';
-
-                  return (
-                    <button
-                      key={course.courseId}
-                      type="button"
-                      onClick={() => handleSystemCourseClick(course.courseId)}
-                      disabled={startingSystemCourseId === course.courseId}
-                      className={`group rounded-[26px] border p-5 text-left shadow-[0_8px_22px_rgba(15,23,42,0.05)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_28px_rgba(15,23,42,0.08)] disabled:opacity-60 ${palette}`}
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-secondary/75">
-                            {course.badge}
-                          </div>
-                          <h3 className="mt-2 text-lg font-semibold text-primary">
-                            {course.title}
-                          </h3>
-                          <p className="mt-2 text-sm leading-6 text-secondary">
-                            {course.summary}
-                          </p>
-                        </div>
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/80 text-primary shadow-sm transition-transform duration-200 group-hover:translate-x-0.5">
-                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                          </svg>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/78 px-3.5 py-2 text-sm font-medium text-primary">
-                        {startingSystemCourseId === course.courseId ? '正在加入课程...' : course.cta}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </section>
+          <SystemCourseRecommendations
+            courses={systemCourseRecommendations}
+            startingCourseId={startingSystemCourseId}
+            onSelect={handleSystemCourseClick}
+          />
         )}
       </div>
 
-      {deleteConfirm && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm"
-          onClick={() => setDeleteConfirm(null)}
-        >
-          <div
-            className="mx-4 w-full max-w-xs rounded-3xl bg-surface p-6 shadow-float"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="mb-2 text-lg font-bold text-primary">确认删除这个主题？</h2>
-            <p className="mb-5 text-sm text-secondary">删除后会从首页历史里移除，之后需要重新生成。</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setDeleteConfirm(null)}
-                className="flex-1 rounded-2xl bg-subtle px-4 py-3 text-sm font-medium text-secondary transition-all duration-150 hover:bg-black/5 active:scale-[0.98]"
-              >
-                取消
-              </button>
-              <button
-                onClick={confirmDelete}
-                className="flex-1 rounded-2xl bg-error px-4 py-3 text-sm font-medium text-white shadow-sm transition-all duration-150 hover:bg-[var(--color-error-dark)] active:scale-[0.98]"
-              >
-                删除
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 删除确认弹窗 */}
+      <ConfirmModal
+        open={deleteConfirm !== null}
+        title="确认删除这个主题？"
+        message="删除后会从首页历史里移除，之后需要重新生成。"
+        confirmLabel="删除"
+        onCancel={() => setDeleteConfirm(null)}
+        onConfirm={() => deleteConfirm && handleDelete(deleteConfirm)}
+      />
 
+      {/* 推荐弹窗 */}
       <RecommendationsModal
         isOpen={showRecommendations}
         onClose={() => setShowRecommendations(false)}

@@ -2,7 +2,8 @@ import json
 import os
 from pathlib import Path
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import StreamingResponse
 
@@ -61,6 +62,16 @@ async def global_exception_handler(request, exc):
         status_code=500,
         content={"error": _user_friendly_error(exc)}
     )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    body = await request.body()
+    print(f"[422 VALIDATION ERROR] path={request.url.path}")
+    print(f"  body={body.decode('utf-8', errors='replace')[:500]}")
+    print(f"  errors={exc.errors()}")
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
 
 @app.get("/health")

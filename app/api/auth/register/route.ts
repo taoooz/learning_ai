@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getRedis, isValidInviteCode, userKey, UserData } from '@/lib/redis'
+import { getRedis, isValidInviteCode, isValidInviteCodeFormat, userKey, UserData } from '@/lib/redis'
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,8 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 验证邀请码格式
-    const formatRegex = /^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$/
-    if (!formatRegex.test(inviteCode)) {
+    if (!isValidInviteCodeFormat(inviteCode)) {
       return NextResponse.json(
         { success: false, error: '邀请码格式不正确' },
         { status: 400 }

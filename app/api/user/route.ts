@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { getRedis, userKey, UserData } from '@/lib/redis'
+import { apiSuccess, apiError } from '@/lib/api-response'
 
 // GET /api/user - 获取当前用户信息
 export async function GET(request: NextRequest) {
@@ -7,29 +8,20 @@ export async function GET(request: NextRequest) {
     const inviteCode = request.headers.get('x-invite-code')
 
     if (!inviteCode) {
-      return NextResponse.json(
-        { error: '未提供邀请码' },
-        { status: 401 }
-      )
+      return apiError('未提供邀请码', 401)
     }
 
     const userDataRaw = await getRedis().get(userKey(inviteCode))
     const userData = userDataRaw ? JSON.parse(userDataRaw) as UserData : null
 
     if (!userData) {
-      return NextResponse.json(
-        { error: '用户不存在' },
-        { status: 404 }
-      )
+      return apiError('用户不存在', 404)
     }
 
-    return NextResponse.json(userData)
+    return apiSuccess(userData)
   } catch (error) {
     console.error('Get user error:', error)
-    return NextResponse.json(
-      { error: '获取用户信息失败' },
-      { status: 500 }
-    )
+    return apiError('获取用户信息失败', 500)
   }
 }
 
@@ -39,10 +31,7 @@ export async function PATCH(request: NextRequest) {
     const inviteCode = request.headers.get('x-invite-code')
 
     if (!inviteCode) {
-      return NextResponse.json(
-        { error: '未提供邀请码' },
-        { status: 401 }
-      )
+      return apiError('未提供邀请码', 401)
     }
 
     const body = await request.json()
@@ -50,25 +39,17 @@ export async function PATCH(request: NextRequest) {
 
     if (nickname !== undefined) {
       if (nickname.length < 1 || nickname.length > 20) {
-        return NextResponse.json(
-          { error: '昵称长度应为1-20字符' },
-          { status: 400 }
-        )
+        return apiError('昵称长度应为1-20字符', 400)
       }
     }
 
-    // 获取现有用户
     const existingUserRaw = await getRedis().get(userKey(inviteCode))
     const existingUser = existingUserRaw ? JSON.parse(existingUserRaw) as UserData : null
 
     if (!existingUser) {
-      return NextResponse.json(
-        { error: '用户不存在' },
-        { status: 404 }
-      )
+      return apiError('用户不存在', 404)
     }
 
-    // 更新用户
     const updatedUser: UserData = {
       ...existingUser,
       nickname: nickname?.trim() || existingUser.nickname,
@@ -76,12 +57,9 @@ export async function PATCH(request: NextRequest) {
 
     await getRedis().set(userKey(inviteCode), JSON.stringify(updatedUser))
 
-    return NextResponse.json(updatedUser)
+    return apiSuccess(updatedUser)
   } catch (error) {
     console.error('Update user error:', error)
-    return NextResponse.json(
-      { error: '更新用户信息失败' },
-      { status: 500 }
-    )
+    return apiError('更新用户信息失败', 500)
   }
 }

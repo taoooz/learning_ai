@@ -1,31 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserMemoryStoreSnapshot } from '@/hooks/useUserMemory';
+import { callMiniMax, parseJSONResponse } from '@/lib/minimax';
+import { requireAuth, apiSuccess, apiError } from '@/lib/api-response';
 
-const MINIMAX_API_KEY = process.env.MINIMAX_API_KEY;
+interface Recommendation {
+  title: string;
+  reason: string;
+}
+
+interface RecommendationsResult {
+  recommendations: Recommendation[];
+}
+
+const DEFAULT_RECOMMENDATIONS: RecommendationsResult = {
+  recommendations: [
+    { title: 'AI Agent 的能力边界：哪些场景该用、哪些不该用', reason: '帮你建立 Agent 落地判断力' },
+    { title: '如何评估 AI 功能的产品价值和 ROI', reason: '用数据说话，别靠感觉做 AI 产品决策' },
+    { title: 'RAG 在企业知识管理中的实战应用', reason: '企业落地最主流的 AI 应用模式' },
+    { title: 'LLM 输出不稳定的工程化解决方案', reason: '从原型到产品的关键一步' },
+    { title: '如何给业务团队设计 AI 提示词模板', reason: '让非技术人员也能用好 AI' },
+  ],
+};
 
 export async function POST(request: NextRequest) {
+  const auth = requireAuth(request);
+  if ('error' in auth) return auth.error;
+
   try {
     const { targetJob, existingTopics, insights, recentTopics, previousRecommendations } = await request.json();
 
     // 构建上下文
     const contextParts = [];
-    
+
     if (targetJob) {
       contextParts.push(`**目标职位**：${targetJob}`);
     }
-    
+
     if (insights?.length > 0) {
       contextParts.push(`**背景洞察**：${insights.slice(0, 3).join('；')}`);
     }
-    
+
     if (existingTopics?.length > 0) {
       contextParts.push(`**已学习课程**：${existingTopics.join('、')}`);
     }
-    
+
     if (recentTopics?.length > 0) {
       contextParts.push(`**最近关注**：${recentTopics.join('、')}`);
     }
-    
+
     if (previousRecommendations?.length > 0) {
       contextParts.push(`**已推荐过**：${previousRecommendations.join('、')}`);
     }
@@ -51,74 +72,21 @@ ${contextParts.join('\n') || '暂无'}
   ]
 }`;
 
-    const response = await fetch('https://api.minimaxi.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${MINIMAX_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'MiniMax-M2.7',
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        temperature: 0.9,
-        max_tokens: 2000,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('MiniMax API error:', errorText);
-      throw new Error('MiniMax API failed');
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || '';
-    
-    console.log('MiniMax response:', content);
-    
-    // 尝试多种方式解析 JSON
-    let result;
-    try {
-      // 方式1：直接解析
-      result = JSON.parse(content);
-    } catch {
-      try {
-        // 方式2：提取 JSON 块
-        const jsonMatch = content.match(/\{[\s\S]*"recommendations"[\s\S]*\}/);
-        if (jsonMatch) {
-          result = JSON.parse(jsonMatch[0]);
-        }
-      } catch {
-        // 方式3：提取数组
-        const arrayMatch = content.match(/\[[\s\S]*\]/);
-        if (arrayMatch) {
-          result = { recommendations: JSON.parse(arrayMatch[0]) };
-        }
-      }
-    }
+    const content = await callMiniMax(prompt, { maxTokens: 2000 });
+    const result = parseJSONResponse<RecommendationsResult>(content);
 
     if (!result?.recommendations || result.recommendations.length === 0) {
-      throw new Error('No recommendations generated');
+      throw new Error('AI 未生成有效推荐');
     }
 
-    return NextResponse.json(result);
+    return apiSuccess(result);
   } catch (error) {
     console.error('Recommendations API error:', error);
-    
-    // 降级：返回默认推荐
+
+    // 降级：返回默认推荐，标记为降级
     return NextResponse.json({
-      recommendations: [
-        { title: 'AI Agent 的能力边界：哪些场景该用、哪些不该用', reason: '帮你建立 Agent 落地判断力' },
-        { title: '如何评估 AI 功能的产品价值和 ROI', reason: '用数据说话，别靠感觉做 AI 产品决策' },
-        { title: 'RAG 在企业知识管理中的实战应用', reason: '企业落地最主流的 AI 应用模式' },
-        { title: 'LLM 输出不稳定的工程化解决方案', reason: '从原型到产品的关键一步' },
-        { title: '如何给业务团队设计 AI 提示词模板', reason: '让非技术人员也能用好 AI' },
-      ],
+      ...DEFAULT_RECOMMENDATIONS,
+      degraded: true,
     });
   }
 }

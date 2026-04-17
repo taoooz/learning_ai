@@ -73,6 +73,11 @@ export function RichStreamingMessage({
     ? 'px-4 pb-4 pt-3'
     : 'px-4 py-4';
 
+  // 无内容时不渲染（避免空边框灰线）
+  if (!shouldShowThinkingSection && !shouldShowPrimarySection) {
+    return null;
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}

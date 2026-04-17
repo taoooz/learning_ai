@@ -25,6 +25,8 @@ function ChatPageContent() {
   useEffect(() => {
     if (!topic || hasInitializedRef.current) return;
     hasInitializedRef.current = true;
+    // 新课程生成时，清除旧 session，防止走 answer_agent 分支
+    sessionStorage.removeItem('outlineSessionId');
     sendMessage();
   }, [topic, sendMessage]);
 

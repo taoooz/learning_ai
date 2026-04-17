@@ -14,11 +14,11 @@ let CHAT_CONCEPT_ALIASES: typeof import('../lib/memory/aggregator').CHAT_CONCEPT
 let detectChatLearningPreferences: typeof import('../lib/memory/aggregator').detectChatLearningPreferences;
 let detectExplicitMasteredConcept: typeof import('../lib/memory/aggregator').detectExplicitMasteredConcept;
 let normalizeConceptKeyFromAggregator: typeof import('../lib/memory/aggregator').normalizeConceptKey;
-let analyzeChatMessageForMemory: typeof import('../hooks/useUserMemory').analyzeChatMessageForMemory;
-let getChatMemoryPayload: typeof import('../hooks/useUserMemory').getChatMemoryPayload;
-let getPlanningMemoryPayload: typeof import('../hooks/useUserMemory').getPlanningMemoryPayload;
-let getTeachingMemoryPayload: typeof import('../hooks/useUserMemory').getTeachingMemoryPayload;
-let normalizeConceptKey: typeof import('../hooks/useUserMemory').normalizeConceptKey;
+let analyzeChatMessageForMemory: typeof import('../lib/memory/aggregator').analyzeChatMessageForMemory;
+let getChatMemoryPayload: typeof import('../lib/memory/memory-agent').getChatMemoryPayload;
+let getPlanningMemoryPayload: typeof import('../lib/memory/memory-agent').getPlanningMemoryPayload;
+let getTeachingMemoryPayload: typeof import('../lib/memory/memory-agent').getTeachingMemoryPayload;
+let normalizeConceptKey: typeof import('../lib/memory/aggregator').normalizeConceptKey;
 let shouldEnterLearningPhase: typeof import('../contexts/CourseContext').shouldEnterLearningPhase;
 let hasResolvedQuestions: typeof import('../contexts/CourseContext').hasResolvedQuestions;
 let buildNodeContentPatch: typeof import('../contexts/CourseContext').buildNodeContentPatch;
@@ -55,12 +55,14 @@ test.before(async () => {
   detectExplicitMasteredConcept = aggregatorModule.detectExplicitMasteredConcept;
   normalizeConceptKeyFromAggregator = aggregatorModule.normalizeConceptKey;
 
-  const userMemoryModule = await import('../hooks/useUserMemory');
-  analyzeChatMessageForMemory = userMemoryModule.analyzeChatMessageForMemory;
-  getChatMemoryPayload = userMemoryModule.getChatMemoryPayload;
-  getPlanningMemoryPayload = userMemoryModule.getPlanningMemoryPayload;
-  getTeachingMemoryPayload = userMemoryModule.getTeachingMemoryPayload;
-  normalizeConceptKey = userMemoryModule.normalizeConceptKey;
+  const memoryAgentModule = await import('../lib/memory/memory-agent');
+  getChatMemoryPayload = memoryAgentModule.getChatMemoryPayload;
+  getPlanningMemoryPayload = memoryAgentModule.getPlanningMemoryPayload;
+  getTeachingMemoryPayload = memoryAgentModule.getTeachingMemoryPayload;
+
+  // analyzeChatMessageForMemory 和 normalizeConceptKey 已在 aggregatorModule 中加载
+  analyzeChatMessageForMemory = aggregatorModule.analyzeChatMessageForMemory;
+  normalizeConceptKey = aggregatorModule.normalizeConceptKey;
 });
 
 test('getCourseTreeLayout returns left-biased staggered positions', () => {
@@ -214,8 +216,8 @@ test('shouldEnterLearningPhase starts once cards are ready even if questions are
   assert.equal(shouldEnterLearningPhase({ questions: [] }), false);
 });
 
-test('hasResolvedQuestions treats an existing questions array as resolved even when empty', () => {
-  assert.equal(hasResolvedQuestions({ questions: [] }), true);
+test('hasResolvedQuestions only returns true for non-empty questions array', () => {
+  assert.equal(hasResolvedQuestions({ questions: [] }), false);
   assert.equal(hasResolvedQuestions({ questions: [{ id: 'q-1', type: 'single', question: '问题', options: ['A. 选项'], answer: 'A', difficulty: 1, dimension: 'understanding', targetConceptId: 'concept-1' }] }), true);
   assert.equal(hasResolvedQuestions({}), false);
 });

@@ -15,7 +15,7 @@ import { ChatLauncher, ChatWidget } from '@/components/ui/ChatWidget';
 import { CardVisualization } from '@/components/ui/CardVisualization';
 import { EnhancedLoadingScreen } from '@/components/learning/EnhancedLoadingScreen';
 import { useUserMemory } from '@/hooks/useUserMemory';
-import { getStoredCourseBundle, getStoredDataV2, updateNodeLesson } from '@/lib/storage';
+import { getStoredDataV2 } from '@/lib/storage';
 
 type LearningPhase = 'loading' | 'learning' | 'complete';
 type LearnStep =
@@ -52,23 +52,25 @@ function formatAnswerDisplay(question: Question): string {
     if (options.length > 0) {
       const optionText = options.find(opt => extractAnswerKey(opt) === answerKey);
       if (optionText) {
-        return `${answerKey}. ${optionText.replace(/^[A-D][.、：:]\s*/, '')}`;
+        const cleaned = optionText.replace(/^[A-D][.、：:]\s*/, '');
+        return cleaned ? `${answerKey}. ${cleaned}` : answerKey;
       }
     }
-    return answerKey;
+    return String(answerKey);
   }
 
-  // 多选题：显示 "A、C" 或 "A. xxx：C. yyy"
+  // 多选题：显示 "A. xxx：B. yyy" 或 "A、B"
   if (question.type === 'multiple' && Array.isArray(answer)) {
     if (options.length > 0) {
       const parts = answer.map(key => {
         const optionText = options.find(opt => extractAnswerKey(opt) === key);
         if (optionText) {
-          return `${key}. ${optionText.replace(/^[A-D][.、：:]\s*/, '')}`;
+          const cleaned = optionText.replace(/^[A-D][.、：:]\s*/, '');
+          return cleaned ? `${key}. ${cleaned}` : key;
         }
         return key;
-      });
-      return parts.join('：');
+      }).filter(p => p);
+      return parts.length > 0 ? parts.join('：') : answer.join('、');
     }
     return answer.join('、');
   }
@@ -193,7 +195,7 @@ function LastLineMarker({
 export default function LearnPage() {
   const params = useParams();
   const router = useRouter();
-  const { courses, generateNodeContent, generateNodeQuestions, preloadNextNode } = useCourse();
+  const { courses, generateNodeContent, generateNodeQuestions, preloadNextNode, updateNodeQuestions } = useCourse();
   const { markCompleted } = useProgress();
   const userMemory = useUserMemory();
 
@@ -328,23 +330,14 @@ export default function LearnPage() {
     generateNodeQuestions(courseId, nodeIndex)
       .then((data) => {
         hasRequestedQuestionsRef.current = requestKey;
-        // 保存 questions 到存储
-        const bundle = getStoredCourseBundle(courseId);
-        if (bundle) {
-          const existingLesson = bundle.lessons[nodeIndex];
-          if (existingLesson) {
-            updateNodeLesson(courseId, nodeIndex, {
-              ...existingLesson,
-              questions: data.questions,
-            });
-          }
-        }
+        // 更新 React 状态 + localStorage
+        updateNodeQuestions(courseId, nodeIndex, data.questions);
       })
       .catch((error) => {
         console.warn('[LearnPage] Questions generation failed:', error);
         // 不设置 ref，允许重试
       });
-  }, [courseId, nodeIndex, generateNodeQuestions, node?.cards, node?.questions, phase]);
+  }, [courseId, nodeIndex, generateNodeQuestions, updateNodeQuestions, node?.cards, node?.questions, phase]);
 
   // 当前节点可学习后，再预加载下一个节点知识
   useEffect(() => {

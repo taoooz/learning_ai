@@ -1,12 +1,4 @@
 {
-  "hooks": {
-    "SessionStart": [{
-      "hooks": [{
-        "type": "command",
-        "command": "test -f ${path}/CLAUDE.md && cat ${path}/CLAUDE.md || true"
-      }]
-    }]
-  },
   "permissions": {
     "allow": [
       "Skill(superpowers:brainstorming)",
@@ -107,7 +99,30 @@
       "Bash(/usr/local/bin/python3:*)",
       "Bash(pip3 install -r requirements.txt -q)",
       "Bash(./venv/bin/pip:*)",
-      "Bash(pip3 install:*)"
+      "Bash(pip3 install:*)",
+      "Bash(claude --version:*)",
+      "Bash(claude mcp list:*)",
+      "Bash(claude plugin list:*)",
+      "Bash(claude plugin install:*)",
+      "Bash(claude plugin marketplace list:*)",
+      "mcp__claude-mem__smart_outline",
+      "mcp__claude-mem__search",
+      "mcp__plugin_claude-mem_mcp-search__search",
+      "Bash(node --test:*)",
+      "Bash(git push origin feature/agent-outline-generator)",
+      "Bash(grep:*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "test -f ${path}/CLAUDE.md && cat ${path}/CLAUDE.md || true"
+          }
+        ]
+      }
     ]
   }
 }

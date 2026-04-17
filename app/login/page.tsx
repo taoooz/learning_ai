@@ -17,6 +17,13 @@ function LoginContent() {
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // 已登录，跳转原页面
+  useEffect(() => {
+    if (isVerified && verifiedCode && !error) {
+      router.replace(redirect)
+    }
+  }, [isVerified, verifiedCode, error, redirect, router])
+
   // 加载中
   if (isLoading) {
     return (
@@ -25,13 +32,6 @@ function LoginContent() {
       </div>
     )
   }
-
-  // 已登录，跳转原页面（使用 useEffect 避免 React 警告）
-  useEffect(() => {
-    if (isVerified && verifiedCode && !error) {
-      router.replace(redirect)
-    }
-  }, [isVerified, verifiedCode, error, redirect, router])
 
   const handleVerify = async () => {
     if (!inviteCode.trim()) {

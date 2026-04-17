@@ -20,6 +20,11 @@ export function useStreamChat(topic: string) {
     if (isWaitingResponse) return;
     setIsWaitingResponse(true);
 
+    // 首次调用（无 message）时清除旧 session，避免走错 answer_agent 分支
+    if (!message) {
+      sessionStorage.removeItem('outlineSessionId');
+    }
+
     if (message) {
       addMessage({ type: 'user', content: message, timestamp: Date.now() });
     } else {
@@ -51,6 +56,7 @@ export function useStreamChat(topic: string) {
             break;
 
           case 'content_delta':
+            if (foundBlueprint) break; // blueprint 已确认，不再用纯文本覆盖卡片
             fullContent += event.content;
             updateMessageAt(idx, m => {
               if (m.type !== 'streaming') return m;
@@ -101,9 +107,24 @@ export function useStreamChat(topic: string) {
               foundBlueprint = true;
               setCurrentBlueprint(blueprint);
               setGeneratedCourseName(blueprint.learningDirection?.split('：')[0] || topic);
+              // 确保 content 包含完整的 <outline> 标签，保证 OutlineCard 稳定渲染
               updateMessageAt(idx, m => {
                 if (m.type !== 'streaming') return m;
-                return { ...m, content: `学习方向：${blueprint.learningDirection}\n学习目标：${blueprint.learningGoal}`, isThinking: false };
+                const existingContent = m.content || '';
+                // 如果已有完整 <outline> 标签，不做额外处理
+                if (existingContent.includes('<outline>') && existingContent.includes('</outline>')) {
+                  return { ...m, isThinking: false };
+                }
+                // 否则用 blueprint 数据生成 <outline> 标签
+                const lp = blueprint.learnerPositioning || {};
+                const outlineTag = `<outline>
+<div slot="direction">${blueprint.learningDirection || ''}</div>
+<div slot="object">${blueprint.learningGoal || ''}</div>
+<div slot="level">${lp.estimatedLevel || 'beginner'}</div>
+${lp.backgroundSummary ? `<div slot="background">${lp.backgroundSummary}</div>` : ''}
+${(lp.skipBasics && lp.skipBasics.length > 0) ? `<div slot="knowledge">${lp.skipBasics.map((k: string, i: number) => `已掌握${i + 1}：${k}`).join('；')}</div>` : ''}
+</outline>`;
+                return { ...m, content: existingContent + '\n' + outlineTag, isThinking: false };
               });
             }
             if (event.sessionId) {
