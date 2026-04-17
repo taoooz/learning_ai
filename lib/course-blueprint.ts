@@ -33,11 +33,11 @@ export function deriveCourseTreeViewFromBlueprint(blueprint: CourseBlueprint): C
   };
 }
 
-export function createStoredCourseBundleFromBlueprint(blueprint: CourseBlueprint): StoredCourseBundle {
+export function createStoredCourseBundleFromBlueprint(blueprint: CourseBlueprint, lessons?: StoredCourseBundle['lessons']): StoredCourseBundle {
   return {
     blueprint: normalizeCourseBlueprint(blueprint),
     treeView: deriveCourseTreeViewFromBlueprint(normalizeCourseBlueprint(blueprint)),
-    lessons: {},
+    lessons: lessons || {},
   };
 }
 

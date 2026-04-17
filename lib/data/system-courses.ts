@@ -87,7 +87,7 @@ function buildBundleFromJson(
   json: { courseId: string; title: string; lessons: Record<string, NodeLesson> },
 ): StoredCourseBundle {
   const blueprint = buildBlueprintFromLessons(courseId, json.title, json.lessons);
-  return createStoredCourseBundleFromBlueprint(blueprint);
+  return createStoredCourseBundleFromBlueprint(blueprint, json.lessons);
 }
 
 // system-ai-for-everyone：从详细 JSON
