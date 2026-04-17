@@ -84,7 +84,7 @@ export function RecommendationsModal({ isOpen, onClose, userProfile, existingCou
       }
 
       const data = await response.json();
-      const newRecommendations = data.recommendations || [];
+      const newRecommendations = data.data?.recommendations || data.recommendations || [];
 
       setRecommendations(newRecommendations);
       // 持久化到 localStorage
