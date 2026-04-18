@@ -58,8 +58,10 @@ function formatAnswerDisplay(question: Question): string {
         if (/^[A-D]$/.test(answerKey) && cleaned !== answerKey) {
           return `${answerKey}. ${cleaned}`;
         }
-        // answerKey 是完整文本 → 直接返回选项内容（不重复）
-        return cleaned || answerKey;
+        // answerKey 是完整文本 → 通过索引拼字母前缀
+        const idx = options.indexOf(optionText);
+        const letter = String.fromCharCode(65 + idx);
+        return `${letter}. ${cleaned || answerKey}`;
       }
       // answerKey 是字母但 options 没有前缀 → 通过索引查找
       if (/^[A-D]$/.test(answerKey)) {
@@ -82,7 +84,10 @@ function formatAnswerDisplay(question: Question): string {
           if (/^[A-D]$/.test(key) && cleaned !== key) {
             return `${key}. ${cleaned}`;
           }
-          return cleaned || key;
+          // key 是完整文本 → 通过索引拼字母前缀
+          const idx = options.indexOf(optionText);
+          const letter = String.fromCharCode(65 + idx);
+          return `${letter}. ${cleaned || key}`;
         }
         // answerKey 是字母但 options 没有前缀 → 通过索引查找
         if (/^[A-D]$/.test(key)) {
