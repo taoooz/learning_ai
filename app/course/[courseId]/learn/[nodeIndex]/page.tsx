@@ -46,31 +46,54 @@ function formatAnswerDisplay(question: Question): string {
   const answer = question.answer;
   const options = question.options || [];
 
-  // 单选题：直接显示答案
+  // 单选题：显示 "A. 选项文本"
   if (question.type === 'single') {
     const answerKey = Array.isArray(answer) ? answer[0] : answer;
     if (options.length > 0) {
+      // 尝试通过 extractAnswerKey 匹配（处理 options 带前缀的情况）
       const optionText = options.find(opt => extractAnswerKey(opt) === answerKey);
       if (optionText) {
         const cleaned = optionText.replace(/^[A-D][.、：:]\s*/, '');
-        return cleaned ? `${answerKey}. ${cleaned}` : answerKey;
+        // answerKey 是字母且 cleaned 不同 → "A. 选项文本"
+        if (/^[A-D]$/.test(answerKey) && cleaned !== answerKey) {
+          return `${answerKey}. ${cleaned}`;
+        }
+        // answerKey 是完整文本 → 直接返回选项内容（不重复）
+        return cleaned || answerKey;
+      }
+      // answerKey 是字母但 options 没有前缀 → 通过索引查找
+      if (/^[A-D]$/.test(answerKey)) {
+        const idx = answerKey.charCodeAt(0) - 65;
+        if (idx >= 0 && idx < options.length) {
+          return `${answerKey}. ${options[idx]}`;
+        }
       }
     }
     return String(answerKey);
   }
 
-  // 多选题：显示 "A. xxx：B. yyy" 或 "A、B"
+  // 多选题：显示 "A. 选项文本；B. 选项文本"
   if (question.type === 'multiple' && Array.isArray(answer)) {
     if (options.length > 0) {
       const parts = answer.map(key => {
         const optionText = options.find(opt => extractAnswerKey(opt) === key);
         if (optionText) {
           const cleaned = optionText.replace(/^[A-D][.、：:]\s*/, '');
-          return cleaned ? `${key}. ${cleaned}` : key;
+          if (/^[A-D]$/.test(key) && cleaned !== key) {
+            return `${key}. ${cleaned}`;
+          }
+          return cleaned || key;
+        }
+        // answerKey 是字母但 options 没有前缀 → 通过索引查找
+        if (/^[A-D]$/.test(key)) {
+          const idx = key.charCodeAt(0) - 65;
+          if (idx >= 0 && idx < options.length) {
+            return `${key}. ${options[idx]}`;
+          }
         }
         return key;
-      }).filter(p => p);
-      return parts.length > 0 ? parts.join('：') : answer.join('、');
+      }).filter(Boolean);
+      return parts.length > 0 ? parts.join('；') : answer.join('、');
     }
     return answer.join('、');
   }
