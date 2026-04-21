@@ -56,7 +56,7 @@ async def generate_questions(topic: str, cards: list, payload: dict) -> dict:
     content = ""
     for chunk in client.stream_chat_sync(
         messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": "请生成本章节的练习题。"}],
-        max_tokens=4000,
+        max_tokens=8000,
     ):
         delta = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
         content += delta

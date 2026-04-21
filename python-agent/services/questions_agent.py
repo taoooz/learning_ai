@@ -32,7 +32,7 @@ def generate_questions_with_tools(topic: str, cards: list, payload: dict) -> dic
         messages=messages,
         tools=SEARCH_TOOLS,
         tool_functions=TOOL_FUNCTIONS,
-        max_tokens=4000,
+        max_tokens=8000,
         reasoning_split=True,
         max_iterations=3,
         max_searches=1,
