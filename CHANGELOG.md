@@ -8,7 +8,6 @@
 - `lib/data/system-courses.ts` 重构为：从 JSON 加载 lessons，通过 `buildBlueprintFromLessons` 动态构建 `CourseBlueprint`，`createStoredCourseBundleFromBlueprint` 生成完整 bundle
 - 推荐元数据（title/summary/badge/cta）从 `catalog.ts` 内联，避免 data/ 目录的 import
 - 移除 `formatAnswerDisplay` 调试日志
-
 ## 2026-04-13
 
 ### Bug 修复

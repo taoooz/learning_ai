@@ -20,7 +20,7 @@ class MiniMaxClient:
     def stream_chat_sync(
         self,
         messages: list[dict],
-        model: str = "MiniMax-M2.7",
+        model: str = "MiniMax-M2.7-highspeed",
         max_tokens: int = 1500,
     ) -> Iterator[dict]:
         """同步流式调用 chat API"""
@@ -48,7 +48,7 @@ class MiniMaxClient:
     async def chat(
         self,
         messages: list[dict],
-        model: str = "MiniMax-M2.7",
+        model: str = "MiniMax-M2.7-highspeed",
         max_tokens: int = 1500,
     ) -> dict:
         """同步调用 chat API"""
@@ -69,7 +69,7 @@ class MiniMaxClient:
     async def stream_chat(
         self,
         messages: list[dict],
-        model: str = "MiniMax-M2.7",
+        model: str = "MiniMax-M2.7-highspeed",
         max_tokens: int = 1500,
     ) -> AsyncIterator[dict]:
         """流式调用 chat API"""

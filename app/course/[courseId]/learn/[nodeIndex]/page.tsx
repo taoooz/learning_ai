@@ -45,6 +45,7 @@ function extractQuestionConcept(question: Question): string {
 function formatAnswerDisplay(question: Question): string {
   const answer = question.answer;
   const options = question.options || [];
+  console.log('[formatAnswerDisplay]', JSON.stringify({ type: question.type, answer, options }));
 
   // 单选题：显示 "A. 选项文本"
   if (question.type === 'single') {
