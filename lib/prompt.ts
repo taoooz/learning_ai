@@ -276,7 +276,7 @@ ${analogySection}${stylesSection}${questionsSection}## 内容要求
 - 知识卡片可根据需要添加 visualization 字段来辅助理解
 - 问题必须基于前面知识卡片中的内容来出，确保与知识强相关
 - 问题卡片间尽量避免重复内容
-- 问题类型：single（单选）、multiple（多选）、sorting（排序）
+- 问题类型：single（单选）、multiple（多选）、fill_blank（填空）
 
 ## 可视化类型说明
 - flowchart: 流程图，使用 Mermaid 语法，如 "graph TD; A-->B"
@@ -304,7 +304,7 @@ ${analogySection}${stylesSection}${questionsSection}## 内容要求
   }],
   "questions": [{
     "id": "q-1",
-    "type": "single|multiple|sorting",
+    "type": "single|multiple|fill_blank",
     "question": "题干",
     "options": ["A", "B"],
     "answer": "答案",
@@ -493,13 +493,13 @@ ${insights.analogyExperiences?.length ? insights.analogyExperiences.map(a => `- 
 - 如果有前置依赖，本节开头先用 1 张卡片衔接，不要默认用户还记得上一节全部细节
 - 如果某个 memory 只是弱相关背景，不要据此把题目改造成其他主题
 
-题目类型：single（单选）、multiple（多选）、sorting（排序）
+题目类型：single（单选）、multiple（多选）、fill_blank（填空）
 数量：3-5道，覆盖核心知识点
 
 ## 输出格式
 {
   "cards": [{"id": "card-1", "title": "标题", "content": "Markdown内容", "imageUrl": null}],
-  "questions": [{"id": "q-1", "type": "single|multiple|sorting", "question": "题目", "options": ["A", "B", "C", "D"], "answer": "答案(single:字符串, multiple:字符串数组, sorting:排列后的数组)", "explanation": "解析", "concept": "本题考查的核心概念", "dimension": "memory|understanding|application|analysis", "difficulty": 1, "cardId": "card-1"}]
+  "questions": [{"id": "q-1", "type": "single|multiple|fill_blank", "question": "题目", "options": ["A", "B", "C", "D"], "answer": "答案(single:字符串, multiple:字符串数组, fill_blank:正确答案数组)", "explanation": "解析", "concept": "本题考查的核心概念", "dimension": "memory|understanding|application|analysis", "difficulty": 1, "cardId": "card-1"}]
 }
 
 ## 可视化决策指南
