@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { PYTHON_AGENT_URL } from '@/lib/agent-config';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * Outline SSE 代理 — 直接 pipe Python Agent 的 SSE 流给前端
  * 前端自行流式消费 thinking/content/questions/blueprint 事件

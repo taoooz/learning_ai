@@ -99,6 +99,7 @@ export function useChatSubmit(params: UseChatSubmitParams) {
         body: JSON.stringify({
           course: { topic: course.topic },
           messages: limitedMessages,
+          userMemory: userMemory.memoryStore,
           contextInfo: {
             ...contextInfo,
             questionContext: questionContextRef.current,

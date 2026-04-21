@@ -6,6 +6,8 @@ import { PYTHON_AGENT_URL } from '@/lib/agent-config';
 import type { ChatMessage } from '@/types/chat';
 import type { ConversationSummary, CourseTree, MemoryStoreV2, MemoryStoreV3, UserMemory } from '@/types/course';
 
+export const dynamic = 'force-dynamic';
+
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
@@ -56,7 +58,7 @@ export async function POST(request: NextRequest) {
       throw new Error(`Python Agent error: ${response.status}`);
     }
 
-    // 直接 pipe SSE 流给前端（MiniMax 兼容格式）
+    // 直接 pipe SSE 流给前端
     return new Response(response.body, {
       headers: {
         'Content-Type': 'text/event-stream',

@@ -45,6 +45,7 @@ function extractQuestionConcept(question: Question): string {
 function formatAnswerDisplay(question: Question): string {
   const answer = question.answer;
   const options = question.options || [];
+  console.log('[formatAnswerDisplay]', JSON.stringify({ type: question.type, answer, options }));
 
   // 单选题：直接显示答案
   if (question.type === 'single') {
@@ -52,23 +53,25 @@ function formatAnswerDisplay(question: Question): string {
     if (options.length > 0) {
       const optionText = options.find(opt => extractAnswerKey(opt) === answerKey);
       if (optionText) {
-        return `${answerKey}. ${optionText.replace(/^[A-D][.、：:]\s*/, '')}`;
+        const cleaned = optionText.replace(/^[A-D][.、：:]\s*/, '');
+        return cleaned ? `${answerKey}. ${cleaned}` : answerKey;
       }
     }
-    return answerKey;
+    return String(answerKey);
   }
 
-  // 多选题：显示 "A、C" 或 "A. xxx：C. yyy"
+  // 多选题：显示 "A. xxx：B. yyy" 或 "A、B"
   if (question.type === 'multiple' && Array.isArray(answer)) {
     if (options.length > 0) {
       const parts = answer.map(key => {
         const optionText = options.find(opt => extractAnswerKey(opt) === key);
         if (optionText) {
-          return `${key}. ${optionText.replace(/^[A-D][.、：:]\s*/, '')}`;
+          const cleaned = optionText.replace(/^[A-D][.、：:]\s*/, '');
+          return cleaned ? `${key}. ${cleaned}` : key;
         }
         return key;
-      });
-      return parts.join('：');
+      }).filter(p => p);
+      return parts.length > 0 ? parts.join('：') : answer.join('、');
     }
     return answer.join('、');
   }
