@@ -33,7 +33,7 @@ def generate_cards_with_tools(topic: str, payload: dict) -> dict:
         messages=messages,
         tools=SEARCH_TOOLS,
         tool_functions=TOOL_FUNCTIONS,
-        max_tokens=8000,
+        max_tokens=16000,
         reasoning_split=True,
         max_iterations=3,
         max_searches=1,

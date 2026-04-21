@@ -138,7 +138,7 @@ async def generate_cards(topic: str, payload: dict) -> dict:
     content = ""
     for chunk in client.stream_chat_sync(
         messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": "请生成本章节的学习卡片。"}],
-        max_tokens=6000,
+        max_tokens=16000,
     ):
         delta = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
         content += delta
