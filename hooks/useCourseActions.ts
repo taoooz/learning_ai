@@ -11,7 +11,7 @@ import {
   getUserProfile,
   updateNodeLesson as saveNodeLesson,
 } from '@/lib/storage';
-import { getUserMemoryStoreSnapshot } from '@/lib/memory';
+import { getPlanningMemoryPayload, getUserMemoryStoreSnapshot } from '@/lib/memory';
 import { unwrapApiResponse } from '@/lib/api-response';
 import { buildNodeInfoPayload } from '@/contexts/CourseContext';
 
@@ -44,7 +44,7 @@ export function useCourseActions({
       body: JSON.stringify({
         topic,
         userProfile: getUserProfile(),
-        userMemory: getUserMemoryStoreSnapshot(),
+        planningMemory: getPlanningMemoryPayload(topic, getUserMemoryStoreSnapshot()),
         userMessage,
         sessionId,
       }),

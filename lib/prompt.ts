@@ -181,6 +181,7 @@ ${payload.riskConcepts.length ? payload.riskConcepts.map((item) => `- ${item}`).
 
 最近相关学习摘要：
 ${payload.recentRelevantCourses.length ? payload.recentRelevantCourses.map((item) => `- ${item.summary}`).join('\n') : '暂无'}
+${payload.learningSummary ? `\n学习旅程洞察：\n- 旅程：${payload.learningSummary.journey}\n- 重点：${payload.learningSummary.currentFocus}\n- 特点：${payload.learningSummary.learnerInsights.join('、')}\n- 需关注：${payload.learningSummary.areasToWatch.join('、')}` : ''}
 `;
 }
 

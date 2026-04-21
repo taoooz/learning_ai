@@ -110,6 +110,38 @@ export interface EpisodicProjection {
   updatedAt: number;
 }
 
+export interface LearningSummary {
+  /** 整体学习旅程描述（100字以内） */
+  journey: string;
+  /** 当前重点学习方向 */
+  currentFocus: string;
+  /** 已表现出的学习偏好（LLM 洞察，非正则检测） */
+  learnerInsights: string[];
+  /** 需要关注的薄弱点 */
+  areasToWatch: string[];
+  /** 上次精炼时间 */
+  updatedAt: number;
+}
+
+export interface MemoryRefineResult {
+  /** 学习旅程总结，null 表示无需更新 */
+  summary: LearningSummary | null;
+  /** LLM 洞察到的学习偏好更新 */
+  preferenceUpdates: Array<{
+    kind: LearningPreference['kind'];
+    value: string;
+    evidence: string;
+    confidence: number;
+  }>;
+  /** 概念理解修正（如发现误判） */
+  conceptCorrections: Array<{
+    concept: string;
+    topic: string;
+    correctedMastery: number;
+    reason: string;
+  }>;
+}
+
 export interface MemoryStoreV3 {
   version: 3;
   learnerId: string;
@@ -124,6 +156,8 @@ export interface MemoryStoreV3 {
     topicProjections: TopicProjection[];
     episodicProjections: EpisodicProjection[];
   };
+  /** LLM 生成的学习旅程总结（定期精炼） */
+  learningSummary?: LearningSummary;
   updatedAt: number;
 }
 
@@ -141,6 +175,7 @@ export interface PlanningMemoryPayload {
     topic: string;
     summary: string;
   }>;
+  learningSummary?: LearningSummary;
 }
 
 export interface CourseBlueprintPromptPayload {
@@ -208,6 +243,7 @@ export interface ChatMemoryPayload {
   analogyHints: string[];
   preferredExplanationStyles: string[];
   topicSummary?: string;
+  learningSummary?: LearningSummary;
 }
 
 // UserMemory 子类型

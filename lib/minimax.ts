@@ -43,7 +43,8 @@ export async function callMiniMax(prompt: string, options: MiniMaxCallOptions = 
     throw new Error('MINIMAX_API_KEY is not set');
   }
 
-  const response = await fetch('https://api.minimaxi.com/v1/chat/completions', {
+  const baseUrl = process.env.MINIMAX_API_BASE || 'https://api.minimaxi.com/v1';
+  const response = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

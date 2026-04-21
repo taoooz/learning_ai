@@ -1,10 +1,8 @@
-// app/api/chat/route.ts
+// app/api/chat/route.ts — Chat SSE 代理
+// 前端发送结构化数据，直接 pipe 到 Python Agent
+// Python Agent 负责构建 system prompt 并调用 LLM
 import { NextRequest } from 'next/server';
-import { buildChatContext } from '@/lib/chat-context';
-import { createMemoryRepository } from '@/lib/memory/repository';
 import { PYTHON_AGENT_URL } from '@/lib/agent-config';
-import type { ChatMessage } from '@/types/chat';
-import type { ConversationSummary, CourseTree, MemoryStoreV2, MemoryStoreV3, UserMemory } from '@/types/course';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,46 +10,17 @@ export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
-    const { course, messages, userMemory, contextInfo, conversationSummary } = await request.json() as {
-      course: CourseTree;
-      messages: ChatMessage[];
-      userMemory: UserMemory | MemoryStoreV2 | MemoryStoreV3;
-      contextInfo?: {
-        currentNodeTitle?: string;
-        currentNodeCards?: string[];
-        currentQuestion?: string;
-      };
-      conversationSummary?: ConversationSummary;
-    };
+    const body = await request.json();
 
-    if (!course || !messages || !userMemory) {
+    if (!body.courseTopic || !body.messages) {
       return new Response('Missing required fields', { status: 400 });
     }
 
-    // 构建上下文
-    const memoryRepository = createMemoryRepository({
-      initialMemory: userMemory as MemoryStoreV3 | null,
-      getProfile: () => null,
-    });
-    const chatMemoryPayload = memoryRepository.getChatPayload({
-      topic: course.topic,
-      currentNodeTitle: contextInfo?.currentNodeTitle,
-      currentQuestion: contextInfo?.currentQuestion,
-    });
-
-    const context = buildChatContext(course, messages, contextInfo, conversationSummary, chatMemoryPayload);
-
-    // 构建 AI 消息
-    const aiMessages = [
-      { role: 'system' as const, content: context },
-      ...messages.map(m => ({ role: m.role, content: m.content }))
-    ];
-
-    // 转发到 Python Agent（输出 MiniMax 兼容 SSE 格式，前端无需改动）
+    // 直接转发到 Python Agent（prompt 构建已迁移到 chat_agent.py）
     const response = await fetch(`${PYTHON_AGENT_URL}/api/agents/chat/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: aiMessages, maxTokens: 1500 }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {

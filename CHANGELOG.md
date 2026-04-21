@@ -1,5 +1,45 @@
 # 项目迭代日志
 
+## 2026-04-20
+
+### 学习小结 Summary 步骤
+
+- 改造学习页 `complete` 阶段 UI，替代简陋的"这一节完成了"卡片
+- 新增 `answerRecords` 状态追踪每道题的答题对错
+- Summary 展示四个信息卡片：关键收获（卡片标题）、练习正确率（进度条动画）、薄弱知识点（答错题目的 concept）、下节预告
+- 所有数据前端计算，不调用 AI，与课程全部完成时的 CourseCelebrationSheet 无冲突
+
+### Prompt 外置为独立模块（借鉴 DeepTutor）
+
+- 新增 `python-agent/prompts/` 目录，将所有硬编码 prompt 从 service 代码中抽离为独立 Python 模块
+- 6 个 prompt 模块：`outline.py`（大纲）、`toc.py`（目录）、`cards.py`（卡片）、`questions.py`（练习题）、`chat.py`（对话）、`memory_refine.py`（记忆精炼）
+- 新增 `prompts/__init__.py` PromptManager：支持 `get_prompt(name, key, **kwargs)` 按需加载 + 模板变量替换 + 内存缓存 + `reload_prompts()` 热更新
+- 改造 6 个 service 文件（outline/toc/cards/questions/chat/memory_refine）使用 `get_prompt()` / `build_prompt()` 代替硬编码 f-string
+- TypeScript 编译通过，Python 模板替换测试通过
+
+### Memory LLM 精炼系统（借鉴 DeepTutor）
+
+- 新增 `learningSummary` 字段到 `MemoryStoreV3`，存储 LLM 生成的学习旅程总结（旅程描述、当前重点、学习者特点、需关注项）
+- 新增 Python Agent `memory/refine` 端点：调用 MiniMax API 分析最近对话和事件，返回结构化洞察（偏好更新、概念修正、学习总结）
+- 新增 Next.js `/api/memory/refine` API 路由代理
+- 新增 `lib/memory/refine.ts`：精炼触发 + 结果应用 + 持久化逻辑
+- 聊天对话完成后自动触发 LLM 精炼（fire-and-forget，不阻塞用户体验），5分钟内不重复精炼
+- Chat 和 Planning prompt 均注入 `learningSummary`，让 AI 能看到用户的学习旅程洞察
+
+### Outline 生成上下文优化
+
+- 前端不再发送全量 `MemoryStoreV3`（含300条 events、200个概念投影等），改为调用 `getPlanningMemoryPayload()` 提取精简 payload（learnerSnapshot + 背景提示 + 必学/可跳过/风险概念 + 最近3门课）
+- Next.js outline route 字段名从 `userMemory` 改为 `planningMemory`
+- Python Agent `build_initial_prompt` 重写：不再只读 `recentRelevantCourses`，而是利用 PlanningMemoryPayload 的全部字段（当前水平、学习目标、可迁移背景、必须覆盖概念、可跳过基础、风险概念、近期课程）
+- Python Agent schema/service/agent 全链路字段名 `user_memory` → `planning_memory`
+
+### Chat 对话上下文优化
+
+- 前端不再发送全量 `userMemory.memoryStore`（MemoryStoreV3）和完整 CourseTree，改为前端直接调用 `getChatMemoryPayload()` 提取精简 ChatMemoryPayload，只传 `courseTopic` 字符串
+- `app/api/chat/route.ts` 简化为纯透传代理，移除 `createMemoryRepository` + `getChatPayload` + `buildChatContext` 的服务端逻辑
+- Prompt 构建从 Next.js `lib/chat-context.ts` 迁移到 Python Agent `services/chat_agent.py` 的 `build_chat_system_prompt()`
+- 前端发送字段从 `course`/`userMemory` 改为 `courseTopic`/`chatMemory`
+
 ## 2026-04-17
 
 ### 代码架构优化

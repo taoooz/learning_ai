@@ -279,6 +279,7 @@ export function getPlanningMemoryPayload(
     skippableBasics: filterValidConcepts(skippableConceptNames.slice(0, 2)),
     riskConcepts: filterValidConcepts(riskConceptNames.slice(0, 3)),
     recentRelevantCourses,
+    learningSummary: memoryStore.learningSummary || undefined,
   };
 }
 
@@ -449,5 +450,6 @@ export function getChatMemoryPayload(input: {
     recentQuestionSummaries,
     analogyHints: getBackgroundHints(`${topic} ${focusSource}`, memoryStore, 3),
     preferredExplanationStyles: [],
+    learningSummary: memoryStore.learningSummary || undefined,
   };
 }

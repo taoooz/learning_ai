@@ -41,7 +41,7 @@ def _extract_content_from_agent_events(events: list[dict]) -> str:
 def stream_outline_with_tools(
     topic: str,
     user_profile: dict,
-    user_memory: dict,
+    planning_memory: dict,
     max_tokens: int = 6000,
 ) -> Generator[str, None, None]:
     """Agent 版 outline 生成（带搜索能力）
@@ -56,8 +56,8 @@ def stream_outline_with_tools(
     Yields: SSE 格式字符串（data: {...}\\n\\n）
     """
     client = AgentClient()
-    system_prompt = build_initial_prompt(topic, user_profile, user_memory)
-    state = make_initial_state(topic, user_profile, user_memory)
+    system_prompt = build_initial_prompt(topic, user_profile, planning_memory)
+    state = make_initial_state(topic, user_profile, planning_memory)
 
     messages = [
         {"role": "system", "content": system_prompt},

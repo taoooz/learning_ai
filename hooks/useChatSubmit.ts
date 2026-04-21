@@ -5,7 +5,9 @@ import {
   analyzeChatMessageForMemory,
   detectChatLearningPreferences,
   detectExplicitMasteredConcept,
+  getChatMemoryPayload,
 } from '@/lib/memory';
+import { refineAndApply } from '@/lib/memory/refine';
 
 interface UseChatSubmitParams {
   courseId: string;
@@ -98,9 +100,14 @@ export function useChatSubmit(params: UseChatSubmitParams) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          course,
+          courseTopic: course.topic,
           messages: limitedMessages,
-          userMemory: userMemory.memoryStore,
+          chatMemory: getChatMemoryPayload({
+            topic: course.topic,
+            currentNodeTitle: contextInfo?.currentNodeTitle,
+            currentQuestion: questionContextRef.current?.question,
+            userMemory: userMemory.memoryStore,
+          }),
           contextInfo: {
             ...contextInfo,
             questionContext: questionContextRef.current,
@@ -190,6 +197,10 @@ export function useChatSubmit(params: UseChatSubmitParams) {
           courseId,
         });
       }
+
+      // 后台触发 LLM 精炼（fire-and-forget，不阻塞）
+      const allMessagesForRefine = [...messages, { role: 'user' as const, content: userMessage }, { role: 'assistant' as const, content: fullContent }];
+      refineAndApply(allMessagesForRefine).catch(() => {});
     } catch (error) {
       console.error('Chat error:', error);
       addMessage({ role: 'assistant', content: '抱歉，发生了错误。请稍后再试。' });

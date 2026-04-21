@@ -241,6 +241,7 @@ export default function LearnPage() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatInitialMessage, setChatInitialMessage] = useState<string | undefined>();
   const [progressPulseKey, setProgressPulseKey] = useState(0);
+  const [answerRecords, setAnswerRecords] = useState<{ question: Question; isCorrect: boolean }[]>([]);
 
   // 用于跟踪当前有效的加载请求
   const loadingVersionRef = useRef(0);
@@ -281,6 +282,7 @@ export default function LearnPage() {
     setSortOptions([]);
     setIsAnswered(false);
     setIsCorrect(false);
+    setAnswerRecords([]);
   }, [courseId, nodeIndex]);
 
   const steps = useMemo(() => {
@@ -450,6 +452,7 @@ export default function LearnPage() {
     const correct = checkIsCorrect(currentStep.question, selectedAnswer, sortOptions);
     setIsCorrect(correct);
     setIsAnswered(true);
+    setAnswerRecords(prev => [...prev, { question: currentStep.question, isCorrect: correct }]);
 
     if (course) {
       userMemory.recordQuestionAttempt({
@@ -819,50 +822,154 @@ export default function LearnPage() {
           </div>
         )}
 
-        {phase === 'complete' && (
-          <div className="flex flex-1 flex-col pt-1.5">
-            <motion.div
-              initial={{ opacity: 0, y: 16, scale: 0.985 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
-              className="rounded-[32px] border border-white/80 bg-surface/96 px-6 py-7 text-center shadow-[0_10px_24px_rgba(15,23,42,0.05)]"
-            >
+        {phase === 'complete' && (() => {
+          const totalQuestions = answerRecords.length;
+          const correctCount = answerRecords.filter(r => r.isCorrect).length;
+          const accuracy = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
+          const wrongRecords = answerRecords.filter(r => !r.isCorrect);
+          const weakConcepts = [...new Set(wrongRecords.map(r => extractQuestionConcept(r.question)))];
+          const cardTitles = steps
+            .filter((s): s is LearnStep & { type: 'card' } => s.type === 'card')
+            .map(s => s.card.title);
+          const nextNode = course?.nodes.find(n => n.index === nodeIndex + 1);
+          const nextGoal = blueprint?.nodes.find(item => item.index === nodeIndex + 1)?.teachingGoal;
+
+          return (
+            <div className="flex flex-1 flex-col pt-1.5 gap-4">
+              {/* 头部卡片 */}
               <motion.div
-                initial={{ scale: 0.88, rotate: -6 }}
-                animate={{ scale: 1, rotate: 0 }}
-                transition={{ duration: 0.34, delay: 0.05, type: 'spring', stiffness: 260, damping: 18 }}
-                className="mb-5 inline-flex h-18 w-18 items-center justify-center rounded-full bg-[linear-gradient(135deg,rgba(255,138,0,0.20),rgba(56,189,248,0.14),rgba(255,255,255,0.98))] text-accent shadow-[0_10px_22px_rgba(255,138,0,0.10)]"
+                initial={{ opacity: 0, y: 16, scale: 0.985 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+                className="rounded-[32px] border border-white/80 bg-surface/96 px-6 py-7 text-center shadow-[0_10px_24px_rgba(15,23,42,0.05)]"
               >
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 text-accent shadow-sm">
-                  <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.1} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
+                <motion.div
+                  initial={{ scale: 0.88, rotate: -6 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  transition={{ duration: 0.34, delay: 0.05, type: 'spring', stiffness: 260, damping: 18 }}
+                  className="mb-5 inline-flex h-18 w-18 items-center justify-center rounded-full bg-[linear-gradient(135deg,rgba(255,138,0,0.20),rgba(56,189,248,0.14),rgba(255,255,255,0.98))] text-accent shadow-[0_10px_22px_rgba(255,138,0,0.10)]"
+                >
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 text-accent shadow-sm">
+                    <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.1} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                </motion.div>
+                <p className="text-sm font-medium text-accent">这一节完成了</p>
+                <h2 className="mt-2 text-[28px] font-semibold tracking-tight text-primary">{node.title}</h2>
               </motion.div>
-              <p className="text-sm font-medium text-accent">这一节完成了</p>
-              <h2 className="mt-2 text-[28px] font-semibold tracking-tight text-primary">{node.title}</h2>
-              <p className="mt-3 text-sm leading-6 text-secondary">
-                当前进度已经更新，接下来继续往前学。
-              </p>
-            </motion.div>
 
-            <div className="mt-auto pt-3">
-              <button
-                onClick={() => {
-                  if (course && nodeIndex + 1 < course.nodes.length) {
-                    router.push(`/course/${courseId}/learn/${nodeIndex + 1}`);
-                    return;
-                  }
+              {/* 关键收获 */}
+              {cardTitles.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.22, delay: 0.08 }}
+                  className="rounded-[24px] border border-black/[0.06] bg-white px-5 py-5 shadow-[0_4px_16px_rgba(15,23,42,0.04)]"
+                >
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-tertiary">
+                    关键收获
+                  </p>
+                  <div className="space-y-2">
+                    {cardTitles.map((title, i) => (
+                      <div key={i} className="flex items-start gap-2.5">
+                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/12 text-[11px] font-semibold text-accent">
+                          {i + 1}
+                        </span>
+                        <span className="text-[15px] leading-6 text-primary">{title}</span>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
 
-                  router.push(`/course/${courseId}`);
-                }}
-                className="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-cta px-6 py-3 text-sm font-semibold text-cta shadow-[0_10px_24px_rgba(17,24,39,0.10)] transition-all duration-150 active:scale-[0.985]"
-              >
-                {course && nodeIndex + 1 < course.nodes.length ? '进入下一节' : '返回学习路线'}
-              </button>
+              {/* 正确率 */}
+              {totalQuestions > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.22, delay: 0.14 }}
+                  className="rounded-[24px] border border-black/[0.06] bg-white px-5 py-5 shadow-[0_4px_16px_rgba(15,23,42,0.04)]"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-tertiary">
+                      练习正确率
+                    </p>
+                    <span className={`text-xl font-bold ${accuracy >= 80 ? 'text-[#2E7D32]' : accuracy >= 50 ? 'text-accent' : 'text-error'}`}>
+                      {accuracy}%
+                    </span>
+                  </div>
+                  <div className="h-2.5 rounded-full bg-black/[0.06] overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${accuracy}%` }}
+                      transition={{ duration: 0.6, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                      className={`h-full rounded-full ${accuracy >= 80 ? 'bg-[#4CAF50]' : accuracy >= 50 ? 'bg-accent' : 'bg-error'}`}
+                    />
+                  </div>
+                  <p className="mt-2 text-xs text-secondary">
+                    共 {totalQuestions} 题，答对 {correctCount} 题
+                  </p>
+                </motion.div>
+              )}
+
+              {/* 薄弱知识点 */}
+              {weakConcepts.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.22, delay: 0.2 }}
+                  className="rounded-[24px] border border-error/20 bg-[linear-gradient(135deg,rgba(239,71,111,0.04),rgba(255,248,249,1))] px-5 py-5 shadow-[0_4px_16px_rgba(239,71,111,0.06)]"
+                >
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-error/70">
+                    需要巩固
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {weakConcepts.map((concept, i) => (
+                      <span key={i} className="rounded-full border border-error/20 bg-white px-3 py-1.5 text-[13px] font-medium text-error/80">
+                        {concept}
+                      </span>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+
+              {/* 下节预告 */}
+              {nextNode && (
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.22, delay: 0.26 }}
+                  className="rounded-[24px] border border-black/[0.06] bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(240,248,255,0.98))] px-5 py-5 shadow-[0_4px_16px_rgba(15,23,42,0.04)]"
+                >
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-tertiary">
+                    下一节预告
+                  </p>
+                  <p className="text-[16px] font-semibold text-primary">{nextNode.title}</p>
+                  {nextGoal && (
+                    <p className="mt-1.5 text-[14px] leading-6 text-secondary">{nextGoal}</p>
+                  )}
+                </motion.div>
+              )}
+
+              {/* 继续按钮 */}
+              <div className="pt-2">
+                <button
+                  onClick={() => {
+                    if (course && nodeIndex + 1 < course.nodes.length) {
+                      router.push(`/course/${courseId}/learn/${nodeIndex + 1}`);
+                      return;
+                    }
+                    router.push(`/course/${courseId}`);
+                  }}
+                  className="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-cta px-6 py-3 text-sm font-semibold text-cta shadow-[0_10px_24px_rgba(17,24,39,0.10)] transition-all duration-150 active:scale-[0.985]"
+                >
+                  {nextNode ? '进入下一节' : '返回学习路线'}
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       <RetryModal

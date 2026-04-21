@@ -38,7 +38,7 @@ class OutlineRequest(BaseModel):
     """生成 Outline 请求"""
     topic: str = Field(..., description="课程主题")
     userProfile: dict = Field(default_factory=dict, description="用户画像")
-    userMemory: dict = Field(default_factory=dict, description="用户记忆")
+    planningMemory: dict = Field(default_factory=dict, description="精简的规划记忆 payload")
 
 
 class OutlineAnswerRequest(BaseModel):

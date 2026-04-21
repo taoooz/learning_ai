@@ -30,7 +30,8 @@ from services.outline_agent import stream_outline_with_tools, stream_answer_with
 from services.toc_agent import stream_toc_with_tools
 from services.cards_agent import generate_cards_with_tools
 from services.questions_agent import generate_questions_with_tools
-from services.chat_agent import stream_chat_with_tools
+from services.chat_agent import stream_chat_with_tools, build_chat_system_prompt
+from services.memory_refine_service import refine_memory
 
 session_store = get_session_store()
 
@@ -83,8 +84,8 @@ async def health_check():
 async def generate_outline(req: OutlineRequest):
     """启动 outline 生成（流式）"""
     async def event_generator():
-        state = make_initial_state(req.topic, req.userProfile, req.userMemory)
-        system_prompt = build_initial_prompt(req.topic, req.userProfile, req.userMemory)
+        state = make_initial_state(req.topic, req.userProfile, req.planningMemory)
+        system_prompt = build_initial_prompt(req.topic, req.userProfile, req.planningMemory)
         session_id = None
 
         try:
@@ -233,7 +234,7 @@ async def generate_outline_agent(req: OutlineRequest):
             yield from stream_outline_with_tools(
                 topic=req.topic,
                 user_profile=req.userProfile,
-                user_memory=req.userMemory,
+                planning_memory=req.planningMemory,
             )
         except Exception as e:
             print(f"[Outline Agent API] Error: {e}")
@@ -367,8 +368,32 @@ async def chat_agent_route(request: dict):
     """Agent 版学习对话（带搜索能力，流式 SSE）"""
     def event_generator():
         try:
-            messages = request.get('messages', [])
+            # 支持两种调用方式：
+            # 1. 直接传 messages（向后兼容）
+            # 2. 传结构化数据（courseTopic + messages），由 Python Agent 构建 prompt
+            raw_messages = request.get('messages')
             max_tokens = request.get('maxTokens', 1500)
+            course_topic = request.get('courseTopic')
+
+            if course_topic:
+                # 新模式：接收结构化数据，构建 prompt
+                chat_memory = request.get('chatMemory')
+                context_info = request.get('contextInfo')
+                conversation_summary = request.get('conversationSummary')
+
+                system_prompt = build_chat_system_prompt(
+                    course_topic=course_topic,
+                    chat_history=raw_messages or [],
+                    context_info=context_info,
+                    conversation_summary=conversation_summary,
+                    chat_memory=chat_memory,
+                )
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    *[{"role": m.get("role", "user"), "content": m.get("content", "")} for m in (raw_messages or [])],
+                ]
+            else:
+                messages = raw_messages or []
 
             yield from stream_chat_with_tools(messages=messages, max_tokens=max_tokens)
         except Exception as e:
@@ -379,6 +404,31 @@ async def chat_agent_route(request: dict):
             yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.post("/api/agents/memory/refine")
+async def memory_refine_route(request: dict):
+    """LLM 驱动的记忆精炼 — 分析对话和事件，返回结构化洞察"""
+    try:
+        recent_messages = request.get("recentMessages", [])
+        current_summary = request.get("currentSummary")
+        concept_count = request.get("conceptCount", 0)
+        topic_count = request.get("topicCount", 0)
+        recent_events_summary = request.get("recentEventsSummary", "")
+
+        result = refine_memory(
+            recent_messages=recent_messages,
+            current_summary=current_summary,
+            concept_count=concept_count,
+            topic_count=topic_count,
+            recent_events_summary=recent_events_summary,
+        )
+        return result
+    except Exception as e:
+        print(f"[Memory Refine API] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
