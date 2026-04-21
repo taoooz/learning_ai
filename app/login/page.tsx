@@ -10,19 +10,19 @@ function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirect = searchParams.get('redirect') || '/'
-  const { isLoading, isVerified, verifiedCode, verifyInviteCode, register } = useAuth()
+  const { isLoading, user, isVerified, verifiedCode, verifyInviteCode, register } = useAuth()
 
   const [inviteCode, setInviteCode] = useState('')
   const [nickname, setNickname] = useState('')
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // 已登录，跳转原页面
+  // 已登录（user 已设置），跳转原页面
   useEffect(() => {
-    if (isVerified && verifiedCode && !error) {
+    if (user && !error) {
       router.replace(redirect)
     }
-  }, [isVerified, verifiedCode, error, redirect, router])
+  }, [user, error, redirect, router])
 
   // 加载中
   if (isLoading) {
@@ -62,13 +62,12 @@ function LoginContent() {
 
     const result = await register(nickname.trim())
 
-    if (result.success) {
-      router.replace(redirect)
-    } else {
+    if (!result.success) {
       setError(result.error || '注册失败')
     }
 
     setIsSubmitting(false)
+    // 跳转由 useEffect 自动处理（当 user 状态更新时）
   }
 
   const handleKeyDown = (e: React.KeyboardEvent, action: () => void) => {

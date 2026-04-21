@@ -200,10 +200,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           nickname: nickname.trim(),
           createdAt: new Date().toISOString(),
         }
-        setUser(localUser)
-        setLocalUser(verifiedCode, localUser)
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ inviteCode: verifiedCode }))
-        setAuthCookie(verifiedCode)
+        // 等待状态更新完成
+        await new Promise<void>((resolve) => {
+          setUser(localUser)
+          setLocalUser(verifiedCode, localUser)
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({ inviteCode: verifiedCode }))
+          setAuthCookie(verifiedCode)
+          // 确保 React 状态更新完成
+          setTimeout(() => resolve(), 0)
+        })
         return { success: true }
       }
 

@@ -112,7 +112,14 @@
       "Bash(git push origin feature/agent-outline-generator)",
       "Bash(grep:*)",
       "Bash(git rm:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(git restore:*)",
+      "Bash(git -C \"/Users/admin/Documents/OpenCode/Learning AI/python-agent\" log --oneline -5)",
+      "Bash(git -C \"/Users/admin/Documents/OpenCode/Learning AI/python-agent\" ls-tree --name-only -r HEAD)",
+      "Bash(git -C \"/Users/admin/Documents/OpenCode/Learning AI/python-agent\" diff HEAD -- main.py)",
+      "Bash(git -C \"/Users/admin/Documents/OpenCode/Learning AI/python-agent\" show HEAD:main.py)",
+      "Bash(echo:*)",
+      "Bash(git diff:*)"
     ]
   },
   "hooks": {
