@@ -6,7 +6,16 @@
 - 症状：outline 会话只存在 Python Agent 内存（`SessionStore` 的 dict），服务重启即全部丢失，用户中途生成课程再刷新/重启就答不上题
 - 修复：`memory/session.py` 增加文件持久化——内存 dict 仍是主存储，磁盘 `data/sessions/*.json` 仅用于跨重启恢复；启动加载全部会话，create/update/delete 同步落盘；原子写入（`.tmp` + `os.replace`）防半截文件；单文件损坏只跳过告警不阻断其余加载；`data/` 加入 .gitignore
 - 验证：`tests/test_session.py` 7 用例（含重启恢复、损坏容错）12/12 绿；跨进程恢复含中文会话正常（`ensure_ascii=False`）；真实 LLM 生成后会话落盘并扛过服务器重启
-- ⚠️ 发现 `python-agent/` 是嵌套独立 git 仓库（`learning_ai_python_agent`，Railway 遗留），与主仓库重叠、工作区大量改动未提交，存在提交错仓库/部署陈旧代码风险，建议后续收敛为单一仓库
+
+### 会话自动过期清理（防 data/sessions 只增不减）
+- 症状：持久化后会话文件只增不减；`cleanup_old` 从未被调用，磁盘/内存缓慢膨胀
+- 修复：`main.py` lifespan 启动时先清一次历史遗留过期会话，并起后台任务按 `SESSION_CLEANUP_INTERVAL_SECONDS`（默认 1h）周期清理超过 `SESSION_MAX_AGE_SECONDS`（默认 24h）的会话；两者均可环境变量覆盖；清理异常不阻断服务
+- 验证：新增 2 用例（活跃会话不被误删、新旧混存只删过期）共 9/9 绿；真实重启时放置的过期会话文件被启动清理删除
+
+### 收敛嵌套 git 仓库（python-agent 归入主仓库）
+- 症状：`python-agent/` 是嵌套独立仓库（远程 `learning_ai_python_agent`，Railway 遗留），与主仓库重叠、工作区堆满未提交改动，存在提交错仓库/部署陈旧代码风险
+- 修复：确认外层主仓库已跟踪全部文件（含 `railway.toml`）且为更新版本、无 submodule 后，移除内层 `.git`（备份至 `~/Documents/python-agent-inner-git-backup`）；此后 `python-agent` 内 git 统一解析到主仓库
+- ⚠️ 后续：用户拟将 git 迁至公司 GitLab，届时一并配置远程与身份
 
 ## 2026-08-27
 
