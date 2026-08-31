@@ -13,24 +13,18 @@
     "lint": "next lint",
     "test": "node --import tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "smoke:generation": "node --import tsx scripts/smoke-generation.ts",
     "generate:system-courses": "node --import tsx scripts/generate-system-courses.ts"
-  },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@prisma/client": "^5.22.0",
     "@tailwindcss/postcss": "^4.2.2",
     "@types/react-syntax-highlighter": "^15.5.13",
     "framer-motion": "^12.38.0",
     "ioredis": "^5.10.1",
     "mermaid": "^11.13.0",
     "next": "^15.5.14",
-    "prisma": "^5.22.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
