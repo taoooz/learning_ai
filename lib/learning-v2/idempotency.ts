@@ -35,6 +35,25 @@ export function buildChapterCompleteIdempotencyKey(
   return `complete:${courseId}:${chapterId}:${planId}:v${planVersion}`;
 }
 
+/** Tutor 问题幂等键（P2）：同一章节同一任务同一问题只入流一次（设计文档 §2.1） */
+export function buildTutorQuestionIdempotencyKey(
+  chapterId: string,
+  taskId: string,
+  questionId: string,
+): string {
+  return `uq:${chapterId}:${taskId}:${questionId}`;
+}
+
+/** Tutor 回答请求幂等键（P2）：同一计划版本下同一问题同一时间只发起一次 Tutor 请求（设计文档 §3.3） */
+export function buildTutorRequestIdempotencyKey(
+  chapterId: string,
+  planVersion: number,
+  taskId: string,
+  questionId: string,
+): string {
+  return `tutor:${chapterId}:v${planVersion}:${taskId}:${questionId}`;
+}
+
 /**
  * 幂等注册表：同一键首次调用执行 create 并缓存，
  * 后续同键调用直接返回既有结果（§6.2 同键返回既有结果）。

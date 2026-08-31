@@ -1,9 +1,10 @@
 // types/learning-v2/learning-stream.ts
 // V2 学习流：用户实际学习经历的持久记录
 // 依据 docs/architecture/v2_课程生成逻辑.md §2.4 / §2.5
-// P0 范围说明：
+// 范围说明：
 // - 内容块仅保留文档建议的第一版 4 种（Process/Visualization/Code/Reflection 后续按需扩展）
-// - Stream Item 仅定义 P1 消费的种类（UserQuestion/TutorAnswer/Checkpoint 等属 P2/P3）
+// - UserQuestionItem / TutorAnswerItem 随 P2 流内答疑引入（设计文档 §2.1）
+// - SupplementalItem / CheckpointItem / CheckpointResultItem 属 P3，暂未定义
 // - NodeLessonV2.evidence 用 unknown[] 占位，LearningEvidence 类型 P3 前定稿
 
 import type { ChapterPlan } from './chapter-plan';
@@ -71,6 +72,9 @@ export interface GeneratedTask {
 
 export type StreamItemStatus = 'pending' | 'streaming' | 'complete' | 'failed' | 'superseded';
 
+/** Tutor 条目状态（P2）：问题无流式态，回答可经历 streaming */
+export type TutorItemStatus = 'pending' | 'streaming' | 'complete' | 'failed';
+
 export interface StreamItemBase {
   itemId: string;
   type: string;
@@ -109,15 +113,41 @@ export interface SystemNoticeItem extends StreamItemBase {
 }
 
 /**
- * P0/P1 学习流条目联合。
- * 完整协议还包含 UserQuestionItem / TutorAnswerItem / SupplementalItem /
- * CheckpointItem / CheckpointResultItem，分别在 P2/P3 引入。
+ * 用户提问条目（P2 流内答疑，设计文档 §2.1）。
+ * itemId 约定 `uq:{questionId}`：重复事件按确定性 itemId upsert，不产生重复条目。
+ */
+export interface UserQuestionItem extends StreamItemBase {
+  type: 'user_question';
+  taskId: string;
+  questionId: string;
+  text: string;
+  status: 'pending' | 'complete' | 'failed';
+}
+
+/**
+ * Tutor 回答条目（P2 流内答疑，设计文档 §2.1）。
+ * itemId 约定 `ta:{questionId}`；第一版只允许 markdown 内容块。
+ */
+export interface TutorAnswerItem extends StreamItemBase {
+  type: 'tutor_answer';
+  taskId: string;
+  questionId: string;
+  blocks: Extract<LearningContentBlock, { type: 'markdown' }>[];
+  status: TutorItemStatus;
+  errorMessage?: string;
+}
+
+/**
+ * P0–P2 学习流条目联合。
+ * 完整协议还包含 SupplementalItem / CheckpointItem / CheckpointResultItem，P3 引入。
  */
 export type LearningStreamItem =
   | TaskContentItem
   | TaskTransitionItem
   | SystemNoticeItem
-  | ChapterRecapItem;
+  | ChapterRecapItem
+  | UserQuestionItem
+  | TutorAnswerItem;
 
 // ---- 章节回顾 ----
 

@@ -1,9 +1,14 @@
 // types/learning-v2/events.ts
-// V2 SSE 事件协议：统一外壳 + 任务事件 + 通用事件
-// 依据 docs/architecture/v2_课程生成逻辑.md §5
-// P0 范围说明：Tutor 事件（tutor_decision / tutor_answer_*）属 P2，暂不定义
+// V2 SSE 事件协议：统一外壳 + 任务事件 + Tutor 事件 + 通用事件
+// 依据 docs/architecture/v2_课程生成逻辑.md §5 与 docs/architecture/p2-流内答疑第一阶段设计.md §2.2
+// P2 范围说明：Tutor 回答事件已引入；请求错误仍用 request_error，传输收尾仍用 request_completed
 
-import type { GeneratedTask, LearningContentBlock, SourceRef } from './learning-stream';
+import type {
+  GeneratedTask,
+  LearningContentBlock,
+  MarkdownBlock,
+  SourceRef,
+} from './learning-stream';
 
 export type TaskSseEventType =
   | 'task_started'
@@ -13,9 +18,17 @@ export type TaskSseEventType =
   | 'sources_ready'
   | 'task_completed';
 
+/** Tutor 回答事件类型（P2 流内答疑，设计文档 §2.2） */
+export type TutorSseEventType =
+  | 'tutor_started'
+  | 'tutor_block_started'
+  | 'tutor_block_delta'
+  | 'tutor_block_completed'
+  | 'tutor_completed';
+
 export type CommonSseEventType = 'request_warning' | 'request_error' | 'request_completed';
 
-export type LearningSseEventType = TaskSseEventType | CommonSseEventType;
+export type LearningSseEventType = TaskSseEventType | TutorSseEventType | CommonSseEventType;
 
 /** 统一事件外壳：所有学习流请求共用 */
 export interface LearningSseEvent<T = unknown> {
@@ -25,6 +38,8 @@ export interface LearningSseEvent<T = unknown> {
   courseId: string;
   chapterId: string;
   taskId?: string;
+  /** Tutor 事件携带（设计文档 §2.2 守卫字段）；任务事件不带 */
+  questionId?: string;
   planVersion: number;
   /** 单请求内严格递增；客户端按 eventId 去重（§5 规则） */
   sequence: number;
@@ -60,6 +75,34 @@ export interface SourcesReadyPayload {
 
 export interface TaskCompletedPayload {
   task: GeneratedTask;
+}
+
+// ---- Tutor 事件载荷（P2 流内答疑） ----
+
+/** Tutor 回答开始：与问题绑定，后续事件经 questionId/requestId 守卫 */
+export interface TutorStartedPayload {
+  questionId: string;
+}
+
+/** Tutor 块开始：第一版固定单个 markdown 块 */
+export interface TutorBlockStartedPayload {
+  blockId: string;
+}
+
+export interface TutorBlockDeltaPayload {
+  blockId: string;
+  /** markdown 文本增量 */
+  delta: string;
+}
+
+export interface TutorBlockCompletedPayload {
+  block: MarkdownBlock;
+}
+
+/** Tutor 回答完成：携带定稿的全部 markdown 块，供客户端校验与恢复 */
+export interface TutorCompletedPayload {
+  questionId: string;
+  blocks: MarkdownBlock[];
 }
 
 // ---- 通用事件载荷 ----
