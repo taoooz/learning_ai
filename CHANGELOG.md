@@ -2,53 +2,15 @@
 
 ## 2026-09-01
 
-### V2 P2 流内答疑：最终审查修复波（重试计数、排队文案、提交相位守卫）
-- 修复 1（Important）：`resume.ts` 任务重试 `nextAttempt` 基线只认 `kind === 'task'` 的 pendingRequest——边界提问的 Tutor 请求会占用 pendingRequest，此前读它的 attempt 导致任务重试计数跳号（新增真实时序用例：任务失败→边界提问→刷新，锁定 attempt 2 不跳号）
-- 修复 2：`LearningStreamV2` 排队提示区分两种场景（新增可测 `tutorQueuedHint`）：主任务生成中保持「本节内容会先生成完，随后回答你的问题」；边界超窗排队（无内容在生成）改为「问题较多时会按顺序回答，也可继续学习」
-- 修复 3：`tutor-orchestration` 的 `decideTutorSubmission` 增加相位白名单自防御（仅 `boundary`/`streaming`/`generating` 受理），不再只靠 UI 门控；`planning`/`completing`/`completed`/`plan_failed` 一律拒收
-- 修复 4（文档）：spec §3.2 与交付契约对齐——任务上下文为标题+任务目标（不含 `observableOutcome`，类型有该字段但改代码不在本波范围）、近期问答范围限当前任务最近 3 组（非本章），保留最小上下文设计理由
-- 验证：TS 231/231 绿（新增 3 项，均先失败后通过）、pytest 67/67 绿、`tsc --noEmit` 干净、lint 0 errors（21 warnings 与基线持平，均在未触碰文件）；报告见 `.superpowers/sdd/2026-08-31-p2-inline-tutor/task-final-fix-report.md`
-
-### V2 P2 第一阶段：流内答疑（交付总结）
-- 完成定义达成：任务流式生成中提问只入队（问题立即入流并落盘，任务完成后按队列顺序自动回答），边界提问立即启动回答；Tutor 完成后章节仍停在边界，不自动推进主线
-- 持久化：UserQuestion/TutorAnswer 立即进入学习流并经 commit 统一入口落盘（不走节流），刷新后问题轨迹、在途回答与失败态均不丢；被中断请求刷新自动重试一次（重试再失败进入可见失败态且不再自动重试）
-- Tutor SSE 双流隔离：Tutor 持独立代际计数 + 独立 AbortController + 忙闲标志，与主任务流互不取消；章节卸载/切换两者一并作废；问题串行回答、自动窗口 3 题，超窗口排队；旧章节残留流与协议版本不匹配事件一律丢弃不写入
-- 红线守住：prompt 明确中文作答当前问题、不输出思维过程、不产出掌握度/证据结论（事件载荷禁含 evidence 字段，真实冒烟实测 0 处）；课程计划、任务内容与证据均不被 Tutor 修改
-- 契约补齐（Task 4 裁决）：请求契约携带 courseId（普通字段，不进入幂等键格式），事件外壳 courseId 回填请求真实值，客户端事件写入前先比对 courseId
-- 静态与测试（2026-09-01 全量）：lint 0 errors（21 warnings 与基线持平）、`tsc --noEmit` 干净、TS 全量 228/228 绿（其中流内答疑测试 78 项）、pytest 67/67 绿
-- HTTP 错误路径冒烟：缺 `question` 字段 → 422 `INVALID_REQUEST`（「请求参数校验失败：question: Field required」，流未开始即拒）；畸形幂等键 → 422 `INVALID_REQUEST`（「幂等键格式无效」）；Next 侧无 cookie 401 与缺字段/畸形 JSON 422 由 `learning-v2-tutor-protocol.test.ts` 自动化覆盖
-- 真实 LLM 冒烟：SSE 序列 `tutor_started → tutor_block_started → tutor_block_delta×109 → tutor_block_completed → tutor_completed → request_completed` 完整有序（sequence 1–114 连续）；中文任意 chunk 切分无乱码，delta 拼接与 `block_completed` 正文完全一致；载荷无 evidence；`generationMeta` 仅含 promptVersion/modelVersion/durationMs/degraded，无内部细节；全程约 1.1s
-- 勘误：Task 6 条目「新增 26 项」实为 19 项，已就地修正
-
-### V2 P2 流内答疑：恢复、错误路径与回归测试（Task 8）
-- 新增 `tests/learning-v2-tutor-integration.test.ts`（8 用例）：基于 Task 6 编排基座锁定恢复与错误路径红线——旧章节残留流（started+delta 携带旧 chapterId）不写入新章节、失败问题局部重试不改变任务内容与 `completedTaskIds`、章节卸载后迟到响应整体丢弃（代际作废）、Tutor 流读取异常不动已完成任务、主任务失败不取消在途 Tutor、超窗口问题保留且串行不并发、HTTP 401/503 落稳定中文错误、Tutor 终态不推进主线
-- `tutor-harness` 测试基座增量扩展（向后兼容）：新增 `tutorEventChapterId`/`failedQuestionId` 夹具选项、`currentAnswerText` 读取、`holdNextTutorFetch`（请求挂起闸）、`failActiveStream`、`emitTaskError` 与 `createTutorHarness` 别名
-- `tutor-resume` 补例：自动重试再次失败进入可见失败态（错误文案 + 问题标记失败），第二次刷新不再自动重试
-- Python 补例：`test_invalid_question_context_is_rejected` 以 TestClient 实测缺 `question`/`idempotencyKey` → 端点层 422（`INVALID_REQUEST`，流未开始即拒）
-- 结论：简报 7 项行为确认均为既有实现，本任务以测试锁定；`resume.ts`/`useChapterLearning.ts` 经核无需改动。两条关键用例经变异测试验证（移除章节守卫/代际守卫即变红）
-- 验证：TS 228/228 绿（新增集成 8 + 恢复 1）、Python 67/67 绿、`tsc --noEmit` 干净、lint 0 errors；V1 ChatWidget 未改动、相关测试全过
-
-### V2 P2 流内答疑：章节 UI 与边界交互（Task 7）
-- 新增 `components/learning-v2/InlineTutorInput.tsx`：受控 textarea + 提问按钮，提交前 trim、空问题不提交；提交即清空，可见反馈由学习流问题条目与忙闲/排队提示行（`role="status"`）承接；Enter 提交 / Shift+Enter 换行 / 中文输入法组词期不提交；输入区与按钮触摸区域 ≥44px；导出可测 `tutorPlaceholder(phase)`（边界「针对本节内容提问…」、生成中「本节生成完成后回答你的问题…」，测试锁定）
-- `LearningStreamV2` 新增 `user_question`（右对齐气泡 + 待回答/排队提示/正在回答…）与 `tutor_answer`（复用既有 markdown 块渲染 + 流式光标；流式无内容时「正在准备回答…」；失败显示错误文案与「重试回答」局部重试，Tutor 忙碌时禁用）；排队判定：主任务生成中全部排队、边界超出自动窗口（3 题）排队
-- 章节页接线：输入框置于学习流/边界卡之后，流中与边界均可见；`completing` 禁用（收尾后问题无人应答）；`completed`/`plan_failed` 隐藏；完成页保留问答轨迹与失败重试入口
-- `TaskBoundaryV2` 行为不变，补注 P2 不变量：回答进行中不阻塞提问、回答完成后保持既有继续按钮不自动推进、Tutor 失败不进入主线失败分支
-- 验证：TS 219/219 绿（新增 UI 文案锁定 1 项）、`tsc --noEmit` 干净、lint 0 errors（21 warnings 与基线持平）
-
-### V2 P2 流内答疑：接入 useChapterLearning 双流编排（Task 6）
-- 新增 `lib/learning-v2/tutor-orchestration.ts` 编排层：提交/自动派发/重试/恢复/失效决策全部抽为可测单元（纯函数 + `TutorStreamOrchestrator`），hook 只做薄接线；相位推导 `deriveChapterPhase` 抽出与测试同源
-- 双流隔离：Tutor 持独立代际计数 + 独立 AbortController + 忙闲标志，与主任务流互不取消；章节卸载/切换两者一并作废，中断回答归一为 pending（同刷新恢复语义）
-- 行为契约：流中提问只入队（问题立即入流 + 立即落盘，不走节流）；边界提问立即启动；任务完成（含预取重放路径）自动回答最早一题；终态后不推进主线、相位不变，队列有题且处于边界则串接下一题；失败只经显式 `retryTutor` 重试
-- 守卫与兜底：事件先比对 courseId 再归约（其余守卫在归约器）；流读取异常/无终态结束沿用 STREAM_FAILED_LOCAL 模式本地合成 `request_error`，防 pending 永久停留 streaming
-- 刷新恢复：初始化 `prepareTutorBoot` 归一（原引用时跳过冗余落盘）；被中断请求自动重试一次（attempt 守卫防循环），无 pendingRequest 的已提交问题走边界空闲兜底派发
-- hook 新增同步镜像（与 reducer 归约路径一致，commit 统一入口）：消除 dispatch 批处理导致的过期读（快速连续提问丢更新、任务完成后队列读旧容器）
-- 参与信号新增 3 类：`tutor_question_submitted`/`tutor_answer_completed`/`tutor_answer_failed`；hook 返回扩展 `submitTutorQuestion`/`retryTutor`/`tutorState`/`isTutorBusy`，既有字段不变
-- 验证：TS 218/218 绿（新增编排决策与行为契约 19 项：协议集成 14 + 刷新恢复 5，含简报基线两用例）、`tsc --noEmit` 干净、lint 0 errors（21 warnings 与基线持平）
-
-### V2 P2 流内答疑：Tutor 请求契约补齐 courseId（Task 4 审查裁决）
-- 设计文档要求 Tutor 事件写入前守卫包含 courseId，裁决扩展请求契约携带该字段（普通请求字段，不进入幂等键格式）：`InlineTutorRequestPayload`/`buildInlineTutorContext` 增加 `courseId`，Python `InlineTutorRequest` 同步增字段（`extra='forbid'` 风格不变），事件外壳 `courseId` 由空串改为回填请求真实值
-- 幂等键格式、prompt、main.py 路由、V1 均未改动；客户端守卫接入留待后续 hook 任务
-- 验证：TS 36/36 绿（载荷形状锁定 9 字段 + courseId 透传）、pytest 21/21 绿（含缺 courseId 422）、`tsc --noEmit` 干净
+### V2 P2 第一阶段：流内答疑（含最终审查修复波）
+- 完成定义达成：任务流式生成中提问只入队（问题立即入流并立即落盘，任务完成后按队列顺序自动回答），边界提问立即启动流式回答；Tutor 完成后章节仍停在边界，不自动推进主线；回答失败只影响当前答疑，可局部重试
+- 持久化与恢复：UserQuestion/TutorAnswer 立即进入学习流并经 commit 统一入口落盘；刷新后问题轨迹、在途回答与失败态不丢，被中断请求自动重试一次（再失败进入可见失败态且不再自动重试）；已完成回答不重复请求
+- 双流隔离：Tutor 持独立代际/AbortController/忙闲标志，与主任务流互不取消；章节卸载/切换两者一并作废；问题串行回答、自动窗口 3 题（滑动窗口语义），超窗口排队不并发；旧章节残留流与版本/ID 不匹配事件一律丢弃
+- 服务端：新增 Python `/api/learning/v2/tutor/stream`（SSE 完整事件序列，`extra='forbid'` 严格校验，幂等键解析章节/任务/问题并交叉校验，不匹配流前 422）+ Next 鉴权薄透传；错误走稳定中文 code/message/retryable
+- 红线守住：回答仅中文 markdown、不输出思维过程；事件载荷禁含 evidence（真实冒烟实测 0 处）；课程计划、任务内容与证据不被 Tutor 修改；V1 ChatWidget 未改动
+- 裁决记录：契约补齐 courseId（普通字段不入幂等键，客户端写入前比对）；任务上下文为标题+任务目标、近期问答限当前任务最近 3 组（spec §3.2 已对齐）；修复波补齐任务重试计数只认 `kind==='task'`、排队文案区分流中/边界超窗、`decideTutorSubmission` 相位白名单自防御
+- 验证：TS 231/231 绿（流内答疑 78 项）、pytest 67/67 绿、typecheck 干净、lint 0 errors；HTTP 错误路径冒烟（422 稳定错误体）；真实 LLM 冒烟：事件序列完整、中文任意切分无损、约 1.1s
+- ⚠️ 已知：8000 端口残留 2026-08-31 旧 python-agent 进程（无 tutor 路由），下次真实验证前需重启
 
 ## 2026-08-31
 
@@ -90,19 +52,9 @@
 - 明确 V1/V2 协议并行、Learning Stream 不静默改写、异步结果校验 planVersion、写操作幂等、参与信号与能力证据分离等工程边界
 - 将历史架构文档和 Hyperlearn 调研归档至 `docs/archive/architecture/`，避免历史方案与竞品推断被后续开发误认为当前需求
 
-### Session 持久化（outline 会话重启不丢）
-- 症状：outline 会话只存在 Python Agent 内存（`SessionStore` 的 dict），服务重启即全部丢失，用户中途生成课程再刷新/重启就答不上题
-- 修复：`memory/session.py` 增加文件持久化——内存 dict 仍是主存储，磁盘 `data/sessions/*.json` 仅用于跨重启恢复；启动加载全部会话，create/update/delete 同步落盘；原子写入（`.tmp` + `os.replace`）防半截文件；单文件损坏只跳过告警不阻断其余加载；`data/` 加入 .gitignore
-- 验证：`tests/test_session.py` 7 用例（含重启恢复、损坏容错）12/12 绿；跨进程恢复含中文会话正常（`ensure_ascii=False`）；真实 LLM 生成后会话落盘并扛过服务器重启
-
-### 会话自动过期清理（防 data/sessions 只增不减）
-- 症状：持久化后会话文件只增不减；`cleanup_old` 从未被调用，磁盘/内存缓慢膨胀
-- 修复：`main.py` lifespan 启动时先清一次历史遗留过期会话，并起后台任务按 `SESSION_CLEANUP_INTERVAL_SECONDS`（默认 1h）周期清理超过 `SESSION_MAX_AGE_SECONDS`（默认 24h）的会话；两者均可环境变量覆盖；清理异常不阻断服务
-- 验证：新增 2 用例（活跃会话不被误删、新旧混存只删过期）共 9/9 绿；真实重启时放置的过期会话文件被启动清理删除
-
-### 收敛嵌套 git 仓库（python-agent 归入主仓库）
-- 症状：`python-agent/` 是嵌套独立仓库（远程 `learning_ai_python_agent`，Railway 遗留），与主仓库重叠、工作区堆满未提交改动，存在提交错仓库/部署陈旧代码风险
-- 修复：确认外层主仓库已跟踪全部文件（含 `railway.toml`）且为更新版本、无 submodule 后，移除内层 `.git`（备份至 `~/Documents/python-agent-inner-git-backup`）；此后 `python-agent` 内 git 统一解析到主仓库
+### 基础设施：会话持久化与清理、嵌套仓库收敛（压缩归档）
+- outline 会话文件持久化（`data/sessions/*.json`，内存为主磁盘恢复，原子写入防半截、单文件损坏跳过）+ 自动过期清理（启动清一次 + 后台周期清理，默认 24h 过期/1h 间隔，环境变量可覆盖）；验证 12/12、9/9 绿含真实重启
+- 收敛 `python-agent/` 嵌套独立仓库（Railway 遗留）入主仓库：确认主仓库已跟踪全部文件后移除内层 `.git`（已备份）
 - ⚠️ 后续：用户拟将 git 迁至公司 GitLab，届时一并配置远程与身份
 
 ## 2026-08-27
