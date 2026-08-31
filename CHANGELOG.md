@@ -1,5 +1,12 @@
 # 项目迭代日志
 
+## 2026-09-01
+
+### V2 P2 流内答疑：Tutor 请求契约补齐 courseId（Task 4 审查裁决）
+- 设计文档要求 Tutor 事件写入前守卫包含 courseId，裁决扩展请求契约携带该字段（普通请求字段，不进入幂等键格式）：`InlineTutorRequestPayload`/`buildInlineTutorContext` 增加 `courseId`，Python `InlineTutorRequest` 同步增字段（`extra='forbid'` 风格不变），事件外壳 `courseId` 由空串改为回填请求真实值
+- 幂等键格式、prompt、main.py 路由、V1 均未改动；客户端守卫接入留待后续 hook 任务
+- 验证：TS 36/36 绿（载荷形状锁定 9 字段 + courseId 透传）、pytest 21/21 绿（含缺 courseId 422）、`tsc --noEmit` 干净
+
 ## 2026-08-31
 
 ### V2 P1b：单任务预取 + 局部重试 + 章节 Recap 与归档压缩

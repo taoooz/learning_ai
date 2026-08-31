@@ -47,6 +47,7 @@ class InlineTutorRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     mode: Literal["inline_tutor"] = Field(..., description="固定为 inline_tutor")
+    courseId: str = Field(..., description="课程实例 ID（事件外壳守卫字段，不进入幂等键格式）")
     courseTopic: str
     chapter: InlineTutorChapterInfo
     task: InlineTutorTaskInfo

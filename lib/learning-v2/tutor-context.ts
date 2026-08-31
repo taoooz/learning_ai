@@ -1,6 +1,6 @@
 // lib/learning-v2/tutor-context.ts
 // P2 流内答疑最小请求上下文构造（设计文档 §3.2）
-// 只发送：课程主题、本章标题与教学目标、当前任务信息、当前任务已完成展示的内容块
+// 只发送：课程 ID、课程主题、本章标题与教学目标、当前任务信息、当前任务已完成展示的内容块
 // （拼接后 ≤6000 字符）、当前任务最近 3 组已完成问答（问题 ≤300 字符 / 回答 ≤1200 字符）、
 // 当前问题与稳定幂等键。
 // 严禁发送整门课程对象、V1 聊天全量历史或模型思维过程。
@@ -37,6 +37,7 @@ export interface InlineTutorQA {
 /** 流内答疑请求载荷：最小上下文契约，严禁扩展为课程全量对象 */
 export interface InlineTutorRequestPayload {
   mode: 'inline_tutor';
+  courseId: string;
   courseTopic: string;
   chapter: InlineTutorChapterInfo;
   task: InlineTutorTaskInfo;
@@ -47,6 +48,7 @@ export interface InlineTutorRequestPayload {
 }
 
 export interface BuildInlineTutorContextArgs {
+  courseId: string;
   courseTopic: string;
   chapter: InlineTutorChapterInfo;
   task: InlineTutorTaskInfo;
@@ -142,6 +144,7 @@ function extractRecentInlineQA(
 export function buildInlineTutorContext(args: BuildInlineTutorContextArgs): InlineTutorRequestPayload {
   return {
     mode: 'inline_tutor',
+    courseId: args.courseId,
     courseTopic: args.courseTopic,
     chapter: { title: args.chapter.title, teachingGoal: args.chapter.teachingGoal },
     task: {

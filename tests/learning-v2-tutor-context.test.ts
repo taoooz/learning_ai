@@ -180,6 +180,7 @@ function makeLessonWithFourQAPairs(): NodeLessonV2 {
 }
 
 const BASE_ARGS = {
+  courseId: 'course-1',
   courseTopic: 'HTTP 缓存',
   chapter: { title: '验证策略', teachingGoal: '理解强缓存和协商缓存' },
   task: { taskId: 'task-1', title: 'ETag', taskDescription: '理解条件请求' },
@@ -192,6 +193,7 @@ const BASE_ARGS = {
 
 test('Tutor 上下文只包含当前任务并截断已展示内容', () => {
   const request = buildInlineTutorContext({
+    courseId: 'course-1',
     courseTopic: 'HTTP 缓存',
     chapter: { title: '验证策略', teachingGoal: '理解强缓存和协商缓存' },
     task: { taskId: 'task-1', title: 'ETag', taskDescription: '理解条件请求' },
@@ -360,6 +362,7 @@ test('载荷字段固定为最小契约，不含课程全量字段', () => {
   const request = buildInlineTutorContext({ ...BASE_ARGS, lesson: lessonWithLongBlocks });
   assert.deepEqual(Object.keys(request).sort(), [
     'chapter',
+    'courseId',
     'courseTopic',
     'idempotencyKey',
     'mode',
@@ -370,6 +373,11 @@ test('载荷字段固定为最小契约，不含课程全量字段', () => {
   ]);
   assert.deepEqual(request.chapter, { title: '验证策略', teachingGoal: '理解强缓存和协商缓存' });
   assert.deepEqual(request.task, { taskId: 'task-1', title: 'ETag', taskDescription: '理解条件请求' });
+});
+
+test('courseId 作为普通请求字段原样透传', () => {
+  const request = buildInlineTutorContext({ ...BASE_ARGS, courseId: 'course-42', lesson: lessonWithLongBlocks });
+  assert.equal(request.courseId, 'course-42');
 });
 
 test('空 lesson → 空上下文', () => {

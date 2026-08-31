@@ -92,8 +92,8 @@ async def stream_tutor_events(
             "eventId": f"{request_id}:{sequence}",
             "requestId": request_id,
             "type": event_type,
-            # 最小上下文不含 courseId（设计文档 §3.2），客户端守卫也不校验该字段
-            "courseId": "",
+            # courseId 由请求携带（普通请求字段，不进入幂等键格式），事件外壳守卫回填真实值
+            "courseId": request.courseId,
             "chapterId": chapter_id,
             "taskId": request.task.taskId,
             "questionId": request.question.questionId,

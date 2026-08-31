@@ -27,6 +27,7 @@ from services.inline_tutor_service import (
 def _request(**overrides) -> InlineTutorRequest:
     base = dict(
         mode="inline_tutor",
+        courseId="course-1",
         courseTopic="HTTP 缓存",
         chapter={"title": "验证策略", "teachingGoal": "理解强缓存和协商缓存"},
         task={"taskId": "task-1", "title": "ETag", "taskDescription": "理解条件请求"},
@@ -112,6 +113,14 @@ def test_request_requires_question_and_idempotency_key():
         InlineTutorRequest(**payload)
 
 
+def test_request_requires_course_id():
+    """缺 courseId → 校验失败（端点层 422）"""
+    payload = _request().model_dump()
+    del payload["courseId"]
+    with pytest.raises(ValidationError):
+        InlineTutorRequest(**payload)
+
+
 def test_response_shape_and_forbid():
     """InlineTutorResponse 对齐 TutorCompletedPayload；只允许 markdown 块且拒绝多余字段"""
     response = InlineTutorResponse(
@@ -188,7 +197,7 @@ def test_tutor_llm_failure_returns_retryable_error():
 
 
 def test_tutor_envelope_fields_and_sequence():
-    """外壳字段：章节/版本从幂等键解析，任务/问题守卫字段齐全，sequence 严格递增"""
+    """外壳字段：章节/版本从幂等键解析，courseId 回填请求值，任务/问题守卫字段齐全，sequence 严格递增"""
     events = list(fake_tutor_events(answer='304 只回包头不回正文。'))
     request_id = events[0]["requestId"]
     assert request_id.startswith("req-")
@@ -199,7 +208,7 @@ def test_tutor_envelope_fields_and_sequence():
         assert event["planVersion"] == 1
         assert event["taskId"] == "task-1"
         assert event["questionId"] == "q-1"
-        assert event["courseId"] == ""           # 最小上下文不含 courseId（设计文档 §3.2）
+        assert event["courseId"] == "course-1"   # 事件外壳 courseId 回填请求携带的真实值
         assert isinstance(event["timestamp"], int)
 
     assert events[0]["payload"] == {"questionId": "q-1"}
@@ -277,6 +286,12 @@ def test_tutor_empty_answer_emits_empty_content_error():
     assert events[-2]["payload"]["code"] == "EMPTY_CONTENT"
     assert events[-2]["payload"]["retryable"] is True
     assert events[-1]["payload"]["status"] == "failed"
+
+
+def test_tutor_envelope_course_id_matches_request():
+    """事件外壳 courseId 取自请求携带值（普通请求字段，不进入幂等键格式）"""
+    events = fake_tutor_events(answer='回答', courseId='course-42')
+    assert all(event["courseId"] == "course-42" for event in events)
 
 
 def test_extract_tutor_envelope_ids_from_idempotency_key():
