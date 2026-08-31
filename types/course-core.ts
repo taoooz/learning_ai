@@ -2,6 +2,7 @@
 
 import type { LearningCard, Question, NodeLessonCard, NodeLessonQuestion } from './learning-content';
 import type { UserProfile, StoredRecommendation } from './user-profile';
+import type { StoredCourseV2 } from './learning-v2';
 
 export interface CourseNode {
   index: number;
@@ -129,6 +130,11 @@ export interface StoredDataV2 {
   courseProgress: CourseProgress;
   userProfile: UserProfile | null;
   recommendations: StoredRecommendation[];
+  /**
+   * V2 课程容器（protocolVersion: 2），与 V1 的 courses 并列、互不混字段。
+   * 旧数据无此字段按 V1 处理（见 docs/architecture/v2_课程生成逻辑.md §12 兼容要求）。
+   */
+  v2Courses?: StoredCourseV2[];
 }
 
 export type GenerationStatus = 'idle' | 'generating' | 'success' | 'error';

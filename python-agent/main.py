@@ -1,11 +1,15 @@
 import asyncio
 import json
 import os
+import time
 from pathlib import Path
 from contextlib import asynccontextmanager
+from uuid import uuid4
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from starlette.responses import StreamingResponse
 
 # 加载 .env
@@ -33,6 +37,18 @@ from services.cards_agent import generate_cards_with_tools
 from services.questions_agent import generate_questions_with_tools
 from services.chat_agent import stream_chat_with_tools, build_chat_system_prompt
 from services.memory_refine_service import refine_memory
+from schemas.learning_v2 import ChapterPlanRequest, ChapterRecapRequest, TaskStreamRequest
+from services.chapter_plan_service import generate_chapter_plan
+from services.chapter_recap_service import generate_chapter_recap
+from services.task_content_service import stream_task_events
+from services.learning_v2_errors import (
+    BlueprintDataError,
+    ChapterNotFoundError,
+    LLM_ERROR_STATUS,
+    PlanValidationError,
+    RecapValidationError,
+    classify_llm_error,
+)
 
 session_store = get_session_store()
 
@@ -457,6 +473,128 @@ async def memory_refine_route(request: dict):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _learning_v2_invalid_request(message: str):
+    """V2 学习流请求参数/数据校验失败的 422 响应体"""
+    return JSONResponse(
+        status_code=422,
+        content={"ok": False, "code": "INVALID_REQUEST", "message": message, "retryable": False},
+    )
+
+
+async def _validate_learning_v2_request(request: Request, schema_cls):
+    """读取请求体并按 pydantic 模型校验；失败返回 (None, 422响应)，成功返回 (模型实例, None)"""
+    try:
+        body = await request.json()
+    except Exception:
+        return None, _learning_v2_invalid_request("请求体必须是合法 JSON")
+    try:
+        return schema_cls.model_validate(body), None
+    except ValidationError as exc:
+        details = []
+        for err in exc.errors():
+            loc = ".".join(str(part) for part in err.get("loc", ()))
+            details.append(f"{loc}: {err.get('msg', '')}" if loc else err.get("msg", ""))
+        return None, _learning_v2_invalid_request("请求参数校验失败：" + "；".join(details))
+
+
+@app.post("/api/learning/v2/chapters/plan")
+async def learning_v2_chapters_plan(request: Request):
+    """V2 章节计划生成（同步 JSON）：把章节拆成 3～7 个短任务"""
+    req, error_response = await _validate_learning_v2_request(request, ChapterPlanRequest)
+    if error_response is not None:
+        return error_response
+
+    try:
+        plan = await generate_chapter_plan(req)
+        return {"ok": True, "plan": plan}
+    except (ChapterNotFoundError, BlueprintDataError) as exc:
+        print(f"[Learning V2 Plan] 请求数据无效: {exc}")
+        return _learning_v2_invalid_request(str(exc))
+    except PlanValidationError as exc:
+        print(f"[Learning V2 Plan] 计划校验失败: {exc.errors}")
+        return JSONResponse(
+            status_code=502,
+            content={
+                "ok": False,
+                "code": "PLAN_VALIDATION_FAILED",
+                "message": "章节计划未通过校验，请重试",
+                "retryable": False,
+                "errors": exc.errors,
+            },
+        )
+    except Exception as exc:  # noqa: BLE001 LLM 调用异常统一分类为错误码
+        code, message = classify_llm_error(exc)
+        print(f"[Learning V2 Plan] LLM 调用失败 code={code}: {exc}")
+        return JSONResponse(
+            status_code=LLM_ERROR_STATUS.get(code, 502),
+            content={"ok": False, "code": code, "message": message, "retryable": True},
+        )
+
+
+@app.post("/api/learning/v2/tasks/stream")
+async def learning_v2_tasks_stream(request: Request):
+    """V2 任务内容流式生成（SSE）：事件遵循 LearningSseEvent 外壳"""
+    req, error_response = await _validate_learning_v2_request(request, TaskStreamRequest)
+    if error_response is not None:
+        return error_response  # 流尚未开始，直接返回 422 JSON
+
+    async def event_generator():
+        fallback_request_id = f"req-{uuid4().hex[:12]}"
+        try:
+            async for event in stream_task_events(req):
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+        except Exception as exc:  # noqa: BLE001 最后兜底：意外异常也要补齐协议序列再结束
+            print(f"[Learning V2 Stream] 意外异常: {exc}")
+            import traceback
+            traceback.print_exc()
+            common = {
+                "requestId": fallback_request_id,
+                "type": "request_error",
+                "courseId": req.courseId,
+                "chapterId": req.chapterId,
+                "taskId": req.taskId,
+                "planVersion": req.planVersion,
+                "timestamp": time.time_ns() // 1_000_000,
+            }
+            yield f"data: {json.dumps({**common, 'eventId': f'{fallback_request_id}:1', 'sequence': 1, 'payload': {'code': 'UPSTREAM_ERROR', 'message': '内容生成出现异常，请稍后重试', 'retryable': True}}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({**common, 'eventId': f'{fallback_request_id}:2', 'sequence': 2, 'type': 'request_completed', 'payload': {'requestId': fallback_request_id, 'status': 'failed', 'errorCode': 'UPSTREAM_ERROR'}}, ensure_ascii=False)}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.post("/api/learning/v2/chapters/recap")
+async def learning_v2_chapters_recap(request: Request):
+    """V2 章节 Recap 生成（同步 JSON）：章节全部任务完成后的小结
+    证据红线（画像文档 §7.1）：三个掌握度证据字段由服务端确定性填空数组"""
+    req, error_response = await _validate_learning_v2_request(request, ChapterRecapRequest)
+    if error_response is not None:
+        return error_response
+
+    try:
+        recap = await generate_chapter_recap(req)
+        return {"ok": True, "recap": recap}
+    except RecapValidationError as exc:
+        print(f"[Learning V2 Recap] 小结校验失败: {exc.errors}")
+        return JSONResponse(
+            status_code=502,
+            content={
+                "ok": False,
+                "code": "RECAP_VALIDATION_FAILED",
+                "message": "章节小结未通过校验，请重试",
+                "retryable": False,
+                "errors": exc.errors,
+            },
+        )
+    except Exception as exc:  # noqa: BLE001 LLM 调用异常统一分类为错误码
+        code, message = classify_llm_error(exc)
+        print(f"[Learning V2 Recap] LLM 调用失败 code={code}: {exc}")
+        return JSONResponse(
+            status_code=LLM_ERROR_STATUS.get(code, 502),
+            content={"ok": False, "code": code, "message": message, "retryable": True},
+        )
 
 
 if __name__ == "__main__":

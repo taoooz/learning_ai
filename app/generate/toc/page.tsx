@@ -9,6 +9,9 @@ import { createStoredCourseBundleFromBlueprint } from '@/lib/course-blueprint';
 import { getUserProfile } from '@/lib/storage';
 import { getPlanningMemoryPayload, getUserMemoryStoreSnapshot } from '@/lib/memory';
 import { parseSSEStream } from '../chat/utils/sseParser';
+import { mapTocToBlueprintV2 } from '@/lib/learning-v2/blueprint-map';
+import { validateCourseBlueprintV2 } from '@/lib/learning-v2/validators';
+import { createStoredCourseV2, saveStoredCourseV2 } from '@/lib/learning-v2/storage';
 import type { CourseBlueprint, StoredCourseBundle, OutlineLearnerPositioning } from '@/types/course';
 
 interface PendingOutline {
@@ -127,7 +130,39 @@ function TocPageContent() {
         };
 
         addCourse(createStoredCourseBundleFromBlueprint(blueprint));
-        generateNodeContent(blueprint.courseId, 0).catch(() => {});
+
+        // V2 双写：TOC 结果映射为 V2 蓝图。校验通过且落盘成功 → 课程走 V2 学习流，
+        // 跳过 V1 节点预热（章节内容按需生成）；任何一步失败 → 降级纯 V1 全链路（含预热），绝不半写
+        let v2Saved = false;
+        try {
+          const v2Blueprint = mapTocToBlueprintV2({
+            courseId: blueprint.courseId,
+            courseName: finalCourseName,
+            description: finalDescription || outline.learningGoal,
+            nodes: finalNodes,
+            outline: {
+              topic: outline.topic,
+              learningDirection: outline.learningDirection,
+              learningGoal: outline.learningGoal,
+              learnerPositioning: outline.learnerPositioning,
+            },
+          });
+          const validation = validateCourseBlueprintV2(v2Blueprint);
+          if (validation.passed) {
+            v2Saved = saveStoredCourseV2(createStoredCourseV2(blueprint.courseId, v2Blueprint));
+            if (!v2Saved) {
+              console.warn('[TOC Page] V2 课程落盘失败，降级纯 V1');
+            }
+          } else {
+            console.warn('[TOC Page] V2 蓝图校验未通过，降级纯 V1：', validation.issues);
+          }
+        } catch (err) {
+          console.warn('[TOC Page] V2 蓝图映射失败，降级纯 V1：', err);
+        }
+
+        if (!v2Saved) {
+          generateNodeContent(blueprint.courseId, 0).catch(() => {});
+        }
         sessionStorage.removeItem('pendingOutline');
 
         // 倒计时跳转

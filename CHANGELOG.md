@@ -2,6 +2,33 @@
 
 ## 2026-08-31
 
+### V2 P1b：单任务预取 + 局部重试 + 章节 Recap 与归档压缩
+- 完成定义达成（§11）：①下一任务在边界停顿期后台预取，点「继续」命中即零等待；②当前任务失败只局部重试当前任务（连续失败计数上送，≥3 次边界卡软提示「可再试一次或稍后再来」，不锁按钮）；③章节完成自动小结 + 已完成章节归档压缩腾 localStorage 配额
+- 预取：末任务流式完成后即对下一任务发起预取请求（独立代际，不与在途请求互斥）；点继续时预取在途则直接接管同一 SSE，预取命中复用结果不重发；计划版本不匹配即弃
+- 局部重试：失败重试复用同一幂等键，服务端按键去重；重试只影响当前任务，后续任务与计划不动
+- 章节 Recap：python-agent 新增 `/api/learning/v2/chapters/recap`（非流式）+ Next 薄透传；**证据红线**——demonstratedObjectives/fragileObjectives/unresolvedQuestions 服务端确定性置空数组，LLM 不得产出，UI 恒不渲染；上游失败走本地兜底小结（`degraded: true`，标注「小结为自动提炼，仅供参考」）
+- 归档压缩（§6.1.1）：写入失败 → 按蓝图 index 升序找「已完成且未归档」章节压缩（正文换单条摘要块，recap/transition/notice 保留）→ 重试，候选耗尽才提示用户；当前章节自身不参与候选
+- 渲染：`ChapterRecapView` 共享组件（完成卡主展示位，流内完成态不再重复渲染）；完成卡上送 recap；边界卡 completing 相位禁用按钮「正在生成章节小结…」
+- 验证：TS 150/150 绿（新增配额兜底 9 项）、pytest 45/45 绿、typecheck 干净；真实 LLM 冒烟：recap 端到端通过（三证据字段确认空数组、中文无损、1.2s 出结果）
+- ESLint 9 迁移：新增 `eslint.config.mjs` 使用 `eslint-config-next/core-web-vitals` Flat Config；忽略 `.next`、`.worktrees`、`node_modules`；`npm run lint` 改为 `eslint .`；移除旧 `.eslintrc.json`；当前 0 errors、21 warnings（既有代码规则告警）
+
+### V2 P1a 核心循环：新课直接走 V2，空章节可连续学完并刷新不丢
+- 完成定义达成：新建课程可从空章节连续完成全部任务（计划→逐任务流式→边界停顿→完成解锁下一章），流式中途/边界刷新均不丢内容；按用户指示不做灰度，新课直接 V2，旧课程（含 2 门系统课）按数据里的 protocol 继续走 V1
+- TOC 双写：`lib/learning-v2/blueprint-map.ts` 把 V1 TOC 结果映射为 CourseBlueprintV2（模板句过校验器、意图关键词推断），映射失败降级纯 V1 不半写；映射成功跳过 V1 node 0 预热省一次 LLM 调用
+- python-agent 两端点：`/api/learning/v2/chapters/plan`（非流式，校验失败带修复提示重试一次）与 `/api/learning/v2/tasks/stream`（异步流式，事件序列 task_started→block_started→delta→block_completed→task_completed→request_completed，`ensure_ascii=False` 中文无损）
+- Next.js 薄透传层两路由（字节级转发 + SSE 头）；课程页按 protocol 分发 V2 章节树（读时自愈刷新 treeView）；章节学习页含流式渲染（4 种内容块）、边界卡（takeaway/nextHint/进度）、完成卡与下一章入口
+- 恢复九分支：`decideResumeAction` 纯函数决策（流式残留/失败一律新 attempt 重生成，确定性 itemId 覆盖半截块），边界恢复滚到锚点任务；竞态防护 = 代际计数 + AbortController + 幂等注册表 + 节流落盘（终态立即写）
+- 参与信号 `lib/learning-v2/engagement.ts`：五类事件独立 key 环形 500 条，写失败静默；按文档 §12 删除 spike 验证代码
+- 文档裁定：归档压缩（§6.1.1）属 P1b 完成定义，本次不实现
+- 验证：TS 测试 122/122 绿（新增恢复九分支 13 项 + SSE 中文任意切分 7 项），python pytest 37/37 绿，typecheck 干净；真实 LLM 冒烟：计划生成 + 任务 SSE 流端到端通过，中文无乱码、takeaway/nextHint 提取正常
+
+### V2 P0 落地：协议、兼容与观测基础（不改默认体验）
+- 按 `v2_项目综述.md` P0 范围建立 V2 稳定数据边界：新增 `protocolVersion: 2`，只定义 P1 消费的类型（Chapter Plan、Learning Stream Item 三种、Chapter Runtime、SSE 事件外壳），Evidence/Checkpoint 推迟 P3 定稿
+- `types/learning-v2/`：蓝图/计划/学习流/运行时四层对象 + `GenerationMeta`（版本 promptVersion/modelVersion、耗时 durationMs、降级 degraded；生成阶段由承载容器类型隐含，符合"只定义 P1 消费类型"原则）
+- `lib/learning-v2/`：章节 8 态 + 任务状态机（含 `partial_paused` 流中提问、`failed→generating` 重试）；SSE reducer（确定性 itemId 幂等 upsert、planVersion/chapterId 守卫拒绝旧版本结果写入、sequence 不回退）；蓝图/计划校验器（前置循环、目标覆盖、空泛描述）；幂等键构建器与注册表（同键不重复创建）
+- 兼容与分发：无 protocolVersion 的旧课程一律按 V1，V1/V2 走判别联合分发不混入无版本对象；章节级独立 localStorage key、协议版本不符/损坏返回 null；Feature Flag 默认关闭（SSR 恒 false，默认页面零变化）
+- 验证：新增 40 项协议测试 + 既有 53 项无回归，共 93/93 绿；`tsc --noEmit` 全绿；V2 空壳可创建/序列化/恢复
+
 ### V2 方案 Review 修订与瀑布流 Spike 验证
 - Review 三份 V2 文档并修订 5 个主要问题：P1 拆为 P1a（核心循环，无预取）/P1b（预取、重试、Recap）两个可独立发布切片；P0 类型收窄为"只定义 P1 消费的类型"，Evidence/Checkpoint 推迟 P3 定稿；补上流式生成中提问的行为定义（§2.6.1，任务状态新增 `partial_paused`）；localStorage 治理从 P5 提前到 P1（每章独立 key + 完成归档压缩）；Checkpoint 结构化题先上线，开放式评估须过回归样本后启用
 - 次要修订：删除无落地设计的 `decision_support` 意图；北极星指标标注 P3 前用 TTFC + 继续率代理；P2 明确聊天底层与 V1 ChatWidget 共享不复制
@@ -76,27 +103,11 @@
 - 修复：`outline_service.py` 新增 `normalize_level` 在 `parse_content_blocks` 单点归一化；前端 `LEVEL_LABELS` 查表并留中文别名兼容旧数据
 - 审计结论：chat/toc/cards/questions agent 无历史丢失回归、失败路径均已显式化；发现 chat 历史双份嵌入 → 见 2026-08-27
 
-## 2026-06-07
+## 2026-05-31 ~ 2026-06-07（压缩）
 
-### 第一阶段课程生成优化方案
-
-- 收窄 `docs/architecture/课程生成与用户画像策略-v2.md` 的第一阶段范围：先优化课程生成和节点学习体验，用户画像更新后置
-- 明确单节点内容从“知识卡片 + 问题卡片”改为“多个流式学习任务 + 用户主动继续”
-- 参考 Hyperlearn 的课程质量原则，补充需求解构、单元聚类、认知负荷控制、任务动词化、梯度排序、内容模板匹配等设计约束
-- 明确第一阶段暂不生成练习题，不做答题正确率和新画像字段更新
-- 确认第一阶段交互极简化：逐任务流式生成，任务间只有“继续”按钮；不做再讲、深入、单独总结页
-- 更新迁移路径：优先落地 `NodeTaskPlan`、任务内容流式生成、最后任务收束与下一节引导、节点完成状态
-- 确认 `NodeTaskPlan` 只包含任务骨架（taskId/taskTitle/taskDescription），任务内容独立流式生成；目录生成后预热首个节点任务计划，上个节点首个任务生成完后预热下个节点任务计划
-
-## 2026-05-31
-
-### 课程生成与用户画像策略 V2
-
-- 新增 `docs/architecture/课程生成与用户画像策略-v2.md`，整理课程生成从“章节卡片内容”升级为“章节目标簇 + 动态任务计划 + 每步理解检查”的产品与架构方案
-- 明确 V2 课程体验：短步推进、每步停顿、答错补救、答对提速、困惑换讲法、目录稳定
-- 设计新的生成链路：需求解构 → 课程蓝图 → 目标簇章节 → 章节任务计划 → 任务即时生成 → Check-in → 画像更新
-- 补充用户画像五层模型：Stable Profile、Knowledge Profile、Learning Behavior Profile、Explanation Preference、Recovery Profile
-- 给出 P0-P5 渐进迁移路径，建议先验证章节任务流，再重构 Agent 与 Prompt 协议
+- 新增 `docs/architecture/课程生成与用户画像策略-v2.md`：课程生成从"章节卡片内容"升级为"章节目标簇 + 动态任务计划 + 每步理解检查"，链路为需求解构→课程蓝图→目标簇章节→章节任务计划→任务即时生成→Check-in→画像更新；画像五层模型；P0-P5 渐进迁移路径
+- 收窄第一阶段范围：单节点内容改为"多个流式学习任务 + 用户主动继续"（逐任务流式、任务间只有"继续"按钮）；补充需求解构/认知负荷/任务动词化/梯度排序等设计约束；暂不做练习题与答题正确率
+- `NodeTaskPlan` 只含任务骨架（taskId/taskTitle/taskDescription），任务内容独立流式生成；确立目录生成后预热首节点、节点首任务完成后预热下一节点
 
 ## 2026-04-20（压缩）
 
@@ -111,17 +122,8 @@
 
 ## 2026-04-13（压缩）
 
-**批量 Bug 修复**
-- 修复：Blueprint 卡片渲染后消失、同标签页重新生成触发 answer_agent 422（sessionId 竞态）、节点内容 404 及 cards 重复请求（`pendingNodeRequests` 去重）、LoginContent Rules of Hooks 错误
-- TOC 目录页恢复流式展示（SSE 透传 + 实时增量解析）；修复 outline thinking 无限循环（同一 chunk 连续 3 次即终止流）；TOC 完成跳转改为底部悬浮提示条（3 秒倒计时）
-
-**代码架构优化（八阶段）**
-- P0 修复：`useUserMemory` 去桶重构、3 个路由补异常捕获、邀请码迁 `INVITE_CODES` 环境变量、Redis 客户端单例
-- 消冗余：新增 `lib/python-agent.ts` 统一代理调用；重写 recommendations 路由（复用 `callMiniMax`，降级标记 `degraded`）
-- 组件拆分：ConfirmModal/CourseCard/SystemCourseRecommendations 独立；`app/page.tsx` 406→218 行
-- API 规范化：新增 `lib/api-response.ts`（`apiSuccess`/`apiError`/`requireAuth`），4 个路由统一迁移
-- ChatWidget 拆分（480→233 行）为 5 子组件 + `useChatSubmit` hook；`types/course.ts`（561 行）拆为 6 个领域文件，35 处导入零改动
-- CourseContext 提取 11 个 action 到 `hooks/useCourseActions.ts`；23 测试全绿
+- 批量修复：Blueprint 卡片渲染后消失、同标签页重新生成 422（sessionId 竞态）、节点内容 404 与 cards 重复请求、Rules of Hooks；TOC 恢复流式展示、outline thinking 无限循环（同 chunk 连续 3 次即终止）、TOC 完成改底部悬浮提示条
+- 架构八阶段：`lib/python-agent.ts` 统一代理、`lib/api-response.ts` API 规范化（4 路由迁移）、邀请码迁环境变量、Redis 单例；ConfirmModal/CourseCard/ChatWidget(480→233 行)/CourseContext(11 action) 拆分；`types/course.ts`（561 行）拆 6 领域文件；`app/page.tsx` 406→218 行
 
 ## 2026-04-09（压缩）
 
@@ -130,46 +132,11 @@
 - 清理：删除废弃 `agents/`（LangGraph）、`mcp/` 目录；`lib/minimax.ts` 353→181 行；`lib/prompt.ts` 删 4 个已迁移函数及 2 个空壳路由
 - 新增 `lib/agent-config.ts` 统一 `PYTHON_AGENT_URL`；set-cookie 改 httpOnly
 
-## 2026-03-27（压缩）
+## 2026-03（压缩）
 
-- 课程目录从固定节点步长改为按估算高度动态排布 + 真实文档流纵向布局；节点卡片改最小高度自适应；标题统一最多 3 行；补长标题场景回归测试
-
-## 2026-03-26（压缩）
-
-- 课程生成环境变量兜底：服务端拿不到 key 时回退读 `.env.local`，补 env 文件回退测试
-- 轻量课程目录蓝图：目录阶段只产轻量大纲再映射成 blueprint，评估与个性化下放到节点阶段；生成超时从重型试验值收回（约 26 秒可重试超时）
-- 生成超时兜底：JSON 请求统一 `reasoning_split` + 双 token 参数（MiniMax 时代 workaround）；两段式重试（超时后收紧 token 预算）；refine 结果强制再校验；失败返回可重试错误而非静默降级
-- 首页新增两门系统推荐课程（AI/理财，预生成可离线直开），不混入最近学习列表
-- Course Blueprint / Memory V3 首轮落地：新增 `CourseBlueprint/NodeLesson/StoredCourseBundle/MemoryStoreV3` 类型；存储切 `ai-learning-data-v2`；validator + refine 双阶段；memory 改 event-sourced + projections；新增 `smoke:generation` 与 `generationMeta`
-- Memory V2 与双层 Retrieval：planning/teaching/chat 三条 payload 链路；`normalizeConceptKey` + alias 字典概念归一；`lib/memory/repository.ts` + `aggregator.ts` 统一出口；assessment 信号改证据累积式置信度；正向信号沉淀（解释偏好、已掌握概念）
-
-## 2026-03-25（压缩）
-
-- 聊天助手加 `max_tokens: 1500` 提速
-- 课程目录合并为路径式结构（节点左移轻弯路径、标题右侧、暖橙焦点 + 四态节点体系），布局抽成可测纯函数
-- 课程内容可视化：MermaidChart + 对比表/时间线/图例/要点组件，AI 生成时自动判断添加，复杂图表支持全屏
-- 澄清问题优先选择题（单选/多选），仅无法设计选项时用填空
-- 课程助理浮窗多轮视觉收敛（暖白胶囊 → 轻科技学习陪伴层，空态引导卡、表格可横向滚动）
-
-## 2026-03-24（压缩）
-
-- 单节学习页重构为单步闯关流：cards+questions 编排统一步骤流，顶部进度条 + 步骤计数，反馈在同一主舞台即时闭环
-- 课程加载页重做为"创作中"体验（中央画布主视觉 + 循环文案，不用伪进度条）；澄清问题改单问题步进式
-- 修复章节学完后当前节点未标记 completed 的问题
-- 目录页重做为"学习路线图"：四态节点 + 纵向路径线，待学习节点进视口定位
-- 个人信息页改"学习画像"方向；首页重排信息层级；课程生成支持画像驱动难度匹配（洞察足够直接生成，不足问 1-3 个澄清问题）+ 搜索增强（最多 3 轮，超时降级）
-
-## 2026-03-23
-
-### 设计焕新 / 性能 / 功能 / 修复（压缩归档）
-
-- 设计焕新：全页面统一 CapWords 风格（首页/课程详情/学习页/生成页/资料页），图标按钮 SVG 化，移除渐变与模糊，全局 CSS 变量设计 Token，移动端触摸区域 ≥44px
-- 性能：课程树移除 description 字段、卡片内容限 200 字内，课程生成 ~67s 优化至 ~34-41s
-- 功能增强：用户画像（目标岗位/工作经历/教育背景）、AI 学习洞察、历史课程列表、节点内容预加载下一节
-- 修复：JSON 嵌套括号与 Markdown 特殊字符解析、练习题答案标识提取（"A. xxx" → "A"）、节点解锁逻辑、界面文本全汉化
-- 技术：react-markdown 渲染卡片与题目；课程生成显式接收画像与 userMemory，服务端不再依赖 localStorage；答题沉淀 mastery 记忆（conceptMastery/knowledgeGaps）；节点生成注入课程上下文、薄弱点与已掌握项，题目输出 concept/dimension/difficulty/cardId
-- 记忆降噪：聊天 memory 提取改“明确困惑信号”判断、新增来源可信度（chat vs assessment，答题错误覆盖低置信聊天推断）、旧信号自动衰减、相关性分层（高相关高置信才影响主干，弱相关只做类比，无关忽略）
-- Prompt 约束：课程树新增“可跳过/必须补/类比落点/节点依赖”规划约束；节点内容注入整门课程结构与前置依赖，减少重复讲解和断层
+- 课程目录与生成：动态排布 + 四态节点路径式结构（布局抽成可测纯函数）；轻量蓝图、超时兜底（失败可重试不静默降级）、画像驱动难度（1-3 澄清题）+ 搜索增强；首页两门系统课
+- Course Blueprint / Memory V3 首轮落地：`CourseBlueprint/NodeLesson/StoredCourseBundle/MemoryStoreV3`；存储切 `ai-learning-data-v2`；memory 改 event-sourced + 双层 Retrieval
+- 学习体验与设计：单节学习改单步闯关流、内容可视化（Mermaid/对比表/时间线）、CapWords 风格统一、课程生成 ~67s→34-41s；记忆降噪（信号判断/衰减/相关性分层、注入课程结构防重复讲解）
 
 ---
 

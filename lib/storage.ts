@@ -43,6 +43,21 @@ function getUserStorageKey(): string {
   return inviteCode ? `${STORAGE_KEY_PREFIX}:${inviteCode}` : STORAGE_KEY_PREFIX;
 }
 
+/**
+ * V2 章节学习流的独立存储 key（§6.1.1：每章独立，不并入课程主对象）。
+ * 注意：前缀 ai-learning-data-v2 是历史命名，与 protocolVersion: 2 无关。
+ */
+export function getV2ChapterStorageKey(courseId: string, chapterId: string): string {
+  return `${getUserStorageKey()}:course:${courseId}:chapter:${chapterId}`;
+}
+
+/**
+ * V2 课程参与信号的独立存储 key（计划 T8：不并入课程主对象，写失败静默）。
+ */
+export function getV2CourseEngagementKey(courseId: string): string {
+  return `${getUserStorageKey()}:course:${courseId}:engagement`;
+}
+
 const defaultDataV2: StoredDataV2 = {
   courses: [],
   currentCourseId: null,
@@ -82,6 +97,7 @@ export function getStoredDataV2(): StoredDataV2 {
         ...parsed,
         courses: Array.isArray(parsed.courses) ? parsed.courses : [],
         courseProgress: parsed.courseProgress || {},
+        v2Courses: Array.isArray(parsed.v2Courses) ? parsed.v2Courses : [],
       };
     }
     const inviteCode = getCurrentUserInviteCode();
@@ -94,6 +110,7 @@ export function getStoredDataV2(): StoredDataV2 {
           ...parsed,
           courses: Array.isArray(parsed.courses) ? parsed.courses : [],
           courseProgress: parsed.courseProgress || {},
+          v2Courses: Array.isArray(parsed.v2Courses) ? parsed.v2Courses : [],
         };
         localStorage.setItem(userKey, JSON.stringify(migrated));
         return migrated;

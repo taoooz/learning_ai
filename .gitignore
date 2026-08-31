@@ -45,3 +45,8 @@ next-env.d.ts
 __pycache__/
 *.pyc
 .gstack/
+
+# agent scratch workspaces
+.superpowers/
+.codex/
+.claude/worktrees/
