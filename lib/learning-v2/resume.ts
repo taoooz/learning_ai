@@ -77,9 +77,15 @@ export function decideResumeAction(lesson: NodeLessonV2 | null): ResumeAction {
   return { kind: 'generate_plan' };
 }
 
-/** 中断恢复的下一 attempt：以 pendingRequest 记录的 attempt 为基线 +1，至少 2 */
+/**
+ * 中断恢复的下一 attempt：以 pendingRequest 记录的 attempt 为基线 +1，至少 2。
+ * 基线只认任务请求：边界提问的 Tutor 请求会占用 pendingRequest 而主任务仍停在
+ * 失败/中断态，读 Tutor 的 attempt 会让任务重试计数跳号（最终审查修复 1）。
+ */
 function nextAttempt(lesson: NodeLessonV2): number {
-  return Math.max((lesson.runtime.pendingRequest?.attempt ?? 1) + 1, 2);
+  const pending = lesson.runtime.pendingRequest;
+  const baseline = pending && pending.kind === 'task' ? pending.attempt : 1;
+  return Math.max(baseline + 1, 2);
 }
 
 /** 计划中第一个未完成/未跳过的任务（按 order 升序） */

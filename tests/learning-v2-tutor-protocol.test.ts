@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 
 import { POST } from '../app/api/learning/v2/tutor/stream/route';
 import { tutorPlaceholder } from '../components/learning-v2/InlineTutorInput';
+import { tutorQueuedHint } from '../components/learning-v2/LearningStreamV2';
 import { createChapterLearningHarness } from './helpers/tutor-harness';
 import {
   canRetryTutorQuestion,
@@ -553,6 +554,24 @@ test('提交决策：流中入队、边界且空闲立即启动、忙碌时入�
   assert.equal(decideTutorSubmission({ lesson: atBoundary, phase: 'boundary', isTutorBusy: false, text: '   ', questionId: 'q-s4', now: 5003 }), null, '空白问题拒收');
 });
 
+test('提交决策：相位白名单自防御，非学习相位一律拒收', () => {
+  // 容器有当前任务、文本非空——若编排层不做相位守卫，这些提交都会被受理。
+  // UI 门控之外的自防御：收尾/完成/失败相位不得受理提问（最终审查修复 3）
+  const withTask: NodeLessonV2 = { ...baseLesson, runtime: { ...baseLesson.runtime, currentTaskId: 'task-1' } };
+  for (const phase of ['planning', 'completing', 'completed', 'plan_failed'] as const) {
+    assert.equal(
+      decideTutorSubmission({ lesson: withTask, phase, isTutorBusy: false, text: '为什么 304 没有正文？', questionId: `q-p-${phase}`, now: 6000 }),
+      null,
+      `${phase} 相位应拒收提问`,
+    );
+  }
+  // 白名单内的相位仍正常受理（边界空闲启动、生成中入队）
+  const started = decideTutorSubmission({ lesson: withTask, phase: 'boundary', isTutorBusy: false, text: '问题', questionId: 'q-p-ok1', now: 6001 });
+  assert.equal(started?.action, 'start');
+  const queued = decideTutorSubmission({ lesson: withTask, phase: 'generating', isTutorBusy: false, text: '问题', questionId: 'q-p-ok2', now: 6002 });
+  assert.equal(queued?.action, 'queue');
+});
+
 test('自动派发只取自动窗口内最早一题；忙碌时不派发', () => {
   let lesson = baseLesson;
   lesson = { ...lesson, runtime: { ...lesson.runtime, currentTaskId: 'task-1' } };
@@ -735,4 +754,11 @@ test('卸载/章节切换作废在途请求：状态归一，重新派发可建�
 test('Tutor UI 文案区分流中排队和边界立即回答', () => {
   assert.equal(tutorPlaceholder('streaming'), '本节生成完成后回答你的问题…');
   assert.equal(tutorPlaceholder('boundary'), '针对本节内容提问…');
+});
+
+test('排队提示区分主任务生成中和边界超窗排队', () => {
+  // 流中排队：内容仍在生成，提示生成完后回答
+  assert.equal(tutorQueuedHint(true), '本节内容会先生成完，随后回答你的问题');
+  // 边界超窗排队：此时没有内容在生成，原文案错位（最终审查修复 2）
+  assert.equal(tutorQueuedHint(false), '问题较多时会按顺序回答，也可继续学习');
 });

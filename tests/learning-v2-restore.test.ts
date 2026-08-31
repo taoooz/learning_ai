@@ -10,8 +10,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { decideResumeAction } from '../lib/learning-v2/resume';
-import { createInitialNodeLessonV2 } from '../lib/learning-v2/reducers';
-import type { ChapterPlan, NodeLessonV2, PlannedTask } from '../types/learning-v2';
+import {
+  appendUserQuestion,
+  applyLearningSseEvent,
+  createInitialNodeLessonV2,
+} from '../lib/learning-v2/reducers';
+import type { ChapterPlan, LearningSseEvent, NodeLessonV2, PlannedTask } from '../types/learning-v2';
 
 const NOW = 1756700000000;
 
@@ -174,6 +178,72 @@ test('分支⑥：当前任务失败 → 以新 attempt 重新生成', () => {
     };
   });
   assert.deepEqual(decideResumeAction(lesson), { kind: 'start_task', taskId: 't2', attempt: 2 });
+});
+
+function makeResumeEvent(overrides: Partial<LearningSseEvent>): LearningSseEvent {
+  return {
+    eventId: 'evt-resume',
+    requestId: 'req-1',
+    type: 'task_started',
+    courseId: 'course-1',
+    chapterId: 'ch-1',
+    planVersion: 1,
+    sequence: 1,
+    timestamp: NOW,
+    payload: {},
+    ...overrides,
+  };
+}
+
+test('分支⑥变体（P2）：Tutor 占用 pendingRequest 不让任务重试 attempt 跳号', () => {
+  // 真实时序：任务流失败（attempt 1）→ 边界提问 → Tutor 流占用 pendingRequest → 刷新
+  let lesson = makeLesson();
+  lesson = applyLearningSseEvent(
+    lesson,
+    makeResumeEvent({
+      type: 'task_started',
+      taskId: 't1',
+      sequence: 1,
+      requestId: 'req-t1',
+      payload: { taskId: 't1', title: '任务 1' },
+    }),
+  );
+  lesson = applyLearningSseEvent(
+    lesson,
+    makeResumeEvent({
+      type: 'request_error',
+      taskId: 't1',
+      sequence: 2,
+      requestId: 'req-t1',
+      payload: { code: 'LLM_TIMEOUT', message: '模型响应超时，请稍后重试', retryable: true },
+    }),
+  );
+  assert.equal(lesson.runtime.currentTaskStatus, 'failed');
+  assert.equal(lesson.runtime.pendingRequest?.kind, 'task');
+  assert.equal(lesson.runtime.pendingRequest?.attempt, 1, '任务自身失败一次的计数基线');
+
+  // 边界提问：Tutor 请求占用 pendingRequest（attempt 沿用前值累加，与任务自身失败次数无关）
+  lesson = appendUserQuestion(
+    lesson,
+    { taskId: 't1', questionId: 'q-1', text: '什么是强校验器？' },
+    NOW + 1,
+  );
+  lesson = applyLearningSseEvent(
+    lesson,
+    makeResumeEvent({
+      type: 'tutor_started',
+      taskId: 't1',
+      questionId: 'q-1',
+      sequence: 3,
+      requestId: 'req-q-1',
+      payload: { questionId: 'q-1' },
+    }),
+  );
+  assert.equal(lesson.runtime.pendingRequest?.kind, 'tutor', 'Tutor 已占用 pendingRequest');
+
+  // 刷新恢复：任务重试 attempt 相对任务自身失败次数连续（失败 1 次 → 下次 attempt 2），
+  // 不因 Tutor 的 attempt 跳号
+  assert.deepEqual(decideResumeAction(lesson), { kind: 'start_task', taskId: 't1', attempt: 2 });
 });
 
 test('分支⑦：脏 pendingRequest 不干扰已停在边界的章节', () => {

@@ -20,6 +20,14 @@ import type { ChapterPhase } from '@/hooks/learning-v2/useChapterLearning';
 import { getPendingTutorQuestions, TUTOR_AUTO_WINDOW_LIMIT } from '@/lib/learning-v2/tutor-queue';
 import { TaskBlockView } from './TaskBlocksV2';
 
+/**
+ * 排队提示文案（可测纯函数，测试锁定，勿改）：
+ * 主任务生成中 → 先生成完再回答；边界超窗排队（无内容在生成）→ 按顺序回答（最终审查修复 2）。
+ */
+export function tutorQueuedHint(mainGenerating: boolean): string {
+  return mainGenerating ? '本节内容会先生成完，随后回答你的问题' : '问题较多时会按顺序回答，也可继续学习';
+}
+
 export function LearningStreamV2({
   lesson,
   phase,
@@ -108,6 +116,7 @@ export function LearningStreamV2({
           streamingTaskId={streamingTaskId}
           queuedQuestionIds={queuedQuestionIds}
           answeringQuestionIds={answeringQuestionIds}
+          mainGenerating={mainGenerating}
           onRetryTutor={onRetryTutor}
           tutorBusy={tutorBusy}
         />
@@ -123,6 +132,7 @@ function StreamItemView({
   streamingTaskId,
   queuedQuestionIds,
   answeringQuestionIds,
+  mainGenerating,
   onRetryTutor,
   tutorBusy,
 }: {
@@ -131,6 +141,7 @@ function StreamItemView({
   streamingTaskId: string | null;
   queuedQuestionIds: Set<string>;
   answeringQuestionIds: Set<string>;
+  mainGenerating: boolean;
   onRetryTutor?: (questionId: string) => void;
   tutorBusy: boolean;
 }) {
@@ -161,6 +172,7 @@ function StreamItemView({
           item={item}
           queued={queuedQuestionIds.has(item.questionId)}
           answering={answeringQuestionIds.has(item.questionId)}
+          mainGenerating={mainGenerating}
         />
       );
     case 'tutor_answer':
@@ -213,7 +225,8 @@ function SystemNoticeView({ item }: { item: SystemNoticeItem }) {
 
 /**
  * 用户提问条目（P2，§2.1/§4）：右对齐气泡与任务内容区分。
- * pending 显示待回答状态；排队中（超出自动窗口或主任务生成中）显示排队提示；
+ * pending 显示待回答状态；排队中（超出自动窗口或主任务生成中）显示排队提示
+ * （文案区分「主任务生成中」与「边界超窗」两种排队场景，见 tutorQueuedHint）；
  * 配对回答已流式时显示「正在回答…」。
  * 失败的具体原因与重试在配对的 tutor_answer 条目上，问题行只给失败标记。
  */
@@ -221,13 +234,15 @@ function UserQuestionView({
   item,
   queued,
   answering,
+  mainGenerating,
 }: {
   item: UserQuestionItem;
   queued: boolean;
   answering: boolean;
+  mainGenerating: boolean;
 }) {
   const pendingHint = queued
-    ? '本节内容会先生成完，随后回答你的问题'
+    ? tutorQueuedHint(mainGenerating)
     : answering
       ? '正在回答…'
       : '待回答';

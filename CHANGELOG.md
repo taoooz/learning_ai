@@ -2,6 +2,13 @@
 
 ## 2026-09-01
 
+### V2 P2 流内答疑：最终审查修复波（重试计数、排队文案、提交相位守卫）
+- 修复 1（Important）：`resume.ts` 任务重试 `nextAttempt` 基线只认 `kind === 'task'` 的 pendingRequest——边界提问的 Tutor 请求会占用 pendingRequest，此前读它的 attempt 导致任务重试计数跳号（新增真实时序用例：任务失败→边界提问→刷新，锁定 attempt 2 不跳号）
+- 修复 2：`LearningStreamV2` 排队提示区分两种场景（新增可测 `tutorQueuedHint`）：主任务生成中保持「本节内容会先生成完，随后回答你的问题」；边界超窗排队（无内容在生成）改为「问题较多时会按顺序回答，也可继续学习」
+- 修复 3：`tutor-orchestration` 的 `decideTutorSubmission` 增加相位白名单自防御（仅 `boundary`/`streaming`/`generating` 受理），不再只靠 UI 门控；`planning`/`completing`/`completed`/`plan_failed` 一律拒收
+- 修复 4（文档）：spec §3.2 与交付契约对齐——任务上下文为标题+任务目标（不含 `observableOutcome`，类型有该字段但改代码不在本波范围）、近期问答范围限当前任务最近 3 组（非本章），保留最小上下文设计理由
+- 验证：TS 231/231 绿（新增 3 项，均先失败后通过）、pytest 67/67 绿、`tsc --noEmit` 干净、lint 0 errors（21 warnings 与基线持平，均在未触碰文件）；报告见 `.superpowers/sdd/2026-08-31-p2-inline-tutor/task-final-fix-report.md`
+
 ### V2 P2 第一阶段：流内答疑（交付总结）
 - 完成定义达成：任务流式生成中提问只入队（问题立即入流并落盘，任务完成后按队列顺序自动回答），边界提问立即启动回答；Tutor 完成后章节仍停在边界，不自动推进主线
 - 持久化：UserQuestion/TutorAnswer 立即进入学习流并经 commit 统一入口落盘（不走节流），刷新后问题轨迹、在途回答与失败态均不丢；被中断请求刷新自动重试一次（重试再失败进入可见失败态且不再自动重试）

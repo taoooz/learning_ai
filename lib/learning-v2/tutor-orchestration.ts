@@ -50,6 +50,16 @@ export function deriveChapterPhase(
 
 export type TutorSubmitAction = 'start' | 'queue';
 
+/**
+ * 可受理提问的相位白名单（最终审查修复 3）：编排层自防御，
+ * 不依赖 UI 门控——收尾/完成/计划失败等非学习相位一律拒收。
+ */
+const TUTOR_SUBMITTABLE_PHASES: ReadonlySet<ChapterPhaseName> = new Set([
+  'boundary',
+  'streaming',
+  'generating',
+]);
+
 export interface TutorSubmitDecisionInput {
   lesson: NodeLessonV2;
   phase: ChapterPhaseName;
@@ -70,12 +80,14 @@ export interface TutorSubmitDecision {
 }
 
 /**
- * 提问提交决策（纯函数）：trim 后非空且存在当前任务才受理。
+ * 提问提交决策（纯函数）：相位在白名单内、trim 后非空且存在当前任务才受理。
  * 问题立即入流（设计文档 §2.1）；是否立即回答由相位与忙闲决定。
  */
 export function decideTutorSubmission(
   input: TutorSubmitDecisionInput,
 ): TutorSubmitDecision | null {
+  // 相位白名单自防御：UI 门控之外再加一层，非学习相位拒收（最终审查修复 3）
+  if (!TUTOR_SUBMITTABLE_PHASES.has(input.phase)) return null;
   const text = input.text.trim();
   if (!text) return null;
   const taskId = input.lesson.runtime.currentTaskId;
