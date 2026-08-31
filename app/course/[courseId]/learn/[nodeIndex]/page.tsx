@@ -45,7 +45,6 @@ function extractQuestionConcept(question: Question): string {
 function formatAnswerDisplay(question: Question): string {
   const answer = question.answer;
   const options = question.options || [];
-  console.log('[formatAnswerDisplay]', JSON.stringify({ type: question.type, answer, options }));
 
   // 单选题：显示 "A. 选项文本"
   if (question.type === 'single') {
@@ -224,7 +223,7 @@ function LastLineMarker({
 export default function LearnPage() {
   const params = useParams();
   const router = useRouter();
-  const { courses, generateNodeContent, generateNodeQuestions, preloadNextNode, updateNodeQuestions } = useCourse();
+  const { courses, generateNodeContent, generateNodeQuestions, preloadNextNode, updateNodeQuestions, isHydrated } = useCourse();
   const { markCompleted } = useProgress();
   const userMemory = useUserMemory();
 
@@ -233,6 +232,9 @@ export default function LearnPage() {
 
   const [phase, setPhase] = useState<LearningPhase>('loading');
   const [showRetry, setShowRetry] = useState(false);
+  // 练习题（后台生成）失败提示：不打断卡片学习，用户可手动重试
+  const [questionsError, setQuestionsError] = useState(false);
+  const [isRetryingQuestions, setIsRetryingQuestions] = useState(false);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string[]>([]);
   const [sortOptions, setSortOptions] = useState<string[]>([]);
@@ -275,6 +277,8 @@ export default function LearnPage() {
     hasRequestedQuestionsRef.current = '';
     hasPreloadedNextRef.current = '';
     setShowRetry(false);
+    setQuestionsError(false);
+    setIsRetryingQuestions(false);
     setPhase('loading');
     setCurrentStepIndex(0);
     setSelectedAnswer([]);
@@ -309,40 +313,28 @@ export default function LearnPage() {
 
   useEffect(() => {
     const requestKey = `${courseId}-${nodeIndex}`;
-    console.log('[LearnPage] Main useEffect triggered', {
-      courseId,
-      nodeIndex,
-      phase,
-      requestKey,
-      hasRequested: hasRequestedRef.current === requestKey,
-      hasCards: shouldEnterLearningPhase(nodeRef.current),
-      hasQuestions: Array.isArray(nodeRef.current?.questions),
-    });
-    
+
     // 如果已完成学习，不做任何操作
     if (phase === 'complete') return;
 
     const currentCourse = courseRef.current;
     const currentNode = nodeRef.current;
-    
+
     if (!currentCourse || !currentNode) return;
 
     // 如果节点内容还没生成，触发生成
     if (!shouldEnterLearningPhase(currentNode)) {
       // 如果已经发起过请求，直接返回
       if (hasRequestedRef.current === requestKey) {
-        console.log('[LearnPage] Request already in progress, skipping');
         return;
       }
       hasRequestedRef.current = requestKey;
-      console.log('[LearnPage] Starting node content generation');
 
       const currentVersion = loadingVersionRef.current + 1;
       loadingVersionRef.current = currentVersion;
-      
+
       loadNodeContent(currentVersion);
     } else if (phase === 'loading') {
-      console.log('[LearnPage] Content ready, switching to learning phase');
       setPhase('learning');
     }
   }, [courseId, nodeIndex, course, node, phase]);
@@ -358,13 +350,19 @@ export default function LearnPage() {
 
     generateNodeQuestions(courseId, nodeIndex)
       .then((data) => {
+        // 空题目视为生成失败（否则本节会在没有练习的情况下静默推进）
+        if (!Array.isArray(data?.questions) || data.questions.length === 0) {
+          throw new Error('Questions result is empty');
+        }
         hasRequestedQuestionsRef.current = requestKey;
+        setQuestionsError(false);
         // 更新 React 状态 + localStorage
         updateNodeQuestions(courseId, nodeIndex, data.questions);
       })
       .catch((error) => {
         console.warn('[LearnPage] Questions generation failed:', error);
-        // 不设置 ref，允许重试
+        // 不设置 ref，允许重试；向用户展示失败提示，避免静默丢失练习
+        setQuestionsError(true);
       });
   }, [courseId, nodeIndex, generateNodeQuestions, updateNodeQuestions, node?.cards, node?.questions, phase]);
 
@@ -471,17 +469,61 @@ export default function LearnPage() {
     await loadNodeContent(currentVersion);
   };
 
+  // 手动重试生成练习题（失败提示条上的按钮）
+  const handleRetryQuestions = async () => {
+    if (isRetryingQuestions) return;
+    setIsRetryingQuestions(true);
+    try {
+      const data = await generateNodeQuestions(courseId, nodeIndex);
+      if (!Array.isArray(data?.questions) || data.questions.length === 0) {
+        throw new Error('Questions result is empty');
+      }
+      updateNodeQuestions(courseId, nodeIndex, data.questions);
+      hasRequestedQuestionsRef.current = `${courseId}-${nodeIndex}`;
+      setQuestionsError(false);
+    } catch (error) {
+      console.warn('[LearnPage] Questions retry failed:', error);
+      // 保持错误提示，用户可继续重试
+    } finally {
+      setIsRetryingQuestions(false);
+    }
+  };
+
   if (!course || !node) {
+    // 水合完成前显示加载态
+    if (!isHydrated) {
+      return (
+        <main className="min-h-screen flex items-center justify-center bg-background">
+          <div className="text-center">
+            <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-gradient-to-br from-accent/20 to-accent/5 flex items-center justify-center">
+              <svg className="w-6 h-6 text-accent animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+            </div>
+            <p className="text-secondary text-sm">加载中...</p>
+          </div>
+        </main>
+      );
+    }
+
+    // 水合后仍找不到课程或章节 → 明确的 404 界面，避免无限 loading
     return (
-      <main className="min-h-screen flex items-center justify-center bg-background">
+      <main className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
         <div className="text-center">
-          <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-gradient-to-br from-accent/20 to-accent/5 flex items-center justify-center">
-            <svg className="w-6 h-6 text-accent animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-error/20 to-error/5 flex items-center justify-center">
+            <svg className="w-8 h-8 text-error" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <p className="text-secondary text-sm">加载中...</p>
+          <h2 className="text-xl font-bold text-primary mb-2">找不到这个章节</h2>
+          <p className="text-secondary text-sm mb-6">课程可能已被删除，或链接已失效</p>
+          <button
+            onClick={() => router.push(course ? `/course/${courseId}` : '/')}
+            className="px-6 py-3 rounded-full bg-accent text-white font-medium shadow-md hover:shadow-lg active:scale-95 transition-all duration-200"
+          >
+            {course ? '返回课程页' : '回到首页'}
+          </button>
         </div>
       </main>
     );
@@ -711,6 +753,29 @@ export default function LearnPage() {
             {/* 固定底部按钮区域 */}
             <div className="fixed bottom-0 left-0 right-0 z-10">
               <div className="mx-auto max-w-md">
+                {/* 练习题生成失败提示：不打断卡片学习，提供手动重试 */}
+                {questionsError && (
+                  <motion.div
+                    initial={{ y: 16, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                    className="px-5 pb-2.5 sm:px-6"
+                  >
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-error/20 bg-[#FFF5F6] px-4 py-3 shadow-[0_6px_18px_rgba(239,71,111,0.10)]">
+                      <p className="text-[13px] leading-5 text-error">
+                        练习题生成失败，不影响本节内容学习
+                      </p>
+                      <button
+                        onClick={handleRetryQuestions}
+                        disabled={isRetryingQuestions}
+                        className="shrink-0 rounded-full border border-error/40 px-3.5 py-1.5 text-[13px] font-semibold text-error transition-all hover:bg-error/10 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isRetryingQuestions ? '重试中…' : '重试'}
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+
                 {currentStep.type === 'question' && !isAnswered && (
                   <div className="bg-gradient-to-t from-white via-white/98 to-transparent px-5 pb-6 pt-8 sm:px-6">
                     <button

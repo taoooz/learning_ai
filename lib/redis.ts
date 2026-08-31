@@ -1,10 +1,5 @@
 import Redis from 'ioredis'
-
-// 邀请码列表：优先从环境变量读取，逗号分隔
-// 环境变量格式：INVITE_CODES="a1b2-c3d4-e5f6,g7h8-i9j0-k1l2"
-const INVITE_CODES: string[] = process.env.INVITE_CODES
-  ? process.env.INVITE_CODES.split(',').map(s => s.trim()).filter(Boolean)
-  : [];
+import { isAllowedInviteCode, isValidInviteCodeFormat as isValidFormat } from './auth'
 
 // 用户数据结构
 export interface UserData {
@@ -13,14 +8,14 @@ export interface UserData {
   createdAt: string
 }
 
-// 验证邀请码是否有效
+// 验证邀请码是否有效（允许名单逻辑统一在 lib/auth.ts，名单为空时本地模式放行）
 export function isValidInviteCode(code: string): boolean {
-  return INVITE_CODES.includes(code)
+  return isAllowedInviteCode(code)
 }
 
 // 邀请码格式校验
 export function isValidInviteCodeFormat(code: string): boolean {
-  return /^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$/.test(code)
+  return isValidFormat(code)
 }
 
 // 用户存储key

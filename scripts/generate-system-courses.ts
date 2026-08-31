@@ -559,8 +559,8 @@ async function generateBundle(entry: (typeof SYSTEM_COURSE_CATALOG)[number]): Pr
 }
 
 async function main() {
-  if (!process.env.MINIMAX_API_KEY) {
-    throw new Error('MINIMAX_API_KEY is not set');
+  if (!process.env.LLM_API_KEY) {
+    throw new Error('LLM_API_KEY is not set');
   }
 
   mkdirSync(OUTPUT_DIR, { recursive: true });

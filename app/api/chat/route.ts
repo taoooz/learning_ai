@@ -3,12 +3,16 @@
 // Python Agent 负责构建 system prompt 并调用 LLM
 import { NextRequest } from 'next/server';
 import { PYTHON_AGENT_URL } from '@/lib/agent-config';
+import { requireAuth } from '@/lib/api-response';
 
 export const dynamic = 'force-dynamic';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
+  const auth = requireAuth(request);
+  if ('error' in auth) return auth.error;
+
   try {
     const body = await request.json();
 

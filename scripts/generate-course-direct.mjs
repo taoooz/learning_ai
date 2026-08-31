@@ -1,4 +1,4 @@
-// 直接调用 Python Agent API 生成课程内容，用 MiniMax 生成题目
+// 直接调用 Python Agent API 生成课程内容，用 LLM 服务生成题目
 import { writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,21 +19,24 @@ async function callWithRetry(fn, maxRetries = 3) {
   }
 }
 
-async function callMiniMax(prompt, maxTokens = 2000) {
-  const response = await fetch("https://api.minimaxi.com/v1/chat/completions", {
+const LLM_API_BASE = process.env.LLM_API_BASE || "http://muses-openapi-prod.weizhipin.com/v1";
+const LLM_MODEL = process.env.LLM_MODEL || "muses/deepseek-v4-flash";
+
+async function callLlm(prompt, maxTokens = 2000) {
+  const response = await fetch(`${LLM_API_BASE}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${process.env.MINIMAX_API_KEY}`
+      "Authorization": `Bearer ${process.env.LLM_API_KEY}`
     },
     body: JSON.stringify({
-      model: "MiniMax-M2.7",
+      model: LLM_MODEL,
       messages: [{ role: "user", content: prompt }],
       max_tokens: maxTokens
     })
   });
   if (!response.ok) {
-    throw new Error(`MiniMax API error: ${response.status}`);
+    throw new Error(`LLM API error: ${response.status}`);
   }
   const data = await response.json();
   return data.choices?.[0]?.message?.content || "";
@@ -85,10 +88,10 @@ ${cardsText}
 只返回 JSON，不要解释。`;
 }
 
-async function generateQuestionsWithMiniMax(nodeTitle, cards) {
+async function generateQuestionsWithLlm(nodeTitle, cards) {
   console.log(`  [生成题目] ${nodeTitle}...`);
   const prompt = buildQuestionsPrompt(nodeTitle, cards);
-  const response = await callMiniMax(prompt, 2000);
+  const response = await callLlm(prompt, 2000);
 
   // 提取 JSON
   const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -133,8 +136,8 @@ async function generateNodeLesson(courseName, nodeTitle, teachingGoal, nodeIndex
   const cardsPayload = createBasePayload(courseName, nodeTitle, teachingGoal, estimatedLevel, backgroundSummary);
   const cardsResult = await callCardsApi(courseName, cardsPayload);
 
-  // 用 MiniMax 生成题目
-  const questionsResult = await generateQuestionsWithMiniMax(nodeTitle, cardsResult.cards);
+  // 用 LLM 生成题目
+  const questionsResult = await generateQuestionsWithLlm(nodeTitle, cardsResult.cards);
 
   return {
     courseId: courseName.toLowerCase().replace(/\s+/g, "-"),
@@ -210,8 +213,8 @@ const financeCourseNodes = [
 ];
 
 async function main() {
-  if (!process.env.MINIMAX_API_KEY) {
-    console.error("MINIMAX_API_KEY 环境变量未设置");
+  if (!process.env.LLM_API_KEY) {
+    console.error("LLM_API_KEY 环境变量未设置");
     process.exit(1);
   }
 

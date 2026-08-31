@@ -2,10 +2,14 @@
 // 前端发送最近对话和事件数据，Python Agent 调用 LLM 分析后返回结构化洞察
 import { NextRequest, NextResponse } from 'next/server';
 import { PYTHON_AGENT_URL } from '@/lib/agent-config';
+import { requireAuth } from '@/lib/api-response';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
+  const auth = requireAuth(request);
+  if ('error' in auth) return auth.error;
+
   try {
     const body = await request.json();
 

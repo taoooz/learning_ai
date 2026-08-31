@@ -291,8 +291,8 @@ test('clearLegacyLearningData removes old storage keys before v2 storage boots',
 test('system course recommendations expose two preset guides and activation writes course into storage', () => {
   const recommendations = getSystemCourseRecommendations();
   assert.equal(recommendations.length, 2);
-  assert.equal(recommendations.some((item) => item.title === '人人都该懂的 AI 课'), true);
-  assert.equal(recommendations.some((item) => item.title === '普通人应该如何理财'), true);
+  assert.equal(recommendations.some((item) => item.title === 'AI 实战进阶课'), true);
+  assert.equal(recommendations.some((item) => item.title === '实战投资进阶课'), true);
 
   const storageMap = new Map<string, string>();
   const fakeStorage = {

@@ -1,19 +1,24 @@
 import { NextRequest } from 'next/server';
 import { PYTHON_AGENT_URL } from '@/lib/agent-config';
+import { requireAuth } from '@/lib/api-response';
 
 /**
  * TOC SSE 代理 — 直接 pipe Python Agent 的 SSE 流给前端
  * 前端自行消费 thinking/course_name/course_description/node/complete 事件
  */
 export async function POST(request: NextRequest) {
+  const auth = requireAuth(request);
+  if ('error' in auth) return auth.error;
+
   try {
     const body = await request.json();
-    const { blueprint } = body;
+    // userProfile/planningPayload 用于个性化目录生成（Python 侧已支持，缺省时行为与原来一致）
+    const { blueprint, userProfile, planningPayload } = body;
 
     const response = await fetch(`${PYTHON_AGENT_URL}/api/agents/toc/generate_agent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ blueprint }),
+      body: JSON.stringify({ blueprint, userProfile, planningPayload }),
     });
 
     if (!response.ok) {

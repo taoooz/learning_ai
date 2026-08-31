@@ -17,7 +17,7 @@ interface UseChatSubmitParams {
     currentNodeTitle?: string;
     currentNodeGoal?: string;
   };
-  messages: Array<{ role: string; content: string }>;
+  messages: Array<{ role: string; content: string; isExpired?: boolean }>;
   addMessage: (
     msg: { role: 'user' | 'assistant'; content: string },
     opts?: { onExpire?: (...args: any[]) => void; onCompact?: (...args: any[]) => void },
@@ -85,9 +85,11 @@ export function useChatSubmit(params: UseChatSubmitParams) {
       }
 
       // 限制历史消息：最多10条，且总长度不超过2000字符
+      // 过期消息已凝结为对话摘要（conversationSummary）单独传递，不再重复发送原文
       const MAX_MESSAGES = 10;
       const MAX_CONTENT_LENGTH = 2000;
-      const allMessages = [...messages, { role: 'user' as const, content: userMessage }];
+      const activeMessages = messages.filter((m) => !m.isExpired);
+      const allMessages = [...activeMessages, { role: 'user' as const, content: userMessage }];
       let limitedMessages = allMessages.slice(-MAX_MESSAGES);
 
       while (limitedMessages.length > 0) {
@@ -124,42 +126,51 @@ export function useChatSubmit(params: UseChatSubmitParams) {
       let fullContent = '';
       const decoder = new TextDecoder();
       let reasoningContent = '';
+      // SSE 行缓冲：一行 data: 可能被拆到多个 chunk，逐 chunk split 会丢行；
+      // decode 传 { stream: true } 避免多字节中文字符在 chunk 边界被截断产生乱码
+      let buffer = '';
+
+      const processLine = (line: string) => {
+        if (!line.startsWith('data: ')) return;
+        try {
+          const data = JSON.parse(line.slice(6));
+          const delta = data.choices?.[0]?.delta;
+
+          if (delta?.reasoning_details) {
+            for (const detail of delta.reasoning_details) {
+              if (detail.text) {
+                reasoningContent += detail.text;
+              }
+            }
+            if (reasoningContent && !fullContent) {
+              setIsThinking(true);
+            }
+          }
+
+          const content = delta?.content;
+          if (content) {
+            fullContent += content;
+            setStreamingContent(fullContent);
+            setIsThinking(false);
+          }
+        } catch {
+          // 忽略解析错误
+        }
+      };
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              const delta = data.choices?.[0]?.delta;
-
-              if (delta?.reasoning_details) {
-                for (const detail of delta.reasoning_details) {
-                  if (detail.text) {
-                    reasoningContent += detail.text;
-                  }
-                }
-                if (reasoningContent && !fullContent) {
-                  setIsThinking(true);
-                }
-              }
-
-              const content = delta?.content;
-              if (content) {
-                fullContent += content;
-                setStreamingContent(fullContent);
-                setIsThinking(false);
-              }
-            } catch {
-              // 忽略解析错误
-            }
-          }
+          processLine(line);
         }
       }
+      // 处理流结束时残留在缓冲中的最后一行（正常以换行结尾的 SSE 不会有残留）
+      processLine(buffer);
 
       addMessage(
         { role: 'assistant', content: fullContent },
@@ -198,8 +209,8 @@ export function useChatSubmit(params: UseChatSubmitParams) {
         });
       }
 
-      // 后台触发 LLM 精炼（fire-and-forget，不阻塞）
-      const allMessagesForRefine = [...messages, { role: 'user' as const, content: userMessage }, { role: 'assistant' as const, content: fullContent }];
+      // 后台触发 LLM 精炼（fire-and-forget，不阻塞）；过期消息已被摘要覆盖，不再参与精炼
+      const allMessagesForRefine = [...activeMessages, { role: 'user' as const, content: userMessage }, { role: 'assistant' as const, content: fullContent }];
       refineAndApply(allMessagesForRefine).catch(() => {});
     } catch (error) {
       console.error('Chat error:', error);

@@ -13,8 +13,7 @@ import { CourseCelebrationSheet } from '@/components/CourseCelebrationSheet';
 export default function CoursePage() {
   const params = useParams();
   const router = useRouter();
-  const { courses, currentCourse, generateNodeContent } = useCourse();
-  const [isLoading, setIsLoading] = useState(true);
+  const { courses, currentCourse, generateNodeContent, isHydrated } = useCourse();
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [showTitleInBar, setShowTitleInBar] = useState(false);
   const { streakData, studiedToday } = useStreak();
@@ -22,12 +21,6 @@ export default function CoursePage() {
   const celebrationShownRef = useRef(false);
 
   const courseId = params.courseId as string;
-
-  useEffect(() => {
-    if (courses.length > 0 || currentCourse) {
-      setIsLoading(false);
-    }
-  }, [courses, currentCourse]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -64,7 +57,8 @@ export default function CoursePage() {
     }
   }, [courses, currentCourse, courseId]);
 
-  if (isLoading) {
+  // 水合完成前显示加载态；水合后课程不存在则落到下方 404 界面，避免无限 loading
+  if (!isHydrated) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">

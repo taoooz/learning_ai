@@ -73,7 +73,11 @@ export function useCourseActions({
       const response = await fetch('/api/generate/toc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ blueprint: outline }),
+        body: JSON.stringify({
+          blueprint: outline,
+          userProfile: getUserProfile(),
+          planningPayload: getPlanningMemoryPayload(outline.topic, getUserMemoryStoreSnapshot()),
+        }),
       });
 
       const raw = await response.json();
@@ -106,21 +110,17 @@ export function useCourseActions({
     try {
       const bundle = getStoredCourseBundle(courseId);
       if (!bundle) throw new Error('Course bundle not found');
-      const node = bundle.blueprint.nodes[nodeIndex];
 
       const response = await fetch('/api/generate/node/cards', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           topic: bundle.blueprint.topic,
-          nodeInfo: {
-            teachingGoal: node.teachingGoal,
-            teachConceptIds: node.teachConceptIds,
-            prerequisiteConceptIds: node.prerequisiteConceptIds,
-          },
+          nodeInfo: buildNodeInfoPayload(bundle, nodeIndex),
           learnerBackground: options.learnerBackground,
           prevNodeSummary: options.prevNodeSummary,
           nextNodeSummary: options.nextNodeSummary,
+          userProfile: getUserProfile(),
         }),
       });
 
@@ -146,7 +146,6 @@ export function useCourseActions({
     try {
       const bundle = getStoredCourseBundle(courseId);
       if (!bundle) throw new Error('Course bundle not found');
-      const node = bundle.blueprint.nodes[nodeIndex];
       const lesson = bundle.lessons[nodeIndex];
 
       const response = await fetch('/api/generate/node/questions', {
@@ -154,12 +153,9 @@ export function useCourseActions({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           topic: bundle.blueprint.topic,
-          nodeInfo: {
-            teachingGoal: node.teachingGoal,
-            teachConceptIds: node.teachConceptIds,
-            prerequisiteConceptIds: node.prerequisiteConceptIds,
-          },
+          nodeInfo: buildNodeInfoPayload(bundle, nodeIndex),
           cards: lesson.cards,
+          userProfile: getUserProfile(),
         }),
       });
 
@@ -224,27 +220,18 @@ export function useCourseActions({
     const promise = (async () => {
       try {
         const nodeInfo = buildNodeInfoPayload(bundle, nodeIndex);
-        const lp = bundle.blueprint.learnerPositioning as typeof bundle.blueprint.learnerPositioning & {
-          backgroundSummary?: string;
-        };
+        // prevNode/nextNode 走独立的 prevNodeSummary/nextNodeSummary 字段，避免重复
+        const { prevNode, nextNode, ...nodeInfoBody } = nodeInfo;
 
         const response = await fetch('/api/generate/node/cards', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             topic: bundle.blueprint.topic,
-            nodeInfo: {
-              title: nodeInfo.title,
-              teachingGoal: nodeInfo.teachingGoal,
-              teachConceptIds: nodeInfo.teachConceptIds,
-              prerequisiteConceptIds: nodeInfo.prerequisiteConceptIds,
-            },
-            learnerBackground: {
-              backgroundSummary: lp.backgroundSummary || '',
-              skipBasics: lp.skipBasics || [],
-            },
-            prevNodeSummary: nodeInfo.prevNode,
-            nextNodeSummary: nodeInfo.nextNode,
+            nodeInfo: nodeInfoBody,
+            prevNodeSummary: prevNode,
+            nextNodeSummary: nextNode,
+            userProfile: getUserProfile(),
           }),
         });
 

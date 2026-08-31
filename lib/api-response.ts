@@ -1,19 +1,11 @@
 // lib/api-response.ts
-// 统一的 API 响应格式
+// 统一的 API 响应格式（服务端用；客户端请从 lib/api-contract.ts 引入）
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
+import type { ApiSuccessResponse, ApiErrorResponse } from './api-contract';
 
-interface ApiSuccessResponse<T> {
-  success: true;
-  data: T;
-}
-
-interface ApiErrorResponse {
-  success: false;
-  error: string;
-}
-
-export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
+export type { ApiResponse, ApiSuccessResponse, ApiErrorResponse } from './api-contract';
+export { unwrapApiResponse } from './api-contract';
 
 export function apiSuccess<T>(data: T, status = 200): NextResponse<ApiSuccessResponse<T>> {
   return NextResponse.json({ success: true, data }, { status });
@@ -24,28 +16,8 @@ export function apiError(error: string, status = 400): NextResponse<ApiErrorResp
 }
 
 /**
- * 客户端解包 apiSuccess/apiError 响应
- * 返回 data 或抛出错误
- */
-export function unwrapApiResponse<T>(raw: { success?: boolean; data?: T; error?: string }): T {
-  if (raw.success === true && raw.data !== undefined) {
-    return raw.data;
-  }
-  if (raw.success === false && raw.error) {
-    throw new Error(raw.error);
-  }
-  // 兼容未包装的旧格式
-  return raw as unknown as T;
-}
-
-/**
  * 检查请求是否已认证（cookie 中有有效的邀请码）
  * 返回 inviteCode 或 null（未认证时附带 401 响应）
+ * 实现统一在 lib/auth.ts，此处保留导出以兼容现有调用方
  */
-export function requireAuth(request: NextRequest): { inviteCode: string } | { error: NextResponse } {
-  const inviteCode = request.cookies.get('ai-learning-auth')?.value;
-  if (!inviteCode) {
-    return { error: NextResponse.json({ error: '未登录' }, { status: 401 }) };
-  }
-  return { inviteCode };
-}
+export { requireAuth } from './auth';

@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { CombinedProvider } from '@/contexts';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { StorageWarningToast } from '@/components/StorageWarningToast';
 
 export const metadata: Metadata = {
   title: 'AI Learning',
@@ -27,6 +28,7 @@ export default function RootLayout({
           <CombinedProvider>
             {children}
           </CombinedProvider>
+          <StorageWarningToast />
         </ErrorBoundary>
       </body>
     </html>

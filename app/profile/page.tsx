@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { CourseHeaderBar } from '@/components/CourseHeaderBar';
 import { useUserProfile } from '@/contexts/UserProfileContext';
 import { UserProfile, WorkExperience, Education } from '@/types/course';
+import { unwrapApiResponse } from '@/lib/api-contract';
 
 function generateId(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -133,7 +134,9 @@ export default function ProfilePage() {
     }).then(response => {
       if (response.ok) return response.json();
       throw new Error('Insights API failed');
-    }).then(updatedProfile => {
+    }).then(raw => {
+      // 解包 {success, data} 包装，避免把响应包装对象误存为用户画像
+      const updatedProfile = unwrapApiResponse<UserProfile>(raw);
       updateProfile(updatedProfile);
     }).catch(error => {
       console.error('Background insights generation failed:', error);

@@ -1,4 +1,5 @@
 // lib/minimax.ts
+// LLM 服务调用（OpenAI 兼容格式，当前接入 muses/deepseek-v4-flash）
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -8,6 +9,9 @@ export interface MiniMaxCallOptions {
   signal?: AbortSignal;
 }
 
+export const DEFAULT_LLM_API_BASE = 'http://muses-openapi-prod.weizhipin.com/v1';
+export const DEFAULT_LLM_MODEL = 'muses/deepseek-v4-flash';
+
 let cachedApiKeyFromFile: string | null | undefined;
 
 function readApiKeyFromEnvFile(): string | null {
@@ -16,14 +20,14 @@ function readApiKeyFromEnvFile(): string | null {
   }
 
   try {
-    const envFilePath = process.env.MINIMAX_ENV_FILE || join(process.cwd(), '.env.local');
+    const envFilePath = process.env.LLM_ENV_FILE || join(process.cwd(), '.env.local');
     if (!existsSync(envFilePath)) {
       cachedApiKeyFromFile = null;
       return cachedApiKeyFromFile;
     }
 
     const envText = readFileSync(envFilePath, 'utf8');
-    const match = envText.match(/(?:^|\n)\s*MINIMAX_API_KEY\s*=\s*(.+)\s*(?:\n|$)/);
+    const match = envText.match(/(?:^|\n)\s*LLM_API_KEY\s*=\s*(.+)\s*(?:\n|$)/);
     cachedApiKeyFromFile = match?.[1]?.trim().replace(/^['"]|['"]$/g, '') || null;
     return cachedApiKeyFromFile;
   } catch {
@@ -32,18 +36,19 @@ function readApiKeyFromEnvFile(): string | null {
   }
 }
 
-function getMiniMaxApiKey(): string | null {
-  return process.env.MINIMAX_API_KEY || readApiKeyFromEnvFile();
+function getLlmApiKey(): string | null {
+  return process.env.LLM_API_KEY || readApiKeyFromEnvFile();
 }
 
 export async function callMiniMax(prompt: string, options: MiniMaxCallOptions = {}): Promise<string> {
-  const apiKey = getMiniMaxApiKey();
+  const apiKey = getLlmApiKey();
 
   if (!apiKey) {
-    throw new Error('MINIMAX_API_KEY is not set');
+    throw new Error('LLM_API_KEY is not set');
   }
 
-  const baseUrl = process.env.MINIMAX_API_BASE || 'https://api.minimaxi.com/v1';
+  const baseUrl = process.env.LLM_API_BASE || DEFAULT_LLM_API_BASE;
+  const model = process.env.LLM_MODEL || DEFAULT_LLM_MODEL;
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -52,18 +57,16 @@ export async function callMiniMax(prompt: string, options: MiniMaxCallOptions = 
     },
     signal: options.signal,
     body: JSON.stringify({
-      model: 'MiniMax-M2.7',
+      model,
       messages: [
         {
           role: 'user',
           content: prompt,
         },
       ],
-      reasoning_split: true,
       ...(typeof options.maxTokens === 'number'
         ? {
           max_tokens: options.maxTokens,
-          max_completion_tokens: options.maxTokens,
         }
         : {}),
     }),
@@ -71,13 +74,13 @@ export async function callMiniMax(prompt: string, options: MiniMaxCallOptions = 
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`MiniMax API error: ${response.status} - ${errorText}`);
+    throw new Error(`LLM API error: ${response.status} - ${errorText}`);
   }
 
   const data = await response.json();
 
   if (!data.choices || data.choices.length === 0) {
-    throw new Error('No response from MiniMax');
+    throw new Error('No response from LLM');
   }
 
   return data.choices[0].message.content;

@@ -2,7 +2,6 @@
 import { NextRequest } from 'next/server';
 import { callMiniMax, parseJSONResponse } from '@/lib/minimax';
 import { buildProfileInsightPrompt } from '@/lib/prompt';
-import { saveUserProfile } from '@/lib/storage';
 import { LearningInsight } from '@/types/course';
 import { apiSuccess, apiError, requireAuth } from '@/lib/api-response';
 
@@ -16,12 +15,11 @@ export async function POST(request: NextRequest) {
     const content = await callMiniMax(prompt);
     const insights = parseJSONResponse<LearningInsight>(content);
 
-    // 将洞察添加到 profile 中并保存
+    // 将洞察添加到 profile 中，由客户端负责持久化（服务端无法访问浏览器存储）
     const profileWithInsights = {
       ...profile,
       insights,
     };
-    saveUserProfile(profileWithInsights);
 
     return apiSuccess(profileWithInsights);
   } catch (error) {

@@ -109,12 +109,31 @@ export function getStoredData(): StoredData {
   return hydrateStoredData(getStoredDataV2());
 }
 
-export function saveStoredDataV2(data: StoredDataV2): void {
+export const STORAGE_WRITE_FAILED_EVENT = 'storage-write-failed';
+
+let lastStorageFailureNotifyAt = 0;
+
+/**
+ * 存储写失败统一通知（配额满时每次保存都会抛错，源头节流 30s 避免事件风暴）
+ * UI 层通过监听 STORAGE_WRITE_FAILED_EVENT 展示全局提示
+ */
+export function notifyStorageWriteFailure(context: string, error: unknown): void {
   if (typeof window === 'undefined') return;
+  const now = Date.now();
+  if (now - lastStorageFailureNotifyAt < 30_000) return;
+  lastStorageFailureNotifyAt = now;
+  console.error(`[storage] ${context} 写入失败:`, error);
+  window.dispatchEvent(new CustomEvent(STORAGE_WRITE_FAILED_EVENT, { detail: { context } }));
+}
+
+export function saveStoredDataV2(data: StoredDataV2): boolean {
+  if (typeof window === 'undefined') return false;
   try {
     localStorage.setItem(getUserStorageKey(), JSON.stringify(data));
+    return true;
   } catch (error) {
-    console.error('Failed to save stored data:', error);
+    notifyStorageWriteFailure('学习数据', error);
+    return false;
   }
 }
 

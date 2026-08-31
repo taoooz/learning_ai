@@ -1,22 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { AUTH_COOKIE_NAME, authCookieOptions, isValidAuthCode } from '@/lib/auth'
 
+// 签发鉴权 cookie：必须先通过邀请码校验（格式 + 允许名单），杜绝任意字符串换取登录态
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { inviteCode } = body
 
-    if (!inviteCode) {
-      return NextResponse.json({ error: '缺少邀请码' }, { status: 400 })
+    if (!isValidAuthCode(inviteCode)) {
+      return NextResponse.json({ error: '邀请码无效' }, { status: 403 })
     }
 
     const response = NextResponse.json({ success: true })
-    response.cookies.set('ai-learning-auth', inviteCode, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 30, // 30 天
-      path: '/',
-    })
+    response.cookies.set(AUTH_COOKIE_NAME, inviteCode, authCookieOptions())
 
     return response
   } catch (error) {

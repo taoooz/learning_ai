@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { AUTH_COOKIE_NAME, isValidAuthCode } from '@/lib/auth'
 
 // 需要登录才能访问的路径（排除公开页面）
 const protectedPaths = ['/', '/course', '/generate', '/profile', '/review']
@@ -21,19 +22,23 @@ export function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // 检查登录态（cookie）
-  const inviteCode = request.cookies.get('ai-learning-auth')?.value
+  // 检查登录态（cookie 中的邀请码必须格式有效且在允许名单内）
+  const inviteCode = request.cookies.get(AUTH_COOKIE_NAME)?.value
 
-  if (!inviteCode) {
-    // 重定向到登录页，带上原页面路径
+  if (!isValidAuthCode(inviteCode)) {
+    // 重定向到登录页，带上原页面路径；无效/过期 cookie 一并清除
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('redirect', pathname)
-    return NextResponse.redirect(loginUrl)
+    const response = NextResponse.redirect(loginUrl)
+    if (inviteCode) {
+      response.cookies.delete(AUTH_COOKIE_NAME)
+    }
+    return response
   }
 
   return NextResponse.next()
 }
 
 export const config = {
-  matcher: ['/', '/course/:path*', '/generate', '/profile/:path*', '/review/:path*'],
+  matcher: ['/', '/course/:path*', '/generate/:path*', '/profile/:path*', '/review/:path*'],
 }

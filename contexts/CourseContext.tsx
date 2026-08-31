@@ -12,6 +12,7 @@ import { useCourseActions } from '@/hooks/useCourseActions';
 interface CourseContextType {
   courses: CourseTree[];
   currentCourse: CourseTree | null;
+  isHydrated: boolean;
   generationStatus: GenerationStatus;
   generationError: string | null;
   systemCourseRecommendations: SystemCourseRecommendation[];
@@ -134,6 +135,7 @@ export function buildNodeInfoPayload(bundle: StoredCourseBundle, nodeIndex: numb
 export function CourseProvider({ children }: { children: React.ReactNode }) {
   const [courses, setCourses] = useState<CourseTree[]>([]);
   const [currentCourse, setCurrentCourse] = useState<CourseTree | null>(null);
+  const [isHydrated, setIsHydrated] = useState(false);
   const [generationStatus, setGenerationStatus] = useState<GenerationStatus>('idle');
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [systemCourseRecommendations] = useState<SystemCourseRecommendation[]>(() => getSystemCourseRecommendations());
@@ -151,6 +153,8 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     if (data.currentCourseId) {
       setCurrentCourse(data.courses.find(c => c.courseId === data.currentCourseId) || null);
     }
+    // 水合完成标记：页面据此区分"还在加载"和"确实没有数据"，避免无限 loading
+    setIsHydrated(true);
 
     // 监听节点完成事件，刷新课程数据
     const handleNodeCompleted = () => {
@@ -177,6 +181,7 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     <CourseContext.Provider value={{
       courses,
       currentCourse,
+      isHydrated,
       generationStatus,
       generationError,
       systemCourseRecommendations,

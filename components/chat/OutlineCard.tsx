@@ -12,6 +12,18 @@ type OutlineCardProps = {
   streaming?: boolean;
 };
 
+// 后端已归一化为英文键；中文别名兼容修复前生成的旧会话数据
+const LEVEL_LABELS: Record<string, string> = {
+  novice: '入门',
+  beginner: '初级',
+  intermediate: '中级',
+  advanced: '高级',
+  '入门': '入门',
+  '初级': '初级',
+  '中级': '中级',
+  '高级': '高级',
+};
+
 export function OutlineCard({ blueprint, onConfirm, showActions, embedded = false, streaming = false }: OutlineCardProps) {
   const { estimatedLevel, backgroundSummary, skipBasics } = blueprint.learnerPositioning;
   const hasContent = shouldRenderLearnerPositioningCard({
@@ -67,10 +79,7 @@ export function OutlineCard({ blueprint, onConfirm, showActions, embedded = fals
                   <div className="flex items-center gap-2">
                     <span className="text-tertiary">难度：</span>
                     <span className="font-medium">
-                      {estimatedLevel === 'novice' && '入门'}
-                      {estimatedLevel === 'beginner' && '初级'}
-                      {estimatedLevel === 'intermediate' && '中级'}
-                      {estimatedLevel === 'advanced' && '高级'}
+                      {LEVEL_LABELS[estimatedLevel] ?? estimatedLevel}
                     </span>
                   </div>
                   {backgroundSummary && (

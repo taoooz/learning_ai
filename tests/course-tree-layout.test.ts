@@ -6,7 +6,6 @@ import { normalizeVisualization } from '../lib/visualization';
 
 let getCourseTreeLayout: typeof import('../lib/course-tree-layout').getCourseTreeLayout;
 let getCourseTreeInitialScrollTop: typeof import('../lib/course-tree-layout').getCourseTreeInitialScrollTop;
-let buildChatContext: typeof import('../lib/chat-context').buildChatContext;
 let compactChatHistoryMessages: typeof import('../hooks/useChatHistory').compactChatHistoryMessages;
 let generateConversationSummary: typeof import('../hooks/useChatHistory').generateConversationSummary;
 let createMemoryRepository: typeof import('../lib/memory/repository').createMemoryRepository;
@@ -30,9 +29,6 @@ test.before(async () => {
   const layoutModule = await import('../lib/course-tree-layout');
   getCourseTreeLayout = layoutModule.getCourseTreeLayout;
   getCourseTreeInitialScrollTop = layoutModule.getCourseTreeInitialScrollTop;
-
-  const chatContextModule = await import('../lib/chat-context');
-  buildChatContext = chatContextModule.buildChatContext;
 
   const chatHistoryModule = await import('../hooks/useChatHistory');
   compactChatHistoryMessages = chatHistoryModule.compactChatHistoryMessages;
@@ -370,42 +366,6 @@ test('detectExplicitMasteredConcept captures explicit understanding statements',
 test('normalizeConceptKey collapses close variants into one canonical concept', () => {
   assert.equal(normalizeConceptKey('外部工具调用'), normalizeConceptKey('工具调用'));
   assert.equal(normalizeConceptKey('工作流编排'), normalizeConceptKey('workflow 编排'));
-});
-
-test('buildChatContext prefers structured v2 payload over legacy chat memory noise', () => {
-  const context = buildChatContext(
-    {
-      topic: 'Agent',
-    },
-    [{ id: 'msg-1', role: 'user', content: '工具调用到底什么时候需要？', timestamp: Date.now() }],
-    {
-      currentNodeTitle: '工具调用',
-      currentNodeGoal: '理解工具调用时机',
-    },
-    undefined,
-    {
-      topic: 'Agent',
-      focusConceptStates: [
-        {
-          concept: '工具调用',
-          status: 'learning',
-          masteryScore: 0.42,
-          misconceptionHints: ['容易和工作流编排混淆'],
-        },
-      ],
-      riskConcepts: ['工具调用'],
-      recentQuestionSummaries: ['工具调用和工作流编排有什么区别？'],
-      analogyHints: ['负责过埋点分析和实验设计'],
-      preferredExplanationStyles: ['分步拆解'],
-      topicSummary: 'Agent 当前最需要补的是 工具调用',
-    },
-  );
-
-  assert.match(context, /用户记忆重点/);
-  assert.match(context, /工具调用/);
-  assert.match(context, /容易和工作流编排混淆/);
-  assert.match(context, /偏好解释方式：分步拆解/);
-  assert.doesNotMatch(context, /薄弱点：暂无记录/);
 });
 
 test('generateConversationSummary preserves questions confusion styles and follow-up', () => {

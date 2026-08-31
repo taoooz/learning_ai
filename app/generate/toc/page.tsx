@@ -6,6 +6,8 @@ import { motion } from 'framer-motion';
 import { useCourse } from '@/contexts/CourseContext';
 import { CourseHeaderBar } from '@/components/CourseHeaderBar';
 import { createStoredCourseBundleFromBlueprint } from '@/lib/course-blueprint';
+import { getUserProfile } from '@/lib/storage';
+import { getPlanningMemoryPayload, getUserMemoryStoreSnapshot } from '@/lib/memory';
 import { parseSSEStream } from '../chat/utils/sseParser';
 import type { CourseBlueprint, StoredCourseBundle, OutlineLearnerPositioning } from '@/types/course';
 
@@ -49,7 +51,15 @@ function TocPageContent() {
         const response = await fetch('/api/generate/toc', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ blueprint: outline }),
+          body: JSON.stringify({
+            blueprint: outline,
+            // 个性化透传：用户画像 + 规划记忆（近期相关课程等），缺省时服务端行为与原来一致
+            userProfile: getUserProfile(),
+            planningPayload: getPlanningMemoryPayload(
+              outline.topic,
+              getUserMemoryStoreSnapshot(),
+            ),
+          }),
         });
 
         if (!response.ok) {
@@ -82,12 +92,20 @@ function TocPageContent() {
           }
         }
 
-        setIsComplete(true);
-
         // 用 complete 结果（更可靠）或已流式展示的数据构造 blueprint
         const finalCourseName = completeResult?.courseName || courseName || outline.topic;
         const finalDescription = completeResult?.courseDescription || courseDescription || outline.learningGoal;
-        const finalNodes = completeResult?.nodes || streamNodes;
+        // 空数组是 truthy，必须显式检查长度，否则空目录会被当成有效结果
+        const finalNodes = Array.isArray(completeResult?.nodes) && completeResult.nodes.length > 0
+          ? completeResult.nodes
+          : streamNodes;
+
+        // 空目录不可用：转入错误态引导重试，而不是静默创建一门没有章节的课程
+        if (finalNodes.length === 0) {
+          throw new Error('课程目录生成失败，请重试');
+        }
+
+        setIsComplete(true);
 
         const blueprint: CourseBlueprint = {
           courseId: `course-${Date.now()}`,
@@ -138,6 +156,8 @@ function TocPageContent() {
 
   // 错误状态
   if (error) {
+    // 纲要还在 sessionStorage 中（仅成功创建课程后才会移除），刷新页面即可重新生成
+    const canRetry = !!sessionStorage.getItem('pendingOutline');
     return (
       <main className="min-h-screen flex flex-col bg-background">
         <CourseHeaderBar title="生成课程" backLabel="返回" onBack={() => router.push('/generate/chat?topic=' + encodeURIComponent(topic))} />
@@ -150,12 +170,25 @@ function TocPageContent() {
             </div>
             <h3 className="mb-2 text-[20px] font-bold text-primary">{error}</h3>
             <p className="mb-6 text-sm text-secondary">请稍后再试</p>
-            <button
-              onClick={() => router.push('/')}
-              className="inline-flex min-h-12 items-center justify-center rounded-full bg-accent px-6 py-3 text-[15px] font-semibold text-white shadow-[0_4px_16px_rgba(255,138,0,0.20)] transition-all hover:shadow-[0_6px_20px_rgba(255,138,0,0.25)] active:scale-[0.985]"
-            >
-              返回首页
-            </button>
+            <div className="flex flex-col items-center gap-3">
+              {canRetry && (
+                <button
+                  onClick={() => window.location.reload()}
+                  className="inline-flex min-h-12 items-center justify-center rounded-full bg-accent px-6 py-3 text-[15px] font-semibold text-white shadow-[0_4px_16px_rgba(255,138,0,0.20)] transition-all hover:shadow-[0_6px_20px_rgba(255,138,0,0.25)] active:scale-[0.985]"
+                >
+                  重新生成
+                </button>
+              )}
+              <button
+                onClick={() => router.push('/')}
+                className={canRetry
+                  ? 'text-sm text-secondary underline-offset-4 transition-colors hover:underline'
+                  : 'inline-flex min-h-12 items-center justify-center rounded-full bg-accent px-6 py-3 text-[15px] font-semibold text-white shadow-[0_4px_16px_rgba(255,138,0,0.20)] transition-all hover:shadow-[0_6px_20px_rgba(255,138,0,0.25)] active:scale-[0.985]'
+                }
+              >
+                返回首页
+              </button>
+            </div>
           </div>
         </div>
       </main>

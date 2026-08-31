@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { notifyStorageWriteFailure } from '@/lib/storage';
 
 interface StreakData {
   currentStreak: number;
@@ -40,7 +41,9 @@ function writeStreak(data: StreakData): void {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch {}
+  } catch (error) {
+    notifyStorageWriteFailure('学习连续记录', error);
+  }
 }
 
 export function useStreak() {

@@ -7,6 +7,7 @@ import {
   detectAssistantExplanationStyle,
   detectChatLearningPreferences,
 } from '@/lib/memory/aggregator';
+import { notifyStorageWriteFailure } from '@/lib/storage';
 
 const CHAT_HISTORY_PREFIX = 'chatHistory_';
 const EXPIRATION_DAYS = 7;
@@ -201,8 +202,9 @@ export function useChatHistory(courseId: string) {
 
     try {
       localStorage.setItem(`${CHAT_HISTORY_PREFIX}${courseId}`, JSON.stringify(updatedMessages));
-    } catch {
-      // localStorage 可能已满，忽略
+    } catch (error) {
+      // localStorage 可能已满：写入失败需让用户知晓，否则聊天记录会静默丢失
+      notifyStorageWriteFailure('聊天记录', error);
     }
   }, [courseId, getMessages]);
 
