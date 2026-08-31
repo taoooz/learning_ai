@@ -1,8 +1,10 @@
 // lib/learning-v2/reducers.ts
 // V2 学习流归约器：SSE 事件 → NodeLessonV2
 // 依据 docs/architecture/v2_课程生成逻辑.md §2.5 / §5 / §6.3
+// 与 docs/architecture/p2-流内答疑第一阶段设计.md §2.1 / §2.2
 // 幂等保证：所有 Item 以确定性 itemId upsert，重复应用同一事件不产生重复条目；
-// 版本守卫：planVersion/chapterId 不匹配的事件直接丢弃（旧版本结果拒绝写入）
+// 版本守卫：planVersion/chapterId 不匹配的事件直接丢弃（旧版本结果拒绝写入）；
+// Tutor 守卫：问题/回答经 taskId + questionId 绑定，requestId 不匹配进行中请求的事件拒写
 
 import type {
   ChapterPlan,
@@ -23,6 +25,13 @@ import type {
   TaskCompletedPayload,
   TaskContentItem,
   TaskStartedPayload,
+  TutorAnswerItem,
+  TutorBlockCompletedPayload,
+  TutorBlockDeltaPayload,
+  TutorBlockStartedPayload,
+  TutorCompletedPayload,
+  TutorStartedPayload,
+  UserQuestionItem,
 } from '@/types/learning-v2';
 import { canTransitionChapter } from './state-machine';
 
@@ -77,6 +86,14 @@ export function systemNoticeItemId(eventId: string): string {
 
 export function chapterRecapItemId(chapterId: string): string {
   return `rc:${chapterId}`;
+}
+
+export function userQuestionItemId(questionId: string): string {
+  return `uq:${questionId}`;
+}
+
+export function tutorAnswerItemId(questionId: string): string {
+  return `ta:${questionId}`;
 }
 
 // ---- 内部工具 ----
@@ -161,6 +178,42 @@ export function applyChapterRecap(
   };
 }
 
+/**
+ * 追加用户提问（P2 流内答疑）：提交即入流，确定性 `uq:{questionId}` upsert。
+ * 重复 questionId 原样返回，不产生重复条目、不漂移 sequence（设计文档 §2.1 / §8）。
+ */
+export function appendUserQuestion(
+  lesson: NodeLessonV2,
+  input: { taskId: string; questionId: string; text: string },
+  now: number,
+): NodeLessonV2 {
+  const itemId = userQuestionItemId(input.questionId);
+  if (lesson.streamItems.some((item) => item.itemId === itemId)) return lesson;
+  const item: UserQuestionItem = {
+    itemId,
+    type: 'user_question',
+    chapterId: lesson.chapterId,
+    taskId: input.taskId,
+    questionId: input.questionId,
+    planVersion: lesson.chapterPlan.planVersion,
+    sequence: lesson.runtime.latestSequence + 1,
+    createdAt: now,
+    status: 'pending',
+    text: input.text,
+  };
+  return {
+    ...lesson,
+    streamItems: [...lesson.streamItems, item],
+    runtime: {
+      ...lesson.runtime,
+      latestSequence: item.sequence,
+      scrollAnchorItemId: itemId,
+      lastActiveAt: now,
+    },
+    updatedAt: now,
+  };
+}
+
 // ---- 主归约函数 ----
 
 /**
@@ -190,9 +243,16 @@ export function applyLearningSseEvent(
     case 'request_warning':
       return applyRequestWarning(lesson, event);
     case 'request_error':
-      return applyRequestError(lesson, event);
+      // 携带 questionId 的错误属于 Tutor 请求，走答疑归约路径（不误伤主线任务）
+      return event.questionId ? applyTutorSseEvent(lesson, event) : applyRequestError(lesson, event);
     case 'request_completed':
       return applyRequestCompleted(lesson, event);
+    case 'tutor_started':
+    case 'tutor_block_started':
+    case 'tutor_block_delta':
+    case 'tutor_block_completed':
+    case 'tutor_completed':
+      return applyTutorSseEvent(lesson, event);
     default:
       return lesson;
   }
@@ -526,5 +586,331 @@ function touchSequence(lesson: NodeLessonV2, event: LearningSseEvent): NodeLesso
       lastActiveAt: event.timestamp,
     },
     updatedAt: event.timestamp,
+  };
+}
+
+// ---- Tutor 流内答疑（P2） ----
+
+type TutorEvent = LearningSseEvent & { taskId: string; questionId: string };
+
+function requireTutorEvent(event: LearningSseEvent): TutorEvent | null {
+  return event.taskId && event.questionId ? (event as TutorEvent) : null;
+}
+
+function findUserQuestionItem(
+  items: LearningStreamItem[],
+  questionId: string,
+): UserQuestionItem | undefined {
+  const found = items.find((item) => item.itemId === userQuestionItemId(questionId));
+  return found?.type === 'user_question' ? found : undefined;
+}
+
+function findTutorAnswerItem(
+  items: LearningStreamItem[],
+  questionId: string,
+): TutorAnswerItem | undefined {
+  const found = items.find((item) => item.itemId === tutorAnswerItemId(questionId));
+  return found?.type === 'tutor_answer' ? found : undefined;
+}
+
+/** Tutor 守卫：问题必须已入流且归属事件携带的任务（设计文档 §2.2 守卫字段） */
+function requireTutorQuestion(
+  lesson: NodeLessonV2,
+  event: LearningSseEvent,
+): { tutorEvent: TutorEvent; question: UserQuestionItem } | null {
+  const tutorEvent = requireTutorEvent(event);
+  if (!tutorEvent) return null;
+  const question = findUserQuestionItem(lesson.streamItems, tutorEvent.questionId);
+  if (!question || question.taskId !== tutorEvent.taskId) return null;
+  return { tutorEvent, question };
+}
+
+/** 过期请求守卫：已有进行中的 Tutor 请求且 requestId 不匹配时拒写（设计文档 §6） */
+function isStaleTutorRequest(lesson: NodeLessonV2, event: LearningSseEvent): boolean {
+  const pending = lesson.runtime.pendingRequest;
+  return !!pending && pending.kind === 'tutor' && pending.requestId !== event.requestId;
+}
+
+/**
+ * 应用 Tutor 事件（P2）：统一守卫后按事件类型归约。
+ * 守卫顺序：外壳（章节/版本）→ 任务与问题绑定 → 载荷一致性 → 进行中请求 requestId。
+ * 任何一环不匹配原样返回，不污染当前章节（设计文档 §2.2 / §5）。
+ */
+export function applyTutorSseEvent(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+  if (event.chapterId !== lesson.chapterId) return lesson;
+  if (event.planVersion !== lesson.chapterPlan.planVersion) return lesson;
+
+  switch (event.type) {
+    case 'tutor_started':
+      return applyTutorStarted(lesson, event);
+    case 'tutor_block_started':
+      return applyTutorBlockStarted(lesson, event);
+    case 'tutor_block_delta':
+      return applyTutorBlockDelta(lesson, event);
+    case 'tutor_block_completed':
+      return applyTutorBlockCompleted(lesson, event);
+    case 'tutor_completed':
+      return applyTutorCompleted(lesson, event);
+    case 'request_error':
+      return applyTutorRequestError(lesson, event);
+    default:
+      return lesson;
+  }
+}
+
+function applyTutorStarted(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+  const guarded = requireTutorQuestion(lesson, event);
+  if (!guarded) return lesson;
+  const { tutorEvent } = guarded;
+  const payload = tutorEvent.payload as TutorStartedPayload;
+  if (payload.questionId !== tutorEvent.questionId) return lesson;
+  const { runtime } = lesson;
+  const now = tutorEvent.timestamp;
+
+  const existing = findTutorAnswerItem(lesson.streamItems, tutorEvent.questionId);
+  // 已完成回答不被过期 started 回退；失败/流式残留重试时先清空半截块（缺陷 A 同源）
+  if (existing?.status === 'complete') return lesson;
+  const base: TutorAnswerItem = existing
+    ? { ...existing, blocks: [], errorMessage: undefined }
+    : {
+        itemId: tutorAnswerItemId(tutorEvent.questionId),
+        type: 'tutor_answer',
+        chapterId: lesson.chapterId,
+        taskId: tutorEvent.taskId,
+        questionId: tutorEvent.questionId,
+        planVersion: tutorEvent.planVersion,
+        // sequence 锚定客户端最新序号：服务端 sequence 按请求重新计数，
+        // 直接用事件序号会把回答排到问题之前
+        sequence: runtime.latestSequence + 1,
+        createdAt: now,
+        status: 'streaming',
+        blocks: [],
+      };
+
+  return {
+    ...lesson,
+    streamItems: upsertItem(lesson.streamItems, { ...base, status: 'streaming' }),
+    runtime: {
+      ...runtime,
+      latestSequence: Math.max(runtime.latestSequence, tutorEvent.sequence, base.sequence),
+      lastActiveAt: now,
+      pendingRequest: {
+        requestId: tutorEvent.requestId,
+        kind: 'tutor',
+        status: 'streaming',
+        attempt:
+          runtime.pendingRequest && runtime.pendingRequest.requestId === tutorEvent.requestId
+            ? runtime.pendingRequest.attempt
+            : (runtime.pendingRequest?.attempt ?? 0) + 1,
+        startedAt:
+          runtime.pendingRequest?.requestId === tutorEvent.requestId
+            ? runtime.pendingRequest.startedAt
+            : now,
+      },
+    },
+    updatedAt: now,
+  };
+}
+
+function applyTutorBlockStarted(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+  const guarded = requireTutorQuestion(lesson, event);
+  if (!guarded) return lesson;
+  const { tutorEvent } = guarded;
+  if (isStaleTutorRequest(lesson, tutorEvent)) return lesson;
+  const payload = tutorEvent.payload as TutorBlockStartedPayload;
+  const answer = findTutorAnswerItem(lesson.streamItems, tutorEvent.questionId);
+  if (!answer || answer.status !== 'streaming') return lesson;
+
+  if (answer.blocks.some((block) => block.blockId === payload.blockId)) {
+    return touchSequence(lesson, tutorEvent);
+  }
+  const nextItem: TutorAnswerItem = {
+    ...answer,
+    blocks: [...answer.blocks, { type: 'markdown', blockId: payload.blockId, markdown: '' }],
+  };
+  return {
+    ...lesson,
+    streamItems: upsertItem(lesson.streamItems, nextItem),
+    runtime: {
+      ...lesson.runtime,
+      latestSequence: Math.max(lesson.runtime.latestSequence, tutorEvent.sequence),
+      lastActiveAt: tutorEvent.timestamp,
+    },
+    updatedAt: tutorEvent.timestamp,
+  };
+}
+
+function applyTutorBlockDelta(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+  const guarded = requireTutorQuestion(lesson, event);
+  if (!guarded) return lesson;
+  const { tutorEvent } = guarded;
+  if (isStaleTutorRequest(lesson, tutorEvent)) return lesson;
+  const payload = tutorEvent.payload as TutorBlockDeltaPayload;
+  const answer = findTutorAnswerItem(lesson.streamItems, tutorEvent.questionId);
+  if (!answer || answer.status !== 'streaming') return lesson;
+
+  const blockIndex = answer.blocks.findIndex((block) => block.blockId === payload.blockId);
+  let blocks: TutorAnswerItem['blocks'];
+  if (blockIndex === -1) {
+    // 块已定型后不匹配 blockId 的增量丢弃；尚无块时容忍缺失的 block_started，
+    // 由首个 delta 建块（与任务流 delta 兜底一致）
+    if (answer.blocks.length > 0) return touchSequence(lesson, tutorEvent);
+    blocks = [{ type: 'markdown', blockId: payload.blockId, markdown: payload.delta }];
+  } else {
+    blocks = [...answer.blocks];
+    blocks[blockIndex] = {
+      ...blocks[blockIndex],
+      markdown: blocks[blockIndex].markdown + payload.delta,
+    };
+  }
+  const nextItem: TutorAnswerItem = { ...answer, blocks };
+  return {
+    ...lesson,
+    streamItems: upsertItem(lesson.streamItems, nextItem),
+    runtime: {
+      ...lesson.runtime,
+      latestSequence: Math.max(lesson.runtime.latestSequence, tutorEvent.sequence),
+      lastActiveAt: tutorEvent.timestamp,
+    },
+    updatedAt: tutorEvent.timestamp,
+  };
+}
+
+function applyTutorBlockCompleted(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+  const guarded = requireTutorQuestion(lesson, event);
+  if (!guarded) return lesson;
+  const { tutorEvent } = guarded;
+  if (isStaleTutorRequest(lesson, tutorEvent)) return lesson;
+  const payload = tutorEvent.payload as TutorBlockCompletedPayload;
+  const answer = findTutorAnswerItem(lesson.streamItems, tutorEvent.questionId);
+  if (!answer || answer.status !== 'streaming') return lesson;
+
+  const block = payload.block;
+  const blockIndex = answer.blocks.findIndex((existing) => existing.blockId === block.blockId);
+  const blocks = [...answer.blocks];
+  if (blockIndex === -1) {
+    blocks.push(block);
+  } else {
+    blocks[blockIndex] = block;
+  }
+  const nextItem: TutorAnswerItem = { ...answer, blocks };
+  return {
+    ...lesson,
+    streamItems: upsertItem(lesson.streamItems, nextItem),
+    runtime: {
+      ...lesson.runtime,
+      latestSequence: Math.max(lesson.runtime.latestSequence, tutorEvent.sequence),
+      lastActiveAt: tutorEvent.timestamp,
+    },
+    updatedAt: tutorEvent.timestamp,
+  };
+}
+
+function applyTutorCompleted(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+  const guarded = requireTutorQuestion(lesson, event);
+  if (!guarded) return lesson;
+  const { tutorEvent, question } = guarded;
+  const payload = tutorEvent.payload as TutorCompletedPayload;
+  if (payload.questionId !== tutorEvent.questionId) return lesson;
+  if (isStaleTutorRequest(lesson, tutorEvent)) return lesson;
+  const { runtime } = lesson;
+  const now = tutorEvent.timestamp;
+
+  const existing = findTutorAnswerItem(lesson.streamItems, tutorEvent.questionId);
+  const answer: TutorAnswerItem = {
+    itemId: tutorAnswerItemId(tutorEvent.questionId),
+    type: 'tutor_answer',
+    chapterId: lesson.chapterId,
+    taskId: tutorEvent.taskId,
+    questionId: tutorEvent.questionId,
+    planVersion: tutorEvent.planVersion,
+    sequence: existing?.sequence ?? runtime.latestSequence + 1,
+    createdAt: existing?.createdAt ?? now,
+    status: 'complete',
+    blocks: payload.blocks,
+    errorMessage: undefined,
+  };
+  const completedQuestion: UserQuestionItem = { ...question, status: 'complete' };
+
+  return {
+    ...lesson,
+    streamItems: upsertItem(upsertItem(lesson.streamItems, answer), completedQuestion),
+    runtime: {
+      ...runtime,
+      latestSequence: Math.max(runtime.latestSequence, tutorEvent.sequence, answer.sequence),
+      lastActiveAt: now,
+      pendingRequest:
+        runtime.pendingRequest && runtime.pendingRequest.requestId === tutorEvent.requestId
+          ? undefined
+          : runtime.pendingRequest,
+    },
+    updatedAt: now,
+  };
+}
+
+/** Tutor 请求错误：回答标记失败（未开始也补失败条目）、问题标记失败但不删除、追加幂等错误通知 */
+function applyTutorRequestError(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+  const guarded = requireTutorQuestion(lesson, event);
+  if (!guarded) return lesson;
+  const { tutorEvent, question } = guarded;
+  if (isStaleTutorRequest(lesson, tutorEvent)) return lesson;
+  const payload = tutorEvent.payload as RequestErrorPayload;
+  const { runtime } = lesson;
+  const now = tutorEvent.timestamp;
+
+  const existing = findTutorAnswerItem(lesson.streamItems, tutorEvent.questionId);
+  const answer: TutorAnswerItem = existing
+    ? { ...existing, status: 'failed', errorMessage: payload.message }
+    : {
+        itemId: tutorAnswerItemId(tutorEvent.questionId),
+        type: 'tutor_answer',
+        chapterId: lesson.chapterId,
+        taskId: tutorEvent.taskId,
+        questionId: tutorEvent.questionId,
+        planVersion: tutorEvent.planVersion,
+        sequence: Math.max(runtime.latestSequence, tutorEvent.sequence) + 1,
+        createdAt: now,
+        status: 'failed',
+        blocks: [],
+        errorMessage: payload.message,
+      };
+  const failedQuestion: UserQuestionItem = { ...question, status: 'failed' };
+
+  // 通知按 eventId 确定性 upsert：重复错误事件不追加重复通知、序号不漂移
+  const noticeItemId = systemNoticeItemId(tutorEvent.eventId);
+  const existingNotice = lesson.streamItems.find((item) => item.itemId === noticeItemId);
+  const noticeSequence =
+    existingNotice?.sequence ?? Math.max(runtime.latestSequence, answer.sequence) + 1;
+  const notice: SystemNoticeItem = {
+    itemId: noticeItemId,
+    type: 'system_notice',
+    chapterId: lesson.chapterId,
+    planVersion: tutorEvent.planVersion,
+    sequence: noticeSequence,
+    createdAt: existingNotice?.createdAt ?? now,
+    status: 'complete',
+    tone: 'error',
+    message: payload.message,
+    code: payload.code,
+  };
+
+  const streamItems = upsertItem(
+    upsertItem(upsertItem(lesson.streamItems, answer), failedQuestion),
+    notice,
+  );
+
+  return {
+    ...lesson,
+    streamItems,
+    runtime: {
+      ...runtime,
+      latestSequence: Math.max(runtime.latestSequence, tutorEvent.sequence, noticeSequence),
+      lastActiveAt: now,
+      pendingRequest:
+        runtime.pendingRequest && runtime.pendingRequest.requestId === tutorEvent.requestId
+          ? { ...runtime.pendingRequest, status: 'failed', errorCode: payload.code }
+          : runtime.pendingRequest,
+    },
+    updatedAt: now,
   };
 }
