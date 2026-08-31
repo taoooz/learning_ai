@@ -7,7 +7,7 @@
 ## 项目信息
 - **项目：** AI Learning（Duolingo 风格 AI 学习产品）
 - **用户：** 中文用户
-- **技术栈：** Next.js, MiniMax API, Tailwind CSS v4, Framer Motion, localStorage
+- **技术栈：** Next.js, LLM API（OpenAI 兼容）, Tailwind CSS v4, Framer Motion, localStorage
 - **已关联Github、Vercel 项目**
 
 ---
@@ -33,9 +33,10 @@
 
 ## 技术注意
 
-### MiniMax API
-- 端点：`https://api.minimaxi.com/v1/chat/completions`
-- 模型：`MiniMax-M2.7`
+### LLM API
+- 服务：OpenAI 兼容，端点 `http://muses-openapi-prod.weizhipin.com/v1`
+- 模型：`muses/deepseek-v4-flash`
+- 环境变量：`LLM_API_KEY` / `LLM_API_BASE` / `LLM_MODEL`（密钥只放 .env* 文件，勿进源码）
 
 ### Tailwind CSS v4
 - 使用 `@import "tailwindcss"`，不支持 `@apply`

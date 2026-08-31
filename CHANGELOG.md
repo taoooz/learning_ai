@@ -1,605 +1,147 @@
 # 项目迭代日志
 
-## 2026-04-20
-
-### 学习小结 Summary 步骤
-
-- 改造学习页 `complete` 阶段 UI，替代简陋的"这一节完成了"卡片
-- 新增 `answerRecords` 状态追踪每道题的答题对错
-- Summary 展示四个信息卡片：关键收获（卡片标题）、练习正确率（进度条动画）、薄弱知识点（答错题目的 concept）、下节预告
-- 所有数据前端计算，不调用 AI，与课程全部完成时的 CourseCelebrationSheet 无冲突
-
-### Prompt 外置为独立模块（借鉴 DeepTutor）
-
-- 新增 `python-agent/prompts/` 目录，将所有硬编码 prompt 从 service 代码中抽离为独立 Python 模块
-- 6 个 prompt 模块：`outline.py`（大纲）、`toc.py`（目录）、`cards.py`（卡片）、`questions.py`（练习题）、`chat.py`（对话）、`memory_refine.py`（记忆精炼）
-- 新增 `prompts/__init__.py` PromptManager：支持 `get_prompt(name, key, **kwargs)` 按需加载 + 模板变量替换 + 内存缓存 + `reload_prompts()` 热更新
-- 改造 6 个 service 文件（outline/toc/cards/questions/chat/memory_refine）使用 `get_prompt()` / `build_prompt()` 代替硬编码 f-string
-- TypeScript 编译通过，Python 模板替换测试通过
-
-### Memory LLM 精炼系统（借鉴 DeepTutor）
-
-- 新增 `learningSummary` 字段到 `MemoryStoreV3`，存储 LLM 生成的学习旅程总结（旅程描述、当前重点、学习者特点、需关注项）
-- 新增 Python Agent `memory/refine` 端点：调用 MiniMax API 分析最近对话和事件，返回结构化洞察（偏好更新、概念修正、学习总结）
-- 新增 Next.js `/api/memory/refine` API 路由代理
-- 新增 `lib/memory/refine.ts`：精炼触发 + 结果应用 + 持久化逻辑
-- 聊天对话完成后自动触发 LLM 精炼（fire-and-forget，不阻塞用户体验），5分钟内不重复精炼
-- Chat 和 Planning prompt 均注入 `learningSummary`，让 AI 能看到用户的学习旅程洞察
-
-### Outline 生成上下文优化
-
-- 前端不再发送全量 `MemoryStoreV3`（含300条 events、200个概念投影等），改为调用 `getPlanningMemoryPayload()` 提取精简 payload（learnerSnapshot + 背景提示 + 必学/可跳过/风险概念 + 最近3门课）
-- Next.js outline route 字段名从 `userMemory` 改为 `planningMemory`
-- Python Agent `build_initial_prompt` 重写：不再只读 `recentRelevantCourses`，而是利用 PlanningMemoryPayload 的全部字段（当前水平、学习目标、可迁移背景、必须覆盖概念、可跳过基础、风险概念、近期课程）
-- Python Agent schema/service/agent 全链路字段名 `user_memory` → `planning_memory`
-
-### Chat 对话上下文优化
-
-- 前端不再发送全量 `userMemory.memoryStore`（MemoryStoreV3）和完整 CourseTree，改为前端直接调用 `getChatMemoryPayload()` 提取精简 ChatMemoryPayload，只传 `courseTopic` 字符串
-- `app/api/chat/route.ts` 简化为纯透传代理，移除 `createMemoryRepository` + `getChatPayload` + `buildChatContext` 的服务端逻辑
-- Prompt 构建从 Next.js `lib/chat-context.ts` 迁移到 Python Agent `services/chat_agent.py` 的 `build_chat_system_prompt()`
-- 前端发送字段从 `course`/`userMemory` 改为 `courseTopic`/`chatMemory`
-
-## 2026-04-17
-
-### 代码架构优化
-
-- 系统课程数据整合：删除 `lib/data/system-courses.ts` 中约 400 行手写简化内容，改为从 `data/system-courses/generated/*.json` 静态导入详细课程内容（AI课 8 cards/节 + 5-7 questions/节，理财课同规格）
-- `lib/data/system-courses.ts` 重构为：从 JSON 加载 lessons，通过 `buildBlueprintFromLessons` 动态构建 `CourseBlueprint`，`createStoredCourseBundleFromBlueprint` 生成完整 bundle
-- 推荐元数据（title/summary/badge/cta）从 `catalog.ts` 内联，避免 data/ 目录的 import
-- 移除 `formatAnswerDisplay` 调试日志
-## 2026-04-13
-
-### Bug 修复
-
-- 修复 Blueprint 卡片渲染后消失的问题：`confirmation` handler 现在会检查 `content` 是否包含完整 `<outline>` 标签，缺失时主动用 blueprint 数据生成，确保 OutlineCard 稳定渲染
-- 修复同标签页重新生成课程时触发 `answer_agent` 422 错误：`CourseContext` 改为仅在 `userMessage` 存在时读取 `sessionStorage` 中的 sessionId，避免旧流的竞态写入导致首次生成走错分支
-- 修复节点内容生成 404：`generateNodeContent` 改为调用新的 `/api/generate/node/cards` 接口，适配架构清理后删除旧 `/api/generate/node` 路由的变更
-- `content_delta` handler 加入 `foundBlueprint` 守卫，避免 blueprint 确认后继续追加纯文本
-- 清理调试代码：移除 `route.ts` 的 `console.log`，`main.py` 的 `answer_outline_agent` 恢复使用 Pydantic schema 校验
-- 修复登录页 `LoginContent` Rules of Hooks 错误：`useEffect` 从条件返回之后移到之前，避免 `isLoading` 为 `true` 时 hooks 数量不一致
-- 修复节点内容生成 404 后 cards 重复请求：`generateNodeContent` 加入 `pendingNodeRequests` Map 做请求去重
-- TOC 目录页恢复流式展示：路由改为 SSE 透传，页面直接消费 `course_name/course_description/node` 事件逐步渲染，搜索阶段展示 thinking 提示
-- 修复 outline 生成时 MiniMax thinking 无限循环：`_do_streaming_call` 新增重复检测，同一 thinking chunk 连续出现 3 次即终止流，防止模型退化
-- 修复 TOC Agent 版流式展示：将 batch 解析改为实时流式解析，Agent 循环中每收到 `content_delta` 即尝试增量提取 courseName/description/nodes 并 yield
-- 优化 TOC 完成后的跳转体验：将内联文字提示改为底部悬浮提示条，带 3 秒倒计时，无需滚动到底部即可感知
-
-### 代码架构优化（四阶段）
-
-**阶段一：P0 架构缺陷修复**
-- 重构 `hooks/useUserMemory.ts`：移除 re-export 桶角色，纯函数和 `getUserMemoryStoreSnapshot` 迁移到 `lib/memory/repository.ts`，删除重复的 `userMemory`/`memoryStore` 返回值
-- 新增 `lib/memory/index.ts` 作为 memory 模块统一导出入口
-- 修复 3 个 API 路由（toc/cards/questions）`request.json()` 在 try-catch 外导致的未捕获异常
-- 邀请码从源码硬编码迁移到 `INVITE_CODES` 环境变量，提取 `isValidInviteCodeFormat()` 共享函数
-- Redis 客户端改为单例复用，避免每次请求创建新连接
-
-**阶段二：消除冗余代码**
-- 删除未使用的 `lib/search.ts`
-- 新增 `lib/python-agent.ts` 统一 Python Agent 代理调用（`callPythonAgent`/`callPythonAgentSSE`），消除 3 个路由的重复 fetch 逻辑
-- 重写 `app/api/recommendations/route.ts`：复用 `callMiniMax` + `parseJSONResponse`，移除未使用 import 和 console.log，降级响应标记 `degraded: true`
-- `RecommendationsModal` 的 `any` 类型改为 `Record<string, any> | null`
-
-**阶段三：组件拆分**
-- 新增 `components/ConfirmModal.tsx`（通用确认弹窗）
-- 新增 `components/CourseCard.tsx`（课程卡片 + 删除菜单交互，含独立 useEffect）
-- 新增 `components/SystemCourseRecommendations.tsx`（空状态推荐区域）
-- `app/page.tsx` 从 406 行降至 218 行
-
-**阶段四：API 规范化**
-- 新增 `lib/api-response.ts` 统一 API 响应格式（`apiSuccess`/`apiError`）
-- `profile/insights` 路由改用统一格式，错误消息改为中文
-
-**阶段五：认证 + 响应格式统一**
-- 新增 `requireAuth()` 函数到 `lib/api-response.ts`，统一 cookie 认证检查
-- `recommendations` 和 `profile/insights` 路由添加 `requireAuth` 认证守卫
-- `user`、`recommendations`、`cards`、`questions` 四个路由全部迁移到 `apiSuccess`/`apiError` 响应格式
-- `cards` 路由错误消息区分 `PythonAgentError` 和普通异常
-
-**阶段六：ChatWidget 组件拆分**
-- 拆分 `ChatWidget`（480 行 → 233 行）为 5 个子组件 + 1 个自定义 hook
-- 新增 `components/ui/chat/AssistantGlyph.tsx`（共享图标组件）
-- 新增 `components/ui/chat/ChatHeader.tsx`（头部区域）
-- 新增 `components/ui/chat/ChatEmptyState.tsx`（空状态欢迎卡片）
-- 新增 `components/ui/chat/ChatThinkingIndicator.tsx`（思考动画指示器）
-- 新增 `components/ui/chat/ChatInputForm.tsx`（输入框 + 发送按钮）
-- 新增 `hooks/useChatSubmit.ts`（SSE 流式请求 + 记忆记录逻辑）
-
-**阶段七：类型文件拆分**
-- 拆分 `types/course.ts`（561 行 → 9 行桶文件 + 6 个领域文件）
-- 新增 `types/visualization.ts`（可视化类型：VisualizationType, TimelineEvent, Visualization）
-- 新增 `types/learning-content.ts`（学习内容：LearningCard, Question, NodeLessonCard, NodeLessonQuestion）
-- 新增 `types/outline.ts`（纲要流程：ClarificationQuestion, OutlineBlueprint, OutlineSSEEvent 等）
-- 新增 `types/user-profile.ts`（用户画像：UserProfile, WorkExperience, Education, LearningInsight）
-- 新增 `types/course-core.ts`（课程结构：CourseTree, CourseBlueprint, NodeLesson, StoredData 等）
-- 新增 `types/memory.ts`（记忆系统：MemoryStoreV3, ConceptState, MemoryEvent 等共 22 个类型）
-- `types/course.ts` 保留为桶文件统一导出，35 个导入文件零改动
-
-**阶段八：CourseContext 精简 + 测试修复**
-- 提取 `CourseContext`（516 行 → 195 行）的 11 个 action 函数到 `hooks/useCourseActions.ts`
-- 新增 `hooks/useCourseActions.ts`：封装所有课程生成/更新/删除逻辑
-- 修复 `tests/course-tree-layout.test.ts`：5 个过时 `useUserMemory` 导入迁移到 `lib/memory/*`
-- 修复 `hasResolvedQuestions` 测试断言与实现不一致的问题
-- 23 个测试全部通过
-
-## 2026-04-09
-
-### Agent 搜索能力推广到 TOC/Cards/Questions 阶段
-
-- 新增 `services/toc_agent.py`：Agent 版 TOC 生成，复用 `build_toc_prompt` 和流式解析逻辑，支持 AI 自动搜索最新课程资料后生成目录
-- 新增 `services/cards_agent.py`：Agent 版 Cards 生成，支持 AI 搜索补充专业知识后生成学习卡片
-- 新增 `services/questions_agent.py`：Agent 版 Questions 生成，支持 AI 搜索后生成更准确的练习题
-- `main.py` 新增 3 个 Agent 路由：`/api/agents/toc/generate_agent`（流式 SSE）、`/api/agents/cards/generate_agent`（JSON）、`/api/agents/questions/generate_agent`（JSON）
-- 所有 Agent 路由保留原有非 Agent 版作为 fallback，前端可按需切换
-- 前端 `app/api/generate/toc/route.ts` 改为转发到 Python Agent，消费 SSE 流提取 complete 事件
-- 前端 `app/api/generate/node/cards/route.ts` 改为转发到 Python Agent，做字段映射（nodeInfo → payload）
-- 前端 `app/api/generate/node/questions/route.ts` 改为转发到 Python Agent，做字段映射（nodeInfo → payload）
-- 前端 CourseContext 无需改动，接口兼容
-
-### Chat 和 Outline Answer 迁移到 Agent + 搜索
-
-- 新增 `services/chat_agent.py`：Agent 版学习对话，AI 自主判断是否需要搜索，输出 MiniMax 兼容 SSE 格式（前端 ChatWidget 零改动）
-- `main.py` 新增 `/api/agents/chat/generate` 路由，`max_iterations=2` 控制延迟
-- 前端 `app/api/chat/route.ts` 改为转发到 Python Agent，pipe SSE 流透传
-- `outline_agent.py` 新增 `stream_answer_with_tools`，多轮澄清问答也支持搜索
-- `main.py` 新增 `/api/agents/outline/answer_agent` 路由
-- 前端 `app/api/agents/outline/route.ts` 的 generate 和 answer 均切到 `_agent` 端点
-- 删除废弃路由 `app/api/generate/outline/route.ts`（前端已全部走 `/api/agents/outline`）
-
-### 代码审查清理
-
-**Python Agent 清理**
-- 删除 `agents/` 目录（LangGraph 实现，未投入使用的废弃代码），将 `OutlineState` 内联到 `outline_service.py`
-- 删除 `mcp/` 目录（旧版 MCP 工具，未被任何代码引用）
-
-**前端废弃代码清理**
-- `lib/minimax.ts`：删除 `callMiniMaxChatStream`、`callMiniMaxWithSearch` 及 4 个搜索辅助函数，移除硬编码调试代码（写 `/tmp/`），353 行精简到 181 行
-- `lib/prompt.ts`：删除 4 个已迁移到 Python Agent 的废弃函数（`buildOutlinePrompt`、`buildTocPrompt`、`buildCardsPrompt`、`buildQuestionsPrompt`）及关联的 `TocCourseBlueprint`、`buildProfileSection`
-- 删除 2 个废弃空壳路由（`/api/generate/route.ts`、`/api/generate/node/route.ts`）
-- `contexts/CourseContext.tsx`：移除 4 个未使用的 import（`CourseBlueprint`、`getStoredDataV2`、`saveCourseBlueprint`、`createMemoryRepository`）
-
-**配置统一**
-- 新增 `lib/agent-config.ts`，统一管理 `PYTHON_AGENT_URL`，5 个代理路由文件不再各自重复定义
-
-**安全修复**
-- `app/api/auth/set-cookie/route.ts`：cookie 改为 `httpOnly: true`（前端无 JS 读取需求，仅 middleware 服务端读取）
-
-## 2026-03-27
-
-### 课程目录排布与标题截断修复
-
-- 课程目录页不再使用固定节点步长，改为按节点按钮与标题卡片的估算整体高度动态排布，长标题节点会自动为后续节点让出更多纵向空间
-- 课程目录节点从绝对定位改为真实文档流纵向排布，节点卡片会按实际渲染高度自然撑开，避免首个长标题把第二个节点挤住
-- 课程树容器高度同步改为按真实布局结果计算，避免内容变高后底部被截断或滚动定位偏差
-- 学习页头部标题改回统一单行省略策略，超长节点标题现在会显示 `...`，不再把顶部栏位和右侧进度挤乱
-- 目录节点标题现在统一最多显示 3 行，超出内容会省略；当前学习节点也按同一行高规则参与布局估算，避免首个长标题与下一节点重叠
-- 课程目录进一步收紧了统一节距，节点行高和列表间隙同步下调，避免整体路径过松
-- 课程节点卡片从固定高度改为最小高度，标题区域会按内容自适应撑开，避免文字被截断或短标题产生多余留白
-- 为课程树布局补上回归测试，覆盖“长标题节点会拉开后续间距”的场景，并验证相关测试通过
-
-## 2026-03-26
-
-### 课程生成环境变量兜底
-
-- 修复本地课程生成在服务端拿不到 `MINIMAX_API_KEY` 时直接 500 的问题，`lib/minimax.ts` 现在会先读 `process.env`，缺失时再回退读取 `.env.local`
-- 为 MiniMax 请求补上 env 文件回退测试，覆盖“进程环境为空但 `.env.local` 已配置”的场景
-- 清理了未完成改动留下的类型错误和无效测试依赖，恢复 `npm test`、`npm run typecheck` 通过
-
-### 轻量课程目录蓝图
-
-- 课程目录生成从“直接产出完整 `CourseBlueprint`”收缩为“先生成轻量课程目录大纲，再由本地映射成 `blueprint`”，把评估与个性化细节下放到节点生成阶段
-- `CourseBlueprint` 的目录阶段字段收缩为最小必要集；`assessmentTargetIds / personalizationHooks / coverage / generationNotes` 现在允许缺省，并在运行时自动补默认值
-- `course-validator` 改为适配轻量目录蓝图，不再要求目录阶段就完成 remediation/coverage 明细
-- `/api/generate` 的超时与 token 预算从重型试验值收回，当前真实目录生成失败时会在约 26 秒内返回可重试超时，而不是等待 40 到 100 秒
-
-### 生成超时兜底与 MiniMax 请求收紧
-
-- 追查生成超时后确认 `MiniMax` 非流式请求会把 `<think>` 推理内容塞进 `message.content`，现在统一为 JSON 生成请求增加 `reasoning_split: true`，并同时发送 `max_tokens + max_completion_tokens`
-- 课程与节点生成主链路不再默认走搜索增强，节点主请求也移除了“新 lesson prompt + 旧 fallback prompt”拼接，减少无效 token 和响应时延
-- 为课程与节点主生成增加“两段式尝试”：第一次保留主要质量预算，超时后会中断请求并用更紧的 token 预算重试，而不是傻等满 45 秒
-- `refine` 结果现在会强制再次通过 validator，不再把“修了但仍不合法”的 blueprint / lesson 直接放行
-- 课程与节点在自动重试后若仍超时，不再静默返回降级课程，而是向前端返回可重试错误；生成页和学习页会明确提示用户手动重试
-- `smoke:generation` 回到“真实失败即失败”的策略，用于持续观察供应侧时延，不再用本地 fallback 掩盖真实超时
-- 为 `max_tokens/max_completion_tokens/reasoning_split` 请求参数与超时重试链路补上回归测试，并再次验证 `npm test` 与 `npm run typecheck` 通过
-
-### 首页系统推荐课程
-
-- 新增两门系统预生成课程：“人人都该懂的 AI 课”和“普通人应该如何理财”，在用户还没有任何课程时会出现在首页下方作为引导入口
-- 推荐课程不会默认混入“最近学习”列表，而是先以单独样式的推荐卡展示；点击后才会写入本地课程列表并直接进入第一节学习页
-- 去掉无课程状态下额外的“第一次开始”引导卡，首页空态仅保留系统推荐课程；一旦用户已有自己的课程，推荐区也会一并隐藏
-- 存储层新增系统课程推荐元数据与预置 `StoredCourseBundle`，保证推荐课可以离线直开，不依赖实时生成
-- 为系统推荐课程补上回归测试，验证推荐项数量正确且点击后会真正写入课程存储
-
-### Course Blueprint / Memory V3 首轮落地
-
-- 新增 `CourseBlueprint / NodeLesson / StoredCourseBundle / MemoryStoreV3` 核心类型，并补上 `lib/course-blueprint.ts` 作为课程中间层与运行时视图之间的转换入口
-- 课程生成 API 改为优先生成 `CourseBlueprint`，并在服务端增加 `validateCourseBlueprint + refine` 双阶段生成；节点生成 API 改为输出 `NodeLesson`，同时校验 `coveredConceptIds / targetConceptId / cardId`
-- 本地存储底层切换为 `ai-learning-data-v2` 形态，真相源变成 `blueprint + treeView + lessons`，前端仍消费水合后的 `CourseTree`，降低页面改造面
-- `CourseContext / ProgressContext / 学习页` 接通新链路：课程保存改走 blueprint，节点内容保存改走 lesson，答题回写优先使用 `targetConceptId`
-- `memory repository / useUserMemory / aggregator` 新增 `MemoryStoreV3` 读写与事件投影能力，课程生成、聊天、答题、节点完成会开始写入 event-sourced memory，并由 v3 projections 直接支撑 planning payload
-- 聊天历史在“被截断”和“会话关闭 / 页面隐藏”两种场景下都会主动产出摘要，不再只在 7 天过期时才整理 memory
-- 新增 `npm run smoke:generation`，可直接用真实 MiniMax 跑 `CourseBlueprint -> NodeLesson -> validator` 的 smoke 验证，并为该脚本补上阶段日志与超时保护
-- 课程生成与节点生成 API 现已输出统一 `generationMeta`，记录 `prompt_build / primary_model / parse / validate / refine` 各阶段耗时、是否触发 refine，以及 timeout/runtime 错误归因
-- 新增 blueprint / lesson / validator / memory v3 回归测试，补上 `tsx` 测试入口，并验证 `npm test` 与 `npm run typecheck` 通过
-
-### Memory V2 与双层 Retrieval
-
-- 为课程生成引入 `MemoryStoreV2` 迁移函数，在不破坏现有 localStorage 数据的前提下补上 `stableFacts / signals / topicStates / conceptStates / summaries`
-- 新增 `getPlanningMemoryPayload` 与 `getTeachingMemoryPayload`，把“课程目录规划”和“节点内容生成”的记忆检索拆成两条链路
-- 课程目录 prompt 改为优先消费结构化 `课程规划输入`，节点内容 prompt 改为优先消费结构化 `节点教学输入`
-- 课程与节点生成 API 现在会先构建 retrieval payload，再交给模型，减少直接拼接原始 memory 带来的噪声和 token 浪费
-- 修正学习完成时写入 learning record 的 topic 维度错误，避免把节点标题误写成课程主题，导致后续规划取不到相关学习记录
-- 为 v2 迁移、planning/teaching payload、结构化 prompt 注入补上回归测试，并验证 TypeScript 静态检查通过
-- 新增 `normalizeConceptKey`，将“外部工具调用/工具调用”“workflow 编排/工作流编排”等近义概念收敛为同一 canonical key
-- 聊天提问与困惑信号开始以 signal-first 方式写入 `userMemoryV2`，后续课程目录和节点生成会直接消费这些 v2 信号
-- 聊天 API 现已基于 `getChatMemoryPayload` 构建结构化 `用户记忆重点`，优先注入当前节点风险概念、最近相关提问和可用类比，减少旧版 chat memory 噪声
-- 新增 `lib/memory/repository.ts`，把 localStorage 读写、v1->v2 迁移与 planning/teaching/chat payload 构建收敛到统一仓储出口，降低后续迁服务端时的耦合成本
-- 新增 `lib/memory/aggregator.ts`，将概念归一化、v1->v2 聚合、planning/teaching/chat retrieval 纯函数从 `hooks/useUserMemory.ts` 抽离，避免 repository 反向依赖 hook
-- 新增 `lib/memory/aliases.ts`，用可维护 alias 字典替代纯硬编码规则，补上 `tool call / 调用工具时机` 等近义表达归一化，并新增对应回归测试
-- `app/api/generate`、`app/api/generate/node`、`app/api/chat` 现已直接依赖 `memory repository` 构建 payload，不再从服务端链路反向依赖 hook 导出
-- 重构 assessment 信号更新规则：单次答题不再直接写入高置信度，`mastery/gap` 的 confidence 会随证据数与表现一致性递增，连续答对也会真实降低 gap 权重
-- 聊天记忆开始沉淀正向信号：新增解释偏好抽取与“已掌握概念”记录，`teaching/chat payload` 现会把偏好解释方式一并注入，减少长期只存困惑带来的负偏置
-- 对话过期摘要从占位文本升级为结构化摘要，保留主要问题、未解概念、偏好解释方式、已用解释路径、解决状态与待跟进点，提升长对话压缩后的可检索价值
-- 修复测试链路里的运行时类型导入问题，并为聊天偏好抽取、已掌握概念识别、结构化摘要与正向 memory 回流补上回归测试
-
-## 2026-03-25
-
-### 工程优化
-
-- 为聊天助手添加 `max_tokens: 1500` 限制，加快回复速度
-
-### 课程目录路径化实验合并
-
-- 将课程目录页合并为新的路径式结构，节点整体左移并沿轻弯路径排布，标题统一放到节点右侧
-- 当前待学习节点改为暖橙主焦点，并用更贴合产品语气的实心星标表达“从这里开始”
-- 已完成、下一节、待解锁三类节点重新收敛为更轻的暖白体系，移除多余投影，减少外部游戏模板感
-- 目录页头部同步收敛为更简短的“课程目录 / 学习路径”结构，与学习页标题栏语言更一致
-- 补上目录页轻动效：节点按顺序淡入，当前节点增加克制的呼吸光圈，卡片 hover / press 反馈更明确
-- 将目录布局和初次滚动定位抽成可测试的纯函数，并新增对应测试，避免后续再把路径排布与进入位置改坏
-- 移除课程目录页底部重复的“打开课程助理”入口，只保留右下角统一浮钮，减少主路径干扰
-- 重做课程助理入口与浮窗样式：浮钮改为暖白悬浮胶囊，弹窗改成更贴合产品的轻科技学习陪伴层，消息气泡与思考态也同步收敛
-- 进一步收敛助理视觉强度：将聊天区高饱和橙色统一降为暖杏色，减少刺眼感并贴合首页/学习页色系
-- 优化消息正文基础样式：强化段落与标题层级、列表与表格可读性，让助理回答更像结构化学习内容
-- 空态改为顶部固定引导卡，不再伪装首条消息；一旦出现真实消息，引导卡自动隐藏
-- 修复助理消息表格显示：去掉会裁切四角内容的圆角容器，改为可横向滚动且完整展示
-- 助理主题色再收敛为更轻的蓝青系，并将入口图标升级为“对话 + 星光”样式，提升 AI 助理识别与灵动感
-- 助理入口进一步收轻为紧凑图标按钮，去掉厚重白边胶囊；同时移除打开弹窗时的自动聚焦，避免输入区初始出现突兀高亮框
-- 调整助理弹窗头部图标与“学习助理”文案的对齐关系，并统一入口与弹窗内的角色标识连续性
-- 为助理入口补入极轻的呼吸式微动效，强化角色感但不打扰页面主内容
-- 助理回答区继续向“教学内容卡”收敛：增加轻量标签、弱化边框生硬感，引用区也改为更贴近 AI 助理色系的提示样式
-- 空态提示卡加入轻微进入动效，并进一步拉齐与真实回答区的视觉节奏，让首次使用和后续对话衔接更自然
-
-### 课程内容可视化
-
-- 新增图表组件 MermaidChart，支持 Mermaid 语法渲染
-- 新增辅助学习组件：对比表、时间线、图例、要点列表
-- LearningCard 支持渲染可视化内容
-- AI 生成内容时可自动判断并添加图表或辅助元素
-- 复杂图表支持全屏放大查看
-
-### 澄清问题优化
-
-- 澄清问题优先使用选择题（单选/多选）
-- 仅在无法设计选项时使用填空题
-
-## 2026-03-24
-
-### 单节学习页重构 - 从翻卡改为单步闯关流
-
-- 学习页从“先看卡片、再统一做题”重构为单步推进流程，一次只展示一个任务
-- 前端把 `cards + questions` 编排成统一步骤流，让学习节奏变成“讲一点、答一点、继续往前”
-- 顶部改为章节级进度条和步骤计数，弱化内容浏览感，强化闯关推进感
-- 理解步骤、答题步骤和完成反馈统一到同一个主舞台中，不再切换成完全不同的页面结构
-- 答题反馈改为页内即时反馈，正确与错误都在当前步骤内闭环，不用跳层或弹重 modal
-- 一节完成后改为轻量完成态，直接进入下一节或返回学习路线，减少“结算页”感
-- 继续收轻学习页：步骤标签并入卡片头部、内容卡片从顶部开始排布、主按钮固定在底部区域
-- 压缩学习页 titlebar 高度，并重做选择题选中态与对错反馈，减少界面重量和跳出感
-- 进一步增强学习页细节识别：步骤标签改为更清晰的小胶囊，选项序号固定为 A/B/C/D，不再误取中文首字
-- 选择题提交后的正确/错误序号改为对应语义色文字，避免白字压在浅色底上看不清
-- 完成页图标加入更活泼的暖橙 + 冷蓝层次，并删去重复完成文案
-- 在学习页局部加入极轻的渐隐网格与标题标记感，延续首页设计语言但不打断沉浸式学习
-- 学习页顶部导航重做为更完整的悬浮导航条，把返回、标题和进度整合进同一层，减少零碎感
-- 学习页正文进一步提高清晰度：正文与选项文字加深，步骤标签底色微增，答对/答错语义色更明确
-- 网格点缀收回到学习卡片左上局部，头部导航继续降权，避免和正文主舞台抢注意力
-- 学习页标题高亮改为测量最后一行文字位置后再绘制，顶部标题、知识标题和题目标题在多行时都会只贴最后一行
-- 继续微调学习页头部与正文间距：标题栏离屏幕上边缘略增，头部与正文卡片的距离略缩短
-- 学习页收尾继续优化：使用 `100svh` 和底部安全区留白修正内容较少时的轻微可滚动问题
-- 课程目录页顶部标题同步到学习页的合并式标题条，把返回和标题收进同一浮层，同时保留进度数字但不增加进度条
-
-### 课程加载页优化 - 从系统等待切换为创作加载态
-
-- 课程加载页重做为更有期待感的创作中体验，不再使用普通图标 + 点点加载
-- 采用中央“正在成形的课程画布”作为主视觉，配合光点、局部网格和缓慢浮动动效，减少长等待带来的焦虑
-- 使用循环切换的过程文案传递“理解目标、整理顺序、生成目录、打磨节奏”的预期，不使用伪精确进度条
-- 新增临时验收入口 `/review/loading`，可单独查看加载页效果而不依赖真实生成流程
-- 放慢循环文案切换节奏，并补上返回按钮，避免用户在中间页失去退路
-- 修正加载页在内容较少时仍可轻微滚动的问题，按屏幕高度和底部安全区重新约束布局
-- 弱化主视觉上方不自然的淡蓝矩形高光，让中心画布和背景过渡更自然
-- 将课程画布左上角的淡蓝网格裁切进卡片范围内，避免超出卡片边界
-- 澄清问题页统一到同一套“生成中 / 创作中”语言，保留返回路径、暖白创作画布和更有品牌感的表单容器
-- 新增临时验收入口 `/review/clarification`，可单独查看澄清问题页效果而不依赖真实生成流程
-- 澄清问题页进一步改为单问题步进式，一次只回答一个问题，减少表单感并保持生成流程的沉浸体验
-- 澄清问题页继续收轻为自上而下的单列节奏：进度信息并入头部文案区，问题区只保留一个核心卡片，底部主按钮对齐学习页的置底结构，且第一题不再出现“上一步”
-- 移除澄清页顶部“问题 x，共 x 个”提示，改为在题卡内部使用与学习页一致的轻量标签来提示“问题 x”
-
-### 学习进度修复 - 完成状态同步到课程节点
-
-- 修复章节学完后只解锁下一节、但当前节点未同步标记为 `completed` 的问题
-- 首页课程进度、目录页顶部百分比和章节状态现在会随学习完成即时更新
-- 解锁下一节时增加状态保护，仅在下一节仍为 `locked` 时切换为 `available`
-
-### 课程目录页优化 - 从列表切换为学习路线图
-
-**路线图优先**
-- 课程目录页重做为“学习路线图”结构，而不是普通章节列表
-- 页首进一步收敛为双悬浮胶囊：左侧独立返回，右侧只保留课程名和百分比进度
-- 移除路线说明区重复 CTA，让顶部导航和当前节点承担唯一主路径
-
-**节点层级优化**
-- 章节节点区分为“现在学习 / 下一节 / 已完成 / 待解锁”四种状态
-- 节点列表加入更明确的纵向路径线和状态原点，待解锁改为独立锁图标表达
-- 去掉“现在学习 / 待解锁 / x张卡片”等低价值字段，只保留标题和下一步提示
-- 当前节点强化为最显眼的橙色焦点，已完成节点明显降权为近白轻卡，避免完成态抢主路径
-
-**进入位置优化**
-- 进入课程目录页时，会直接把“当前待学习”节点定位到视口中上部，而不是先落到页首再滚动过去
-- 当当前节点接近顶部或底部时保持自然边界，不强行把内容挤出可视区域
-
-**节点对齐修正**
-- 统一左侧路径线、状态圆点与锁图标的中心轴，修复视觉未对齐问题
-- 待解锁锁图标补白底，避免直接压在线上导致识别不清
-- 已完成状态圆点减轻描边与投影，当前节点卡片压低阴影，整体层级更稳定
-- 卡片内数字块、标题区和右侧箭头改为垂直居中对齐
-- 继续统一目录页与学习链路风格：顶部结构收成一条轻标题栏 + 一段简短引导，移除“列表页”式标题堆叠
-- 当前待学习节点进一步成为唯一主焦点，已完成与已解锁节点明显降权，待解锁卡同步加强底色和识别度，避免像异常态
-- 路线节点卡补入局部淡网格、暖白渐层和更轻的右侧箭头容器，让目录页更接近学习页、加载页与澄清页的同套语言
-- 课程目录页与学习页的顶部导航抽成统一组件，固定在视口顶部，统一相对位置、返回按钮、标题容器和右侧信息胶囊的骨架
-- 目录页头部第二行“从某一节开始继续”引导先移除，为后续放课程概述信息预留位置；当前待学习节点的投影和光圈同步收轻，避免过度跳出
-- 修正学习页被共用导航联动影响的布局：重新拉开 titlebar 与正文卡片的距离，并恢复底部主按钮稳定居底
-
-### 个人信息页优化 - 从普通设置表单改为学习画像页
-
-- 个人信息页改为“学习画像”方向：顶部轻导航 + 说明文案 + 分组信息区 + 底部置底保存，更贴近整条课程生成链路
-- 目标岗位、姓名、工作经历、教育经历重新整理为更清晰的内容分组，强调“这些信息会怎样影响课程生成”
-- 工作经历和教育经历改为更轻但更完整的卡片结构，补入局部网格、轻暖白底与统一输入样式，减少原先普通后台表单感
-- 底部保存区改为固定置底，明确告诉用户保存后会影响后续生成的新课程
-- 修正已有用户画像为空数组时的展示，至少保留一条空白经历，避免页面打开后无输入入口
-- 继续收紧个人信息页文案，移除分组下多余说明，并补足底部滚动留白，避免最后一张卡片被固定保存区遮挡
-
-### 首页一致性优化 - 接入新生成链路并统一顶部壳层
-
-- 首页提交生成时改为先进入 `/generate`，直接复用已定稿的“生成中 / 澄清问题”链路，不再出现旧的阻塞式 spinner 蒙层
-- 首页顶部改为与课程页更一致的轻量固定壳层，把品牌入口与“个人信息”统一收进同一层级
-- 首页主说明文案补回更稳定的写作引导，减少提示完全依赖 placeholder 带来的信息丢失
-- 最近学习卡片的三点菜单补上点空白关闭和 `Esc` 关闭，避免浮层残留
-- 进一步修正首页细节：把“个人信息”恢复成更明确的按钮外观，主说明文案收回单行，并为无课程用户补上更完整的首次生成引导区
-- 首页右上角入口继续收轻为更接近标签的按钮样式，并在用户尚未填写任何资料时改为“完善个人信息”
-- 首页右上角入口继续收细：去掉描边，改为浅灰底，图标与文字同步缩小一点
-
-### 首页改版 - 强化首屏转化与继续学习
-
-**首页结构重排**
-- 首页从“主题贴纸墙”改为“主输入区 + 继续学习 + 灵感主题 + 最近探索”的信息层级
-- 首屏主标题改为结果导向表达，强调“生成学习路径”而不是泛泛“探索”
-- 输入区增加明确按钮文案、示例主题 chips，降低首次输入成本
-
-**二次收敛优化**
-- 移除“灵感主题”独立大区块，只保留输入区下方的示例主题胶囊，避免发现新主题的引导重复
-- 顶部新课程输入区改为更开放的多行描述输入，鼓励用户写出目标、背景和具体问题
-- 收紧首页重复文案，减少“生成路径 / 探索主题”之间的信息竞争
-- 优化输入区微文案和示例主题，明确提示用户补充“目标 / 基础 / 具体问题”三类信息
-- 继续减轻头部重量：移除外层大卡包裹，改为输入框 + 主按钮 + 少量胶囊引导
-- 收紧头部标题与说明文案，减少重复表达
-- 将输入标签并入标题下方说明，只保留一条更完整的引导文案
-- 胶囊引导改为单条引用式示例文案，减少组件感和重复提示
-- 进一步收紧头部文案，placeholder 与示例统一改为“想学什么 / 目前基础 / 要解决的问题”
-- 头部标题加入更克制的渐变高光和线性装饰，补一点 AI 科技感
-- 进一步增强标题区与背景光效的联动，并将示例文案切换为 Agent / AI 产品经理场景
-- 去掉头部 AI 标签，改弱标题渐变以保证识读，同时把示例文案显式标记为“示例：”
-- 头部进一步改为 Signal Glass 方向：输入层加入玻璃质感、高光边缘和冷色光晕，主按钮改为更有 AI 工具感的深色发光按钮
-- 头部新增局部渐隐网格纹理，让科技感更多来自结构而不是单纯光效
-- 去掉输入框顶部蓝色高光边，保留玻璃层次感，避免视觉过脏
-- 适度扩大头部局部网格的可见范围，让科技纹理更容易被感知
-- 加强标题下的马克笔标记感，并微增输入层高度，让按钮与输入区关系更紧但仍保持独立 CTA
-- 统一首页视觉语言：保留网格与标记线，弱化玻璃感输入框；课程卡色系统一收敛到暖色家族，操作区按钮与三点交互也同步统一
-- 继续优化头部可读性：降低输入层透明感，移除焦点时多余黑线，并把示例文案内嵌进输入区
-- 右上角入口改为更完整的“个人信息”胶囊按钮，提升完成度
-- 标题说明文案调整为“告诉我 你想学什么，以及为什么要学它”
-- 继续收轻头部：移除输入框 placeholder，仅保留顶部示例；缩短输入层高度，并弱化“个人信息”入口的视觉重量
-- 输入框示例改回真正的 placeholder 行为，用户输入时从首行开始；主按钮文案改为“生成专属学习计划”，“最近探索”改为“最近学习”
-
-**回访用户体验优化**
-- “继续学习”能力并入“最近探索”卡片体系，所有已开始课程都用统一卡片承接
-- 移除“查看课程结构”次按钮，只保留继续学习主动作
-- 每张课程卡仅保留一个核心进度数字，去掉重复进度条信息
-- 最近探索卡片加入轮换配色，让课程之间更容易区分和扫读
-- 删除操作保留在二级菜单中，减少首页管理感
-- 课程卡底部改为“继续学习 + 管理”同一行，信息层级更稳定
-- 课程副文案改为“下一节：xxx”，让回访用户更清楚点进去会看到什么
-- 三点管理入口改为纯图标，菜单拉宽避免操作文案换行
-- 首张课程卡做轻微放大和按钮加重，增强“优先继续”感
-- 三点菜单浮层增加更清晰的阴影、描边和模糊分层，避免与课程卡背景融为一体
-- 三点菜单与触发按钮拉开更多垂直距离，强化“浮层”感
-- 删除确认弹窗主按钮改为显式错误色，避免在当前主题下不够显眼
-
-**视觉与可读性优化**
-- 推荐主题从 4 列小贴纸改为 2 列灵感卡片，提高中文可读性与点击意愿
-- 统一首页卡片圆角、阴影和层级，减少“玩具感”，提升正式产品质感
-- 修正全局中文字体策略，移除首页被 Inter 干扰的中英混排问题
-- 补充 `shadow-float` 设计 token，保证菜单和弹窗层次稳定
-
-**文案与反馈优化**
-- 加载态文案改为“正在为你拆解学习路径”，更贴近用户预期
-- 删除确认文案补充影响说明，降低误操作焦虑
-- 主要按钮、菜单按钮补充更明确的无障碍语义
-
-### 课程生成优化 - 基于用户画像的智能难度匹配
-
-**用户洞察改进 (buildProfileInsightPrompt)**
-- 改为事实性总结，不做推测延伸
-- 示例："用过 docker" → "在项目中使用过 Docker"（而非"有容器化基础"）
-- 每份工作总结：做什么产品、有什么技能、什么领域
-
-**两级课程生成机制**
-- 第一级：AI 分析用户洞察与主题关联度
-  - 洞察足够 → 直接生成课程
-  - 洞察不足但关键 → 返回 1-3 个澄清问题
-- 第二级：用户回答澄清问题后 → 重新生成课程
-
-**课程结构决策指南**
-- 节点数量：5-15 个（按主题复杂度）
-- 卡片数量：每节点 8-12 张（按内容深度）
-- 新增 difficultySummary 字段描述课程难度
-
-**相关文件**
-- `types/course.ts` - 新增 ClarificationQuestion、ClarificationAnswer、CourseTreeResponse 类型
-- `lib/prompt.ts` - 更新 buildProfileInsightPrompt 和 buildCourseTreePrompt
-- `app/api/generate/route.ts` - 支持两种响应格式
-- `contexts/CourseContext.tsx` - 新增澄清状态管理
-- `app/generate/page.tsx` - 新增澄清问题 UI
-
-### 课程生成搜索增强
-
-- 新增 `lib/search.ts` 搜索功能封装
-- 新增多轮调用 `callMiniMaxWithSearch` 支持最多3次调用
-- Prompt 增加搜索判断逻辑（判断搜索 → 搜索结果注入 → 页面详情注入）
-- 搜索使用 `search-engine-tool` npm 包
-- 超时保护：API 30s、搜索 15s/关键词、页面 10s/页
-- 降级处理：失败时继续使用已有知识生成
-
-### 首页 UI 优化 - 从"效率工具"到"好奇驱动"
-
-**设计理念转型**
-- 从"学习工具"转为"学习玩具"，降低学习门槛和任务感
-- 文案从"学习"改为"探索"，"开始学习"改为"今天想探索什么？"
-
-**探索主题卡片化**
-- 8个主题卡片采用网格布局（4列），每卡片有专属配色和emoji
-- 卡片点击直接触发生成，无需先填充输入框
-- 主题包括：Python入门、日本历史、UI设计、机器学习、天文奥秘、生态系统、心理学、金融入门
-
-**视觉风格增强**
-- 增加柔和渐变背景装饰（blur-3xl动效）
-- 卡片采用轻拟物风格，带阴影和悬浮动效
-- 移除工具型灰色感，提升趣味性
-
-**交互模式优化**
-- 输入框弱化：圆角search样式，placeholder改为"或者搜索任何主题..."
-- 有课程时输入框降低opacity（但hover恢复）
-- 推荐主题点击即触发生成，简化操作路径
-
-**课程列表转型**
-- "我的课程"改为"已探索内容"
-- 从垂直列表改为横向滚动卡片（类似App Store展示风格）
-- 删除按钮移入三个点菜单，减少管理信息
-- 文案改为"点击继续"而非进度信息
-
-**情绪设计**
-- 加载动画增加"好奇之旅即将开始 ✨"文案
-- 删除确认弹窗改为更轻松的"确定删除吗？"语气
-- 整体氛围从"目标驱动"转为"好奇驱动"
-
-**交互细节优化**
-- 搜索框增加右侧搜索按钮，提升移动端可点击性
-- 课程列表从横向滚动改为纵向排列，充分利用垂直空间
-- 课程卡片信息更完整：显示百分比进度和节数
-
-### 全页面 UI 统一优化
-
-**生成页 (generate)**
-- 增加书籍图标 bounce 动画
-- 文案改为"正在生成你的好奇之旅..."、"AI 正在编织知识网络"
-- 三个点加载动画替代 spinner
-
-**课程详情页 (course/[courseId])**
-- 进度展示改为渐变背景卡片，百分比突出显示
-- 章节标题改为小写"章节"
-- 课程节点卡片优化：圆角 2xl，渐变背景状态图标，完成状态带绿色渐变
-
-**学习页 (learn/[nodeIndex])**
-- 加载状态增加书籍图标和引导文案
-- 完成页增加星星庆祝动画
-- 文案从"课程完成"改为"探索完成"
-- 按钮文案从"下一节"改为"继续下一章"
-
-**学习页组件效率优化**
-- LearningCard：移除多余嵌套卡片，改为单层 surface 卡片，去掉 shadow
-- LearningCardStack：移除固定高度，改为 min-h-[50vh]，内容自适应页面
-- LearningCard：移除 overflow-auto，内容自然展开，不需要滚动查看
-- QuizQuestion：移除外层卡片包装，progress 直接展示，按钮与内容紧凑排列
-
-**学习页头部固定**
-- NavHeader 改为 sticky 定位，滚动时保持固定
-- 内容区域独立滚动，头部不受影响
-- 添加 backdrop-blur 效果增强视觉层次
-
-**个人资料页窄屏优化**
-- 工作经历的公司与岗位输入框改为堆叠布局（窄屏）/并排（宽屏）
-- 添加 min-w-0 防止 flex 子元素溢出
-
-**个人资料页 (profile)**
-- 背景装饰统一
-- 输入框改为 2xl 圆角，border-2
-- 删除按钮改为 SVG 图标
-- 保存按钮统一使用橙色阴影
-
-**组件统一**
-- LoadingSpinner：边框改为 design system 颜色
-- RetryModal：警告图标居中，backdrop-blur，按钮样式统一
-- LearningCardStack：进度条改为渐变，移除 ProgressBar 依赖
-- QuizQuestion：标签改为圆角药丸样式，文案改为"答错啦"
-
-**页面效率优化**
-- 个人资料页：移除所有 section 卡片包裹，输入框直接展示，使用 margin 分隔
-- 课程详情页：移除进度渐变卡片，改为 inline 进度条展示
-- CourseTree 组件：移除内置 ProgressBar，进度由父组件控制
-
----
+## 2026-08-27
+
+### chat 历史去重（省 token）
+- 症状：chat 每次请求双份嵌入历史——system prompt 嵌入最近 6 条活跃消息，messages 数组又带全量 ≤10 条（每次最多重复约 2000 字符）；且前端不过滤过期消息，过期原文与摘要一并重复发送
+- 修复：`useChatSubmit.ts` 发送前过滤 `isExpired` 消息（过期消息已凝结为 conversationSummary 单独传递），记忆精炼路径同步排除过期消息；`chat_agent.py` 的 `build_chat_system_prompt` 去掉 `chat_history` 参数与近期历史段，只保留过期对话摘要段（改名「更早的对话摘要」）；`main.py` 调用同步精简
+
+### questions 补齐输出字段（concept/dimension/difficulty/cardId）
+- 根因：`prompts/questions.py` 的 JSON 输出示例不含这些字段，模型照示例输出导致字段省略，前端答题掌握度追踪（`recordQuestionAttempt`）静默失效
+- 修复：输出格式段增加字段说明 + JSON 示例补齐四字段；`questions_service.py` 的 cards_section 暴露卡片真实 id（无 id 时回退 card-N），防止 cardId 幻觉；Agent/非 Agent 版复用同一 prompt 构建，两条路径均覆盖
+- 验证：tsc 全绿、py_compile 通过、pytest 5/5、prompt 渲染冒烟（花括号转义、卡片 id 暴露、chat 新签名）通过，Python Agent 已重启
+
+## 2026-08-26（压缩归档）
+
+### LLM 切换（MiniMax → muses/deepseek-v4-flash）
+- 环境变量统一 `LLM_API_KEY`/`LLM_API_BASE`/`LLM_MODEL`；TS（`lib/minimax.ts`）与 Python（`lib/minimax.py`/`minimax_agent.py`）客户端切换新服务，流式 thinking 走 `delta.reasoning_content`
+- 修复隐患：`memory_refine_service.py` 引用未导入的 `MiniMaxClient()` 致 NameError 被 except 静默吞掉，记忆精炼长期静默失败
+
+### A. 统一鉴权
+- 新增 `lib/auth.ts`（本地/Redis 双模式）；set-cookie 改 httpOnly；8 个原无鉴权 API 路由全补 `requireAuth`；`/api/user` 改从 cookie 读身份
+
+### B. 存储可靠性 + 失败显式化
+- 存储写失败显式化（`saveStoredDataV2` 唯一咽喉 + `StorageWarningToast`）；引入 `isHydrated` 消除无限 loading
+- TOC 失败可见+可重试（三级兜底）；`minimax.py` 新增 JSON 括号平衡检查，截断输出显式抛错
+- `useChatSubmit` SSE 解析改行缓冲 + `decode({stream:true})` 防中文乱码；空目录转错误态；练习题生成失败非阻断横幅 + 手动重试
+
+### C. 个性化数据透传
+- 客户端补齐 `userProfile` + `planningPayload` 透传；节点内容/卡片/题目统一改 `buildNodeInfoPayload` 发全量节点信息 + 画像（原仅发 4 字段）
+
+### 收尾：密钥泄露清理
+- `python-agent/.env` 移出 git 跟踪，`.env.example` 真实密钥换占位符；⚠️ 密钥已存在 git 历史建议轮换
+
+### E. 死代码清理
+- 删除 prisma 全链路、`lib/chat-context.ts`、`api-schemas.ts`、`observability.ts`、`lib/prompt/` 目录、悬空 `smoke:generation`；保留 `scripts/` 本地脚本；修复长期红测试；53/53 全绿
+
+### F. 新模型 JSON 输出适配（全链路冒烟通过）
+- 建 Python 3.12 `python-agent/.venv`；outline/TOC/cards/questions/chat/memory 全链路冒烟通过（直连 + 经代理两种方式）
+- 修复三类 JSON 问题：模板花括号转义不匹配、字符串内未转义双引号（新增 `_repair_unescaped_quotes` 兜底）、裸控制字符（`strict=False`）
+- 修复原生二进制隔离问题（lightningcss 等，`xattr -d com.apple.quarantine`）
+
+### G. 修复 outline 澄清问题无限循环
+- 根因：`outline_agent.py` 保存 `llm_messages` 时从未写入本轮 AI 回复 → 模型看不到自己问过什么 → 反复提问
+- 修复：双向均 append assistant 回复 + 提取公共 `_stream_agent_sse`；双保险 `MAX_QUESTIONS=3` 硬上限强制收敛
+
+### H. 修复 estimatedLevel 中英文值不匹配 + _agent 审计
+- 根因：prompt 约定中文水平词但下游按英文键查表 → 查空回退，难度显示与个性化注入失效
+- 修复：`outline_service.py` 新增 `normalize_level` 在 `parse_content_blocks` 单点归一化；前端 `LEVEL_LABELS` 查表并留中文别名兼容旧数据
+- 审计结论：chat/toc/cards/questions agent 无历史丢失回归、失败路径均已显式化；发现 chat 历史双份嵌入 → 见 2026-08-27
+
+## 2026-06-07
+
+### 第一阶段课程生成优化方案
+
+- 收窄 `docs/architecture/课程生成与用户画像策略-v2.md` 的第一阶段范围：先优化课程生成和节点学习体验，用户画像更新后置
+- 明确单节点内容从“知识卡片 + 问题卡片”改为“多个流式学习任务 + 用户主动继续”
+- 参考 Hyperlearn 的课程质量原则，补充需求解构、单元聚类、认知负荷控制、任务动词化、梯度排序、内容模板匹配等设计约束
+- 明确第一阶段暂不生成练习题，不做答题正确率和新画像字段更新
+- 确认第一阶段交互极简化：逐任务流式生成，任务间只有“继续”按钮；不做再讲、深入、单独总结页
+- 更新迁移路径：优先落地 `NodeTaskPlan`、任务内容流式生成、最后任务收束与下一节引导、节点完成状态
+- 确认 `NodeTaskPlan` 只包含任务骨架（taskId/taskTitle/taskDescription），任务内容独立流式生成；目录生成后预热首个节点任务计划，上个节点首个任务生成完后预热下个节点任务计划
+
+## 2026-05-31
+
+### 课程生成与用户画像策略 V2
+
+- 新增 `docs/architecture/课程生成与用户画像策略-v2.md`，整理课程生成从“章节卡片内容”升级为“章节目标簇 + 动态任务计划 + 每步理解检查”的产品与架构方案
+- 明确 V2 课程体验：短步推进、每步停顿、答错补救、答对提速、困惑换讲法、目录稳定
+- 设计新的生成链路：需求解构 → 课程蓝图 → 目标簇章节 → 章节任务计划 → 任务即时生成 → Check-in → 画像更新
+- 补充用户画像五层模型：Stable Profile、Knowledge Profile、Learning Behavior Profile、Explanation Preference、Recovery Profile
+- 给出 P0-P5 渐进迁移路径，建议先验证章节任务流，再重构 Agent 与 Prompt 协议
+
+## 2026-04-20（压缩）
+
+- 学习页 complete 阶段新增"学习小结"：关键收获/练习正确率/薄弱知识点/下节预告四卡片，纯前端计算不调 AI
+- Prompt 全部外置到 `python-agent/prompts/`（outline/toc/cards/questions/chat/memory_refine 6 模块 + PromptManager：按需加载、模板变量、缓存、`reload_prompts()` 热更新），6 个 service 去硬编码 f-string
+- 新增 Memory LLM 精炼系统：`MemoryStoreV3.learningSummary` + Python Agent `memory/refine` 端点 + `/api/memory/refine` 代理；聊天完成后自动触发（fire-and-forget、5 分钟去重），精炼结果注入 Chat/Planning prompt
+- Outline/Chat 上下文瘦身：前端改发 `getPlanningMemoryPayload()`/`getChatMemoryPayload()` 精简 payload，不再发全量 MemoryStoreV3；字段 `user_memory` → `planning_memory`；chat prompt 构建迁到 Python Agent `chat_agent.py`
+
+## 2026-04-17（压缩）
+
+- 系统课程数据整合：删除约 400 行手写简化内容，改为从 `data/system-courses/generated/*.json` 静态导入；`lib/data/system-courses.ts` 重构为从 JSON 加载 lessons 并动态构建 `CourseBlueprint`
+
+## 2026-04-13（压缩）
+
+**批量 Bug 修复**
+- 修复：Blueprint 卡片渲染后消失、同标签页重新生成触发 answer_agent 422（sessionId 竞态）、节点内容 404 及 cards 重复请求（`pendingNodeRequests` 去重）、LoginContent Rules of Hooks 错误
+- TOC 目录页恢复流式展示（SSE 透传 + 实时增量解析）；修复 outline thinking 无限循环（同一 chunk 连续 3 次即终止流）；TOC 完成跳转改为底部悬浮提示条（3 秒倒计时）
+
+**代码架构优化（八阶段）**
+- P0 修复：`useUserMemory` 去桶重构、3 个路由补异常捕获、邀请码迁 `INVITE_CODES` 环境变量、Redis 客户端单例
+- 消冗余：新增 `lib/python-agent.ts` 统一代理调用；重写 recommendations 路由（复用 `callMiniMax`，降级标记 `degraded`）
+- 组件拆分：ConfirmModal/CourseCard/SystemCourseRecommendations 独立；`app/page.tsx` 406→218 行
+- API 规范化：新增 `lib/api-response.ts`（`apiSuccess`/`apiError`/`requireAuth`），4 个路由统一迁移
+- ChatWidget 拆分（480→233 行）为 5 子组件 + `useChatSubmit` hook；`types/course.ts`（561 行）拆为 6 个领域文件，35 处导入零改动
+- CourseContext 提取 11 个 action 到 `hooks/useCourseActions.ts`；23 测试全绿
+
+## 2026-04-09（压缩）
+
+- Agent 搜索能力推广：新增 `toc_agent`/`cards_agent`/`questions_agent` 及 3 个 `_agent` 路由，原非 Agent 版保留为 fallback；前端 toc/cards/questions 路由全部转发 Python Agent
+- Chat 迁移到 `chat_agent.py`（AI 自主判断是否搜索，输出兼容 SSE 格式，前端零改动）；outline answer 也支持搜索；删除废弃 `/api/generate/outline` 路由
+- 清理：删除废弃 `agents/`（LangGraph）、`mcp/` 目录；`lib/minimax.ts` 353→181 行；`lib/prompt.ts` 删 4 个已迁移函数及 2 个空壳路由
+- 新增 `lib/agent-config.ts` 统一 `PYTHON_AGENT_URL`；set-cookie 改 httpOnly
+
+## 2026-03-27（压缩）
+
+- 课程目录从固定节点步长改为按估算高度动态排布 + 真实文档流纵向布局；节点卡片改最小高度自适应；标题统一最多 3 行；补长标题场景回归测试
+
+## 2026-03-26（压缩）
+
+- 课程生成环境变量兜底：服务端拿不到 key 时回退读 `.env.local`，补 env 文件回退测试
+- 轻量课程目录蓝图：目录阶段只产轻量大纲再映射成 blueprint，评估与个性化下放到节点阶段；生成超时从重型试验值收回（约 26 秒可重试超时）
+- 生成超时兜底：JSON 请求统一 `reasoning_split` + 双 token 参数（MiniMax 时代 workaround）；两段式重试（超时后收紧 token 预算）；refine 结果强制再校验；失败返回可重试错误而非静默降级
+- 首页新增两门系统推荐课程（AI/理财，预生成可离线直开），不混入最近学习列表
+- Course Blueprint / Memory V3 首轮落地：新增 `CourseBlueprint/NodeLesson/StoredCourseBundle/MemoryStoreV3` 类型；存储切 `ai-learning-data-v2`；validator + refine 双阶段；memory 改 event-sourced + projections；新增 `smoke:generation` 与 `generationMeta`
+- Memory V2 与双层 Retrieval：planning/teaching/chat 三条 payload 链路；`normalizeConceptKey` + alias 字典概念归一；`lib/memory/repository.ts` + `aggregator.ts` 统一出口；assessment 信号改证据累积式置信度；正向信号沉淀（解释偏好、已掌握概念）
+
+## 2026-03-25（压缩）
+
+- 聊天助手加 `max_tokens: 1500` 提速
+- 课程目录合并为路径式结构（节点左移轻弯路径、标题右侧、暖橙焦点 + 四态节点体系），布局抽成可测纯函数
+- 课程内容可视化：MermaidChart + 对比表/时间线/图例/要点组件，AI 生成时自动判断添加，复杂图表支持全屏
+- 澄清问题优先选择题（单选/多选），仅无法设计选项时用填空
+- 课程助理浮窗多轮视觉收敛（暖白胶囊 → 轻科技学习陪伴层，空态引导卡、表格可横向滚动）
+
+## 2026-03-24（压缩）
+
+- 单节学习页重构为单步闯关流：cards+questions 编排统一步骤流，顶部进度条 + 步骤计数，反馈在同一主舞台即时闭环
+- 课程加载页重做为"创作中"体验（中央画布主视觉 + 循环文案，不用伪进度条）；澄清问题改单问题步进式
+- 修复章节学完后当前节点未标记 completed 的问题
+- 目录页重做为"学习路线图"：四态节点 + 纵向路径线，待学习节点进视口定位
+- 个人信息页改"学习画像"方向；首页重排信息层级；课程生成支持画像驱动难度匹配（洞察足够直接生成，不足问 1-3 个澄清问题）+ 搜索增强（最多 3 轮，超时降级）
 
 ## 2026-03-23
 
-### 设计焕新
-- **全页面 CapWords 化**：首页、课程详情页、学习页、生成页、个人资料页全部统一设计系统
-- **学习页**：完成页用 SVG 橙色勾选图标替代 emoji，统一按钮和配色
-- **Quiz 组件**：题目卡、配色、按钮全部 CapWords 化
-- **重试弹窗**：图标居中设计，按钮样式统一
-- **资料页**：表单输入、删除按钮全部 SVG 化
-- 配色：#1c3344（主色）、#778089（次色）、#f97316（强调）、#fcfcfa（背景）
-- 移除渐变和模糊效果，采用简洁现代的视觉风格
-- 节点状态使用 SVG 图标替代 emoji
-- **设计系统抽离**：全局 CSS 变量定义完整设计 Token，Tailwind 配置使用 CSS 变量
-- **移动端适配**：按钮/链接最小触摸区域 44px，支持 prefers-reduced-motion
+### 设计焕新 / 性能 / 功能 / 修复（压缩归档）
 
-### 性能优化
-- 简化课程树结构，移除 description 字段，API 响应更快
-- Prompt 工程优化，限制卡片内容在 200 字以内
-- 课程生成耗时从 ~67s 优化至 ~34-41s
-
-### 功能增强
-- 用户画像功能：支持目标岗位、工作经历、教育背景
-- 学习洞察机制：AI 分析用户背景提升内容个性化
-- 历史课程列表：首页显示已生成课程及进度
-- 课程节点预加载：进入学习页时后台预加载下一节
-
-### 问题修复
-- JSON 解析：处理 AI 返回的嵌套括号和 Markdown 特殊字符
-- 练习题答案校验：正确提取选项标识符（如 "A. xxx" -> "A"）
-- 节点解锁逻辑：完成后正确解锁下一节点
-- 界面文本全部汉化
-
-### 技术改进
-- react-markdown 支持卡片内容和 Quiz 题目渲染
-- useRef 稳定 CourseContext 回调，避免不必要的重渲染
-- Next.js 4.x 兼容性修复
-- 课程生成接口显式接收用户画像与 userMemory，服务端不再错误依赖 localStorage
-- 新增 mastery 记忆沉淀：答题结果会更新 conceptMastery 与 knowledgeGaps
-- 节点内容生成加入课程上下文、薄弱点和已掌握项约束，题目输出 concept/dimension/difficulty/cardId
-- 聊天助理开始使用对话摘要、常问问题和待强化概念，memory 主题归档更稳定
-- 课程树 prompt 新增“可跳过/必须补/类比落点/节点依赖”内部规划约束，减少看似个性化但结构发飘的问题
-- 节点内容 prompt 注入整门课程结构与前置依赖，降低节与节之间的重复讲解和断层感
-- 聊天 memory 提取从通用疑问词命中改为“明确困惑信号”判断，降低把正常提问误记成薄弱点的噪声
-- 聊天 memory 新增来源可信度字段（chat vs assessment），答题错误会覆盖聊天推断的低置信度薄弱点
-- 聊天兴趣、问题模式、薄弱点新增自动衰减逻辑，旧聊天信号会随时间变轻，避免长期污染用户画像
-- 课程生成新增 memory 相关性分层：高相关高置信度信号才影响主干结构，弱相关背景只用于类比，无关 memory 直接忽略
+- 设计焕新：全页面统一 CapWords 风格（首页/课程详情/学习页/生成页/资料页），图标按钮 SVG 化，移除渐变与模糊，全局 CSS 变量设计 Token，移动端触摸区域 ≥44px
+- 性能：课程树移除 description 字段、卡片内容限 200 字内，课程生成 ~67s 优化至 ~34-41s
+- 功能增强：用户画像（目标岗位/工作经历/教育背景）、AI 学习洞察、历史课程列表、节点内容预加载下一节
+- 修复：JSON 嵌套括号与 Markdown 特殊字符解析、练习题答案标识提取（"A. xxx" → "A"）、节点解锁逻辑、界面文本全汉化
+- 技术：react-markdown 渲染卡片与题目；课程生成显式接收画像与 userMemory，服务端不再依赖 localStorage；答题沉淀 mastery 记忆（conceptMastery/knowledgeGaps）；节点生成注入课程上下文、薄弱点与已掌握项，题目输出 concept/dimension/difficulty/cardId
+- 记忆降噪：聊天 memory 提取改“明确困惑信号”判断、新增来源可信度（chat vs assessment，答题错误覆盖低置信聊天推断）、旧信号自动衰减、相关性分层（高相关高置信才影响主干，弱相关只做类比，无关忽略）
+- Prompt 约束：课程树新增“可跳过/必须补/类比落点/节点依赖”规划约束；节点内容注入整门课程结构与前置依赖，减少重复讲解和断层
 
 ---
 
