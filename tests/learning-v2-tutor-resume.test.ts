@@ -9,6 +9,8 @@ import assert from 'node:assert/strict';
 
 import { appendUserQuestion, applyLearningSseEvent, createInitialNodeLessonV2 } from '../lib/learning-v2/reducers';
 import { normalizeTutorRuntimeForResume } from '../lib/learning-v2/resume';
+import { prepareTutorBoot } from '../lib/learning-v2/tutor-orchestration';
+import { createChapterLearningHarness } from './helpers/tutor-harness';
 
 import type {
   ChapterPlan,
@@ -141,13 +143,24 @@ function tutorCompletedEvent(questionId: string, markdown: string, sequence: num
 /** 任务 1 完成、边界提问后流式回答进行中被刷新的夹具（经真实归约器构造） */
 function makeLessonWithStreamingTutor(): NodeLessonV2 {
   let lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+  // 真实时序：先 task_started（planning→learning），task_completed 才能推进到边界
+  lesson = applyLearningSseEvent(
+    lesson,
+    makeEvent({
+      type: 'task_started',
+      taskId: 'task-1',
+      sequence: 1,
+      requestId: 'req-task-1',
+      payload: { taskId: 'task-1', title: 'ETag' },
+    }),
+  );
   lesson = applyLearningSseEvent(
     lesson,
     taskCompletedEvent(
       'task-1',
       'ETag',
       [{ type: 'markdown', blockId: 'b1', markdown: 'ETag 是资源的版本指纹。' }],
-      1,
+      2,
     ),
   );
   lesson = appendUserQuestion(
@@ -315,4 +328,96 @@ test('主任务请求在途时只归一 Tutor 回答，不动主任务状态', (
   assert.equal(result.lesson.runtime.currentTaskStatus, 'streaming', '主任务状态原封不动');
   assert.equal(result.lesson.streamItems.find((i) => i.itemId === 'ta:q-1')?.status, 'pending');
   assert.equal(result.lesson.streamItems.find((i) => i.itemId === 'ta:q-2')?.status, 'pending');
+});
+
+// ---- Task 6：刷新恢复接线（prepareTutorBoot + 编排层 harness） ----
+
+test('prepareTutorBoot：归一结果需落盘，一次性自动重试标记正确', () => {
+  const prepared = prepareTutorBoot(lessonWithStreamingTutor, NOW + 10);
+  assert.equal(prepared.persisted, true, '归一改变了容器，启动时需落盘');
+  assert.equal(prepared.shouldAutoRetry, true);
+  assert.ok(prepared.lesson);
+  assert.equal(prepared.lesson.streamItems.find((i) => i.itemId === 'ta:q-1')?.status, 'pending');
+
+  // 一次性重试标记随归一消耗：再次准备不再自动重试
+  const again = prepareTutorBoot(prepared.lesson, NOW + 20);
+  assert.equal(again.shouldAutoRetry, false, '第二次刷新不再自动重试');
+});
+
+test('prepareTutorBoot：无可归一内容返回原引用不落盘；空容器安全', () => {
+  const lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+  const prepared = prepareTutorBoot(lesson, NOW + 10);
+  assert.equal(prepared.lesson, lesson, '原样返回');
+  assert.equal(prepared.persisted, false, '跳过冗余落盘');
+  assert.equal(prepared.shouldAutoRetry, false);
+
+  const empty = prepareTutorBoot(null, NOW);
+  assert.equal(empty.lesson, null);
+  assert.equal(empty.persisted, false);
+  assert.equal(empty.shouldAutoRetry, false);
+});
+
+test('刷新恢复：被中断的 Tutor 自动重试一次，不影响主任务状态', async () => {
+  const prepared = prepareTutorBoot(lessonWithStreamingTutor, NOW + 10);
+  assert.ok(prepared.lesson);
+  const harness = createChapterLearningHarness({ lesson: prepared.lesson });
+  assert.equal(harness.phase, 'boundary');
+  harness.resumeFromBoot(prepared.shouldAutoRetry);
+  assert.equal(harness.tutorRequests, 1, '自动重试只发一次请求');
+  assert.equal(harness.tutorBodies[0].question.questionId, 'q-1');
+  assert.equal(harness.tutorBodies[0].courseId, 'course-1');
+
+  // 归一后死请求为 failed，重试的新 requestId 能正常建流且 attempt 升到 2
+  await harness.emitTutorStarted();
+  assert.equal(harness.lesson.runtime.pendingRequest?.kind, 'tutor');
+  assert.equal(harness.lesson.runtime.pendingRequest?.status, 'streaming');
+  assert.equal(harness.lesson.runtime.pendingRequest?.attempt, 2, '再次刷新不再自动重试的守卫依据');
+  assert.deepEqual(harness.lesson.runtime.completedTaskIds, ['task-1'], '主任务完成列表不受影响');
+
+  await harness.emitTutorCompleted('重试后完成的回答');
+  assert.equal(harness.phase, 'boundary', '重试完成后仍停在边界');
+  assert.equal(harness.lesson.streamItems.find((i) => i.itemId === 'ta:q-1')?.status, 'complete');
+});
+
+test('刷新恢复：无 pendingRequest 的已提交未答问题走边界兜底派发', async () => {
+  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+  lesson = applyLearningSseEvent(
+    lesson,
+    makeEvent({
+      type: 'task_started',
+      taskId: 'task-1',
+      sequence: 1,
+      requestId: 'req-task-1',
+      payload: { taskId: 'task-1', title: 'ETag' },
+    }),
+  );
+  lesson = applyLearningSseEvent(
+    lesson,
+    taskCompletedEvent('task-1', 'ETag', [{ type: 'markdown', blockId: 'b1', markdown: 'ETag 是资源的版本指纹。' }], 2),
+  );
+  lesson = appendUserQuestion(lesson, { taskId: 'task-1', questionId: 'q-9', text: '304 为什么没有正文？' }, NOW + 1);
+
+  const prepared = prepareTutorBoot(lesson, NOW + 10);
+  assert.equal(prepared.shouldAutoRetry, false, '无被中断的 Tutor 请求 → 无自动重试标记');
+  assert.equal(prepared.persisted, false, '无归一内容 → 不冗余落盘');
+  assert.ok(prepared.lesson);
+
+  const harness = createChapterLearningHarness({ lesson: prepared.lesson });
+  assert.equal(harness.phase, 'boundary');
+  harness.resumeFromBoot(prepared.shouldAutoRetry);
+  assert.equal(harness.tutorRequests, 1, '边界空闲兜底派发启动最早问题');
+  assert.equal(harness.tutorBodies[0].question.questionId, 'q-9');
+});
+
+test('刷新恢复：主任务重启时 Tutor 问题不抢先启动，等任务完成后自动回答', async () => {
+  // 流式相位（主线恢复为流式中）：队列里有问题也不启动 Tutor，等任务完成再派发
+  const harness = createChapterLearningHarness({ phase: 'streaming' });
+  harness.submitTutorQuestion('304 为什么没有正文？');
+  assert.equal(harness.tutorRequests, 0);
+  const prepared = prepareTutorBoot(harness.lesson, NOW + 10);
+  assert.equal(prepared.shouldAutoRetry, false);
+  harness.resumeFromBoot(prepared.shouldAutoRetry);
+  assert.equal(harness.tutorRequests, 0, '非边界相位不启动 Tutor');
+  harness.emitTaskCompleted();
+  assert.equal(harness.tutorRequests, 1, '任务完成后队列兜底启动');
 });

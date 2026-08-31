@@ -12,6 +12,9 @@ export type EngagementEventType =
   | 'prefetch_hit' // 边界继续时命中预取缓存（零等待）
   | 'prefetch_missed' // 边界继续时未命中预取（无缓存/在途/版本不匹配）
   | 'recap_completed' // 章节 Recap 完成（含本地兜底）
+  | 'tutor_question_submitted' // P2 流内答疑：用户提交问题（含入队与立即回答）
+  | 'tutor_answer_completed' // P2 流内答疑：回答完成终态
+  | 'tutor_answer_failed' // P2 流内答疑：回答失败终态（含本地合成失败）
   | 'exited'; // 离开章节学习页（卸载）
 
 export interface EngagementEvent {

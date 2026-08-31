@@ -2,6 +2,16 @@
 
 ## 2026-09-01
 
+### V2 P2 流内答疑：接入 useChapterLearning 双流编排（Task 6）
+- 新增 `lib/learning-v2/tutor-orchestration.ts` 编排层：提交/自动派发/重试/恢复/失效决策全部抽为可测单元（纯函数 + `TutorStreamOrchestrator`），hook 只做薄接线；相位推导 `deriveChapterPhase` 抽出与测试同源
+- 双流隔离：Tutor 持独立代际计数 + 独立 AbortController + 忙闲标志，与主任务流互不取消；章节卸载/切换两者一并作废，中断回答归一为 pending（同刷新恢复语义）
+- 行为契约：流中提问只入队（问题立即入流 + 立即落盘，不走节流）；边界提问立即启动；任务完成（含预取重放路径）自动回答最早一题；终态后不推进主线、相位不变，队列有题且处于边界则串接下一题；失败只经显式 `retryTutor` 重试
+- 守卫与兜底：事件先比对 courseId 再归约（其余守卫在归约器）；流读取异常/无终态结束沿用 STREAM_FAILED_LOCAL 模式本地合成 `request_error`，防 pending 永久停留 streaming
+- 刷新恢复：初始化 `prepareTutorBoot` 归一（原引用时跳过冗余落盘）；被中断请求自动重试一次（attempt 守卫防循环），无 pendingRequest 的已提交问题走边界空闲兜底派发
+- hook 新增同步镜像（与 reducer 归约路径一致，commit 统一入口）：消除 dispatch 批处理导致的过期读（快速连续提问丢更新、任务完成后队列读旧容器）
+- 参与信号新增 3 类：`tutor_question_submitted`/`tutor_answer_completed`/`tutor_answer_failed`；hook 返回扩展 `submitTutorQuestion`/`retryTutor`/`tutorState`/`isTutorBusy`，既有字段不变
+- 验证：TS 218/218 绿（新增编排决策与行为契约 26 项，含简报基线两用例）、`tsc --noEmit` 干净、lint 0 errors（21 warnings 与基线持平）
+
 ### V2 P2 流内答疑：Tutor 请求契约补齐 courseId（Task 4 审查裁决）
 - 设计文档要求 Tutor 事件写入前守卫包含 courseId，裁决扩展请求契约携带该字段（普通请求字段，不进入幂等键格式）：`InlineTutorRequestPayload`/`buildInlineTutorContext` 增加 `courseId`，Python `InlineTutorRequest` 同步增字段（`extra='forbid'` 风格不变），事件外壳 `courseId` 由空串改为回填请求真实值
 - 幂等键格式、prompt、main.py 路由、V1 均未改动；客户端守卫接入留待后续 hook 任务

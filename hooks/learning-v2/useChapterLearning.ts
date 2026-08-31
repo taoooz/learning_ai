@@ -4,16 +4,21 @@
 // V2 章节学习核心循环：计划生成 → 逐任务流式 → 边界停顿 → 继续 → 完成章节
 // P1b 扩展：单任务预取（纯内存缓存，绑定 planId+planVersion+taskId，§6.1）；
 // 章节完成流异步化（Recap 请求 → 本地兜底 → 归档压缩 → 解锁下一章，§6.1.1/§7）
+// P2 扩展：流内答疑双流编排（设计文档 §3/§4/§5）——提问提交/排队/自动派发/重试/刷新恢复
 // 状态事实来源是 NodeLessonV2.runtime（reducer 纯函数推进），hook 只负责
 // 请求编排、节流落盘与竞态守卫（代际计数 + AbortController + 幂等注册表）
+// 双流隔离（§3.1）：主任务流持有 generationRef/abortRef；Tutor 由
+// TutorStreamOrchestrator 持有独立代际与 abort。Tutor 请求不取消主任务流，
+// 主任务流也不取消 Tutor；章节卸载/切换时两者一并作废。
 
-import { useCallback, useEffect, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import type {
   ChapterPlan,
   ChapterRecap,
   CourseBlueprintV2,
   LearningSseEvent,
   NodeLessonV2,
+  TutorAnswerItem,
 } from '@/types/learning-v2';
 import {
   appendSystemNotice,
@@ -41,15 +46,16 @@ import {
 } from '@/lib/learning-v2/prefetch';
 import { archiveCompletedLesson } from '@/lib/learning-v2/archive';
 import { buildLocalFallbackRecap } from '@/lib/learning-v2/recap';
+import { countUnansweredTutorQuestions, TUTOR_AUTO_WINDOW_LIMIT } from '@/lib/learning-v2/tutor-queue';
+import {
+  deriveChapterPhase,
+  prepareTutorBoot,
+  TutorStreamOrchestrator,
+  type ChapterPhaseName,
+} from '@/lib/learning-v2/tutor-orchestration';
 
-export type ChapterPhase =
-  | 'planning' // 正在生成章节计划
-  | 'generating' // 任务请求已发出，等待首个事件
-  | 'streaming' // 任务流式生成中
-  | 'boundary' // 任务边界：等用户点「继续」或「重新生成」
-  | 'completing' // 章节收尾中
-  | 'completed' // 章节已完成
-  | 'plan_failed'; // 计划生成失败，可重试
+/** 章节相位（与编排层 ChapterPhaseName 同源） */
+export type ChapterPhase = ChapterPhaseName;
 
 interface HookState {
   lesson: NodeLessonV2 | null;
@@ -61,22 +67,35 @@ type HookAction =
   | { type: 'PLANNING' }
   | { type: 'PLAN_READY'; lesson: NodeLessonV2 }
   | { type: 'PLAN_FAILED'; message: string }
-  | { type: 'TASK_STARTING'; taskId: string }
+  | { type: 'TASK_STARTING'; taskId: string; now: number }
   | { type: 'SSE_EVENT'; event: LearningSseEvent }
-  | { type: 'STREAM_FAILED_LOCAL'; message: string; code?: string }
+  | { type: 'STREAM_FAILED_LOCAL'; message: string; code?: string; now: number }
   | { type: 'CHAPTER_COMPLETING'; lesson: NodeLessonV2 }
-  | { type: 'COMPLETED'; lesson: NodeLessonV2 };
+  | { type: 'COMPLETED'; lesson: NodeLessonV2 }
+  // Tutor 编排层预归约容器写回（LESSON_PATCH 只用于 Tutor 流，任务流仍走事件归约）
+  | { type: 'LESSON_PATCH'; lesson: NodeLessonV2 };
 
-function derivePhase(lesson: NodeLessonV2, prev: ChapterPhase): ChapterPhase {
-  const { runtime } = lesson;
-  if (runtime.status === 'completed') return 'completed';
-  if (runtime.status === 'completing') return 'completing';
-  if (runtime.currentTaskStatus === 'failed') return 'boundary';
-  if (runtime.status === 'awaiting_user' && runtime.currentTaskStatus === 'awaiting_user') {
-    return 'boundary';
-  }
-  if (runtime.currentTaskStatus === 'streaming') return 'streaming';
-  return prev;
+/** TASK_STARTING 的容器级归约（reducer 与同步镜像共用，保证两侧完全一致） */
+function lessonAfterTaskStarting(lesson: NodeLessonV2, taskId: string, now: number): NodeLessonV2 {
+  const transitioned = transitionTask(lesson.runtime, 'generating', now);
+  const runtime = transitioned.ok
+    ? transitioned.runtime
+    : { ...lesson.runtime, currentTaskStatus: 'generating' as const, lastActiveAt: now };
+  return { ...lesson, runtime: { ...runtime, currentTaskId: taskId }, updatedAt: now };
+}
+
+/** STREAM_FAILED_LOCAL 的容器级归约：传输层失败本地合成（任务流既有模式） */
+function lessonAfterStreamFailure(
+  lesson: NodeLessonV2,
+  message: string,
+  code: string | undefined,
+  now: number,
+): NodeLessonV2 {
+  const transitioned = transitionTask(lesson.runtime, 'failed', now);
+  const runtime = transitioned.ok
+    ? transitioned.runtime
+    : { ...lesson.runtime, currentTaskStatus: 'failed' as const, lastActiveAt: now };
+  return appendSystemNotice({ ...lesson, runtime }, { tone: 'error', message, code }, now);
 }
 
 function reducer(state: HookState, action: HookAction): HookState {
@@ -89,39 +108,20 @@ function reducer(state: HookState, action: HookAction): HookState {
       return { ...state, phase: 'plan_failed', planError: action.message };
     case 'TASK_STARTING': {
       if (!state.lesson) return state;
-      const now = Date.now();
-      const transitioned = transitionTask(state.lesson.runtime, 'generating', now);
-      const runtime = transitioned.ok
-        ? transitioned.runtime
-        : { ...state.lesson.runtime, currentTaskStatus: 'generating' as const, lastActiveAt: now };
       return {
         ...state,
         phase: 'generating',
-        lesson: {
-          ...state.lesson,
-          runtime: { ...runtime, currentTaskId: action.taskId },
-          updatedAt: now,
-        },
+        lesson: lessonAfterTaskStarting(state.lesson, action.taskId, action.now),
       };
     }
     case 'SSE_EVENT': {
       if (!state.lesson) return state;
       const lesson = applyLearningSseEvent(state.lesson, action.event);
-      return { ...state, lesson, phase: derivePhase(lesson, state.phase) };
+      return { ...state, lesson, phase: deriveChapterPhase(lesson, state.phase) };
     }
     case 'STREAM_FAILED_LOCAL': {
-      // 传输层失败（HTTP 错误/流中断）：reducer 侧无对应 SSE 事件，本地合成失败态
       if (!state.lesson) return state;
-      const now = Date.now();
-      const transitioned = transitionTask(state.lesson.runtime, 'failed', now);
-      const runtime = transitioned.ok
-        ? transitioned.runtime
-        : { ...state.lesson.runtime, currentTaskStatus: 'failed' as const, lastActiveAt: now };
-      const lesson = appendSystemNotice(
-        { ...state.lesson, runtime },
-        { tone: 'error', message: action.message, code: action.code },
-        now,
-      );
+      const lesson = lessonAfterStreamFailure(state.lesson, action.message, action.code, action.now);
       return { ...state, lesson, phase: 'boundary' };
     }
     case 'CHAPTER_COMPLETING':
@@ -129,8 +129,63 @@ function reducer(state: HookState, action: HookAction): HookState {
       return { ...state, lesson: action.lesson, phase: 'completing' };
     case 'COMPLETED':
       return { lesson: action.lesson, phase: 'completed', planError: null };
+    case 'LESSON_PATCH':
+      return { ...state, lesson: action.lesson, phase: deriveChapterPhase(action.lesson, state.phase) };
     default:
       return state;
+  }
+}
+
+/**
+ * 容器同步镜像归约：与 reducer 的容器归约路径完全一致。
+ * React 的 dispatch 是异步批处理的，回调里在 dispatch 之后立刻读 state 会拿
+ * 到旧值（快速连续提问丢更新、任务完成后队列派发读到旧容器）。镜像由 commit
+ * 同步更新，供编排决策与请求构造读取；渲染仍以 React state 为准。
+ */
+function mirrorLesson(current: NodeLessonV2 | null, action: HookAction): NodeLessonV2 | null {
+  switch (action.type) {
+    case 'PLAN_READY':
+    case 'CHAPTER_COMPLETING':
+    case 'COMPLETED':
+    case 'LESSON_PATCH':
+      return action.lesson;
+    case 'TASK_STARTING':
+      return current ? lessonAfterTaskStarting(current, action.taskId, action.now) : current;
+    case 'SSE_EVENT':
+      return current ? applyLearningSseEvent(current, action.event) : current;
+    case 'STREAM_FAILED_LOCAL':
+      return current ? lessonAfterStreamFailure(current, action.message, action.code, action.now) : current;
+    default:
+      return current;
+  }
+}
+
+/** 相位同步镜像：与 reducer 各分支的相位推导一致 */
+function mirrorPhase(
+  action: HookAction,
+  lesson: NodeLessonV2 | null,
+  prev: ChapterPhase,
+): ChapterPhase {
+  switch (action.type) {
+    case 'PLANNING':
+      return 'planning';
+    case 'PLAN_READY':
+      return 'generating';
+    case 'PLAN_FAILED':
+      return 'plan_failed';
+    case 'TASK_STARTING':
+      return 'generating';
+    case 'STREAM_FAILED_LOCAL':
+      return 'boundary';
+    case 'CHAPTER_COMPLETING':
+      return 'completing';
+    case 'COMPLETED':
+      return 'completed';
+    case 'SSE_EVENT':
+    case 'LESSON_PATCH':
+      return lesson ? deriveChapterPhase(lesson, prev) : prev;
+    default:
+      return prev;
   }
 }
 
@@ -138,6 +193,18 @@ interface UseChapterLearningArgs {
   courseId: string;
   chapterId: string;
   blueprint: CourseBlueprintV2;
+}
+
+/** Tutor UI 最小状态（P2 设计文档 §4）：忙闲、排队数、失败信息 */
+export interface TutorUiState {
+  /** Tutor 请求在途或回答流式中 */
+  busy: boolean;
+  /** 未回答问题数（含流式中；不含已完成/已失败） */
+  pendingCount: number;
+  /** 自动处理窗口上限；超过则 UI 显示排队提示（§3.3） */
+  autoWindowLimit: number;
+  /** 回答失败的问题 id（UI 据此渲染「重试回答」） */
+  failedQuestionIds: string[];
 }
 
 export interface UseChapterLearningResult {
@@ -152,6 +219,14 @@ export interface UseChapterLearningResult {
   resumeAnchorTaskId: string | null;
   /** 当前任务已发起的请求次数（边界卡「多次失败」软提示用；读 attemptsRef，勿用 pendingRequest.attempt） */
   currentTaskAttempts: number;
+  /** P2：提交流内答疑问题；trim 后非空才处理；流中入队、边界立即回答 */
+  submitTutorQuestion: (text: string) => void;
+  /** P2：重试失败问题的回答；只重发该问题，不触碰主线 */
+  retryTutor: (questionId: string) => void;
+  /** P2：Tutor UI 最小状态（忙闲/排队数/失败信息） */
+  tutorState: TutorUiState;
+  /** P2：Tutor 是否忙碌（请求在途或回答流式中） */
+  isTutorBusy: boolean;
 }
 
 /** 落盘节流窗口：流式期间约 300ms 写一次，终态立即写 */
@@ -164,6 +239,15 @@ interface PrefetchSlot extends PrefetchCacheEntry {
 
 function prefetchCacheKey(planId: string, planVersion: number, taskId: string): string {
   return `${planId}:v${planVersion}:${taskId}`;
+}
+
+/** P2 问题 id：时间戳 + 随机后缀；不含 ':'（Python 幂等键正则要求 [^:]+） */
+function createTutorQuestionId(now: number): string {
+  const random =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID().slice(0, 8)
+      : Math.random().toString(36).slice(2, 10);
+  return `q-${now.toString(36)}-${random}`;
 }
 
 export function useChapterLearning({
@@ -180,25 +264,35 @@ export function useChapterLearning({
   const saveTimerRef = useRef<number | null>(null);
 
   const bootActionRef = useRef<ReturnType<typeof decideResumeAction> | null>(null);
+  // P2 刷新恢复：初始化归一结果（是否需要落盘 / 是否自动重试一次）
+  const tutorResumeRef = useRef<{ persisted: boolean; shouldAutoRetry: boolean } | null>(null);
+
   const [state, dispatch] = useReducer(reducer, undefined, (): HookState => {
     const lesson = loadNodeLessonV2(courseId, chapterId);
-    const action = decideResumeAction(lesson);
+    // Tutor 刷新归一（§5）：只处理 Tutor，不触碰主任务状态；归一后再决策主线恢复
+    const prepared = prepareTutorBoot(lesson, Date.now());
+    tutorResumeRef.current = {
+      persisted: prepared.persisted,
+      shouldAutoRetry: prepared.shouldAutoRetry,
+    };
+    const bootLesson = prepared.lesson;
+    const action = decideResumeAction(bootLesson);
     bootActionRef.current = action;
     switch (action.kind) {
       case 'generate_plan':
         return { lesson: null, phase: 'planning', planError: null };
       case 'render_completed':
-        return { lesson, phase: 'completed', planError: null };
+        return { lesson: bootLesson, phase: 'completed', planError: null };
       case 'render_boundary':
-        return { lesson, phase: 'boundary', planError: null };
+        return { lesson: bootLesson, phase: 'boundary', planError: null };
       case 'start_task':
-        return { lesson, phase: 'generating', planError: null };
+        return { lesson: bootLesson, phase: 'generating', planError: null };
     }
   });
 
-  // 同步镜像：供回调读取最新 state，避免 useCallback 闭包过期
-  const stateRef = useRef(state);
-  stateRef.current = state;
+  // 同步镜像：初始值 = 启动容器/相位；之后只由 commit 同步更新，不被 React 渲染覆盖
+  const lessonMirrorRef = useRef<NodeLessonV2 | null>(state.lesson);
+  const phaseMirrorRef = useRef<ChapterPhase>(state.phase);
 
   // 落盘走配额兜底：写失败时先压缩历史已完成章节再重试（§6.1.1）
   const persist = useCallback(
@@ -208,15 +302,55 @@ export function useChapterLearning({
     [courseId, blueprint],
   );
 
+  // 统一提交入口：同步更新镜像 + dispatch 到 React state（所有状态变更必须走这里）
+  const commit = useCallback((action: HookAction) => {
+    lessonMirrorRef.current = mirrorLesson(lessonMirrorRef.current, action);
+    phaseMirrorRef.current = mirrorPhase(action, lessonMirrorRef.current, phaseMirrorRef.current);
+    dispatch(action);
+  }, []);
+
+  // ---- P2 Tutor 编排器：独立代际/abort/忙闲，与主任务流完全隔离（§3.1） ----
+  const orchestratorRef = useRef<TutorStreamOrchestrator | null>(null);
+  if (!orchestratorRef.current) {
+    const chapter = blueprint.chapters.find((c) => c.chapterId === chapterId);
+    orchestratorRef.current = new TutorStreamOrchestrator({
+      courseId,
+      chapterId,
+      courseTopic: blueprint.topic,
+      chapterTitle: chapter?.title ?? '',
+      chapterTeachingGoal: chapter?.teachingGoal ?? '',
+      getLesson: () => lessonMirrorRef.current,
+      getPhase: () => phaseMirrorRef.current,
+      commitLesson: (next, opts) => {
+        if (next === lessonMirrorRef.current) return;
+        commit({ type: 'LESSON_PATCH', lesson: next });
+        if (opts?.persistNow) persist(next);
+      },
+      fetchTutorStream: (body, signal) =>
+        fetch('/api/learning/v2/tutor/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal,
+        }),
+      recordEngagement: (eventType, taskId) =>
+        recordEngagementEvent(courseId, { eventType, chapterId, taskId }),
+    });
+  }
+
   // ---- 落盘：非终态节流，终态立即写 ----
   useEffect(() => {
     const lesson = state.lesson;
     if (!lesson) return;
+    const pending = lesson.runtime.pendingRequest;
+    const tutorStreaming = pending?.kind === 'tutor' && pending.status === 'streaming';
+    // Tutor 流式回答期间沿用 300ms 节流（边界相位不触发立即写）；终态立即写
     const terminal =
-      lesson.runtime.status === 'awaiting_user' ||
-      lesson.runtime.status === 'completing' ||
-      lesson.runtime.status === 'completed' ||
-      lesson.runtime.currentTaskStatus === 'failed';
+      (lesson.runtime.status === 'awaiting_user' ||
+        lesson.runtime.status === 'completing' ||
+        lesson.runtime.status === 'completed' ||
+        lesson.runtime.currentTaskStatus === 'failed') &&
+      !tutorStreaming;
     if (terminal) {
       if (saveTimerRef.current != null) {
         window.clearTimeout(saveTimerRef.current);
@@ -228,7 +362,7 @@ export function useChapterLearning({
     if (saveTimerRef.current == null) {
       saveTimerRef.current = window.setTimeout(() => {
         saveTimerRef.current = null;
-        persist(stateRef.current.lesson);
+        persist(lessonMirrorRef.current);
       }, SAVE_THROTTLE_MS);
     }
   }, [state.lesson, persist]);
@@ -293,7 +427,7 @@ export function useChapterLearning({
   // ---- 任务流请求 ----
   const startTask = useCallback(
     async (taskId: string, explicitAttempt?: number, lessonArg?: NodeLessonV2 | null) => {
-      const lesson = lessonArg ?? stateRef.current.lesson;
+      const lesson = lessonArg ?? lessonMirrorRef.current;
       if (!lesson) return;
       const planned = lesson.chapterPlan.tasks.find((t) => t.taskId === taskId);
       if (!planned) return;
@@ -305,7 +439,7 @@ export function useChapterLearning({
 
       const attempt = explicitAttempt ?? (attemptsRef.current.get(taskId) ?? 0) + 1;
       attemptsRef.current.set(taskId, attempt);
-      dispatch({ type: 'TASK_STARTING', taskId });
+      commit({ type: 'TASK_STARTING', taskId, now: Date.now() });
 
       let response: Response;
       try {
@@ -319,7 +453,12 @@ export function useChapterLearning({
         if (generationRef.current !== generation) return; // 已被新流程取代或已卸载
         const aborted = error instanceof DOMException && error.name === 'AbortError';
         if (!aborted) {
-          dispatch({ type: 'STREAM_FAILED_LOCAL', message: '网络连接失败，请检查网络后重试', code: 'NETWORK_ERROR' });
+          commit({
+            type: 'STREAM_FAILED_LOCAL',
+            message: '网络连接失败，请检查网络后重试',
+            code: 'NETWORK_ERROR',
+            now: Date.now(),
+          });
         }
         return;
       }
@@ -337,7 +476,7 @@ export function useChapterLearning({
         } catch {
           // 非 JSON 错误体，用通用文案
         }
-        dispatch({ type: 'STREAM_FAILED_LOCAL', message, code });
+        commit({ type: 'STREAM_FAILED_LOCAL', message, code, now: Date.now() });
         return;
       }
 
@@ -351,7 +490,9 @@ export function useChapterLearning({
             recordEngagementEvent(courseId, { eventType: 'task_completed', chapterId, taskId });
           }
           if (event.type === 'request_error') sawRequestError = true;
-          dispatch({ type: 'SSE_EVENT', event });
+          commit({ type: 'SSE_EVENT', event });
+          // P2：task_completed 归约后镜像已同步更新；队列有未完成问题则自动回答（§3.3）
+          if (event.type === 'task_completed') orchestratorRef.current?.notifyTaskCompleted();
         }
       } catch (error) {
         if (generationRef.current !== generation) return;
@@ -360,14 +501,15 @@ export function useChapterLearning({
 
       // 流结束但未收到终态事件（上游断流）：本地合成失败，避免卡在 streaming
       if (generationRef.current === generation && !sawTaskCompleted && !sawRequestError) {
-        dispatch({
+        commit({
           type: 'STREAM_FAILED_LOCAL',
           message: '内容生成中断，请重新生成本节',
           code: 'STREAM_INTERRUPTED',
+          now: Date.now(),
         });
       }
     },
-    [courseId, chapterId, buildTaskStreamBody],
+    [courseId, chapterId, buildTaskStreamBody, commit],
   );
 
   // ---- 单任务预取：只在边界触发，事件只收进缓存、绝不 dispatch，绝不触碰 generationRef ----
@@ -415,7 +557,7 @@ export function useChapterLearning({
       const slot = prefetchCacheRef.current.get(key);
       if (!slot) return;
       // 写入 complete 前复核状态：仍在边界等待、当前任务与计划版本未变（§2.3）
-      const latest = stateRef.current.lesson;
+      const latest = lessonMirrorRef.current;
       const stillAtBoundary =
         latest != null &&
         latest.runtime.status === 'awaiting_user' &&
@@ -444,7 +586,7 @@ export function useChapterLearning({
   // ---- 计划生成 ----
   const fetchPlan = useCallback(async () => {
     const generation = ++generationRef.current;
-    dispatch({ type: 'PLANNING' });
+    commit({ type: 'PLANNING' });
     try {
       const idempotencyKey = buildChapterPlanIdempotencyKey(
         courseId,
@@ -475,7 +617,7 @@ export function useChapterLearning({
       if (!validation.valid) {
         // 校验失败的计划不缓存、不落盘：清注册表允许重新生成
         planRegistryRef.current.clear();
-        dispatch({
+        commit({
           type: 'PLAN_FAILED',
           message: `计划校验未通过：${validation.errors[0]?.message ?? '未知错误'}`,
         });
@@ -484,24 +626,24 @@ export function useChapterLearning({
 
       const lesson = createInitialNodeLessonV2(chapterId, plan, Date.now());
       persist(lesson);
-      dispatch({ type: 'PLAN_READY', lesson });
+      commit({ type: 'PLAN_READY', lesson });
 
       const firstTask = [...plan.tasks].sort((a, b) => a.order - b.order)[0];
       if (firstTask) {
         void startTask(firstTask.taskId, 1, lesson);
       } else {
-        dispatch({ type: 'PLAN_FAILED', message: '计划中没有任务，请重新生成' });
+        commit({ type: 'PLAN_FAILED', message: '计划中没有任务，请重新生成' });
       }
     } catch (error) {
       if (generationRef.current !== generation) return;
       const message = error instanceof Error ? error.message : '计划生成失败，请重试';
-      dispatch({ type: 'PLAN_FAILED', message });
+      commit({ type: 'PLAN_FAILED', message });
     }
-  }, [courseId, chapterId, blueprint, persist, startTask]);
+  }, [courseId, chapterId, blueprint, persist, startTask, commit]);
 
   // ---- 章节完成（异步）：completing → Recap → 归档 → completed，落盘后刷新课程树 ----
   const finishChapter = useCallback(async () => {
-    const lesson = stateRef.current.lesson;
+    const lesson = lessonMirrorRef.current;
     if (!lesson) return;
     const generation = generationRef.current;
     const now = Date.now();
@@ -513,7 +655,12 @@ export function useChapterLearning({
     } else {
       const toCompleting = transitionChapter(lesson.runtime, 'completing', now);
       if (!toCompleting.ok) {
-        dispatch({ type: 'STREAM_FAILED_LOCAL', message: toCompleting.reason, code: 'TRANSITION_BLOCKED' });
+        commit({
+          type: 'STREAM_FAILED_LOCAL',
+          message: toCompleting.reason,
+          code: 'TRANSITION_BLOCKED',
+          now: Date.now(),
+        });
         return;
       }
       workingLesson = {
@@ -531,7 +678,7 @@ export function useChapterLearning({
         updatedAt: now,
       };
     }
-    dispatch({ type: 'CHAPTER_COMPLETING', lesson: workingLesson });
+    commit({ type: 'CHAPTER_COMPLETING', lesson: workingLesson });
 
     // ② Recap 请求：失败必须 throw（注册表只缓存成功）；彻底失败走本地兜底（§7）
     let recap: ChapterRecap;
@@ -598,7 +745,12 @@ export function useChapterLearning({
     // ⑤ completing → completed
     const toCompleted = transitionChapter(archivedLesson.runtime, 'completed', recapAt);
     if (!toCompleted.ok) {
-      dispatch({ type: 'STREAM_FAILED_LOCAL', message: toCompleted.reason, code: 'TRANSITION_BLOCKED' });
+      commit({
+        type: 'STREAM_FAILED_LOCAL',
+        message: toCompleted.reason,
+        code: 'TRANSITION_BLOCKED',
+        now: Date.now(),
+      });
       return;
     }
     const completedLesson: NodeLessonV2 = {
@@ -612,13 +764,13 @@ export function useChapterLearning({
     completeChapterV2(courseId, chapterId);
     recordEngagementEvent(courseId, { eventType: 'recap_completed', chapterId });
     recordEngagementEvent(courseId, { eventType: 'chapter_completed', chapterId });
-    dispatch({ type: 'COMPLETED', lesson: completedLesson });
-  }, [courseId, chapterId, blueprint, persist]);
+    commit({ type: 'COMPLETED', lesson: completedLesson });
+  }, [courseId, chapterId, blueprint, persist, commit]);
 
   // ---- 边界按钮统一入口 ----
   const continueNext = useCallback(() => {
-    const lesson = stateRef.current.lesson;
-    if (!lesson || stateRef.current.phase !== 'boundary') return;
+    const lesson = lessonMirrorRef.current;
+    if (!lesson || phaseMirrorRef.current !== 'boundary') return;
     recordEngagementEvent(courseId, { eventType: 'chapter_continued', chapterId });
 
     // 当前任务失败：重新生成同一任务
@@ -648,22 +800,38 @@ export function useChapterLearning({
     prefetchCacheRef.current.delete(key);
     if (decision.kind === 'replay') {
       recordEngagementEvent(courseId, { eventType: 'prefetch_hit', chapterId, taskId: nextTask.taskId });
+      let replayedTaskCompleted = false;
       for (const event of decision.events) {
-        dispatch({ type: 'SSE_EVENT', event });
+        commit({ type: 'SSE_EVENT', event });
+        if (event.type === 'task_completed') replayedTaskCompleted = true;
       }
+      // P2：重放路径同样触发队列自动派发，否则流中排队的问题会失去任务完成时机
+      if (replayedTaskCompleted) orchestratorRef.current?.notifyTaskCompleted();
       return;
     }
     recordEngagementEvent(courseId, { eventType: 'prefetch_missed', chapterId, taskId: nextTask.taskId });
     entry?.controller.abort();
     void startTask(nextTask.taskId);
-  }, [courseId, chapterId, startTask, finishChapter]);
+  }, [courseId, chapterId, startTask, finishChapter, commit]);
 
   const retryPlan = useCallback(() => {
     planRegistryRef.current.clear();
     void fetchPlan();
   }, [fetchPlan]);
 
-  // ---- 挂载：按恢复决策起步；卸载：abort + flush ----
+  // ---- P2 流内答疑入口 ----
+  const submitTutorQuestion = useCallback((text: string) => {
+    const orchestrator = orchestratorRef.current;
+    if (!orchestrator) return;
+    const now = Date.now();
+    orchestrator.submitQuestion(text, createTutorQuestionId(now), now);
+  }, []);
+
+  const retryTutor = useCallback((questionId: string) => {
+    orchestratorRef.current?.retry(questionId);
+  }, []);
+
+  // ---- 挂载：按恢复决策起步 + Tutor 刷新恢复；卸载：双流一并作废 + flush ----
   useEffect(() => {
     recordEngagementEvent(courseId, { eventType: 'chapter_opened', chapterId });
     const action = bootActionRef.current;
@@ -671,23 +839,55 @@ export function useChapterLearning({
       void fetchPlan();
     } else if (action?.kind === 'start_task') {
       // 失败任务（恢复分支⑥）随挂载自动重试一次；再失败由边界按钮接管
-      void startTask(action.taskId, action.attempt, stateRef.current.lesson);
+      void startTask(action.taskId, action.attempt, lessonMirrorRef.current);
     }
+
+    // P2 Tutor 刷新恢复：归一结果落盘（无变化跳过）；被中断问题自动重试一次，
+    // 或边界空闲时兜底派发最早未答问题（含无 pendingRequest 的已提交问题，§5）
+    const tutorResume = tutorResumeRef.current;
+    if (tutorResume?.persisted) persist(lessonMirrorRef.current);
+    orchestratorRef.current?.resumeFromBoot(tutorResume?.shouldAutoRetry ?? false);
 
     return () => {
       recordEngagementEvent(courseId, { eventType: 'exited', chapterId });
       generationRef.current += 1;
       abortRef.current?.abort();
+      orchestratorRef.current?.invalidate(); // P2：作废 Tutor 流并归一中断态（不删除已写入问题）
       for (const slot of prefetchCacheRef.current.values()) slot.controller.abort();
       prefetchCacheRef.current.clear();
       if (saveTimerRef.current != null) {
         window.clearTimeout(saveTimerRef.current);
         saveTimerRef.current = null;
       }
-      persist(stateRef.current.lesson);
+      persist(lessonMirrorRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ---- P2 Tutor UI 状态 ----
+  // 忙闲 = 编排器在途标记（发起→首事件窗口）或容器内 tutor 请求流式中；
+  // 两者翻转都伴随容器提交触发的重渲染，渲染期读 ref 安全
+  const pendingRequest = state.lesson?.runtime.pendingRequest;
+  const isTutorBusy =
+    (orchestratorRef.current?.isBusy ?? false) ||
+    (pendingRequest?.kind === 'tutor' && pendingRequest.status === 'streaming');
+  const tutorState = useMemo<TutorUiState>(() => {
+    const lesson = state.lesson;
+    const failedQuestionIds = lesson
+      ? lesson.streamItems
+          .filter(
+            (item): item is TutorAnswerItem =>
+              item.type === 'tutor_answer' && item.status === 'failed',
+          )
+          .map((item) => item.questionId)
+      : [];
+    return {
+      busy: isTutorBusy,
+      pendingCount: lesson ? countUnansweredTutorQuestions(lesson) : 0,
+      autoWindowLimit: TUTOR_AUTO_WINDOW_LIMIT,
+      failedQuestionIds,
+    };
+  }, [state.lesson, isTutorBusy]);
 
   const bootAction = bootActionRef.current;
   const currentTaskId = state.lesson?.runtime.currentTaskId ?? null;
@@ -699,5 +899,9 @@ export function useChapterLearning({
     retryPlan,
     resumeAnchorTaskId: bootAction?.kind === 'render_boundary' ? bootAction.taskId : null,
     currentTaskAttempts: currentTaskId ? attemptsRef.current.get(currentTaskId) ?? 0 : 0,
+    submitTutorQuestion,
+    retryTutor,
+    tutorState,
+    isTutorBusy,
   };
 }

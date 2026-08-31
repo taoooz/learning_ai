@@ -1,11 +1,18 @@
 // tests/learning-v2-tutor-protocol.test.ts
 // V2 流内答疑（Tutor）协议测试：幂等键、事件类型、问题/回答归约与版本守卫（P2 Task 1/Task 2）
 // Task 4：Next 薄透传路由的鉴权与必填字段校验
+// Task 6：双流编排（编排层纯决策 + 最小 harness 锁定行为契约）
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { POST } from '../app/api/learning/v2/tutor/stream/route';
+import { createChapterLearningHarness } from './helpers/tutor-harness';
+import {
+  canRetryTutorQuestion,
+  decideTutorSubmission,
+  pickAutoTutorQuestion,
+} from '../lib/learning-v2/tutor-orchestration';
 import {
   buildTutorQuestionIdempotencyKey,
   buildTutorRequestIdempotencyKey,
@@ -521,4 +528,202 @@ test('V2 Tutor 代理缺少必填字段返回 422 且不触达上游', async () 
     method: 'POST', body: '不是 JSON', ...authedInit,
   }) as never);
   assert.equal(invalidJson.status, 422);
+});
+
+// ---- Task 6：双流编排决策（纯函数） ----
+
+test('提交决策：流中入队、边界且空闲立即启动、忙碌时入队', () => {
+  // 基于无问题条目的容器构造边界态，避免既有夹具问题干扰断言
+  const atBoundary: NodeLessonV2 = { ...baseLesson, runtime: { ...baseLesson.runtime, status: 'awaiting_user' as const, currentTaskId: 'task-1', currentTaskStatus: 'awaiting_user' as const } };
+  const start = decideTutorSubmission({ lesson: atBoundary, phase: 'boundary', isTutorBusy: false, text: '  为什么 304 没有正文？  ', questionId: 'q-s1', now: 5000 });
+  assert.ok(start);
+  assert.equal(start.action, 'start');
+  assert.equal(start.taskId, 'task-1');
+  const question = start.lesson.streamItems.find((i) => i.type === 'user_question');
+  assert.equal(question?.type === 'user_question' && question.text, '为什么 304 没有正文？', '问题文本取 trim 后的值');
+
+  const queuedDuringStream = decideTutorSubmission({ lesson: atBoundary, phase: 'streaming', isTutorBusy: false, text: '问题', questionId: 'q-s2', now: 5001 });
+  assert.equal(queuedDuringStream?.action, 'queue');
+
+  const queuedWhenBusy = decideTutorSubmission({ lesson: atBoundary, phase: 'boundary', isTutorBusy: true, text: '问题', questionId: 'q-s3', now: 5002 });
+  assert.equal(queuedWhenBusy?.action, 'queue');
+
+  assert.equal(decideTutorSubmission({ lesson: atBoundary, phase: 'boundary', isTutorBusy: false, text: '   ', questionId: 'q-s4', now: 5003 }), null, '空白问题拒收');
+});
+
+test('自动派发只取自动窗口内最早一题；忙碌时不派发', () => {
+  let lesson = baseLesson;
+  lesson = { ...lesson, runtime: { ...lesson.runtime, currentTaskId: 'task-1' } };
+  lesson = appendUserQuestion(lesson, { taskId: 'task-1', questionId: 'q-a', text: '甲' }, 1);
+  lesson = appendUserQuestion(lesson, { taskId: 'task-1', questionId: 'q-b', text: '乙' }, 2);
+  assert.equal(pickAutoTutorQuestion(lesson, false)?.questionId, 'q-a');
+  assert.equal(pickAutoTutorQuestion(lesson, true), undefined);
+});
+
+test('重试决策：仅失败问题可重试，排队/完成问题不接受重试', () => {
+  const failed = applyTutorSseEvent(baseWithQuestion, tutorErrorEvent);
+  assert.equal(canRetryTutorQuestion(failed, 'q-1')?.questionId, 'q-1');
+  assert.equal(canRetryTutorQuestion(failed, 'q-missing'), undefined);
+  const completed = applyTutorSseEvent(applyTutorSseEvent(baseWithQuestion, tutorStartedEvent), tutorCompletedEvent);
+  assert.equal(canRetryTutorQuestion(completed, 'q-1'), undefined);
+});
+
+// ---- Task 6：双流编排行为契约（最小 harness） ----
+
+test('流中提问不取消主任务流，任务完成后自动回答', async () => {
+  const harness = createChapterLearningHarness({ phase: 'streaming' });
+  harness.submitTutorQuestion('为什么 ETag 能减少正文传输？');
+  assert.equal(harness.taskAbortCount, 0, '主任务流取消入口不得被触碰');
+  assert.equal(harness.lesson.streamItems.some((i) => i.type === 'user_question'), true);
+  assert.equal(harness.phase, 'streaming', '主任务流继续，相位不变');
+  assert.equal(harness.tutorRequests, 0, '流式期间只入队，不发 Tutor 请求');
+  assert.equal(harness.immediatePersists.length, 1, '问题提交立即落盘，不走节流');
+  harness.emitTaskCompleted();
+  assert.equal(harness.tutorRequests, 1, '任务完成后自动启动最早问题');
+  assert.equal(harness.tutorBodies[0].courseId, 'course-1', '请求载荷必须携带 courseId');
+  assert.equal(harness.tutorBodies[0].question.text, '为什么 ETag 能减少正文传输？');
+  assert.equal(harness.tutorBodies[0].mode, 'inline_tutor');
+});
+
+test('边界提问立即启动 Tutor，回答后仍保持边界', async () => {
+  const harness = createChapterLearningHarness({ phase: 'boundary' });
+  harness.submitTutorQuestion('能举个例子吗？');
+  assert.equal(harness.tutorRequests, 1);
+  assert.equal(harness.phase, 'boundary', 'Tutor 启动不改变章节相位');
+  await harness.emitTutorCompleted();
+  assert.equal(harness.phase, 'boundary', '回答结束后仍停在边界');
+  assert.equal(harness.orchestrator.isBusy, false);
+  const answer = harness.lesson.streamItems.find((i) => i.type === 'tutor_answer');
+  assert.equal(answer?.status, 'complete');
+  const question = harness.lesson.streamItems.find((i) => i.type === 'user_question');
+  assert.equal(question?.status, 'complete');
+});
+
+test('courseId 不匹配的事件丢弃，不污染当前章节', async () => {
+  const harness = createChapterLearningHarness({ phase: 'boundary' });
+  harness.submitTutorQuestion('304 为什么没有正文？');
+  await harness.emitTutorStarted();
+  await harness.emitForeignTutorEvent({ type: 'tutor_block_delta', payload: { blockId: 'tb1', delta: '来自其他课程的内容' } });
+  let answer = harness.lesson.streamItems.find((i) => i.type === 'tutor_answer');
+  assert.ok(answer, '本课程的 started 正常建流');
+  assert.equal(answer?.type === 'tutor_answer' && answer.blocks.length, 0, '外课程 delta 被丢弃');
+  const qid = harness.tutorBodies[0].question.questionId;
+  await harness.emitForeignTutorEvent({
+    type: 'tutor_completed',
+    payload: { questionId: qid, blocks: [{ type: 'markdown', blockId: 'tb1', markdown: '被劫持的回答' }] },
+  });
+  answer = harness.lesson.streamItems.find((i) => i.type === 'tutor_answer');
+  assert.equal(answer?.status, 'streaming', '外课程 completed 同样被丢弃，回答不被劫持');
+});
+
+test('失败问题局部重试只重发该问题，不动 completedTaskIds', async () => {
+  const harness = createChapterLearningHarness({ phase: 'boundary' });
+  harness.submitTutorQuestion('304 为什么没有正文？');
+  await harness.emitTutorError();
+  const completedBefore = [...harness.lesson.runtime.completedTaskIds];
+  assert.equal(harness.lesson.streamItems.find((i) => i.type === 'tutor_answer')?.status, 'failed');
+  assert.equal(harness.orchestrator.isBusy, false, '失败后 Tutor 回到空闲');
+
+  assert.equal(harness.retryTutor(harness.lastQuestionId ?? ''), true);
+  assert.equal(harness.tutorRequests, 2, '重试发起新的独立请求');
+  assert.equal(harness.tutorBodies[1].question.questionId, harness.lastQuestionId);
+  assert.deepEqual(harness.lesson.runtime.completedTaskIds, completedBefore, '不触碰已完成任务');
+  assert.equal(harness.lesson.runtime.currentTaskStatus, 'awaiting_user', '不触碰主线任务状态');
+  assert.equal(harness.phase, 'boundary');
+  await harness.emitTutorCompleted('重试后的回答');
+  assert.equal(harness.lesson.streamItems.find((i) => i.type === 'tutor_answer')?.status, 'complete');
+});
+
+test('重试只接受失败问题；Tutor 忙碌期间不重复发请求', async () => {
+  const harness = createChapterLearningHarness({ phase: 'boundary' });
+  const first = harness.submitTutorQuestion('第一个问题');
+  assert.equal(harness.retryTutor(first ?? ''), false, '未失败的问题不能重试');
+  const second = harness.submitTutorQuestion('第二个问题');
+  assert.ok(second, '忙碌期间问题仍入队');
+  assert.equal(harness.retryTutor(second ?? ''), false, '排队中的问题不能重试');
+  assert.equal(harness.tutorRequests, 1, '全程只发一个请求');
+});
+
+test('快速连续提问：第一题立即启动，第二题入队；首题完成后自动串接第二题', async () => {
+  const harness = createChapterLearningHarness({ phase: 'boundary' });
+  harness.submitTutorQuestion('第一个问题');
+  harness.submitTutorQuestion('第二个问题');
+  assert.equal(harness.tutorRequests, 1, 'Tutor 请求进行中不启动第二个请求');
+  assert.equal(harness.lesson.streamItems.filter((i) => i.type === 'user_question').length, 2);
+  await harness.emitTutorCompleted('第一题的回答');
+  assert.equal(harness.tutorRequests, 2, '终态后自动处理队列下一题');
+  assert.equal(harness.tutorBodies[1].question.text, '第二个问题');
+});
+
+test('参与信号：答疑提交与回答终态按既有模式记录', async () => {
+  const harness = createChapterLearningHarness({ phase: 'boundary' });
+  harness.submitTutorQuestion('304 为什么没有正文？');
+  await harness.emitTutorCompleted();
+  assert.deepEqual(
+    harness.engagements.map((e) => e.eventType),
+    ['tutor_question_submitted', 'tutor_answer_completed'],
+  );
+
+  const failedHarness = createChapterLearningHarness({ phase: 'boundary' });
+  failedHarness.submitTutorQuestion('另一个问题');
+  await failedHarness.emitTutorError();
+  assert.deepEqual(
+    failedHarness.engagements.map((e) => e.eventType),
+    ['tutor_question_submitted', 'tutor_answer_failed'],
+  );
+});
+
+test('流未开始即失败（422 校验）：问题标记失败且可重试', async () => {
+  const harness = createChapterLearningHarness({ phase: 'boundary' });
+  harness.failNextTutorFetch(422, { code: 'INVALID_REQUEST', message: '幂等键与当前问题不一致' });
+  harness.submitTutorQuestion('304 为什么没有正文？');
+  await harness.settle();
+  const answer = harness.lesson.streamItems.find((i) => i.type === 'tutor_answer');
+  assert.equal(answer?.status, 'failed');
+  assert.equal(answer?.type === 'tutor_answer' && answer.errorMessage, '幂等键与当前问题不一致');
+  assert.equal(harness.orchestrator.isBusy, false, '失败后释放忙碌，允许重试');
+  assert.equal(harness.retryTutor(harness.lastQuestionId ?? ''), true);
+  assert.equal(harness.tutorRequests, 2);
+});
+
+test('网络异常：沿用本地合成失败模式，问题保留可重试', async () => {
+  const harness = createChapterLearningHarness({ phase: 'boundary' });
+  harness.failNextTutorFetchWithNetworkError();
+  harness.submitTutorQuestion('304 为什么没有正文？');
+  await harness.settle();
+  const answer = harness.lesson.streamItems.find((i) => i.type === 'tutor_answer');
+  assert.equal(answer?.status, 'failed');
+  const question = harness.lesson.streamItems.find((i) => i.type === 'user_question');
+  assert.equal(question?.status, 'failed', '失败保留问题条目');
+  assert.ok(harness.lesson.streamItems.some((i) => i.type === 'system_notice'), '附带用户可见错误通知');
+  assert.equal(harness.phase, 'boundary', 'Tutor 失败不改变章节相位');
+});
+
+test('流无终态结束：本地合成失败，防止 pending 永久停留', async () => {
+  const harness = createChapterLearningHarness({ phase: 'boundary' });
+  harness.submitTutorQuestion('304 为什么没有正文？');
+  await harness.emitTutorStarted();
+  await harness.emitTutorDelta('半截回答');
+  await harness.endActiveStream();
+  const answer = harness.lesson.streamItems.find((i) => i.type === 'tutor_answer');
+  assert.equal(answer?.status, 'failed', '无终态时合成失败，不卡在 streaming');
+  assert.equal(harness.orchestrator.isBusy, false);
+});
+
+test('卸载/章节切换作废在途请求：状态归一，重新派发可建流', async () => {
+  const harness = createChapterLearningHarness({ phase: 'boundary' });
+  harness.submitTutorQuestion('强缓存和协商缓存的区别？');
+  await harness.emitTutorStarted();
+  await harness.emitTutorDelta('半截回答');
+  harness.invalidate();
+  assert.equal(harness.orchestrator.isBusy, false, 'invalidate 复位忙碌');
+  const answer = harness.lesson.streamItems.find((i) => i.type === 'tutor_answer');
+  assert.equal(answer?.status, 'pending', '被中断回答归一为 pending（同刷新恢复语义）');
+  assert.equal(harness.lesson.runtime.pendingRequest?.status, 'failed', '死请求标记 failed 解除在途守卫');
+
+  // 章节切换后重新挂载：边界兜底派发可重启（旧代际事件已作废）
+  harness.resumeFromBoot(false);
+  assert.equal(harness.tutorRequests, 2);
+  await harness.emitTutorCompleted('重启后的回答');
+  assert.equal(harness.lesson.streamItems.find((i) => i.type === 'tutor_answer')?.status, 'complete');
 });
