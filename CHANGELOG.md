@@ -2,6 +2,14 @@
 
 ## 2026-09-01
 
+### V2 P2 流内答疑：恢复、错误路径与回归测试（Task 8）
+- 新增 `tests/learning-v2-tutor-integration.test.ts`（8 用例）：基于 Task 6 编排基座锁定恢复与错误路径红线——旧章节残留流（started+delta 携带旧 chapterId）不写入新章节、失败问题局部重试不改变任务内容与 `completedTaskIds`、章节卸载后迟到响应整体丢弃（代际作废）、Tutor 流读取异常不动已完成任务、主任务失败不取消在途 Tutor、超窗口问题保留且串行不并发、HTTP 401/503 落稳定中文错误、Tutor 终态不推进主线
+- `tutor-harness` 测试基座增量扩展（向后兼容）：新增 `tutorEventChapterId`/`failedQuestionId` 夹具选项、`currentAnswerText` 读取、`holdNextTutorFetch`（请求挂起闸）、`failActiveStream`、`emitTaskError` 与 `createTutorHarness` 别名
+- `tutor-resume` 补例：自动重试再次失败进入可见失败态（错误文案 + 问题标记失败），第二次刷新不再自动重试
+- Python 补例：`test_invalid_question_context_is_rejected` 以 TestClient 实测缺 `question`/`idempotencyKey` → 端点层 422（`INVALID_REQUEST`，流未开始即拒）
+- 结论：简报 7 项行为确认均为既有实现，本任务以测试锁定；`resume.ts`/`useChapterLearning.ts` 经核无需改动。两条关键用例经变异测试验证（移除章节守卫/代际守卫即变红）
+- 验证：TS 228/228 绿（新增集成 8 + 恢复 1）、Python 67/67 绿、`tsc --noEmit` 干净、lint 0 errors；V1 ChatWidget 未改动、相关测试全过
+
 ### V2 P2 流内答疑：章节 UI 与边界交互（Task 7）
 - 新增 `components/learning-v2/InlineTutorInput.tsx`：受控 textarea + 提问按钮，提交前 trim、空问题不提交；提交即清空，可见反馈由学习流问题条目与忙闲/排队提示行（`role="status"`）承接；Enter 提交 / Shift+Enter 换行 / 中文输入法组词期不提交；输入区与按钮触摸区域 ≥44px；导出可测 `tutorPlaceholder(phase)`（边界「针对本节内容提问…」、生成中「本节生成完成后回答你的问题…」，测试锁定）
 - `LearningStreamV2` 新增 `user_question`（右对齐气泡 + 待回答/排队提示/正在回答…）与 `tutor_answer`（复用既有 markdown 块渲染 + 流式光标；流式无内容时「正在准备回答…」；失败显示错误文案与「重试回答」局部重试，Tutor 忙碌时禁用）；排队判定：主任务生成中全部排队、边界超出自动窗口（3 题）排队

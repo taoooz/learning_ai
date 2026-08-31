@@ -14,6 +14,7 @@ import {
   type TutorBridge,
 } from '../../lib/learning-v2/tutor-orchestration';
 import {
+  appendUserQuestion,
   applyLearningSseEvent,
   createInitialNodeLessonV2,
 } from '../../lib/learning-v2/reducers';
@@ -175,11 +176,22 @@ export interface ChapterLearningHarnessOptions {
   lesson?: NodeLessonV2;
   courseId?: string;
   chapterId?: string;
+  /**
+   * 投喂事件的章节 id（Task 8）：默认等于 chapterId；
+   * 指定不同值时模拟「旧章节残留流事件混入新章节」，事件须被章节守卫丢弃。
+   */
+  tutorEventChapterId?: string;
+  /**
+   * 预置一个已失败的指定 questionId（Task 8）：容器构造时同步入流问题并经真实
+   * 归约器落为失败态（问题保留、回答失败），供「局部重试」用例直接起跳。
+   */
+  failedQuestionId?: string;
 }
 
 export function createChapterLearningHarness(options: ChapterLearningHarnessOptions = {}) {
   const courseId = options.courseId ?? 'course-1';
   const chapterId = options.chapterId ?? 'ch-1';
+  const tutorEventChapterId = options.tutorEventChapterId ?? chapterId;
 
   let lesson: NodeLessonV2;
   let phase: ChapterPhaseName;
@@ -192,6 +204,8 @@ export function createChapterLearningHarness(options: ChapterLearningHarnessOpti
     | { kind: 'status'; status: number; body?: unknown }
     | { kind: 'network' }
     | null = null;
+  // 请求挂起闸（Task 8 代际竞态用例）：holdNextTutorFetch 后下一次请求在 release 前不返回
+  let fetchGate: Promise<void> | null = null;
 
   const tutorBodies: InlineTutorRequestPayload[] = [];
   const streams: FakeTutorStream[] = [];
@@ -244,6 +258,29 @@ export function createChapterLearningHarness(options: ChapterLearningHarnessOpti
         },
       });
     }
+    if (options.failedQuestionId) {
+      // 预置失败问题（Task 8）：真实时序入流后经 request_error 落为失败态，
+      // 问题保留可重试——「局部重试不改变任务内容和 completedTaskIds」用例的起跳点
+      const questionId = options.failedQuestionId;
+      lesson = appendUserQuestion(
+        lesson,
+        { taskId: 'task-1', questionId, text: '304 为什么没有正文？' },
+        HARNESS_NOW + 3,
+      );
+      lesson = applyLearningSseEvent(lesson, {
+        eventId: `evt-h-failed-${questionId}`,
+        requestId: `req-${questionId}`,
+        type: 'request_error',
+        courseId,
+        chapterId,
+        taskId: 'task-1',
+        questionId,
+        planVersion: lesson.chapterPlan.planVersion,
+        sequence: nextSequence(),
+        timestamp: HARNESS_NOW + 4,
+        payload: { code: 'E_LLM', message: '回答生成失败，请稍后重试', retryable: true },
+      });
+    }
     phase = deriveChapterPhase(lesson, 'generating');
   }
 
@@ -263,6 +300,9 @@ export function createChapterLearningHarness(options: ChapterLearningHarnessOpti
     fetchTutorStream: async (body, signal) => {
       tutorRequests += 1;
       tutorBodies.push(body);
+      const gate = fetchGate;
+      fetchGate = null;
+      if (gate) await gate;
       const failure = nextFetchFailure;
       nextFetchFailure = null;
       if (failure?.kind === 'network') {
@@ -360,7 +400,7 @@ export function createChapterLearningHarness(options: ChapterLearningHarnessOpti
       requestId: currentRequestId(),
       type,
       courseId,
-      chapterId,
+      chapterId: tutorEventChapterId,
       taskId: body.task.taskId,
       questionId: body.question.questionId,
       planVersion: lesson.chapterPlan.planVersion,
@@ -445,6 +485,39 @@ export function createChapterLearningHarness(options: ChapterLearningHarnessOpti
     nextFetchFailure = { kind: 'network' };
   }
 
+  /** 挂起下一次 Tutor 请求（返回放行函数）：模拟卸载时响应仍在途的代际竞态 */
+  function holdNextTutorFetch(): () => void {
+    let release!: () => void;
+    fetchGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return release;
+  }
+
+  /** 主动令当前流读取抛错（非终态断流）：编排层应本地合成失败而不触碰主任务 */
+  async function failActiveStream(error: Error): Promise<void> {
+    currentStream().fail(error);
+    await settle();
+  }
+
+  /** 主任务流侧的失败事件（不带 questionId，走主任务错误归约路径） */
+  function emitTaskError(code = 'STREAM_INTERRUPTED', message = '内容生成中断，请重新生成本节'): void {
+    const sequence = nextSequence();
+    lesson = applyLearningSseEvent(lesson, {
+      eventId: `evt-h-task-error-${sequence}`,
+      requestId: 'req-task-1',
+      type: 'request_error',
+      courseId,
+      chapterId,
+      taskId: lesson.runtime.currentTaskId ?? 'task-1',
+      planVersion: lesson.chapterPlan.planVersion,
+      sequence,
+      timestamp: HARNESS_NOW + sequence,
+      payload: { code, message, retryable: true },
+    });
+    phase = deriveChapterPhase(lesson, phase);
+  }
+
   return {
     orchestrator,
     get lesson() {
@@ -471,8 +544,16 @@ export function createChapterLearningHarness(options: ChapterLearningHarnessOpti
     get lastQuestionId() {
       return lastQuestionId;
     },
+    /** 当前所有 Tutor 回答块拼出的文本（未建流/被守卫丢弃时为空串） */
+    get currentAnswerText(): string {
+      return lesson.streamItems
+        .flatMap((item) => (item.type === 'tutor_answer' ? item.blocks : []))
+        .map((block) => block.markdown)
+        .join('');
+    },
     submitTutorQuestion,
     emitTaskCompleted,
+    emitTaskError,
     abortTaskStream,
     emitTutorStarted,
     emitTutorDelta,
@@ -480,11 +561,16 @@ export function createChapterLearningHarness(options: ChapterLearningHarnessOpti
     emitTutorError,
     emitForeignTutorEvent,
     endActiveStream,
+    failActiveStream,
     failNextTutorFetch,
     failNextTutorFetchWithNetworkError,
+    holdNextTutorFetch,
     settle,
     retryTutor: (questionId: string): boolean => orchestrator.retry(questionId),
     resumeFromBoot: (shouldAutoRetry: boolean): void => orchestrator.resumeFromBoot(shouldAutoRetry),
     invalidate: (): void => orchestrator.invalidate(),
   };
 }
+
+/** 与简报一致的入口别名 */
+export const createTutorHarness = createChapterLearningHarness;

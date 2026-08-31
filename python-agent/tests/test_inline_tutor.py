@@ -121,6 +121,38 @@ def test_request_requires_course_id():
         InlineTutorRequest(**payload)
 
 
+# ---- Task 8：HTTP 端点必填字段校验 → 422（流尚未开始，直接 JSON 错误体） ----
+
+
+def _endpoint_client():
+    from fastapi.testclient import TestClient
+
+    from main import app
+
+    return TestClient(app)
+
+
+def test_invalid_question_context_is_rejected():
+    """缺 question 等必填字段 → 端点层 422，不触达 LLM"""
+    client = _endpoint_client()
+
+    payload = _request().model_dump()
+    del payload["question"]
+    response = client.post("/api/learning/v2/tutor/stream", json=payload)
+    assert response.status_code == 422
+    body = response.json()
+    assert body["ok"] is False
+    assert body["code"] == "INVALID_REQUEST"
+    assert body["retryable"] is False
+    assert "question" in body["message"]
+
+    # 其余必填字段同理：缺 idempotencyKey → 422
+    payload = _request().model_dump()
+    del payload["idempotencyKey"]
+    response = client.post("/api/learning/v2/tutor/stream", json=payload)
+    assert response.status_code == 422
+
+
 def test_response_shape_and_forbid():
     """InlineTutorResponse 对齐 TutorCompletedPayload；只允许 markdown 块且拒绝多余字段"""
     response = InlineTutorResponse(

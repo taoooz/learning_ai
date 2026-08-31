@@ -379,6 +379,34 @@ test('刷新恢复：被中断的 Tutor 自动重试一次，不影响主任务�
   assert.equal(harness.lesson.streamItems.find((i) => i.itemId === 'ta:q-1')?.status, 'complete');
 });
 
+test('刷新恢复：自动重试再次失败进入可见失败态，第二次刷新不再自动重试', async () => {
+  const prepared = prepareTutorBoot(lessonWithStreamingTutor, NOW + 10);
+  assert.equal(prepared.shouldAutoRetry, true);
+  assert.ok(prepared.lesson);
+  const harness = createChapterLearningHarness({ lesson: prepared.lesson });
+  harness.resumeFromBoot(prepared.shouldAutoRetry);
+  assert.equal(harness.tutorRequests, 1, '自动重试只发生一次');
+
+  // 重试的流再次失败 → 可见失败态（错误文案 + 问题标记失败供手动重试）
+  await harness.emitTutorError('LLM_TIMEOUT', '模型响应超时，请稍后重试');
+  const answer = harness.lesson.streamItems.find((i) => i.itemId === 'ta:q-1');
+  const question = harness.lesson.streamItems.find((i) => i.itemId === 'uq:q-1');
+  assert.equal(answer?.status, 'failed');
+  assert.equal(
+    answer?.type === 'tutor_answer' && answer.errorMessage,
+    '模型响应超时，请稍后重试',
+    '失败态携带 UI 可见的中文错误文案',
+  );
+  assert.equal(question?.status, 'failed', '问题保留并标记失败');
+  assert.equal(harness.phase, 'boundary', '失败不改变章节相位');
+  assert.equal(harness.orchestrator.isBusy, false, '失败后释放忙碌，允许手动重试');
+
+  // 第二次刷新：失败回答不再归一、不再自动重试（防循环重试）
+  const second = normalizeTutorRuntimeForResume(harness.lesson, NOW + 20);
+  assert.equal(second.shouldAutoRetry, false);
+  assert.equal(second.lesson, harness.lesson, '失败态容器原样返回');
+});
+
 test('刷新恢复：无 pendingRequest 的已提交未答问题走边界兜底派发', async () => {
   let lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
   lesson = applyLearningSseEvent(
