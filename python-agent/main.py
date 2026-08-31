@@ -383,7 +383,6 @@ async def chat_agent_route(request: dict):
 
                 system_prompt = build_chat_system_prompt(
                     course_topic=course_topic,
-                    chat_history=raw_messages or [],
                     context_info=context_info,
                     conversation_summary=conversation_summary,
                     chat_memory=chat_memory,

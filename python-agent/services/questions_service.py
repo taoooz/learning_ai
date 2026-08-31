@@ -25,7 +25,11 @@ def build_questions_prompt(topic: str, cards: list, payload: dict) -> str:
     work_background = payload.get('workBackground', '')
     education_background = payload.get('educationBackground', '')
 
-    cards_section = '\n'.join([f"【卡片 {i+1}】{c.get('title', '')}\n{c.get('content', '')}" for i, c in enumerate(cards)])
+    # 卡片标题带上真实 id，供模型把题目绑定到来源卡片（cardId 字段）
+    cards_section = '\n'.join([
+        f"【卡片 {c.get('id') or f'card-{i+1}'}】{c.get('title', '')}\n{c.get('content', '')}"
+        for i, c in enumerate(cards)
+    ])
 
     level_description = LEVEL_DESCRIPTIONS.get(estimated_level, LEVEL_DESCRIPTIONS['beginner'])
     skip_basics_text = '、'.join(skip_basics) if skip_basics else '暂无'

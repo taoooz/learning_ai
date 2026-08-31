@@ -169,9 +169,10 @@ class AgentClient(MiniMaxClient):
     """支持 function calling 的 MiniMax 客户端"""
 
     def chat_with_tools(self, messages, tools, tool_functions,
-                        model="MiniMax-M2.7-highspeed", max_tokens=2000,
+                        model=None, max_tokens=2000,
                         reasoning_split=True, max_iterations=3) -> dict:
         """同步调用 chat API，自动处理 tool_calls 循环"""
+        model = model or self.model
         iteration = 0
         while iteration < max_iterations:
             response = self._call_llm(messages, tools, model, max_tokens, reasoning_split)
@@ -207,7 +208,7 @@ class AgentClient(MiniMaxClient):
         messages: list[dict],
         tools: list[dict],
         tool_functions: dict[str, Callable],
-        model: str = "MiniMax-M2.7-highspeed",
+        model: str | None = None,
         max_tokens: int = 2000,
         reasoning_split: bool = True,
         max_iterations: int = 3,
@@ -222,6 +223,7 @@ class AgentClient(MiniMaxClient):
             - content_delta: 内容增量
             - done: 完成标记
         """
+        model = model or self.model
         iteration = 0
         search_count = 0
         stop_search_instruction_added = False

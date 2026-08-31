@@ -46,22 +46,39 @@ PROMPT = {
 - 填空题的 sentence 字段为包含 ___ 空位的完整句子，answer 为正确答案数组，options 为 4-6 个候选词选项（包含正确答案和干扰项）
 
 ## 输出格式
-{{{{
-  "questions": [{{{{
+每道题必须包含 concept / dimension / difficulty / cardId 四个字段：
+- concept：本题考查的核心概念（2-8 个字，用于学习情况跟踪）
+- dimension：memory / understanding / application / analysis 之一（见"出题维度"）
+- difficulty：整数 1 / 2 / 3（见"出题难度梯度"）
+- cardId：题目依据的卡片，取「章节学习内容」中「【卡片 xxx】」里的 id，不要编造
+
+{{
+  "questions": [{{
     "id": "q-1",
     "type": "single",
     "question": "题干",
     "options": ["选项A", "选项B", "选项C", "选项D"],
-    "answer": "A"
-  }}}}},{{{{{
+    "answer": "A",
+    "concept": "核心概念",
+    "dimension": "understanding",
+    "difficulty": 2,
+    "cardId": "card-1"
+  }},{{
     "id": "q-2",
     "type": "fill_blank",
     "question": "题干（可选）",
     "sentence": "这是一个___，用于测试___。",
     "options": ["候选词1", "候选词2", "候选词3", "候选词4"],
-    "answer": ["候选词1", "候选词3"]
-  }}}}]
-}}}}
+    "answer": ["候选词1", "候选词3"],
+    "concept": "核心概念",
+    "dimension": "memory",
+    "difficulty": 1,
+    "cardId": "card-2"
+  }}]
+}}
+
+## JSON 书写规范
+- 字符串值内部不要出现英文双引号，引述内容改用中文引号「」
 
 只返回合法 JSON。""",
 }

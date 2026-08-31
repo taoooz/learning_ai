@@ -38,6 +38,42 @@ def _extract_content_from_agent_events(events: list[dict]) -> str:
     return "".join(parts)
 
 
+# 与 prompt 约定一致：每次仅提 1 个问题，累计最多 3 个
+MAX_QUESTIONS = 3
+
+
+def _stream_agent_sse(client, messages: list[dict], max_tokens: int, agent_events: list) -> Generator[str, None, None]:
+    """运行 Agent tool-calling 循环，把 agent 事件转成前端 SSE 格式，同时累积到 agent_events"""
+    for event in client.stream_chat_with_tools(
+        messages=messages,
+        tools=SEARCH_TOOLS,
+        tool_functions=TOOL_FUNCTIONS,
+        max_tokens=max_tokens,
+        reasoning_split=True,
+        max_iterations=8,
+        max_searches=3,
+    ):
+        agent_events.append(event)
+
+        if event["type"] == "thinking":
+            yield f"data: {json.dumps({'type': 'thinking', 'message': event['message']}, ensure_ascii=False)}\n\n"
+
+        elif event["type"] == "tool_call":
+            tool_name = event["tool"]
+            tool_args = event["args"]
+            if tool_name == "web_search":
+                query = tool_args.get("query", "")
+                yield f"data: {json.dumps({'type': 'thinking', 'message': f'正在搜索：{query}'}, ensure_ascii=False)}\n\n"
+            elif tool_name == "read_url":
+                url = tool_args.get("url", "")
+                yield f"data: {json.dumps({'type': 'thinking', 'message': f'正在读取：{url}'}, ensure_ascii=False)}\n\n"
+
+        elif event["type"] == "content_delta":
+            content = event["content"]
+            if content:
+                yield f"data: {json.dumps({'type': 'content_delta', 'content': content}, ensure_ascii=False)}\n\n"
+
+
 def stream_outline_with_tools(
     topic: str,
     user_profile: dict,
@@ -67,41 +103,7 @@ def stream_outline_with_tools(
     agent_events = []
 
     try:
-        for event in client.stream_chat_with_tools(
-            messages=messages,
-            tools=SEARCH_TOOLS,
-            tool_functions=TOOL_FUNCTIONS,
-            max_tokens=max_tokens,
-            reasoning_split=True,
-            max_iterations=8,
-            max_searches=3,
-        ):
-            agent_events.append(event)
-
-            if event["type"] == "thinking":
-                yield f"data: {json.dumps({'type': 'thinking', 'message': event['message']}, ensure_ascii=False)}\n\n"
-
-            elif event["type"] == "tool_call":
-                tool_name = event["tool"]
-                tool_args = event["args"]
-                if tool_name == "web_search":
-                    query = tool_args.get("query", "")
-                    yield f"data: {json.dumps({'type': 'thinking', 'message': f'正在搜索：{query}'}, ensure_ascii=False)}\n\n"
-                elif tool_name == "read_url":
-                    url = tool_args.get("url", "")
-                    yield f"data: {json.dumps({'type': 'thinking', 'message': f'正在读取：{url}'}, ensure_ascii=False)}\n\n"
-
-            elif event["type"] == "tool_result":
-                pass
-
-            elif event["type"] == "content_delta":
-                content = event["content"]
-                if content:
-                    yield f"data: {json.dumps({'type': 'content_delta', 'content': content}, ensure_ascii=False)}\n\n"
-
-            elif event["type"] == "done":
-                pass
-
+        yield from _stream_agent_sse(client, messages, max_tokens, agent_events)
     except Exception as e:
         print(f"[Outline Agent] Error during agent loop: {e}")
         import traceback
@@ -155,7 +157,10 @@ def stream_outline_with_tools(
             yield f"data: {json.dumps({'type': 'blueprint_field', 'field': field, 'value': blueprint[field]}, ensure_ascii=False)}\n\n"
         yield f"data: {json.dumps({'type': 'confirmation', 'blueprint': blueprint, 'sessionId': session_id}, ensure_ascii=False)}\n\n"
 
-    # 保存 messages 到 state
+    # 保存 messages 到 state：先写入本轮 AI 回复，下一轮模型才能看到
+    # 自己提过的问题，否则会反复提出相似问题（澄清循环）
+    if content_clean:
+        messages.append({"role": "assistant", "content": content_clean})
     state["llm_messages"] = messages
     session_store.update(session_id, state)
 
@@ -199,35 +204,7 @@ def stream_answer_with_tools(
     agent_events = []
 
     try:
-        for event in client.stream_chat_with_tools(
-            messages=messages,
-            tools=SEARCH_TOOLS,
-            tool_functions=TOOL_FUNCTIONS,
-            max_tokens=max_tokens,
-            reasoning_split=True,
-            max_iterations=8,
-            max_searches=3,
-        ):
-            agent_events.append(event)
-
-            if event["type"] == "thinking":
-                yield f"data: {json.dumps({'type': 'thinking', 'message': event['message']}, ensure_ascii=False)}\n\n"
-
-            elif event["type"] == "tool_call":
-                tool_name = event["tool"]
-                tool_args = event["args"]
-                if tool_name == "web_search":
-                    query = tool_args.get("query", "")
-                    yield f"data: {json.dumps({'type': 'thinking', 'message': f'正在搜索：{query}'}, ensure_ascii=False)}\n\n"
-                elif tool_name == "read_url":
-                    url = tool_args.get("url", "")
-                    yield f"data: {json.dumps({'type': 'thinking', 'message': f'正在读取：{url}'}, ensure_ascii=False)}\n\n"
-
-            elif event["type"] == "content_delta":
-                content = event["content"]
-                if content:
-                    yield f"data: {json.dumps({'type': 'content_delta', 'content': content}, ensure_ascii=False)}\n\n"
-
+        yield from _stream_agent_sse(client, messages, max_tokens, agent_events)
     except Exception as e:
         print(f"[Outline Answer Agent] Error: {e}")
         import traceback
@@ -241,6 +218,26 @@ def stream_answer_with_tools(
     full_content = _extract_content_from_agent_events(agent_events)
     content_clean = re.sub(r'Thinking.*?Thinking', '', full_content, flags=re.DOTALL).strip()
     parsed = parse_content_blocks(content_clean)
+
+    # 防御：累计提问已达上限但模型仍要提问时，追加指令再跑一轮，强制收敛到学习计划
+    if parsed.get("questions") and not parsed.get("outline") and state["question_count"] >= MAX_QUESTIONS:
+        print(f"[Outline Answer Agent] 提问数已达上限（{state['question_count']}），强制收敛到学习计划")
+        messages.append({"role": "assistant", "content": content_clean})
+        messages.append({"role": "user", "content": "已收集到足够信息，请不要再提问。请直接按输出格式给出 <outline> 学习计划。"})
+        agent_events = []
+        try:
+            yield from _stream_agent_sse(client, messages, max_tokens, agent_events)
+        except Exception as e:
+            print(f"[Outline Answer Agent] Force converge error: {e}")
+            import traceback
+            traceback.print_exc()
+            msg = _user_friendly_error(e)
+            yield f"data: {json.dumps({'type': 'error', 'message': msg}, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
+            return
+        full_content = _extract_content_from_agent_events(agent_events)
+        content_clean = re.sub(r'Thinking.*?Thinking', '', full_content, flags=re.DOTALL).strip()
+        parsed = parse_content_blocks(content_clean)
 
     if parsed.get("questions"):
         q = parsed["questions"][0]
@@ -271,7 +268,10 @@ def stream_answer_with_tools(
             yield f"data: {json.dumps({'type': 'blueprint_field', 'field': field, 'value': blueprint[field]}, ensure_ascii=False)}\n\n"
         yield f"data: {json.dumps({'type': 'confirmation', 'blueprint': blueprint, 'sessionId': session_id}, ensure_ascii=False)}\n\n"
 
-    # 保存 AI 回复和 messages 到 state
+    # 保存 AI 回复和 messages 到 state：本轮 AI 回复必须写入，
+    # 下一轮模型才能看到自己提过的问题，避免重复提问
+    if content_clean:
+        messages.append({"role": "assistant", "content": content_clean})
     state["llm_messages"] = messages
     session_store.update(session_id, state)
 

@@ -50,6 +50,25 @@ def get_client() -> MiniMaxClient:
     return _client
 
 
+# prompt 约定模型输出中文水平词，但前端展示与下游 prompt（LEVEL_DESCRIPTIONS 等）
+# 均以英文键为准，统一在解析层归一化，避免各消费方各自踩空
+_LEVEL_ALIASES = {
+    "入门": "novice",
+    "零基础": "novice",
+    "初级": "beginner",
+    "中级": "intermediate",
+    "高级": "advanced",
+}
+_VALID_LEVELS = {"novice", "beginner", "intermediate", "advanced"}
+
+
+def normalize_level(level: str) -> str:
+    """将模型输出的水平值归一化为英文键；无法识别时回退 beginner"""
+    value = (level or "").strip()
+    normalized = _LEVEL_ALIASES.get(value, value.lower())
+    return normalized if normalized in _VALID_LEVELS else "beginner"
+
+
 def _format_user_profile(user_profile: dict) -> str:
     """将用户画像 JSON 格式化为可读文本"""
     sections = []
@@ -262,7 +281,7 @@ def parse_content_blocks(content: str) -> dict:
             "learningDirection": direction_match.group(1).strip() if direction_match else "",
             "learningKeypoint": keypoint_match.group(1).strip() if keypoint_match else "",
             "learningGoal": object_match.group(1).strip() if object_match else "",
-            "estimatedLevel": level_match.group(1).strip() if level_match else "",
+            "estimatedLevel": normalize_level(level_match.group(1) if level_match else ""),
             "backgroundSummary": background_match.group(1).strip() if background_match else None,
             "skipBasics": knowledge_match.group(1).strip().split('；') if knowledge_match else None,
         }

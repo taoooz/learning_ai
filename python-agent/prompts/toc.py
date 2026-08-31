@@ -60,11 +60,14 @@ PROMPT = {
      h. exploration_deduction（探究发现）：围绕核心疑问→假设推导→规律总结→延伸探索组织内容
 
 ## 输出格式
-{{{{
+{{
   "courseName": "课程名称",
   "courseDescription": "课程描述",
-  "nodes": [{{{{"index": 1, "title": "章节标题", "description": "章节描述", "frame": "what_why_how"}}}}]
-}}}}
+  "nodes": [{{"index": 1, "title": "章节标题", "description": "章节描述", "frame": "what_why_how"}}]
+}}
+
+## JSON 书写规范
+- 字符串值内部不要出现英文双引号，引述内容改用中文引号「」
 
 只返回 JSON。
 </output_format>""",

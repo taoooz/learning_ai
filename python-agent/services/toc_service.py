@@ -4,7 +4,7 @@ TOC Agent 业务逻辑服务
 """
 import json
 import re
-from lib.minimax import MiniMaxClient
+from lib.minimax import MiniMaxClient, parse_json_response
 from lib.constants import LEVEL_DESCRIPTIONS, LEARNING_STYLE_DESCRIPTIONS, TECHNICAL_LEVEL_DESCRIPTIONS
 from prompts import build_prompt
 
@@ -132,7 +132,6 @@ async def generate_toc(blueprint: dict, planning_payload: dict = None, user_prof
         content += delta
 
     # 解析 JSON
-    from lib.minimax import parse_json_response
     return parse_json_response(content)
 
 
@@ -182,7 +181,8 @@ def _extract_complete_node_objects(content: str) -> list[dict]:
               if depth == 0 and object_start >= 0:
                   raw_object = content[object_start:cursor + 1]
                   try:
-                      nodes.append(json.loads(raw_object))
+                      # 与最终解析同口径：容忍裸控制字符/未转义引号
+                      nodes.append(parse_json_response(raw_object))
                   except Exception:
                       pass
                   object_start = -1

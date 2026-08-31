@@ -44,11 +44,12 @@ def stream_toc_with_tools(
     streaming_content = ""
     emitted_course_name = None
     emitted_course_description = None
-    emitted_node_count = 0
+    emitted_nodes = []       # 已流式输出的节点，最终解析失败时用于兜底
+    consumed_node_count = 0  # 已扫描的节点数（含无效节点，避免重复扫描）
 
     def _try_parse_and_yield():
         """从当前累积内容中增量解析 TOC 字段并 yield SSE 事件"""
-        nonlocal emitted_course_name, emitted_course_description, emitted_node_count
+        nonlocal emitted_course_name, emitted_course_description, consumed_node_count
         content_clean = re.sub(r'Thinking.*?Thinking', '', streaming_content, flags=re.DOTALL).strip()
         if not content_clean:
             return
@@ -64,11 +65,18 @@ def stream_toc_with_tools(
             yield f"data: {json.dumps({'type': 'course_description', 'value': course_description}, ensure_ascii=False)}\n\n"
 
         nodes = _extract_complete_node_objects(content_clean)
-        while emitted_node_count < len(nodes):
-            node = nodes[emitted_node_count]
+        while consumed_node_count < len(nodes):
+            node = nodes[consumed_node_count]
+            consumed_node_count += 1
             if isinstance(node, dict) and all(key in node for key in ("index", "title", "description")):
-                yield f"data: {json.dumps({'type': 'node', 'node': {'index': node['index'], 'title': node['title'], 'description': node['description'], 'frame': node.get('frame', 'total_split_total')}}, ensure_ascii=False)}\n\n"
-            emitted_node_count += 1
+                emitted_node = {
+                    'index': node['index'],
+                    'title': node['title'],
+                    'description': node['description'],
+                    'frame': node.get('frame', 'total_split_total'),
+                }
+                emitted_nodes.append(emitted_node)
+                yield f"data: {json.dumps({'type': 'node', 'node': emitted_node}, ensure_ascii=False)}\n\n"
 
     try:
         for event in client.stream_chat_with_tools(
@@ -111,15 +119,29 @@ def stream_toc_with_tools(
     # 最终兜底解析（确保 complete 事件包含完整数据）
     content_clean = re.sub(r'Thinking.*?Thinking', '', streaming_content, flags=re.DOTALL).strip()
     from lib.minimax import parse_json_response
+    result = None
     try:
-        result = parse_json_response(content_clean)
+        parsed = parse_json_response(content_clean)
+        parsed_nodes = parsed.get("nodes") if isinstance(parsed, dict) else None
+        if isinstance(parsed_nodes, list) and parsed_nodes:
+            result = parsed
     except Exception:
-        # 如果最终解析失败，用已流式 emit 的数据构造结果
+        pass
+
+    if result is None:
+        # 最终解析失败或未解析出节点：退化为流式阶段已提取的节点数据
         result = {
             "courseName": emitted_course_name or blueprint.get("topic", ""),
             "courseDescription": emitted_course_description or "",
-            "nodes": [],
+            "nodes": emitted_nodes,
         }
-    yield f"data: {json.dumps({'type': 'complete', 'result': result}, ensure_ascii=False)}\n\n"
 
+    if not result.get("nodes"):
+        # 空目录不可用：明确发 error 事件，让前端展示错误并引导重试，
+        # 而不是用空结果假装完成（静默降级）
+        yield f"data: {json.dumps({'type': 'error', 'message': '课程目录生成失败，请重试'}, ensure_ascii=False)}\n\n"
+        yield "data: [DONE]\n\n"
+        return
+
+    yield f"data: {json.dumps({'type': 'complete', 'result': result}, ensure_ascii=False)}\n\n"
     yield "data: [DONE]\n\n"

@@ -75,18 +75,19 @@ def _build_memory_section(chat_memory: Optional[dict]) -> str:
 
 def build_chat_system_prompt(
     course_topic: str,
-    chat_history: list[dict],
     context_info: Optional[dict] = None,
     conversation_summary: Optional[dict] = None,
     chat_memory: Optional[dict] = None,
 ) -> str:
     """构建 chat system prompt（从 Next.js chat-context.ts 迁移）
 
+    近期对话由 messages 数组全量携带（前端已过滤过期消息），
+    system prompt 只补充过期对话的压缩摘要，避免历史双份嵌入浪费 token。
+
     Args:
         course_topic: 课程主题
-        chat_history: 对话历史消息（role + content）
         context_info: 上下文信息（currentNodeTitle, currentNodeGoal, questionContext）
-        conversation_summary: 对话摘要
+        conversation_summary: 过期对话摘要
         chat_memory: ChatMemoryPayload 精简记忆
     """
     if not chat_memory:
@@ -139,22 +140,9 @@ def build_chat_system_prompt(
         node_section = get_prompt("chat", "node_section",
             node_title=node_title, node_goal=node_goal or '')
 
-    # 对话历史
-    active_messages = [m for m in chat_history if not m.get('isExpired')]
+    # 过期对话摘要（近期对话在 messages 数组中，不再重复嵌入）
     expired_summary = (conversation_summary or {}).get('summary')
-
-    history_section = ''
-    if active_messages:
-        recent = active_messages[-6:]
-        history_section = '\n'.join(
-            f"{'用户' if m.get('role') == 'user' else '助理'}：{m.get('content', '')}"
-            for m in recent
-        )
-
-    if expired_summary:
-        summary_section = f"{expired_summary}\n\n最近对话：\n{history_section or '暂无'}"
-    else:
-        summary_section = history_section or '暂无'
+    summary_section = f"## 更早的对话摘要\n{expired_summary}\n\n" if expired_summary else ''
 
     memory_section = _build_memory_section(chat_memory)
 
@@ -168,10 +156,7 @@ def build_chat_system_prompt(
 
 {memory_section}
 
-## 对话历史
-{summary_section}
-
-请基于以上信息，简洁回答用户当前问题。"""
+{summary_section}请基于以上信息，简洁回答用户当前问题。"""
 
 
 def stream_chat_with_tools(

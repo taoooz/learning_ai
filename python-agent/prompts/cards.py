@@ -69,7 +69,7 @@ PROMPT = {
 - 必备字段：
   - "type": "timeline"
   - "title": "标题"
-  - "events": [{{"time": "...", "title": "...", "description": "..."}}]
+  - "events": [{"time": "...", "title": "...", "description": "..."}]
 
 3. comparison
 - 适用于两种或多种方案对比
@@ -102,18 +102,18 @@ PROMPT = {
 - 如果某张卡片不需要可视化，直接省略 visualization 字段
 
 ## 输出格式
-{{{{
+{
   "cards": [
-    {{{{
+    {
       "id": "card-1",
       "title": "标题",
       "content": "Markdown 内容"
-    }}}},
-    {{{{
+    },
+    {
       "id": "card-2",
       "title": "标题",
       "content": "Markdown 内容",
-      "visualization": {{{{
+      "visualization": {
         "type": "table",
         "title": "示例标题",
         "columns": ["列1", "列2", "列3"],
@@ -121,11 +121,13 @@ PROMPT = {
           ["值1", "值2", "值3"],
           ["值1", "值2", "值3"]
         ]
-      }}}}
-    }}}}
+      }
+    }
   ]
-}}}}
+}
 
-只返回合法 JSON，不要解释，不要输出 Markdown 代码块。
+## JSON 书写规范
+- 字符串值内部不要出现英文双引号，引述内容改用中文引号「」
+- 只返回合法 JSON，不要解释，不要输出 Markdown 代码块
 </output_format>""",
 }

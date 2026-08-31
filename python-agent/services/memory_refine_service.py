@@ -77,7 +77,6 @@ def refine_memory(
     if len(user_messages) < 3:
         return {"summary": None, "preferenceUpdates": [], "conceptCorrections": []}
 
-    client = MiniMaxClient()
     user_prompt = _build_user_prompt(
         recent_messages=recent_messages,
         current_summary=current_summary,
@@ -92,8 +91,9 @@ def refine_memory(
     ]
 
     try:
-        api_key = os.getenv("MINIMAX_API_KEY", "")
-        base_url = os.getenv("MINIMAX_API_BASE", "https://api.minimaxi.com/v1")
+        api_key = os.getenv("LLM_API_KEY", "")
+        base_url = os.getenv("LLM_API_BASE", "http://muses-openapi-prod.weizhipin.com/v1")
+        model = os.getenv("LLM_MODEL", "muses/deepseek-v4-flash")
         with httpx.Client() as http_client:
             resp = http_client.post(
                 f"{base_url}/chat/completions",
@@ -102,7 +102,7 @@ def refine_memory(
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "MiniMax-M2.7-highspeed",
+                    "model": model,
                     "messages": messages,
                     "max_tokens": 800,
                 },
@@ -113,15 +113,9 @@ def refine_memory(
 
         content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
 
-        # 解析 JSON（处理 markdown 代码块包裹）
-        content = content.strip()
-        if content.startswith("```"):
-            # 去掉 ```json 和 ```
-            lines = content.split("\n")
-            lines = [l for l in lines if not l.strip().startswith("```")]
-            content = "\n".join(lines)
-
-        result = json.loads(content)
+        # 解析 JSON（parse_json_response 统一处理 markdown 包裹、未转义引号与裸控制字符）
+        from lib.minimax import parse_json_response
+        result = parse_json_response(content)
 
         # 验证结构
         return {
