@@ -3,8 +3,10 @@
 // 九分支对应计划 T7：①无 lesson→生成计划 ②completed→完成卡 ③planning 无内容→最小 order 任务
 // ④awaiting_user→渲染已有+边界 ⑤流式残留→新 attempt ⑥failed→重试 ⑦脏 pendingRequest→忽略
 // ⑧损坏 null 由 storage 归一为 null（等同①）⑨章节 locked 在页面层重定向，不进此函数
+// P2：normalizeTutorRuntimeForResume 负责 Tutor 答疑的刷新归一（设计文档 §5），
+// 不触碰主任务状态（主线恢复仍由 decideResumeAction 决策）
 
-import type { NodeLessonV2 } from '@/types/learning-v2';
+import type { NodeLessonV2, TutorAnswerItem } from '@/types/learning-v2';
 
 export type ResumeAction =
   | { kind: 'generate_plan' }
@@ -100,4 +102,70 @@ function lastCompletedTaskId(lesson: NodeLessonV2): string | null {
     if (runtime.completedTaskIds.includes(sorted[i].taskId)) return sorted[i].taskId;
   }
   return null;
+}
+
+// ---- Tutor 刷新归一（P2 流内答疑，设计文档 §5） ----
+
+export interface TutorResumeNormalization {
+  lesson: NodeLessonV2;
+  /** 是否需要对最早的未完成问题执行一次自动重试 */
+  shouldAutoRetry: boolean;
+}
+
+function isUnfinishedTutorAnswer(
+  item: NodeLessonV2['streamItems'][number],
+): item is TutorAnswerItem {
+  return item.type === 'tutor_answer' && (item.status === 'pending' || item.status === 'streaming');
+}
+
+/**
+ * 刷新后的 Tutor 运行时归一（纯函数，只处理 Tutor，不动主任务状态）。
+ * - pending/streaming 的回答统一恢复为 pending：保留问题条目与已展示的回答块，
+ *   重试建流时归约器会按既有规则清空半截块，不在这里丢弃内容；
+ * - 已完成/已失败的回答与问题不动；
+ * - 一次性自动重试：仅当首次尝试（attempt === 1）的 Tutor 请求被刷新打断时为真。
+ *   重试标记持久化在 lesson.runtime.pendingRequest 上——归一把死请求状态改为
+ *   failed 并保留 attempt，重试建流后 attempt 升到 2，再次刷新即不再自动重试，
+ *   防止「刷新→自动重试→失败前再刷新」的循环重试；
+ * - 死请求归一为 failed 同时解除归约器的在途守卫，保证重试的新 requestId
+ *   能被 tutor_started 接受；主任务（kind 非 tutor）的 pendingRequest 原样保留。
+ * 无可归一内容时原样返回（引用不变），与归约器的 no-op 约定一致。
+ */
+export function normalizeTutorRuntimeForResume(
+  lesson: NodeLessonV2,
+  now: number,
+): TutorResumeNormalization {
+  const { runtime } = lesson;
+  const pending = runtime.pendingRequest;
+
+  const hasUnfinishedAnswer = lesson.streamItems.some(isUnfinishedTutorAnswer);
+  const hasLiveTutorRequest = !!pending && pending.kind === 'tutor' && pending.status !== 'failed';
+
+  if (!hasUnfinishedAnswer && !hasLiveTutorRequest) {
+    return { lesson, shouldAutoRetry: false };
+  }
+
+  // 见函数注释：attempt === 1 且被刷新打断的 Tutor 请求才值得一次自动重试
+  const shouldAutoRetry =
+    hasUnfinishedAnswer &&
+    !!pending &&
+    pending.kind === 'tutor' &&
+    pending.status !== 'failed' &&
+    pending.attempt === 1;
+
+  return {
+    lesson: {
+      ...lesson,
+      streamItems: lesson.streamItems.map((item) =>
+        isUnfinishedTutorAnswer(item) ? { ...item, status: 'pending' as const } : item,
+      ),
+      runtime: {
+        ...runtime,
+        pendingRequest: hasLiveTutorRequest ? { ...pending, status: 'failed' as const } : pending,
+        lastActiveAt: now,
+      },
+      updatedAt: now,
+    },
+    shouldAutoRetry,
+  };
 }
