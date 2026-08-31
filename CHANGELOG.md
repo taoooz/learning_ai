@@ -2,6 +2,17 @@
 
 ## 2026-09-01
 
+### V2 P2 第一阶段：流内答疑（交付总结）
+- 完成定义达成：任务流式生成中提问只入队（问题立即入流并落盘，任务完成后按队列顺序自动回答），边界提问立即启动回答；Tutor 完成后章节仍停在边界，不自动推进主线
+- 持久化：UserQuestion/TutorAnswer 立即进入学习流并经 commit 统一入口落盘（不走节流），刷新后问题轨迹、在途回答与失败态均不丢；被中断请求刷新自动重试一次（重试再失败进入可见失败态且不再自动重试）
+- Tutor SSE 双流隔离：Tutor 持独立代际计数 + 独立 AbortController + 忙闲标志，与主任务流互不取消；章节卸载/切换两者一并作废；问题串行回答、自动窗口 3 题，超窗口排队；旧章节残留流与协议版本不匹配事件一律丢弃不写入
+- 红线守住：prompt 明确中文作答当前问题、不输出思维过程、不产出掌握度/证据结论（事件载荷禁含 evidence 字段，真实冒烟实测 0 处）；课程计划、任务内容与证据均不被 Tutor 修改
+- 契约补齐（Task 4 裁决）：请求契约携带 courseId（普通字段，不进入幂等键格式），事件外壳 courseId 回填请求真实值，客户端事件写入前先比对 courseId
+- 静态与测试（2026-09-01 全量）：lint 0 errors（21 warnings 与基线持平）、`tsc --noEmit` 干净、TS 全量 228/228 绿（其中流内答疑测试 78 项）、pytest 67/67 绿
+- HTTP 错误路径冒烟：缺 `question` 字段 → 422 `INVALID_REQUEST`（「请求参数校验失败：question: Field required」，流未开始即拒）；畸形幂等键 → 422 `INVALID_REQUEST`（「幂等键格式无效」）；Next 侧无 cookie 401 与缺字段/畸形 JSON 422 由 `learning-v2-tutor-protocol.test.ts` 自动化覆盖
+- 真实 LLM 冒烟：SSE 序列 `tutor_started → tutor_block_started → tutor_block_delta×109 → tutor_block_completed → tutor_completed → request_completed` 完整有序（sequence 1–114 连续）；中文任意 chunk 切分无乱码，delta 拼接与 `block_completed` 正文完全一致；载荷无 evidence；`generationMeta` 仅含 promptVersion/modelVersion/durationMs/degraded，无内部细节；全程约 1.1s
+- 勘误：Task 6 条目「新增 26 项」实为 19 项，已就地修正
+
 ### V2 P2 流内答疑：恢复、错误路径与回归测试（Task 8）
 - 新增 `tests/learning-v2-tutor-integration.test.ts`（8 用例）：基于 Task 6 编排基座锁定恢复与错误路径红线——旧章节残留流（started+delta 携带旧 chapterId）不写入新章节、失败问题局部重试不改变任务内容与 `completedTaskIds`、章节卸载后迟到响应整体丢弃（代际作废）、Tutor 流读取异常不动已完成任务、主任务失败不取消在途 Tutor、超窗口问题保留且串行不并发、HTTP 401/503 落稳定中文错误、Tutor 终态不推进主线
 - `tutor-harness` 测试基座增量扩展（向后兼容）：新增 `tutorEventChapterId`/`failedQuestionId` 夹具选项、`currentAnswerText` 读取、`holdNextTutorFetch`（请求挂起闸）、`failActiveStream`、`emitTaskError` 与 `createTutorHarness` 别名
@@ -25,7 +36,7 @@
 - 刷新恢复：初始化 `prepareTutorBoot` 归一（原引用时跳过冗余落盘）；被中断请求自动重试一次（attempt 守卫防循环），无 pendingRequest 的已提交问题走边界空闲兜底派发
 - hook 新增同步镜像（与 reducer 归约路径一致，commit 统一入口）：消除 dispatch 批处理导致的过期读（快速连续提问丢更新、任务完成后队列读旧容器）
 - 参与信号新增 3 类：`tutor_question_submitted`/`tutor_answer_completed`/`tutor_answer_failed`；hook 返回扩展 `submitTutorQuestion`/`retryTutor`/`tutorState`/`isTutorBusy`，既有字段不变
-- 验证：TS 218/218 绿（新增编排决策与行为契约 26 项，含简报基线两用例）、`tsc --noEmit` 干净、lint 0 errors（21 warnings 与基线持平）
+- 验证：TS 218/218 绿（新增编排决策与行为契约 19 项：协议集成 14 + 刷新恢复 5，含简报基线两用例）、`tsc --noEmit` 干净、lint 0 errors（21 warnings 与基线持平）
 
 ### V2 P2 流内答疑：Tutor 请求契约补齐 courseId（Task 4 审查裁决）
 - 设计文档要求 Tutor 事件写入前守卫包含 courseId，裁决扩展请求契约携带该字段（普通请求字段，不进入幂等键格式）：`InlineTutorRequestPayload`/`buildInlineTutorContext` 增加 `courseId`，Python `InlineTutorRequest` 同步增字段（`extra='forbid'` 风格不变），事件外壳 `courseId` 由空串改为回填请求真实值
