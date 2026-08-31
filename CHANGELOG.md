@@ -2,6 +2,17 @@
 
 ## 2026-08-31
 
+### V2 方案 Review 修订与瀑布流 Spike 验证
+- Review 三份 V2 文档并修订 5 个主要问题：P1 拆为 P1a（核心循环，无预取）/P1b（预取、重试、Recap）两个可独立发布切片；P0 类型收窄为"只定义 P1 消费的类型"，Evidence/Checkpoint 推迟 P3 定稿；补上流式生成中提问的行为定义（§2.6.1，任务状态新增 `partial_paused`）；localStorage 治理从 P5 提前到 P1（每章独立 key + 完成归档压缩）；Checkpoint 结构化题先上线，开放式评估须过回归样本后启用
+- 次要修订：删除无落地设计的 `decision_support` 意图；北极星指标标注 P3 前用 TTFC + 继续率代理；P2 明确聊天底层与 V1 ChatWidget 共享不复制
+- Spike 实测（`/spike/waterfall`，一次性验证代码）：单任务流式首字约 0.3s、总时长 3.5～4.2s，任务衔接自然不重复，验证 P1a 不做预取 + 300～500 字任务粒度成立，结论已回填方案 §6.1；53 项既有测试无回归
+
+### V2 理想架构重建与旧文档归档
+- 以“稳定课程路线 + 章节内连续学习流 + 流内答疑 + 证据型理解检查 + 有边界的动态调度”为目标，从理想产品方案重新建立三份 V2 Source of Truth：项目综述、课程与学习系统、用户画像与学习证据
+- 明确 P0～P5 分阶段路线：协议兼容 → 瀑布流 MVP → 流内答疑 → 证据型检查与补救 → 动态教学调度 → 服务端持久化与质量规模化；每阶段包含范围、非目标、工程结构、测试和完成定义
+- 明确 V1/V2 协议并行、Learning Stream 不静默改写、异步结果校验 planVersion、写操作幂等、参与信号与能力证据分离等工程边界
+- 将历史架构文档和 Hyperlearn 调研归档至 `docs/archive/architecture/`，避免历史方案与竞品推断被后续开发误认为当前需求
+
 ### Session 持久化（outline 会话重启不丢）
 - 症状：outline 会话只存在 Python Agent 内存（`SessionStore` 的 dict），服务重启即全部丢失，用户中途生成课程再刷新/重启就答不上题
 - 修复：`memory/session.py` 增加文件持久化——内存 dict 仍是主存储，磁盘 `data/sessions/*.json` 仅用于跨重启恢复；启动加载全部会话，create/update/delete 同步落盘；原子写入（`.tmp` + `os.replace`）防半截文件；单文件损坏只跳过告警不阻断其余加载；`data/` 加入 .gitignore
