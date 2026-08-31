@@ -5,6 +5,11 @@
 // 展示可带走要点（takeaway）与下一步预告（nextHint）；按钮统一走 continueNext：
 // 失败→重新生成 / 有下一任务→继续学习 / 末任务→完成本章
 // completing 相位：末任务确认后进入收尾，按钮禁用并提示正在生成小结
+//
+// P2 流内答疑不变量（设计文档 §4，勿破坏）：
+// - Tutor 回答进行中不禁用本卡任何操作，提问输入框（页面层）也保持可用；
+// - 回答完成后保持既有继续按钮与语义，不自动推进主线；
+// - Tutor 失败只在回答条目上局部重试，不进入本卡的失败分支（本卡只反映主线任务状态）。
 
 import type { NodeLessonV2 } from '@/types/learning-v2';
 import type { ChapterPhase } from '@/hooks/learning-v2/useChapterLearning';

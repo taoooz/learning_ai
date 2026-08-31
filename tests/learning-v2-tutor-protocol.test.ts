@@ -2,11 +2,13 @@
 // V2 流内答疑（Tutor）协议测试：幂等键、事件类型、问题/回答归约与版本守卫（P2 Task 1/Task 2）
 // Task 4：Next 薄透传路由的鉴权与必填字段校验
 // Task 6：双流编排（编排层纯决策 + 最小 harness 锁定行为契约）
+// Task 7：UI 文案辅助函数（占位文案区分流中排队与边界提问）
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { POST } from '../app/api/learning/v2/tutor/stream/route';
+import { tutorPlaceholder } from '../components/learning-v2/InlineTutorInput';
 import { createChapterLearningHarness } from './helpers/tutor-harness';
 import {
   canRetryTutorQuestion,
@@ -726,4 +728,11 @@ test('卸载/章节切换作废在途请求：状态归一，重新派发可建�
   assert.equal(harness.tutorRequests, 2);
   await harness.emitTutorCompleted('重启后的回答');
   assert.equal(harness.lesson.streamItems.find((i) => i.type === 'tutor_answer')?.status, 'complete');
+});
+
+// ---- Task 7：UI 文案辅助函数 ----
+
+test('Tutor UI 文案区分流中排队和边界立即回答', () => {
+  assert.equal(tutorPlaceholder('streaming'), '本节生成完成后回答你的问题…');
+  assert.equal(tutorPlaceholder('boundary'), '针对本节内容提问…');
 });

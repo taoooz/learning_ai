@@ -2,7 +2,8 @@
 
 // components/learning-v2/LearningStreamV2.tsx
 // V2 学习流渲染：streamItems 按显式 sequence 排序（文档 §2.5，顺序不能依赖数组写入竞态）
-// 三种条目：task_content（标题+内容块+流式光标）/ task_transition（过渡分隔）/ system_notice（按 tone 着色）
+// 条目类型：task_content（标题+内容块+流式光标）/ task_transition（过渡分隔）/
+// system_notice（按 tone 着色）/ chapter_recap / user_question + tutor_answer（P2 流内答疑，§2.1/§4）
 // 自动滚动：上滑离底部 >120px 暂停跟随，回到底部恢复
 
 import { useEffect, useRef } from 'react';
@@ -12,19 +13,28 @@ import type {
   NodeLessonV2,
   SystemNoticeItem,
   TaskContentItem,
+  TutorAnswerItem,
+  UserQuestionItem,
 } from '@/types/learning-v2';
 import type { ChapterPhase } from '@/hooks/learning-v2/useChapterLearning';
+import { getPendingTutorQuestions, TUTOR_AUTO_WINDOW_LIMIT } from '@/lib/learning-v2/tutor-queue';
 import { TaskBlockView } from './TaskBlocksV2';
 
 export function LearningStreamV2({
   lesson,
   phase,
   anchorTaskId,
+  onRetryTutor,
+  tutorBusy = false,
 }: {
   lesson: NodeLessonV2;
   phase: ChapterPhase;
   /** 恢复分支④锚点：挂载时滚到该任务位置，且不自动贴底（用户上滑即视为跟随关闭） */
   anchorTaskId?: string | null;
+  /** P2：失败回答的重试入口（接 hook.retryTutor）；未提供时不渲染重试按钮 */
+  onRetryTutor?: (questionId: string) => void;
+  /** P2：Tutor 忙碌时禁用重试按钮（编排层忙碌期间不受理重试，§4） */
+  tutorBusy?: boolean;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(!anchorTaskId);
@@ -70,6 +80,24 @@ export function LearningStreamV2({
       ? lesson.runtime.currentTaskId
       : null;
 
+  // P2 排队判定（§3.3/§4）：主任务生成中未答问题全部排队；边界仅超出自动窗口的部分排队。
+  // 排队问题在任务完成（或前一题答完）后按提交顺序自动回答
+  const mainGenerating = phase === 'generating' || phase === 'streaming';
+  const queuedQuestionIds = new Set(
+    getPendingTutorQuestions(lesson)
+      .filter((question, index) => mainGenerating || index >= TUTOR_AUTO_WINDOW_LIMIT)
+      .map((question) => question.questionId),
+  );
+  // 已有流式回答的问题：问题行显示「正在回答…」而非「待回答」
+  const answeringQuestionIds = new Set(
+    lesson.streamItems
+      .filter(
+        (item): item is TutorAnswerItem =>
+          item.type === 'tutor_answer' && item.status === 'streaming',
+      )
+      .map((item) => item.questionId),
+  );
+
   return (
     <div className="space-y-6">
       {items.map((item) => (
@@ -78,6 +106,10 @@ export function LearningStreamV2({
           item={item}
           taskOrder={taskOrder}
           streamingTaskId={streamingTaskId}
+          queuedQuestionIds={queuedQuestionIds}
+          answeringQuestionIds={answeringQuestionIds}
+          onRetryTutor={onRetryTutor}
+          tutorBusy={tutorBusy}
         />
       ))}
       <div ref={bottomRef} />
@@ -89,10 +121,18 @@ function StreamItemView({
   item,
   taskOrder,
   streamingTaskId,
+  queuedQuestionIds,
+  answeringQuestionIds,
+  onRetryTutor,
+  tutorBusy,
 }: {
   item: LearningStreamItem;
   taskOrder: Map<string, number>;
   streamingTaskId: string | null;
+  queuedQuestionIds: Set<string>;
+  answeringQuestionIds: Set<string>;
+  onRetryTutor?: (questionId: string) => void;
+  tutorBusy: boolean;
 }) {
   switch (item.type) {
     case 'task_content':
@@ -115,6 +155,16 @@ function StreamItemView({
       return <SystemNoticeView item={item} />;
     case 'chapter_recap':
       return <ChapterRecapView recap={item.recap} />;
+    case 'user_question':
+      return (
+        <UserQuestionView
+          item={item}
+          queued={queuedQuestionIds.has(item.questionId)}
+          answering={answeringQuestionIds.has(item.questionId)}
+        />
+      );
+    case 'tutor_answer':
+      return <TutorAnswerView item={item} busy={tutorBusy} onRetry={onRetryTutor} />;
     default:
       return null;
   }
@@ -158,6 +208,87 @@ function SystemNoticeView({ item }: { item: SystemNoticeItem }) {
     <div className={`rounded-xl px-4 py-3 text-[13px] leading-relaxed ${NOTICE_TONE_STYLES[item.tone]}`}>
       {item.message}
     </div>
+  );
+}
+
+/**
+ * 用户提问条目（P2，§2.1/§4）：右对齐气泡与任务内容区分。
+ * pending 显示待回答状态；排队中（超出自动窗口或主任务生成中）显示排队提示；
+ * 配对回答已流式时显示「正在回答…」。
+ * 失败的具体原因与重试在配对的 tutor_answer 条目上，问题行只给失败标记。
+ */
+function UserQuestionView({
+  item,
+  queued,
+  answering,
+}: {
+  item: UserQuestionItem;
+  queued: boolean;
+  answering: boolean;
+}) {
+  const pendingHint = queued
+    ? '本节内容会先生成完，随后回答你的问题'
+    : answering
+      ? '正在回答…'
+      : '待回答';
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent/10 px-4 py-2.5 text-[14px] leading-relaxed text-primary">
+        {item.text}
+      </div>
+      {item.status === 'pending' && (
+        <p className="pr-1 text-[12px] text-tertiary">{pendingHint}</p>
+      )}
+      {item.status === 'failed' && <p className="pr-1 text-[12px] text-error">回答失败</p>}
+    </div>
+  );
+}
+
+/**
+ * Tutor 回答条目（P2，§2.1/§4）：markdown 块复用既有内容块渲染。
+ * 流式中无内容时显示准备态；失败显示错误文案与「重试回答」（只重发该问题，不影响主线）。
+ */
+function TutorAnswerView({
+  item,
+  busy,
+  onRetry,
+}: {
+  item: TutorAnswerItem;
+  busy: boolean;
+  onRetry?: (questionId: string) => void;
+}) {
+  const streaming = item.status === 'streaming';
+  const failed = item.status === 'failed';
+  return (
+    <section className="space-y-2 rounded-2xl border border-accent/15 bg-surface px-4 py-3.5">
+      <p className="text-[12px] font-medium tracking-wide text-tertiary">回答</p>
+      {item.blocks.map((block) => (
+        <TaskBlockView key={block.blockId} block={block} />
+      ))}
+      {streaming && item.blocks.length === 0 && (
+        <p className="text-[13px] leading-relaxed text-tertiary">正在准备回答…</p>
+      )}
+      {streaming && (
+        <span className="inline-block h-4 w-2 animate-pulse rounded-[2px] bg-accent align-middle" />
+      )}
+      {failed && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-error/8 px-3 py-2.5">
+          <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-error">
+            {item.errorMessage ?? '回答生成失败，请重试'}
+          </p>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={() => onRetry(item.questionId)}
+              disabled={busy}
+              className="min-h-[44px] shrink-0 rounded-full bg-accent px-5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              重试回答
+            </button>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 

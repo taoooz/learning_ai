@@ -10,6 +10,7 @@ import { CourseHeaderBar } from '@/components/CourseHeaderBar';
 import { LearningStreamV2 } from '@/components/learning-v2/LearningStreamV2';
 import { TaskBoundaryV2 } from '@/components/learning-v2/TaskBoundaryV2';
 import { ChapterCompleteCard } from '@/components/learning-v2/ChapterCompleteCard';
+import { InlineTutorInput, tutorPlaceholder } from '@/components/learning-v2/InlineTutorInput';
 import { useChapterLearning } from '@/hooks/learning-v2/useChapterLearning';
 import { resolveStoredCourse } from '@/lib/learning-v2/dispatch';
 import { refreshCourseTreeViewV2, isSameCourseTreeView } from '@/lib/learning-v2/chapter-complete';
@@ -110,11 +111,18 @@ function ChapterLearningView({
     retryPlan,
     resumeAnchorTaskId,
     currentTaskAttempts,
+    submitTutorQuestion,
+    retryTutor,
+    tutorState,
+    isTutorBusy,
   } = useChapterLearning({
     courseId: course.courseId,
     chapterId: chapter.chapterId,
     blueprint: course.blueprint,
   });
+
+  // P2 流内答疑草稿：受控于页面；章节切换随 key={chapterId} 重建清空
+  const [tutorDraft, setTutorDraft] = useState('');
 
   const totalTasks = lesson?.chapterPlan.tasks.length ?? 0;
   const completedTasks = lesson ? lesson.runtime.completedTaskIds.length : 0;
@@ -188,7 +196,13 @@ function ChapterLearningView({
                     正在生成第一节内容…
                   </div>
                 )}
-              <LearningStreamV2 lesson={lesson} phase={phase} anchorTaskId={resumeAnchorTaskId} />
+              <LearningStreamV2
+                lesson={lesson}
+                phase={phase}
+                anchorTaskId={resumeAnchorTaskId}
+                onRetryTutor={retryTutor}
+                tutorBusy={isTutorBusy}
+              />
               {phase === 'completing' && (
                 <div className="mt-6 text-center text-[13px] text-tertiary">正在收尾本章…</div>
               )}
@@ -198,12 +212,29 @@ function ChapterLearningView({
                 attempts={currentTaskAttempts}
                 onContinue={continueNext}
               />
+              {/* P2 提问输入框（§4）：学习流/边界卡之后常驻，流中与边界均可见；
+                  completing 禁用（收尾后章节转 completed，排队问题将无人应答）；
+                  completed/plan_failed 相位整体隐藏 */}
+              <InlineTutorInput
+                value={tutorDraft}
+                onChange={setTutorDraft}
+                onSubmit={submitTutorQuestion}
+                placeholder={tutorPlaceholder(phase)}
+                disabled={phase === 'completing'}
+                queuedCount={tutorState.pendingCount}
+                busy={tutorState.busy}
+              />
             </>
           )}
 
           {phase === 'completed' && lesson && (
             <>
-              <LearningStreamV2 lesson={lesson} phase={phase} />
+              <LearningStreamV2
+                lesson={lesson}
+                phase={phase}
+                onRetryTutor={retryTutor}
+                tutorBusy={isTutorBusy}
+              />
               <div className="mt-8">
                 <ChapterCompleteCard
                   chapterTitle={chapter.title}

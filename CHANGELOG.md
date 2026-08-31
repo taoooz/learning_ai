@@ -2,6 +2,13 @@
 
 ## 2026-09-01
 
+### V2 P2 流内答疑：章节 UI 与边界交互（Task 7）
+- 新增 `components/learning-v2/InlineTutorInput.tsx`：受控 textarea + 提问按钮，提交前 trim、空问题不提交；提交即清空，可见反馈由学习流问题条目与忙闲/排队提示行（`role="status"`）承接；Enter 提交 / Shift+Enter 换行 / 中文输入法组词期不提交；输入区与按钮触摸区域 ≥44px；导出可测 `tutorPlaceholder(phase)`（边界「针对本节内容提问…」、生成中「本节生成完成后回答你的问题…」，测试锁定）
+- `LearningStreamV2` 新增 `user_question`（右对齐气泡 + 待回答/排队提示/正在回答…）与 `tutor_answer`（复用既有 markdown 块渲染 + 流式光标；流式无内容时「正在准备回答…」；失败显示错误文案与「重试回答」局部重试，Tutor 忙碌时禁用）；排队判定：主任务生成中全部排队、边界超出自动窗口（3 题）排队
+- 章节页接线：输入框置于学习流/边界卡之后，流中与边界均可见；`completing` 禁用（收尾后问题无人应答）；`completed`/`plan_failed` 隐藏；完成页保留问答轨迹与失败重试入口
+- `TaskBoundaryV2` 行为不变，补注 P2 不变量：回答进行中不阻塞提问、回答完成后保持既有继续按钮不自动推进、Tutor 失败不进入主线失败分支
+- 验证：TS 219/219 绿（新增 UI 文案锁定 1 项）、`tsc --noEmit` 干净、lint 0 errors（21 warnings 与基线持平）
+
 ### V2 P2 流内答疑：接入 useChapterLearning 双流编排（Task 6）
 - 新增 `lib/learning-v2/tutor-orchestration.ts` 编排层：提交/自动派发/重试/恢复/失效决策全部抽为可测单元（纯函数 + `TutorStreamOrchestrator`），hook 只做薄接线；相位推导 `deriveChapterPhase` 抽出与测试同源
 - 双流隔离：Tutor 持独立代际计数 + 独立 AbortController + 忙闲标志，与主任务流互不取消；章节卸载/切换两者一并作废，中断回答归一为 pending（同刷新恢复语义）
