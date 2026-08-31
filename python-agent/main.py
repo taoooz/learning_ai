@@ -38,9 +38,15 @@ from services.questions_agent import generate_questions_with_tools
 from services.chat_agent import stream_chat_with_tools, build_chat_system_prompt
 from services.memory_refine_service import refine_memory
 from schemas.learning_v2 import ChapterPlanRequest, ChapterRecapRequest, TaskStreamRequest
+from schemas.tutor import InlineTutorRequest
 from services.chapter_plan_service import generate_chapter_plan
 from services.chapter_recap_service import generate_chapter_recap
 from services.task_content_service import stream_task_events
+from services.inline_tutor_service import (
+    TutorRequestDataError,
+    extract_tutor_envelope_ids,
+    stream_tutor_events,
+)
 from services.learning_v2_errors import (
     BlueprintDataError,
     ChapterNotFoundError,
@@ -560,6 +566,51 @@ async def learning_v2_tasks_stream(request: Request):
             }
             yield f"data: {json.dumps({**common, 'eventId': f'{fallback_request_id}:1', 'sequence': 1, 'payload': {'code': 'UPSTREAM_ERROR', 'message': '内容生成出现异常，请稍后重试', 'retryable': True}}, ensure_ascii=False)}\n\n"
             yield f"data: {json.dumps({**common, 'eventId': f'{fallback_request_id}:2', 'sequence': 2, 'type': 'request_completed', 'payload': {'requestId': fallback_request_id, 'status': 'failed', 'errorCode': 'UPSTREAM_ERROR'}}, ensure_ascii=False)}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.post("/api/learning/v2/tutor/stream")
+async def learning_v2_tutor_stream(request: Request):
+    """V2 流内答疑流式生成（SSE）：tutor_started → tutor_block_started → N×tutor_block_delta
+    → tutor_block_completed → tutor_completed → request_completed"""
+    req, error_response = await _validate_learning_v2_request(request, InlineTutorRequest)
+    if error_response is not None:
+        return error_response  # 流尚未开始，直接返回 422 JSON
+
+    try:
+        chapter_id, plan_version = extract_tutor_envelope_ids(req)
+    except TutorRequestDataError as exc:
+        return _learning_v2_invalid_request(str(exc))
+
+    async def event_generator():
+        fallback_request_id = f"req-{uuid4().hex[:12]}"
+
+        def fallback_event(sequence: int, event_type: str, payload: dict) -> dict:
+            return {
+                "eventId": f"{fallback_request_id}:{sequence}",
+                "requestId": fallback_request_id,
+                "type": event_type,
+                "courseId": "",
+                "chapterId": chapter_id,
+                "taskId": req.task.taskId,
+                "questionId": req.question.questionId,
+                "planVersion": plan_version,
+                "sequence": sequence,
+                "timestamp": time.time_ns() // 1_000_000,
+                "payload": payload,
+            }
+
+        try:
+            async for event in stream_tutor_events(req, chapter_id, plan_version):
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+        except Exception as exc:  # noqa: BLE001 最后兜底：意外异常也要补齐协议序列再结束
+            print(f"[Learning V2 Tutor] 意外异常: {exc}")
+            import traceback
+            traceback.print_exc()
+            yield f"data: {json.dumps(fallback_event(1, 'request_error', {'code': 'UPSTREAM_ERROR', 'message': '内容生成出现异常，请稍后重试', 'retryable': True}), ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps(fallback_event(2, 'request_completed', {'requestId': fallback_request_id, 'status': 'failed', 'errorCode': 'UPSTREAM_ERROR'}), ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")

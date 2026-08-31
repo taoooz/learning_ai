@@ -1,14 +1,27 @@
-# tests/test_inline_tutor.py — P2 流内答疑请求模型与 prompt（计划 Task 3）
+# tests/test_inline_tutor.py — P2 流内答疑请求模型、prompt 与 Tutor SSE 服务（计划 Task 3 / Task 4）
 # 契约对齐：
 # - InlineTutorRequest 与 lib/learning-v2/tutor-context.ts InlineTutorRequestPayload 逐字段对齐，
 #   extra='forbid' 拒绝整门课程对象或全量历史混入
 # - build_inline_tutor_prompt 明确中文回答当前问题、不输出思维过程、不产出证据结论
+# - 事件序列 tutor_started → tutor_block_started → tutor_block_delta* → tutor_block_completed
+#   → tutor_completed → request_completed（设计文档 §2.2）
 
+import asyncio
+import json
+
+import httpx
 import pytest
 from pydantic import ValidationError
 
 from prompts.inline_tutor import build_inline_tutor_prompt
 from schemas.tutor import InlineTutorRequest, InlineTutorResponse
+from services.inline_tutor_service import (
+    BLOCK_ID,
+    TutorRequestDataError,
+    classify_tutor_error,
+    extract_tutor_envelope_ids,
+    stream_tutor_events,
+)
 
 
 def _request(**overrides) -> InlineTutorRequest:
@@ -121,6 +134,189 @@ def test_response_shape_and_forbid():
             generationMeta={},
             evidence=[],
         )
+
+
+# ---- Task 4：Tutor SSE 服务 ----
+
+
+class FakeTutorClient:
+    """假 LLM 客户端：stream_chat 产出预置增量；可选在开头或第 N 个增量后抛异常"""
+    model = "fake-model"
+
+    def __init__(self, deltas=(), error: Exception | None = None, error_after: int | None = None):
+        self.deltas = list(deltas)
+        self.error = error
+        self.error_after = error_after  # 发出 N 个增量后抛错；None 表示开始前抛错
+
+    async def stream_chat(self, messages, model=None, max_tokens=1500):
+        if self.error is not None and self.error_after is None:
+            raise self.error
+        for index, delta in enumerate(self.deltas):
+            if self.error_after is not None and index == self.error_after:
+                raise self.error
+            yield {"choices": [{"delta": {"content": delta}}]}
+
+
+async def _collect_tutor(gen):
+    return [event async for event in gen]
+
+
+def fake_tutor_events(answer: str | None = None, client=None, **request_overrides) -> list[dict]:
+    """以假 LLM 客户端运行 Tutor 服务，返回完整事件序列（answer 作为单个增量发出）"""
+    if client is None:
+        client = FakeTutorClient(deltas=[answer] if answer is not None else [])
+    request = _request(**request_overrides)
+    chapter_id, plan_version = extract_tutor_envelope_ids(request)
+    return asyncio.run(_collect_tutor(
+        stream_tutor_events(request, chapter_id, plan_version, client=client)
+    ))
+
+
+def test_tutor_event_order_and_utf8():
+    events = list(fake_tutor_events(answer='ETag 可以理解为版本指纹'))
+    assert [event['type'] for event in events] == [
+        'tutor_started', 'tutor_block_started', 'tutor_block_delta',
+        'tutor_block_completed', 'tutor_completed', 'request_completed',
+    ]
+    assert any('版本指纹' in json.dumps(event, ensure_ascii=False) for event in events)
+
+
+def test_tutor_llm_failure_returns_retryable_error():
+    error = classify_tutor_error(TimeoutError())
+    assert error.code == 'LLM_TIMEOUT'
+    assert error.retryable is True
+
+
+def test_tutor_envelope_fields_and_sequence():
+    """外壳字段：章节/版本从幂等键解析，任务/问题守卫字段齐全，sequence 严格递增"""
+    events = list(fake_tutor_events(answer='304 只回包头不回正文。'))
+    request_id = events[0]["requestId"]
+    assert request_id.startswith("req-")
+    for index, event in enumerate(events, 1):
+        assert event["eventId"] == f"{request_id}:{index}"
+        assert event["sequence"] == index
+        assert event["chapterId"] == "ch-1"      # 解析自幂等键
+        assert event["planVersion"] == 1
+        assert event["taskId"] == "task-1"
+        assert event["questionId"] == "q-1"
+        assert event["courseId"] == ""           # 最小上下文不含 courseId（设计文档 §3.2）
+        assert isinstance(event["timestamp"], int)
+
+    assert events[0]["payload"] == {"questionId": "q-1"}
+    assert events[1]["payload"] == {"blockId": BLOCK_ID}
+    assert events[2]["payload"] == {"blockId": BLOCK_ID, "delta": "304 只回包头不回正文。"}
+    assert events[3]["payload"]["block"] == {
+        "type": "markdown", "blockId": BLOCK_ID, "markdown": "304 只回包头不回正文。",
+    }
+
+    # tutor_completed = InlineTutorResponse 形状：questionId + markdown-only blocks + generationMeta
+    completed = events[4]["payload"]
+    assert completed["questionId"] == "q-1"
+    assert completed["blocks"] == [
+        {"type": "markdown", "blockId": BLOCK_ID, "markdown": "304 只回包头不回正文。"},
+    ]
+    meta = completed["generationMeta"]
+    assert meta["promptVersion"] == "inline-tutor-v1"
+    assert meta["modelVersion"] == "fake-model"
+    assert meta["degraded"] is False
+    assert isinstance(meta["generatedAt"], int)
+    assert isinstance(meta["durationMs"], int)
+
+    assert events[5]["payload"]["requestId"] == request_id
+    assert events[5]["payload"]["status"] == "completed"
+
+    # 证据红线：任何事件载荷都不得携带 evidence
+    assert all("evidence" not in event["payload"] for event in events)
+
+
+def test_tutor_multiple_deltas_accumulate_into_single_markdown_block():
+    """LLM 输出只进 tutor_block_delta；多个增量累积为同一个固定 blockId 的块"""
+    events = fake_tutor_events(client=FakeTutorClient(deltas=["304 ", "没有正文，", "只有包头。"]))
+    types = [event["type"] for event in events]
+    assert types.count("tutor_block_delta") == 3
+    assert types.count("tutor_block_completed") == 1
+    assert all(
+        event["payload"]["blockId"] == BLOCK_ID
+        for event in events
+        if event["type"] in ("tutor_block_started", "tutor_block_delta")
+    )
+    block_completed = next(e for e in events if e["type"] == "tutor_block_completed")
+    assert block_completed["payload"]["block"]["markdown"] == "304 没有正文，只有包头。"
+
+
+def test_tutor_llm_timeout_before_stream_emits_error_events():
+    """流开始前超时 → request_error(LLM_TIMEOUT, retryable) + request_completed(failed)"""
+    events = fake_tutor_events(client=FakeTutorClient(error=httpx.ReadTimeout("timeout")))
+    assert [event["type"] for event in events] == [
+        "tutor_started", "tutor_block_started", "request_error", "request_completed",
+    ]
+    assert events[2]["payload"]["code"] == "LLM_TIMEOUT"
+    assert events[2]["payload"]["retryable"] is True
+    assert events[2]["payload"]["message"]  # 中文可展示消息
+    assert events[3]["payload"]["status"] == "failed"
+    assert events[3]["payload"]["errorCode"] == "LLM_TIMEOUT"
+
+
+def test_tutor_stream_broken_midway_keeps_emitted_deltas():
+    """流中断（已有增量）→ UPSTREAM_STREAM_BROKEN，已发增量保留在序列中"""
+    client = FakeTutorClient(deltas=["第一句。", "第二句。"], error=httpx.ReadError("boom"), error_after=1)
+    events = fake_tutor_events(client=client)
+    assert [event["type"] for event in events] == [
+        "tutor_started", "tutor_block_started", "tutor_block_delta",
+        "request_error", "request_completed",
+    ]
+    assert events[3]["payload"]["code"] == "UPSTREAM_STREAM_BROKEN"
+    assert events[3]["payload"]["retryable"] is True
+    assert events[4]["payload"]["errorCode"] == "UPSTREAM_STREAM_BROKEN"
+    assert [event["sequence"] for event in events] == list(range(1, len(events) + 1))
+
+
+def test_tutor_empty_answer_emits_empty_content_error():
+    """累积内容为空 → EMPTY_CONTENT + failed"""
+    events = fake_tutor_events(client=FakeTutorClient(deltas=[]))
+    assert events[-2]["payload"]["code"] == "EMPTY_CONTENT"
+    assert events[-2]["payload"]["retryable"] is True
+    assert events[-1]["payload"]["status"] == "failed"
+
+
+def test_extract_tutor_envelope_ids_from_idempotency_key():
+    chapter_id, plan_version = extract_tutor_envelope_ids(_request())
+    assert chapter_id == "ch-1"
+    assert plan_version == 1
+
+
+def test_extract_tutor_envelope_ids_rejects_bad_or_inconsistent_key():
+    """幂等键格式无效或与请求任务/问题不一致 → 端点层 422 前置错误"""
+    with pytest.raises(TutorRequestDataError):
+        extract_tutor_envelope_ids(_request(idempotencyKey="task:ch-1:v1:task-1:q-1"))
+    with pytest.raises(TutorRequestDataError):
+        extract_tutor_envelope_ids(_request(idempotencyKey="tutor:ch-1:v1:task-OTHER:q-1"))
+    with pytest.raises(TutorRequestDataError):
+        extract_tutor_envelope_ids(_request(idempotencyKey="tutor:ch-1:v1:task-1:q-OTHER"))
+    with pytest.raises(TutorRequestDataError):
+        extract_tutor_envelope_ids(_request(idempotencyKey=""))
+
+
+def test_classify_tutor_error_covers_llm_failure_modes():
+    """全部 LLM 失败模式都得到稳定 code、中文 message 且可重试"""
+    timeout = classify_tutor_error(httpx.ReadTimeout("timeout"))
+    assert (timeout.code, timeout.retryable) == ("LLM_TIMEOUT", True)
+
+    response = httpx.Response(429, request=httpx.Request("POST", "http://llm.local/chat"))
+    limited = classify_tutor_error(
+        httpx.HTTPStatusError("429", request=response.request, response=response)
+    )
+    assert (limited.code, limited.retryable) == ("LLM_RATE_LIMITED", True)
+
+    unavailable = classify_tutor_error(httpx.ConnectError("refused"))
+    assert (unavailable.code, unavailable.retryable) == ("LLM_UNAVAILABLE", True)
+
+    generic = classify_tutor_error(RuntimeError("boom"))
+    assert (generic.code, generic.retryable) == ("UPSTREAM_ERROR", True)
+
+    for error in (timeout, limited, unavailable, generic):
+        assert error.message  # 用户可见中文消息非空
+        assert "http" not in error.message.lower()  # 不泄露内部 URL
 
 
 if __name__ == "__main__":

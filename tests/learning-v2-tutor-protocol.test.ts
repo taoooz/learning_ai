@@ -1,9 +1,11 @@
 // tests/learning-v2-tutor-protocol.test.ts
 // V2 流内答疑（Tutor）协议测试：幂等键、事件类型、问题/回答归约与版本守卫（P2 Task 1/Task 2）
+// Task 4：Next 薄透传路由的鉴权与必填字段校验
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { POST } from '../app/api/learning/v2/tutor/stream/route';
 import {
   buildTutorQuestionIdempotencyKey,
   buildTutorRequestIdempotencyKey,
@@ -480,4 +482,43 @@ test('request_completed 清理 Tutor pendingRequest', () => {
     }),
   );
   assert.equal(wrappedUp.runtime.pendingRequest, undefined);
+});
+
+// ---- Task 4：Next 薄透传路由（鉴权与必填字段校验） ----
+
+// 与 python-agent/schemas/tutor.py InlineTutorRequest 对齐的合法请求体
+const validTutorBody = {
+  mode: 'inline_tutor',
+  courseTopic: 'HTTP 缓存',
+  chapter: { title: '验证策略', teachingGoal: '理解强缓存和协商缓存' },
+  task: { taskId: 'task-1', title: 'ETag', taskDescription: '理解条件请求' },
+  visibleContent: 'ETag 可以理解为资源的版本指纹。',
+  recentInlineQA: [],
+  question: { questionId: 'q-1', text: '304 为什么没有正文？' },
+  idempotencyKey: 'tutor:ch-1:v1:task-1:q-1',
+};
+
+test('V2 Tutor 代理拒绝无认证请求', async () => {
+  const response = await POST(new Request('http://localhost/api/learning/v2/tutor/stream', {
+    method: 'POST', body: JSON.stringify(validTutorBody),
+  }) as never);
+  assert.equal(response.status, 401);
+});
+
+test('V2 Tutor 代理缺少必填字段返回 422 且不触达上游', async () => {
+  const authedInit = { headers: { cookie: 'ai-learning-auth=abcd-1234-ef56' } };
+  const missingKey = await POST(new Request('http://localhost/api/learning/v2/tutor/stream', {
+    method: 'POST', body: JSON.stringify({ ...validTutorBody, idempotencyKey: undefined }), ...authedInit,
+  }) as never);
+  assert.equal(missingKey.status, 422);
+
+  const missingQuestion = await POST(new Request('http://localhost/api/learning/v2/tutor/stream', {
+    method: 'POST', body: JSON.stringify({ ...validTutorBody, question: undefined }), ...authedInit,
+  }) as never);
+  assert.equal(missingQuestion.status, 422);
+
+  const invalidJson = await POST(new Request('http://localhost/api/learning/v2/tutor/stream', {
+    method: 'POST', body: '不是 JSON', ...authedInit,
+  }) as never);
+  assert.equal(invalidJson.status, 422);
 });
