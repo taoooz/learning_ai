@@ -64,6 +64,30 @@ def test_cleanup_old_removes_expired(tmp_path):
     assert not fp.exists()
 
 
+def test_cleanup_keeps_fresh_sessions(tmp_path):
+    """刚创建/活跃的会话不应被清理误删"""
+    store = SessionStore(data_dir=tmp_path)
+    fresh = store.create("outline", {"v": 1})
+    removed = store.cleanup_old(max_age_seconds=3600)
+    assert removed == 0
+    assert store.get(fresh.session_id) is not None
+    assert (tmp_path / f"{fresh.session_id}.json").exists()
+
+
+def test_cleanup_mixed_only_removes_expired(tmp_path):
+    """新旧会话并存时只删过期的，保留活跃的"""
+    store = SessionStore(data_dir=tmp_path)
+    fresh = store.create("outline", {"v": 1})
+    stale = store.create("outline", {"v": 2})
+    store.get(stale.session_id).updated_at = int(time.time()) - 7200
+
+    removed = store.cleanup_old(max_age_seconds=3600)
+    assert removed == 1
+    assert store.get(fresh.session_id) is not None
+    assert store.get(stale.session_id) is None
+    assert not (tmp_path / f"{stale.session_id}.json").exists()
+
+
 def test_corrupt_file_is_skipped(tmp_path):
     """单个损坏文件不应阻断其余会话加载"""
     store = SessionStore(data_dir=tmp_path)

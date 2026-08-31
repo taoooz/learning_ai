@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 from pathlib import Path
@@ -35,12 +36,40 @@ from services.memory_refine_service import refine_memory
 
 session_store = get_session_store()
 
+# 会话过期与清理策略（可用环境变量覆盖）：
+# 持久化后会话只增不减，需定期清理过期会话，防止磁盘/内存缓慢膨胀
+SESSION_MAX_AGE_SECONDS = int(os.getenv("SESSION_MAX_AGE_SECONDS", "86400"))
+SESSION_CLEANUP_INTERVAL_SECONDS = int(os.getenv("SESSION_CLEANUP_INTERVAL_SECONDS", "3600"))
+
+
+async def _session_cleanup_loop() -> None:
+    """后台定期清理过期会话；单次清理失败不中断循环"""
+    while True:
+        await asyncio.sleep(SESSION_CLEANUP_INTERVAL_SECONDS)
+        try:
+            removed = session_store.cleanup_old(max_age_seconds=SESSION_MAX_AGE_SECONDS)
+            if removed:
+                print(f"[INFO] 定期清理过期会话 {removed} 个")
+        except Exception as e:  # noqa: BLE001 清理是后台维护任务，任何异常都不应影响主服务
+            print(f"[WARN] 清理过期会话失败: {e}")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Agent 服务启动")
-    yield
-    print("Agent 服务关闭")
+    # 启动时先清一次历史遗留的过期会话（重启前已过期的文件）
+    try:
+        removed = session_store.cleanup_old(max_age_seconds=SESSION_MAX_AGE_SECONDS)
+        if removed:
+            print(f"[INFO] 启动清理过期会话 {removed} 个")
+    except Exception as e:  # noqa: BLE001 启动清理失败不阻断服务启动
+        print(f"[WARN] 启动清理过期会话失败: {e}")
+    cleanup_task = asyncio.create_task(_session_cleanup_loop())
+    try:
+        yield
+    finally:
+        cleanup_task.cancel()
+        print("Agent 服务关闭")
 
 
 app = FastAPI(title="Agent Outline Generator", version="1.0.0", lifespan=lifespan)
