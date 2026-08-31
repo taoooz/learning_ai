@@ -1,5 +1,13 @@
 # 项目迭代日志
 
+## 2026-08-31
+
+### Session 持久化（outline 会话重启不丢）
+- 症状：outline 会话只存在 Python Agent 内存（`SessionStore` 的 dict），服务重启即全部丢失，用户中途生成课程再刷新/重启就答不上题
+- 修复：`memory/session.py` 增加文件持久化——内存 dict 仍是主存储，磁盘 `data/sessions/*.json` 仅用于跨重启恢复；启动加载全部会话，create/update/delete 同步落盘；原子写入（`.tmp` + `os.replace`）防半截文件；单文件损坏只跳过告警不阻断其余加载；`data/` 加入 .gitignore
+- 验证：`tests/test_session.py` 7 用例（含重启恢复、损坏容错）12/12 绿；跨进程恢复含中文会话正常（`ensure_ascii=False`）；真实 LLM 生成后会话落盘并扛过服务器重启
+- ⚠️ 发现 `python-agent/` 是嵌套独立 git 仓库（`learning_ai_python_agent`，Railway 遗留），与主仓库重叠、工作区大量改动未提交，存在提交错仓库/部署陈旧代码风险，建议后续收敛为单一仓库
+
 ## 2026-08-27
 
 ### chat 历史去重（省 token）
