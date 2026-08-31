@@ -667,6 +667,13 @@ function applyTutorStarted(lesson: NodeLessonV2, event: LearningSseEvent): NodeL
   const { runtime } = lesson;
   const now = tutorEvent.timestamp;
 
+  // 在途请求守卫：started 负责建立请求，不复用 isStaleTutorRequest（它只拒不同 requestId）。
+  // Tutor 流式进行中时：同 requestId 重投幂等 no-op（不清空已累积块），
+  // 不同 requestId 的迟到/错投 started 一律拒写——否则会劫持 pendingRequest，
+  // 反令在途请求的合法 delta 被过期守卫拒写；失败重试走下方 pending.status === 'failed' 分支
+  const pending = runtime.pendingRequest;
+  if (pending && pending.kind === 'tutor' && pending.status === 'streaming') return lesson;
+
   const existing = findTutorAnswerItem(lesson.streamItems, tutorEvent.questionId);
   // 已完成回答不被过期 started 回退；失败/流式残留重试时先清空半截块（缺陷 A 同源）
   if (existing?.status === 'complete') return lesson;

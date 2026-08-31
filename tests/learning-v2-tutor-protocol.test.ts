@@ -244,6 +244,64 @@ test('进行中的 Tutor 请求在位时，过期 requestId 的事件拒写', ()
   assert.equal(applyTutorSseEvent(started, staleDelta), started);
 });
 
+test('在途同 requestId 的 tutor_started 重投幂等，不清空已累积块', () => {
+  const started = applyTutorSseEvent(baseWithQuestion, tutorStartedEvent);
+  const withBlock = applyTutorSseEvent(started, tutorBlockStartedEvent);
+  const partial = applyTutorSseEvent(withBlock, tutorDeltaEvent('已累积内容'));
+  assert.equal(findAnswer(partial)?.blocks[0]?.markdown, '已累积内容');
+
+  // 同一事件重投：重复应用必须得到相同状态，不得清空在途内容
+  const replayed = applyTutorSseEvent(partial, tutorStartedEvent);
+  const answer = findAnswer(replayed);
+  assert.ok(answer);
+  assert.equal(answer.status, 'streaming');
+  assert.equal(answer.blocks[0]?.markdown, '已累积内容', '重投不得清空已累积块');
+  assert.equal(replayed.runtime.pendingRequest?.requestId, 'req-tutor-1');
+  assert.equal(replayed.runtime.pendingRequest?.attempt, started.runtime.pendingRequest?.attempt, '重投不得增加 attempt');
+  assert.deepEqual(replayed, partial);
+});
+
+test('旧 requestId 迟到的 tutor_started 拒写，不劫持在途新请求', () => {
+  const newStarted = applyTutorSseEvent(
+    baseWithQuestion,
+    makeTutorEvent({
+      eventId: 'evt-tutor-started-new',
+      requestId: 'req-new',
+      type: 'tutor_started',
+      sequence: 20,
+      timestamp: 5000,
+      payload: { questionId: 'q-1' },
+    }),
+  );
+  const partial = applyTutorSseEvent(
+    newStarted,
+    tutorDeltaEvent('新回答进行中', { requestId: 'req-new', sequence: 21 }),
+  );
+  assert.equal(findAnswer(partial)?.blocks[0]?.markdown, '新回答进行中');
+
+  // 旧请求迟到的 started：拒写，不得清空在途内容、不得劫持 pendingRequest
+  const staleStarted = makeTutorEvent({
+    eventId: 'evt-tutor-started-stale',
+    requestId: 'req-old',
+    type: 'tutor_started',
+    sequence: 22,
+    timestamp: 5100,
+    payload: { questionId: 'q-1' },
+  });
+  const afterStale = applyTutorSseEvent(partial, staleStarted);
+  assert.equal(afterStale, partial, '旧 requestId 迟到的 started 应拒写');
+  assert.equal(afterStale.runtime.pendingRequest?.requestId, 'req-new', 'pendingRequest 不得被劫持');
+  assert.equal(afterStale.runtime.pendingRequest?.attempt, newStarted.runtime.pendingRequest?.attempt);
+  assert.equal(findAnswer(afterStale)?.blocks[0]?.markdown, '新回答进行中', '不得清空在途回答内容');
+
+  // 劫持被拒后，新请求的合法 delta 仍可正常写入
+  const continued = applyTutorSseEvent(
+    afterStale,
+    tutorDeltaEvent('继续', { requestId: 'req-new', sequence: 23 }),
+  );
+  assert.equal(findAnswer(continued)?.blocks[0]?.markdown, '新回答进行中继续');
+});
+
 // ---- Task 2：回答流 ----
 
 test('tutor_started 创建流式回答并记录 tutor pendingRequest', () => {
