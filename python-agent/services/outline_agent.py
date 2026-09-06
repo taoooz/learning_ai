@@ -78,7 +78,8 @@ def stream_outline_with_tools(
     topic: str,
     user_profile: dict,
     planning_memory: dict,
-    max_tokens: int = 6000,
+    # glm-5.3-flash 思考长度方差大，预算不足会截断在思考阶段（同 TOC 教训）
+    max_tokens: int = 12000,
 ) -> Generator[str, None, None]:
     """Agent 版 outline 生成（带搜索能力）
 
@@ -171,7 +172,7 @@ def stream_outline_with_tools(
 def stream_answer_with_tools(
     session_id: str,
     answer: str,
-    max_tokens: int = 4000,
+    max_tokens: int = 8000,
 ) -> Generator[str, None, None]:
     """Agent 版 outline 多轮回答（带搜索能力）
 

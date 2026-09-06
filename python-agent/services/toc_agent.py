@@ -19,7 +19,9 @@ def stream_toc_with_tools(
     blueprint: dict,
     planning_payload: dict = None,
     user_profile: dict = None,
-    max_tokens: int = 4000,
+    # glm-5.3-flash 思考长度方差大（实测 3k~12k 字），带 tools 决策时更长；
+    # 预算不足会被 max_tokens 截断在思考阶段（finish_reason=length、content 为空）
+    max_tokens: int = 16000,
 ) -> Generator[str, None, None]:
     """Agent 版 TOC 生成（带搜索能力）
 
@@ -41,6 +43,7 @@ def stream_toc_with_tools(
 
     agent_events = []
     # 实时流式解析状态
+    streaming_thinking = ""
     streaming_content = ""
     emitted_course_name = None
     emitted_course_description = None
@@ -90,6 +93,7 @@ def stream_toc_with_tools(
             agent_events.append(event)
 
             if event["type"] == "thinking":
+                streaming_thinking += event["message"]
                 yield f"data: {json.dumps({'type': 'thinking', 'message': event['message']}, ensure_ascii=False)}\n\n"
 
             elif event["type"] == "content_delta":
@@ -139,7 +143,11 @@ def stream_toc_with_tools(
     if not result.get("nodes"):
         # 空目录不可用：明确发 error 事件，让前端展示错误并引导重试，
         # 而不是用空结果假装完成（静默降级）
-        yield f"data: {json.dumps({'type': 'error', 'message': '课程目录生成失败，请重试'}, ensure_ascii=False)}\n\n"
+        # thinking 有内容而正文为空 = 输出预算被思考耗尽（finish_reason=length），单独提示便于诊断
+        if streaming_thinking and not streaming_content:
+            yield f"data: {json.dumps({'type': 'error', 'message': '模型思考过长耗尽输出预算，请重试；若反复出现请反馈'}, ensure_ascii=False)}\n\n"
+        else:
+            yield f"data: {json.dumps({'type': 'error', 'message': '课程目录生成失败，请重试'}, ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"
         return
 

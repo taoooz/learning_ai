@@ -2,6 +2,14 @@
 
 ## 2026-09-06
 
+### 修复：TOC/Outline 生成卡死（glm-5.3-flash 思考耗尽 max_tokens 预算）
+- 症状：生成课程一直 loading 无结果，TOC 流只出 thinking 无内容；错误信息笼统「课程目录生成失败」
+- 根因：glm-5.3-flash 思考长度方差大（实测 3.4k~12k 字），带搜索工具定义时更长；max_tokens 预算被思考耗尽后 content 一个 token 未输出即截断（finish_reason=length）；旧预算按 deepseek-v4-flash（思考短）设定，今天切模型后暴露
+- 铁证对照：带 tools → finish_reason=length、thinking 10259 字、content 0 字；不带 tools → finish_reason=stop、thinking 3374 字、content 1935 字
+- 修复：max_tokens 调整 toc_agent 4000→16000、outline_agent 6000→12000（初始）/4000→8000（多轮回答），对齐 cards_agent 此前 16000 的先例；toc_agent 空目录兜底特判「思考耗尽预算」单独提示便于诊断（补 streaming_thinking 累积变量）
+- 已知风险：chat_agent max_tokens=1500 理论上同样有截断风险（无实锤、场景不同，暂不动）
+- 验证：pytest 68/68 绿；真实 LLM 冒烟：TOC 端到端完整输出（course_name + 12 节点 + complete 事件），本次 thinking 14067 字——旧预算 4000 必截断、16000 预算完整走完
+
 ### 修复：模型思考过程换行全部丢失（段落连成一行）
 - 症状：outline 流式生成时「思考过程」所有内容连成一行，看不到段落结构；用户另观察到思考尾部已表达学习方向/学习目标（查明为模型先打草稿再誊写的正常行为，卡片数据从 content 流独立解析，非 bug）
 - 根因：`minimax_agent.py` 的 `_do_streaming_call` 对每个 thinking/content_delta chunk 做 `rstrip('\n')`（2026-04-13 引入，无必要动机）——换行恰好落在 chunk 边界时被逐个剥离，5k 字思考流 0 换行；前端 `whitespace-pre-wrap` 渲染正常，数据在源头已丢失
