@@ -104,7 +104,8 @@ def _do_streaming_call(
                         reasoning_content = delta.get("reasoning_content")
                         if reasoning_content:
                             full_reasoning += reasoning_content
-                            yield {"type": "thinking", "message": reasoning_content.rstrip('\n')}
+                            # 换行是内容结构的一部分，不可剥离（否则前端段落连成一行）
+                            yield {"type": "thinking", "message": reasoning_content}
 
                             # 重复检测：模型退化循环时同一段文本会反复出现
                             _recent_thinking_chunks.append(reasoning_content.strip())
@@ -120,7 +121,7 @@ def _do_streaming_call(
                         if content:
                             full_content += content
                             if not any(tag in content for tag in ('<invoke', '</minimax:tool_call>')):
-                                yield {"type": "content_delta", "content": content.rstrip('\n')}
+                                yield {"type": "content_delta", "content": content}
 
                         delta_tool_calls = delta.get("tool_calls")
                         if delta_tool_calls:

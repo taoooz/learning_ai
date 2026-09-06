@@ -2,6 +2,13 @@
 
 ## 2026-09-06
 
+### 修复：模型思考过程换行全部丢失（段落连成一行）
+- 症状：outline 流式生成时「思考过程」所有内容连成一行，看不到段落结构；用户另观察到思考尾部已表达学习方向/学习目标（查明为模型先打草稿再誊写的正常行为，卡片数据从 content 流独立解析，非 bug）
+- 根因：`minimax_agent.py` 的 `_do_streaming_call` 对每个 thinking/content_delta chunk 做 `rstrip('\n')`（2026-04-13 引入，无必要动机）——换行恰好落在 chunk 边界时被逐个剥离，5k 字思考流 0 换行；前端 `whitespace-pre-wrap` 渲染正常，数据在源头已丢失
+- 修复：去掉两处 rstrip（换行是内容结构的一部分）；`StreamingMessage.tsx` 渲染层 `thinkingContent.trim()` 兜底流尾残留空白（数据保持原样）
+- 惠及范围：`AgentClient` 为 outline/toc/cards/questions/chat 5 个 agent 共用，全部流式端点换行恢复
+- 验证：TDD 先红后绿（新增 `test_stream_newlines.py` 构造 SSE 流断言换行保留）；pytest 68/68、TS 231/231、typecheck 干净、lint 0 errors；真实 LLM 冒烟：thinking 换行 0→79、content 0→6，段落结构完整；顺带重启了 8000 端口 8/31 残留旧进程
+
 ### 课程模型切换：zhipu/glm-5.3-flash（全链路）
 - 全链路替换 `muses/deepseek-v4-flash` → `zhipu/glm-5.3-flash`，共 9 处：4 个 env 文件（`.env.local`、`python-agent/.env` 及两个 `.env.example` 占位符）`LLM_MODEL` 行、3 处源码硬编码默认值（`lib/minimax.ts`、`python-agent/lib/minimax.py`、`python-agent/services/memory_refine_service.py`——第 3 处为全链路 grep 才发现的兜底点）、CLAUDE.md / AGENTS.md 模型记录
 - 端点不变：新模型同为 `provider/model` 命名，走同一 muses 网关

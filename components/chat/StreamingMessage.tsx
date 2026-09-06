@@ -84,7 +84,8 @@ export function StreamingMessage({ content, thinkingContent, isThinking }: Strea
                   className="overflow-hidden"
                 >
                   <div className="px-4 pb-3 text-sm text-tertiary leading-relaxed whitespace-pre-wrap">
-                    {thinkingContent}
+                    {/* 渲染层 trim：流尾残留换行不显示为空行（数据保持原样） */}
+                    {thinkingContent.trim()}
                   </div>
                 </motion.div>
               )}
