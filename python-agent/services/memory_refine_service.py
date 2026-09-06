@@ -93,7 +93,7 @@ def refine_memory(
     try:
         api_key = os.getenv("LLM_API_KEY", "")
         base_url = os.getenv("LLM_API_BASE", "http://muses-openapi-prod.weizhipin.com/v1")
-        model = os.getenv("LLM_MODEL", "muses/deepseek-v4-flash")
+        model = os.getenv("LLM_MODEL", "zhipu/glm-5.3-flash")
         with httpx.Client() as http_client:
             resp = http_client.post(
                 f"{base_url}/chat/completions",

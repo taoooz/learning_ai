@@ -35,7 +35,7 @@
 
 ### LLM API
 - 服务：OpenAI 兼容，端点 `http://muses-openapi-prod.weizhipin.com/v1`
-- 模型：`muses/deepseek-v4-flash`
+- 模型：`zhipu/glm-5.3-flash`
 - 环境变量：`LLM_API_KEY` / `LLM_API_BASE` / `LLM_MODEL`（密钥只放 .env* 文件，勿进源码）
 
 ### Tailwind CSS v4

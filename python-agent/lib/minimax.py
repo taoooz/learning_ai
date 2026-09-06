@@ -4,11 +4,11 @@ import httpx
 from typing import AsyncIterator, Iterator
 
 DEFAULT_LLM_API_BASE = "http://muses-openapi-prod.weizhipin.com/v1"
-DEFAULT_LLM_MODEL = "muses/deepseek-v4-flash"
+DEFAULT_LLM_MODEL = "zhipu/glm-5.3-flash"
 
 
 class MiniMaxClient:
-    """LLM API 客户端（OpenAI 兼容格式，当前接入 muses/deepseek-v4-flash）"""
+    """LLM API 客户端（OpenAI 兼容格式，当前接入 zhipu/glm-5.3-flash）"""
 
     def __init__(self, api_key: str | None = None, base_url: str | None = None):
         self.api_key = api_key or os.getenv("LLM_API_KEY", "")

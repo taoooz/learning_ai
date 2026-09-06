@@ -1,5 +1,5 @@
 // lib/minimax.ts
-// LLM 服务调用（OpenAI 兼容格式，当前接入 muses/deepseek-v4-flash）
+// LLM 服务调用（OpenAI 兼容格式，当前接入 zhipu/glm-5.3-flash）
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -10,7 +10,7 @@ export interface MiniMaxCallOptions {
 }
 
 export const DEFAULT_LLM_API_BASE = 'http://muses-openapi-prod.weizhipin.com/v1';
-export const DEFAULT_LLM_MODEL = 'muses/deepseek-v4-flash';
+export const DEFAULT_LLM_MODEL = 'zhipu/glm-5.3-flash';
 
 let cachedApiKeyFromFile: string | null | undefined;
 

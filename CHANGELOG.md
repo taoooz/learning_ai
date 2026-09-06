@@ -1,5 +1,19 @@
 # 项目迭代日志
 
+## 2026-09-06
+
+### 课程模型切换：zhipu/glm-5.3-flash（全链路）
+- 全链路替换 `muses/deepseek-v4-flash` → `zhipu/glm-5.3-flash`，共 9 处：4 个 env 文件（`.env.local`、`python-agent/.env` 及两个 `.env.example` 占位符）`LLM_MODEL` 行、3 处源码硬编码默认值（`lib/minimax.ts`、`python-agent/lib/minimax.py`、`python-agent/services/memory_refine_service.py`——第 3 处为全链路 grep 才发现的兜底点）、CLAUDE.md / AGENTS.md 模型记录
+- 端点不变：新模型同为 `provider/model` 命名，走同一 muses 网关
+- 冒烟通过：内网直连 HTTP 200，流式 delta 含 `content` + `reasoning_content`（与 deepseek 相同结构，Python thinking 处理链路兼容，TS 侧 `callMiniMax` 非流式不受影响），中文回复无损
+- 历史文档（`v2_课程生成逻辑.md` Spike 实测记录）为历史事实，有意不改
+
+### 修复：首页全页面交互失效（dev server 长跑退化）
+- 症状：首页 SSR HTML 正常显示，但所有按钮点击无反应、受控输入无法更新
+- 根因：dev server 连续运行 10 天，`.next` 增量编译缓存退化——关键 chunk（`app-pages-internals.js`）磁盘丢失但 HTML 仍引用 → 浏览器 404 → React hydration 失败，全部交互死掉
+- 修复：杀进程 + `rm -rf .next` + 双服务重启；验证关键 chunk 全 200、tutor 路由 422 正常返回（路由已加载）
+- 非代码问题：P2 diff 未触及首页链路，代码本身无 bug
+
 ## 2026-09-01
 
 ### V2 P2 第一阶段：流内答疑（含最终审查修复波）
