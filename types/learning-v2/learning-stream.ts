@@ -10,6 +10,7 @@
 import type { ChapterPlan } from './chapter-plan';
 import type { GenerationMeta } from './generation-meta';
 import type { ChapterRuntimeState } from './runtime';
+import type { TutorAction } from './events';
 
 // ---- 内容块（第一版 4 种） ----
 
@@ -133,6 +134,8 @@ export interface TutorAnswerItem extends StreamItemBase {
   taskId: string;
   questionId: string;
   blocks: Extract<LearningContentBlock, { type: 'markdown' }>[];
+  /** P2 四意图：模型分类的教学动作（§2.6.2） */
+  action?: TutorAction;
   status: TutorItemStatus;
   errorMessage?: string;
 }

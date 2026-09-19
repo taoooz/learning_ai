@@ -835,6 +835,7 @@ function applyTutorCompleted(lesson: NodeLessonV2, event: LearningSseEvent): Nod
     createdAt: existing?.createdAt ?? now,
     status: 'complete',
     blocks: payload.blocks,
+    action: payload.action,
     errorMessage: undefined,
   };
   const completedQuestion: UserQuestionItem = { ...question, status: 'complete' };

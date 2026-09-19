@@ -6,6 +6,7 @@
 // - Enter 提交、Shift+Enter 换行；中文输入法组词期间（isComposing）Enter 不提交
 // - 触摸区域至少 44px（输入区与提交按钮均满足）
 // - tutorPlaceholder(phase) 为可测纯函数：边界提问直接回答，其余相位提交将排队（§3.3/§4）
+// - P2 四意图：快捷动作按钮发送预置问题文本触发模型意图分类（§2.6.2）
 
 import type { KeyboardEvent } from 'react';
 import type { ChapterPhaseName } from '@/lib/learning-v2/tutor-orchestration';
@@ -16,6 +17,12 @@ export function tutorPlaceholder(phase: ChapterPhaseName): string {
   if (phase === 'completing') return '本章正在收尾…';
   return '本节生成完成后回答你的问题…';
 }
+
+/** 快捷动作按钮：预置问题文本，模型据此分类意图（§2.6.2） */
+const QUICK_ACTIONS = [
+  { label: '举个例子', question: '请举一个具体例子帮助理解' },
+  { label: '换个讲法', question: '请换一种方式讲解这个概念' },
+] as const;
 
 /** 忙闲/排队提示行文案：忙碌时播报回答进度与队列长度，空闲时播报排队数 */
 function tutorHint(busy: boolean, queuedCount: number): string | null {
@@ -52,12 +59,12 @@ export function InlineTutorInput({
   queuedCount,
   busy,
 }: InlineTutorInputProps) {
-  const handleSubmit = () => {
+  const handleSubmit = (text?: string) => {
     if (disabled) return;
-    const text = value.trim();
-    if (!text) return; // 空问题不提交
+    const trimmed = (text ?? value).trim();
+    if (!trimmed) return; // 空问题不提交
     onChange(''); // 提交即清空；可见反馈由学习流问题条目与下方提示行承接
-    onSubmit(text);
+    onSubmit(trimmed);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -91,13 +98,27 @@ export function InlineTutorInput({
         />
         <button
           type="button"
-          onClick={handleSubmit}
+          onClick={() => handleSubmit()}
           disabled={disabled || value.trim().length === 0}
           className="h-11 shrink-0 rounded-full bg-accent px-5 text-[14px] font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:cursor-not-allowed disabled:bg-accent/40"
         >
           提问
         </button>
       </div>
+      {!disabled && (
+        <div className="mt-2 flex gap-2 px-1">
+          {QUICK_ACTIONS.map((action) => (
+            <button
+              key={action.label}
+              type="button"
+              onClick={() => handleSubmit(action.question)}
+              className="rounded-full border border-black/8 px-3 py-1.5 text-[12px] text-secondary transition-colors hover:bg-black/4 active:bg-black/8"
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+      )}
       {hint && (
         <p role="status" className="mt-2 px-1 text-[12px] text-tertiary">
           {hint}

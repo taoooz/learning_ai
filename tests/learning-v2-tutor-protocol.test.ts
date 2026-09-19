@@ -143,6 +143,7 @@ const tutorCompletedEvent = makeTutorEvent({
   payload: {
     questionId: 'q-1',
     blocks: [{ type: 'markdown', blockId: 'tb-1', markdown: '定稿的完整回答' }],
+    action: { type: 'answer_inline', reasonCode: 'LOCAL_QUESTION' },
   },
 });
 
@@ -401,6 +402,26 @@ test('tutor_completed 定稿回答、完成问题，重复应用不漂移', () =
   assert.equal(twice.runtime.latestSequence, once.runtime.latestSequence, 'sequence 不得漂移');
   assert.equal(twice.streamItems.length, once.streamItems.length, '不得产生重复条目');
   assert.deepEqual(twice, once);
+});
+
+test('tutor_completed action 存储到 TutorAnswerItem', () => {
+  const actionEvent = makeTutorEvent({
+    eventId: 'evt-tutor-completed-action',
+    type: 'tutor_completed',
+    sequence: 5,
+    timestamp: 2300,
+    payload: {
+      questionId: 'q-1',
+      blocks: [{ type: 'markdown', blockId: 'tb-1', markdown: '好，我们继续。' }],
+      action: { type: 'proceed', reasonCode: 'USER_READY' },
+    },
+  });
+  const result = applyTutorSseEvent(baseWithQuestion, actionEvent);
+  const answer = findAnswer(result);
+  assert.ok(answer);
+  assert.ok(answer.action);
+  assert.equal(answer.action.type, 'proceed');
+  assert.equal(answer.action.reasonCode, 'USER_READY');
 });
 
 // ---- Task 2：错误路径 ----

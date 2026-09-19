@@ -1,5 +1,16 @@
 # 项目迭代日志
 
+## 2026-09-19
+
+### V2 P2 第二阶段：教学动作四意图（answer_inline / expand_current / switch_explanation / proceed）
+- 完成定义达成：Tutor 回答携带教学动作分类（§2.6.2 四意图），模型根据问题意图自动判定 action type + reasonCode；快捷动作按钮（举例、换个讲法）发送预置问题文本触发分类
+- 协议：Python `InlineTutorResponse` 新增 `action: TutorActionField`（type + reasonCode，Pydantic Literal 校验）；TS `TutorCompletedPayload` 新增 `action: TutorAction`；`TutorAnswerItem` 持久化 `action` 字段
+- 意图分类：模型输出首行 `[ACTION:type:reasonCode]` 标记行 + 正文；服务端解析后剥离标记行，action 随 `tutor_completed` 载荷下发；无效动作值回退 `answer_inline`
+- 流式体验：标记行不出现在 `tutor_block_delta` 流中——服务端 buffer 首个 delta 直到标记解析完毕（前缀匹配 + 等换行）或确定无标记后才下发正文，客户端不闪现标记文本
+- UI：`InlineTutorInput` 新增快捷动作按钮行（举例/换个讲法），点击即提交对应问题文本；prompt 新增动作分类指令与 proceed 类型 80 字限制
+- reducer：`applyTutorCompleted` 将 payload.action 存入 TutorAnswerItem
+- 验证：pytest 78/78（+10 四意图新测试）、TS 232/232（+1 action 存储测试）、tsc 干净、lint 0 errors
+
 ## 2026-09-06
 
 ### 修复：TOC/Outline 生成卡死（glm-5.3-flash 思考耗尽 max_tokens 预算）

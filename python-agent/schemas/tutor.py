@@ -2,11 +2,21 @@
 # 契约对齐：
 # - InlineTutorRequest 与 lib/learning-v2/tutor-context.ts InlineTutorRequestPayload 逐字段对齐
 # - InlineTutorResponse 与 types/learning-v2/events.ts TutorCompletedPayload 对齐
+# - TutorAction 与 docs/architecture/v2_课程生成逻辑.md §2.6.2 教学动作对齐
 # 最小上下文红线（设计文档 §3.2）：全部模型 extra='forbid'，
 # 整门课程对象、全量聊天历史或任何未定义字段一律拒收
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+TutorActionType = Literal["answer_inline", "expand_current", "switch_explanation", "proceed"]
+TutorReasonCode = Literal[
+    "LOCAL_QUESTION",
+    "NEEDS_EXAMPLE",
+    "NEEDS_MORE_DETAIL",
+    "EXPLANATION_MISMATCH",
+    "USER_READY",
+]
 
 
 class InlineTutorChapterInfo(BaseModel):
@@ -69,10 +79,19 @@ class InlineTutorAnswerBlock(BaseModel):
     markdown: str
 
 
+class TutorActionField(BaseModel):
+    """教学动作：模型根据问题分类判定（§2.6.2 P2 四意图）"""
+    model_config = ConfigDict(extra="forbid")
+
+    type: TutorActionType
+    reasonCode: TutorReasonCode
+
+
 class InlineTutorResponse(BaseModel):
     """流内答疑定稿响应（tutor_completed 载荷形状 + 生成元信息）"""
     model_config = ConfigDict(extra="forbid")
 
     questionId: str
     blocks: list[InlineTutorAnswerBlock]
+    action: TutorActionField
     generationMeta: dict

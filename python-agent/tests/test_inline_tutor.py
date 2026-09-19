@@ -20,6 +20,7 @@ from services.inline_tutor_service import (
     TutorRequestDataError,
     classify_tutor_error,
     extract_tutor_envelope_ids,
+    parse_action_marker,
     stream_tutor_events,
 )
 
@@ -158,7 +159,8 @@ def test_response_shape_and_forbid():
     response = InlineTutorResponse(
         questionId="q-1",
         blocks=[{"type": "markdown", "blockId": "tb1", "markdown": "304 只回包头不回正文。"}],
-        generationMeta={"promptVersion": "inline-tutor-v1"},
+        action={"type": "answer_inline", "reasonCode": "LOCAL_QUESTION"},
+        generationMeta={"promptVersion": "inline-tutor-v2"},
     )
     assert response.blocks[0].markdown == "304 只回包头不回正文。"
 
@@ -166,12 +168,14 @@ def test_response_shape_and_forbid():
         InlineTutorResponse(
             questionId="q-1",
             blocks=[{"type": "key_point", "blockId": "tb1", "points": []}],
+            action={"type": "answer_inline", "reasonCode": "LOCAL_QUESTION"},
             generationMeta={},
         )
     with pytest.raises(ValidationError):
         InlineTutorResponse(
             questionId="q-1",
             blocks=[{"type": "markdown", "blockId": "tb1", "markdown": "正文"}],
+            action={"type": "answer_inline", "reasonCode": "LOCAL_QUESTION"},
             generationMeta={},
             evidence=[],
         )
@@ -257,7 +261,7 @@ def test_tutor_envelope_fields_and_sequence():
         {"type": "markdown", "blockId": BLOCK_ID, "markdown": "304 只回包头不回正文。"},
     ]
     meta = completed["generationMeta"]
-    assert meta["promptVersion"] == "inline-tutor-v1"
+    assert meta["promptVersion"] == "inline-tutor-v2"
     assert meta["modelVersion"] == "fake-model"
     assert meta["degraded"] is False
     assert isinstance(meta["generatedAt"], int)
@@ -283,6 +287,101 @@ def test_tutor_multiple_deltas_accumulate_into_single_markdown_block():
     )
     block_completed = next(e for e in events if e["type"] == "tutor_block_completed")
     assert block_completed["payload"]["block"]["markdown"] == "304 没有正文，只有包头。"
+
+
+# ---- P2 四意图：动作标记解析与流式下发 ----
+
+
+def test_parse_action_marker_with_valid_marker():
+    """有效标记 → 正确 action + 纯正文"""
+    action, body = parse_action_marker("[ACTION:expand_current:NEEDS_EXAMPLE]\n\n比如 ET\u0061g 304。")
+    assert action.type == "expand_current"
+    assert action.reasonCode == "NEEDS_EXAMPLE"
+    assert body == "比如 ETag 304。"
+
+
+def test_parse_action_marker_without_marker():
+    """无标记 → 回退 answer_inline + 原文"""
+    action, body = parse_action_marker("304 只回包头。")
+    assert action.type == "answer_inline"
+    assert action.reasonCode == "LOCAL_QUESTION"
+    assert body == "304 只回包头。"
+
+
+def test_parse_action_marker_invalid_action_fallback():
+    """无效动作值 → 回退 answer_inline + 剥离标记行后的正文"""
+    action, body = parse_action_marker("[ACTION:unknown:INVALID]\n\n正文内容。")
+    assert action.type == "answer_inline"
+    assert body == "正文内容。"
+
+
+def test_parse_action_marker_no_newline():
+    """标记行存在但无换行 → 正确解析 action（空正文由 EMPTY_CONTENT 兜底）"""
+    action, body = parse_action_marker("[ACTION:expand_current:NEEDS_EXAMPLE]")
+    assert action.type == "expand_current"
+    assert action.reasonCode == "NEEDS_EXAMPLE"
+    assert body == ""
+
+
+def test_tutor_action_marker_parsed_in_completed_payload():
+    """LLM 输出含标记 → tutor_completed 携带 action，最终块不含标记文本"""
+    answer = "[ACTION:expand_current:NEEDS_EXAMPLE]\n\n比如：GET /users 请求。"
+    events = fake_tutor_events(answer=answer)
+    completed = next(e for e in events if e["type"] == "tutor_completed")
+    assert completed["payload"]["action"]["type"] == "expand_current"
+    assert completed["payload"]["action"]["reasonCode"] == "NEEDS_EXAMPLE"
+    block = completed["payload"]["blocks"][0]
+    assert "ACTION" not in block["markdown"]
+    assert block["markdown"] == "比如：GET /users 请求。"
+
+
+def test_tutor_action_marker_stripped_from_delta_stream():
+    """标记行不出现在 tutor_block_delta 流中（客户端不会闪现标记文本）"""
+    answer = "[ACTION:proceed:USER_READY]\n\n好，我们继续。"
+    events = fake_tutor_events(answer=answer)
+    deltas = [e for e in events if e["type"] == "tutor_block_delta"]
+    for delta_event in deltas:
+        assert "[ACTION:" not in delta_event["payload"]["delta"]
+    # 合并所有 delta 应等于正文（不含标记行）
+    all_deltas = "".join(e["payload"]["delta"] for e in deltas)
+    assert all_deltas == "好，我们继续。"
+
+
+def test_tutor_no_marker_fallback_action_in_completed():
+    """无标记输出 → tutor_completed 携带回退 action=answer_inline"""
+    events = fake_tutor_events(answer="304 只回包头不回正文。")
+    completed = next(e for e in events if e["type"] == "tutor_completed")
+    assert completed["payload"]["action"]["type"] == "answer_inline"
+    assert completed["payload"]["action"]["reasonCode"] == "LOCAL_QUESTION"
+
+
+def test_tutor_marker_across_multiple_deltas():
+    """标记跨多个 delta chunk → 正确解析，delta 流不含标记文本"""
+    client = FakeTutorClient(deltas=["[ACT", "ION:switch_expl", "anation:EXPLANATION_MISMATCH]\n\n换一种方式理解。"])
+    events = fake_tutor_events(client=client)
+    completed = next(e for e in events if e["type"] == "tutor_completed")
+    assert completed["payload"]["action"]["type"] == "switch_explanation"
+    assert completed["payload"]["action"]["reasonCode"] == "EXPLANATION_MISMATCH"
+    deltas = [e for e in events if e["type"] == "tutor_block_delta"]
+    all_deltas = "".join(e["payload"]["delta"] for e in deltas)
+    assert "ACTION" not in all_deltas
+    assert all_deltas == "换一种方式理解。"
+
+
+def test_tutor_prompt_contains_action_classification():
+    """prompt 含教学动作分类指令与全部四类动作"""
+    prompt = build_inline_tutor_prompt(_request())
+    assert "[ACTION:" in prompt
+    assert "answer_inline" in prompt
+    assert "expand_current" in prompt
+    assert "switch_explanation" in prompt
+    assert "proceed" in prompt
+
+
+def test_tutor_prompt_proceed_shorter():
+    """proceed 类型要求更短回答（80 字以内）"""
+    prompt = build_inline_tutor_prompt(_request())
+    assert "80 字" in prompt
 
 
 def test_tutor_llm_timeout_before_stream_emits_error_events():

@@ -5,6 +5,9 @@ V2 流内答疑（Tutor）流式生成服务
 
 最小上下文红线（设计文档 §3.2）：请求只含当前任务的最小上下文，
 事件中不生成 evidence 字段，错误只返回稳定 code/中文 message/retryable。
+
+P2 四意图：LLM 首行输出 [ACTION:type:reasonCode] 标记行，
+服务端解析后剥离标记，action 随 tutor_completed 载荷下发。
 """
 import re
 import time
@@ -14,10 +17,14 @@ from uuid import uuid4
 
 from lib.minimax import MiniMaxClient
 from prompts.inline_tutor import build_inline_tutor_prompt
-from schemas.tutor import InlineTutorRequest, InlineTutorResponse
+from schemas.tutor import (
+    InlineTutorRequest,
+    InlineTutorResponse,
+    TutorActionField,
+)
 from services.learning_v2_errors import classify_llm_error
 
-PROMPT_VERSION = "inline-tutor-v1"
+PROMPT_VERSION = "inline-tutor-v2"
 # 第一版固定单个 markdown 块（设计文档 §2.1）
 BLOCK_ID = "tb1"
 
@@ -26,6 +33,10 @@ BLOCK_ID = "tb1"
 _TUTOR_KEY_RE = re.compile(
     r"^tutor:(?P<chapterId>.+):v(?P<planVersion>\d+):(?P<taskId>[^:]+):(?P<questionId>[^:]+)$"
 )
+
+# LLM 输出首行动作标记解析（P2 四意图 §2.6.2）
+_ACTION_LINE_RE = re.compile(r"^\[ACTION:(\w+):(\w+)\]\s*\n?")
+_ACTION_FALLBACK = TutorActionField(type="answer_inline", reasonCode="LOCAL_QUESTION")
 
 
 class TutorRequestDataError(ValueError):
@@ -69,6 +80,21 @@ def extract_tutor_envelope_ids(request: InlineTutorRequest) -> tuple[str, int]:
     return match["chapterId"], int(match["planVersion"])
 
 
+def parse_action_marker(text: str) -> tuple[TutorActionField, str]:
+    """从 LLM 累积输出中解析首行动作标记并剥离标记行
+
+    返回 (action, 纯正文)；无标记或格式无效时回退 answer_inline。
+    """
+    match = _ACTION_LINE_RE.match(text)
+    if not match:
+        return _ACTION_FALLBACK, text.strip()
+    try:
+        action = TutorActionField(type=match.group(1), reasonCode=match.group(2))
+    except Exception:  # noqa: BLE001  无效动作值回退
+        return _ACTION_FALLBACK, text[match.end():].strip()
+    return action, text[match.end():].strip()
+
+
 async def stream_tutor_events(
     request: InlineTutorRequest,
     chapter_id: str,
@@ -80,6 +106,10 @@ async def stream_tutor_events(
     正常序列：tutor_started → tutor_block_started → N×tutor_block_delta
     → tutor_block_completed → tutor_completed → request_completed
     异常时发 request_error 后必须补发 request_completed（status=failed）
+
+    P2 四意图：LLM 输出首行 [ACTION:...] 标记行在 tutor_block_delta 中照常流式下发
+    （客户端只渲染 delta 文本标记行不影响体验），tutor_completed 载荷的 action 字段
+    为解析后的教学动作。标记行不在 tutor_block_completed 的最终 markdown 中出现。
     """
     client = client or MiniMaxClient()
     request_id = f"req-{uuid4().hex[:12]}"
@@ -92,7 +122,6 @@ async def stream_tutor_events(
             "eventId": f"{request_id}:{sequence}",
             "requestId": request_id,
             "type": event_type,
-            # courseId 由请求携带（普通请求字段，不进入幂等键格式），事件外壳守卫回填真实值
             "courseId": request.courseId,
             "chapterId": chapter_id,
             "taskId": request.task.taskId,
@@ -113,18 +142,43 @@ async def stream_tutor_events(
     yield make_event("tutor_started", {"questionId": request.question.questionId})
     yield make_event("tutor_block_started", {"blockId": BLOCK_ID})
 
-    # 必须用 stream_chat（async）：stream_chat_sync 会阻塞事件循环
     accumulated = ""
     received_delta = False
+    # 动作标记 buffer：LLM 首行 [ACTION:type:reasonCode] 不下发 delta，
+    # 直到标记解析完毕或确定无标记后才流式输出正文
+    MARKER_PREFIX = "[ACTION:"
+    MAX_MARKER_DETECT_CHARS = 100
+    marker_resolved = False
+    marker_check_buffer = ""
     try:
-        async for chunk in client.stream_chat(messages=messages, max_tokens=1000):
+        async for chunk in client.stream_chat(messages=messages, max_tokens=1500):
             delta = (chunk.get("choices") or [{}])[0].get("delta", {}).get("content", "")
             if not delta:
                 continue
             received_delta = True
             accumulated += delta
-            # LLM 输出只进入 tutor_block_delta，服务端不生成其他内容
-            yield make_event("tutor_block_delta", {"blockId": BLOCK_ID, "delta": delta})
+            if not marker_resolved:
+                marker_check_buffer += delta
+                if marker_check_buffer.startswith(MARKER_PREFIX):
+                    # 已确认标记前缀 → 等换行确认标记完整
+                    if "\n" in marker_check_buffer:
+                        marker_resolved = True
+                        newline_idx = marker_check_buffer.index("\n")
+                        clean_start = marker_check_buffer[newline_idx + 1:].lstrip("\n")
+                        if clean_start:
+                            yield make_event("tutor_block_delta", {"blockId": BLOCK_ID, "delta": clean_start})
+                    elif len(marker_check_buffer) > MAX_MARKER_DETECT_CHARS:
+                        marker_resolved = True
+                        yield make_event("tutor_block_delta", {"blockId": BLOCK_ID, "delta": marker_check_buffer})
+                elif MARKER_PREFIX.startswith(marker_check_buffer):
+                    # 仍是标记前缀（如 [ACT）→ 继续等更多字符
+                    pass
+                else:
+                    # 不是标记 → 全量下发
+                    marker_resolved = True
+                    yield make_event("tutor_block_delta", {"blockId": BLOCK_ID, "delta": marker_check_buffer})
+            else:
+                yield make_event("tutor_block_delta", {"blockId": BLOCK_ID, "delta": delta})
     except Exception as exc:  # noqa: BLE001 流的任何异常都统一走错误事件路径
         if received_delta:
             code, message = "UPSTREAM_STREAM_BROKEN", "回答流中断，请重试"
@@ -136,19 +190,21 @@ async def stream_tutor_events(
         yield make_event("request_completed", {"requestId": request_id, "status": "failed", "errorCode": code})
         return
 
-    if not accumulated.strip():
+    action, markdown_content = parse_action_marker(accumulated)
+
+    if not markdown_content.strip():
         yield make_event("request_error", {"code": "EMPTY_CONTENT", "message": "回答内容为空，请重试", "retryable": True})
         yield make_event("request_completed", {"requestId": request_id, "status": "failed", "errorCode": "EMPTY_CONTENT"})
         return
 
     now_ms = time.time_ns() // 1_000_000
-    block = {"type": "markdown", "blockId": BLOCK_ID, "markdown": accumulated}
+    block = {"type": "markdown", "blockId": BLOCK_ID, "markdown": markdown_content}
     yield make_event("tutor_block_completed", {"block": block})
 
-    # 定稿回答经 InlineTutorResponse 校验（只允许 markdown 块、不得携带 evidence 等额外字段）
     response = InlineTutorResponse(
         questionId=request.question.questionId,
         blocks=[block],
+        action=action,
         generationMeta={
             "promptVersion": PROMPT_VERSION,
             "modelVersion": getattr(client, "model", None) or "unknown",
