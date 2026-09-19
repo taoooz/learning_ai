@@ -85,9 +85,22 @@ export function applyCheckpointEvaluation(
     status: 'evaluated',
   };
 
+  // P3a：评估结果同步写入学习证据（§2.7 学习证据写入章节状态）
+  const evidence: LearningEvidence = {
+    objectiveId: item.checkpoint.objectiveId,
+    checkpointId,
+    outcome: evaluation.outcome,
+    score: evaluation.score,
+    attempt,
+    recordedAt: now,
+  };
+  // 同一 checkpoint 的证据按最新覆盖（重试后以最终结果为准）
+  const existingEvidence = lesson.evidence.filter((e) => e.checkpointId !== checkpointId);
+
   return {
     ...lesson,
     streamItems: lesson.streamItems.map((s) => (s === item ? updated : s)),
+    evidence: [...existingEvidence, evidence],
     runtime: {
       ...lesson.runtime,
       status: lesson.runtime.status === 'checking' ? 'awaiting_user' : lesson.runtime.status,
@@ -149,4 +162,31 @@ export function applyRemediation(
     runtime: { ...lesson.runtime, lastActiveAt: now },
     updatedAt: now,
   };
+}
+
+
+/**
+ * P3a Evidence 聚合（§2.7）：从学习证据中提取每个目标的最终结果，
+ * 填充 Recap 的 demonstratedObjectives / fragileObjectives。
+ * - 最终 outcome 为 demonstrated → demonstratedObjectives
+ * - 最终 outcome 为 not_demonstrated / partial → fragileObjectives
+ * - skipped → 不算证据（明确跳过，P2 Recap 红线不伪造）
+ */
+export function aggregateEvidenceToObjectives(
+  evidence: LearningEvidence[],
+): { demonstratedObjectives: string[]; fragileObjectives: string[] } {
+  const latest = new Map<string, LearningEvidence>();
+  for (const e of evidence) {
+    const existing = latest.get(e.objectiveId);
+    if (!existing || e.recordedAt >= existing.recordedAt) {
+      latest.set(e.objectiveId, e);
+    }
+  }
+  const demonstratedObjectives: string[] = [];
+  const fragileObjectives: string[] = [];
+  for (const [objectiveId, e] of latest) {
+    if (e.outcome === 'demonstrated') demonstratedObjectives.push(objectiveId);
+    else if (e.outcome === 'not_demonstrated' || e.outcome === 'partial') fragileObjectives.push(objectiveId);
+  }
+  return { demonstratedObjectives, fragileObjectives };
 }

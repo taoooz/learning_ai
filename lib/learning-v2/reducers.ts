@@ -34,6 +34,7 @@ import type {
   UserQuestionItem,
 } from '@/types/learning-v2';
 import { canTransitionChapter } from './state-machine';
+import { aggregateEvidenceToObjectives } from './checkpoint-ops';
 
 // ---- 初始状态 ----
 
@@ -155,6 +156,13 @@ export function applyChapterRecap(
   const itemId = chapterRecapItemId(lesson.chapterId);
   const existing = lesson.streamItems.find((item) => item.itemId === itemId);
   const sequence = existing?.sequence ?? lesson.runtime.latestSequence + 1;
+  // P3a：从学习证据聚合目标掌握情况（仅覆盖有空数组的证据字段；LLM 产出仍不得写入证据字段）
+  const aggregated = aggregateEvidenceToObjectives(lesson.evidence);
+  const enrichedRecap: ChapterRecap = {
+    ...recap,
+    demonstratedObjectives: recap.demonstratedObjectives.length > 0 ? recap.demonstratedObjectives : aggregated.demonstratedObjectives,
+    fragileObjectives: recap.fragileObjectives.length > 0 ? recap.fragileObjectives : aggregated.fragileObjectives,
+  };
   const item: ChapterRecapItem = {
     itemId,
     type: 'chapter_recap',
@@ -163,12 +171,12 @@ export function applyChapterRecap(
     sequence,
     createdAt: existing?.createdAt ?? now,
     status: 'complete',
-    recap,
+    recap: enrichedRecap,
   };
   return {
     ...lesson,
     streamItems: upsertItem(lesson.streamItems, item),
-    recap,
+    recap: enrichedRecap,
     runtime: {
       ...lesson.runtime,
       latestSequence: Math.max(lesson.runtime.latestSequence, sequence),

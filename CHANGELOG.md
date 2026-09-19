@@ -2,6 +2,13 @@
 
 ## 2026-09-19
 
+### V2 P3a 第四切片：Evidence 聚合到章节状态与 Recap
+- 类型：`NodeLessonV2.evidence` 从 `unknown[]` 改为 `LearningEvidence[]`（P3 前占位 → P3a 定稿启用）
+- 写入：checkpoint 评估结果同步写入 `lesson.evidence`（同一 checkpoint 重试后以最终结果覆盖）
+- 聚合：新增 `aggregateEvidenceToObjectives` 纯函数（按 objectiveId 取最新证据，demonstrated → demonstratedObjectives，not_demonstrated/partial → fragileObjectives）
+- Recap 集成：`applyChapterRecap` 自动聚合 evidence 填充 recap 证据字段（LLM 产出非空时不覆盖，证据红线保留）；skipped 不算证据
+- 验证：TS 258/258（+6 evidence 聚合测试）、tsc 干净、lint 0 errors
+
 ### V2 P3a 补强：真实 LLM 冒烟 4/4 + 稳定性修复
 - 真实 LLM 冒烟：checkpoint 生成（scenario_choice）→ 程序判分（正确/首错/二错三路径）→ 补救内容 + 等价新题 → 新题判分，4/4 通过
 - 稳定性修复：模型 JSON 输出不稳定（无 JSON / options 输出纯字符串）——`_extract_json` 优先直接 loads、`_call_for_json` 自动重试 2 次、`_normalize_new_checkpoint` 字符串选项转对象并分配 id

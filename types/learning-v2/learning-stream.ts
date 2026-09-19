@@ -12,6 +12,7 @@ import type { GenerationMeta } from './generation-meta';
 import type { ChapterRuntimeState } from './runtime';
 import type { TutorAction } from './events';
 import type { CheckpointItem } from './checkpoint';
+import type { LearningEvidence } from './checkpoint';
 
 // ---- 内容块（第一版 4 种） ----
 
@@ -192,8 +193,8 @@ export interface NodeLessonV2 {
   chapterPlan: ChapterPlan;
   runtime: ChapterRuntimeState;
   streamItems: LearningStreamItem[];
-  /** 学习证据：类型 P3 前定稿，P0 仅预留占位，禁止写入任何内容 */
-  evidence: unknown[];
+  /** 学习证据（P3a）：由 Checkpoint 评估写入，章节完成时聚合到 Recap */
+  evidence: LearningEvidence[];
   recap?: ChapterRecap;
   /** 已完成章节的压缩归档标记（§6.1.1）：正文块已替换为摘要块 */
   archived?: boolean;

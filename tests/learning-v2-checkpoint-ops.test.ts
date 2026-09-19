@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 
 import {
   applyCheckpointEvaluation,
+  aggregateEvidenceToObjectives,
   applyRemediation,
   collectEvidence,
   findCheckpointForTask,
@@ -172,4 +173,77 @@ test('applyRemediation 写入补救内容 + 替换为新题 + 重置为 pending'
 test('applyRemediation 对不存在的 checkpointId → 不修改', () => {
   const result = applyRemediation(baseLesson, 'nonexistent', remediationContent, cpDefinition, 2000);
   assert.equal(result, baseLesson);
+});
+
+
+// ---- Evidence 聚合（P3a 第三部分） ----
+
+import { applyChapterRecap } from '../lib/learning-v2/reducers';
+import type { ChapterRecap } from '../types/learning-v2';
+
+test('applyCheckpointEvaluation 同步写入 lesson.evidence', () => {
+  const atBoundary = { ...baseLesson, runtime: { ...baseLesson.runtime, status: 'awaiting_user' as const } };
+  const withCp = upsertCheckpointItem(atBoundary, cpDefinition, 2000);
+  const result = applyCheckpointEvaluation(withCp, 'cp-1', 'b', evalPass, 2001);
+  assert.equal(result.evidence.length, 1);
+  assert.equal(result.evidence[0].checkpointId, 'cp-1');
+  assert.equal(result.evidence[0].outcome, 'demonstrated');
+  assert.equal(result.evidence[0].objectiveId, 'obj-1');
+});
+
+test('applyCheckpointEvaluation 重试后证据覆盖（同一 checkpointId 只留最新）', () => {
+  const atBoundary = { ...baseLesson, runtime: { ...baseLesson.runtime, status: 'awaiting_user' as const } };
+  const withCp = upsertCheckpointItem(atBoundary, cpDefinition, 2000);
+  const first = applyCheckpointEvaluation(withCp, 'cp-1', 'a', evalFail, 2001);
+  const second = applyCheckpointEvaluation(first, 'cp-1', 'b', evalPass, 2002);
+  assert.equal(second.evidence.length, 1, '同一 checkpoint 重试后只保留最新证据');
+  assert.equal(second.evidence[0].outcome, 'demonstrated');
+  assert.equal(second.evidence[0].attempt, 2);
+});
+
+test('aggregateEvidenceToObjectives: demonstrated → demonstrated 列表', () => {
+  const result = aggregateEvidenceToObjectives([
+    { objectiveId: 'obj-1', checkpointId: 'cp-1', outcome: 'demonstrated', attempt: 1, recordedAt: 100 },
+    { objectiveId: 'obj-2', checkpointId: 'cp-2', outcome: 'not_demonstrated', attempt: 2, recordedAt: 200 },
+  ]);
+  assert.deepEqual(result.demonstratedObjectives, ['obj-1']);
+  assert.deepEqual(result.fragileObjectives, ['obj-2']);
+});
+
+test('aggregateEvidenceToObjectives: 同一目标以最新证据为准', () => {
+  const result = aggregateEvidenceToObjectives([
+    { objectiveId: 'obj-1', checkpointId: 'cp-1', outcome: 'not_demonstrated', attempt: 1, recordedAt: 100 },
+    { objectiveId: 'obj-1', checkpointId: 'cp-1', outcome: 'demonstrated', attempt: 2, recordedAt: 200 },
+  ]);
+  assert.deepEqual(result.demonstratedObjectives, ['obj-1']);
+  assert.deepEqual(result.fragileObjectives, []);
+});
+
+test('applyChapterRecap 聚合 evidence 到 recap objectives', () => {
+  const atBoundary = { ...baseLesson, runtime: { ...baseLesson.runtime, status: 'awaiting_user' as const } };
+  const withCp = upsertCheckpointItem(atBoundary, cpDefinition, 2000);
+  const evaluated = applyCheckpointEvaluation(withCp, 'cp-1', 'b', evalPass, 2001);
+  const recap: ChapterRecap = {
+    chapterId: 'ch-1',
+    keyTakeaways: ['要点'],
+    demonstratedObjectives: [],
+    fragileObjectives: [],
+    unresolvedQuestions: [],
+  };
+  const result = applyChapterRecap(evaluated, recap, 3000);
+  assert.deepEqual(result.recap?.demonstratedObjectives, ['obj-1']);
+  assert.deepEqual(result.recap?.fragileObjectives, []);
+});
+
+test('applyChapterRecap: LLM 已产出非空 objectives 时不覆盖（红线保留）', () => {
+  const recap: ChapterRecap = {
+    chapterId: 'ch-1',
+    keyTakeaways: [],
+    demonstratedObjectives: ['obj-99'],
+    fragileObjectives: [],
+    unresolvedQuestions: [],
+  };
+  // lesson.evidence 为空（无 checkpoint），recap 带 LLM 产出 → 不覆盖也不清空
+  const result = applyChapterRecap(baseLesson, recap, 3000);
+  assert.deepEqual(result.recap?.demonstratedObjectives, ['obj-99']);
 });
