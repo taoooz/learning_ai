@@ -777,3 +777,32 @@ async def learning_v2_checkpoints_remediate(request: Request):
             status_code=LLM_ERROR_STATUS.get(code, 502),
             content={"ok": False, "code": code, "message": message, "retryable": True},
         )
+
+
+@app.post("/api/learning/v2/plan-patch/generate")
+async def learning_v2_plan_patch_generate(request: Request):
+    """P4 动态调度：基于证据信号生成计划补丁建议（客户端再过 canApplyPatch 校验）"""
+    from schemas.plan_patch import GeneratePlanPatchRequest
+    from services.plan_patch_service import generate_plan_patch
+
+    req, error_response = await _validate_learning_v2_request(request, GeneratePlanPatchRequest)
+    if error_response is not None:
+        return error_response
+
+    try:
+        patch = await generate_plan_patch(
+            course_topic=req.courseTopic,
+            chapter_title=req.chapterTitle,
+            teaching_goal=req.teachingGoal,
+            plan_version=req.planVersion,
+            remaining_tasks=req.remainingTasks,
+            evidence_summary=req.evidenceSummary,
+        )
+        return {"ok": True, "patch": patch.model_dump()}
+    except Exception as exc:  # noqa: BLE001
+        code, message = classify_llm_error(exc)
+        print(f"[Learning V2 PlanPatch] 生成失败 code={code}: {exc}")
+        return JSONResponse(
+            status_code=LLM_ERROR_STATUS.get(code, 502),
+            content={"ok": False, "code": code, "message": message, "retryable": True},
+        )

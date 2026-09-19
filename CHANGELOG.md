@@ -2,6 +2,13 @@
 
 ## 2026-09-19
 
+### V2 P4 第一切片：计划补丁协议层（ChapterPlanPatch）
+- 类型：PlanPatchOperation（白名单：insert_task/skip_task/reorder_tasks/adjust_depth）+ ChapterPlanPatch（basePlanVersion/reasonCode/confidence/summary）+ 每章上限 2 次 + 高影响操作置信度阈值 0.8
+- 纯函数：canApplyPatch（版本守卫拒绝旧补丁 / 上限 / 只动未展示任务 / 白名单校验）+ applyPlanPatch（planVersion+1 / 预取失效 / order 重排 / appliedPatchCount 递增）
+- Python：plan_patch schema + prompt（证据驱动调度纪律：无强证据不建议 skip/insert）+ plan_patch_service + `/plan-patch/generate` 端点 + Next.js 代理
+- 完成定义达成：所有调整可追溯（patchId + 版本）、可拒绝旧结果（basePlanVersion 守卫）、不改写已展示内容（TARGETS_SHOWN_TASK 拒绝）
+- 验证：TS 267/267（+9 plan-patch 测试）、pytest 97/97、tsc/lint 干净
+
 ### V2 P3b：开放式题型（self_explanation / micro_practice）启用
 - 回归验证达标：12 个固定样本（正例/反例/边界例/陷阱题），模型 Rubric 评分 vs 人工判定一致率 83%（10/12）≥ 80% 阈值（§2.7 红线）
 - Python：OPEN_ENDED_EVAL_PROMPT（严格判定规则：事实性错误一票否决）、evaluate_open_ended 服务（confidence<0.5 降级不产出证据）、评估端点默认启用（env kill-switch）
