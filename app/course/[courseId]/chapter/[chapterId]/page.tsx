@@ -118,6 +118,7 @@ function ChapterLearningView({
     isTutorBusy,
     submitCheckpoint,
     retryCheckpoint,
+    requestRemediation,
   } = useChapterLearning({
     courseId: course.courseId,
     chapterId: chapter.chapterId,
@@ -207,6 +208,7 @@ function ChapterLearningView({
                 tutorBusy={isTutorBusy}
                 onSubmitCheckpoint={submitCheckpoint}
                 onRetryCheckpoint={retryCheckpoint}
+                onRequestRemediation={requestRemediation}
               />
               {phase === 'completing' && (
                 <div className="mt-6 text-center text-[13px] text-tertiary">正在收尾本章…</div>
@@ -242,6 +244,7 @@ function ChapterLearningView({
                 tutorBusy={isTutorBusy}
                 onSubmitCheckpoint={submitCheckpoint}
                 onRetryCheckpoint={retryCheckpoint}
+                onRequestRemediation={requestRemediation}
               />
               <div className="mt-8">
                 <ChapterCompleteCard

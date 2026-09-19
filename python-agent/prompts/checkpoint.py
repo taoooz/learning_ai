@@ -88,3 +88,61 @@ def build_checkpoint_prompt(
         task_goal=task_goal,
         task_content_summary=task_content_summary,
     )
+
+REMEDIATION_PROMPT = {
+    "role": """<role>
+你是一位中文学习辅导专家。学习者在理解检查中答错了，你需要：
+1. 用不同于首次讲解的方式重新解释核心概念（补救内容）
+2. 出一道新的等价检查题（考查同一概念，但场景/表述不同）
+</role>""",
+
+    "remediation_context": """<remediation_context>
+## 课程主题
+{course_topic}
+
+## 本章标题
+{chapter_title}
+
+## 任务标题
+{task_title}
+
+## 任务目标
+{task_goal}
+
+## 原题目
+{original_prompt}
+
+## 学习者的错误答案
+{user_answer}
+
+## 正确答案
+{correct_answer}
+
+## 原补救提示
+{original_hint}
+
+## 原题已展示内容摘要
+{task_content_summary}
+</remediation_context>""",
+
+    "output_format": """<output_format>
+输出一个 JSON 对象（不要用代码围栏包裹，不要输出其他文字）：
+
+{{
+  "remediationContent": "补救解释的 markdown 文本（80~150 字），用不同于原讲解的比喻/角度重新解释核心概念，针对学习者的错误指出关键误解",
+  "newCheckpoint": {{
+    "kind": "scenario_choice 或 sequence（与原题同类型或不同类型均可）",
+    "prompt": "新的检查题（考查同一概念，但换一个场景或角度）",
+    "options": [...],
+    "sequenceItems": [...],
+    "correctAnswer": "...",
+    "remediationHint": "新题的错误提示"
+  }}
+}}
+
+## 质量要求
+- remediationContent 必须与原任务内容的讲解方式不同（换比喻、换角度）
+- newCheckpoint 考查同一概念但绝不重复原题的场景和选项
+- 中文输出
+</output_format>""",
+}

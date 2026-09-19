@@ -121,3 +121,51 @@ def evaluate_checkpoint(
         correct=False,
         correctAnswer=definition.correctAnswer,
     )
+
+
+async def generate_remediation(
+    course_topic: str,
+    chapter_title: str,
+    task_id: str,
+    task_title: str,
+    task_goal: str,
+    original_prompt: str,
+    user_answer: str,
+    correct_answer: str,
+    original_hint: str,
+    task_content_summary: str,
+    client: MiniMaxClient | None = None,
+) -> dict:
+    """LLM 生成补救内容 + 等价不同题的新检查（§2.7 补救流程）"""
+    from prompts.checkpoint import REMEDIATION_PROMPT
+
+    client = client or MiniMaxClient()
+    system_prompt = (
+        REMEDIATION_PROMPT["role"]
+        + "\n"
+        + REMEDIATION_PROMPT["remediation_context"].format(
+            course_topic=course_topic,
+            chapter_title=chapter_title,
+            task_title=task_title,
+            task_goal=task_goal,
+            original_prompt=original_prompt,
+            user_answer=user_answer,
+            correct_answer=correct_answer,
+            original_hint=original_hint,
+            task_content_summary=task_content_summary,
+        )
+        + "\n"
+        + REMEDIATION_PROMPT["output_format"]
+    )
+    response = await client.chat(
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": "请生成补救内容和新检查题。"},
+        ],
+        max_tokens=2000,
+    )
+    content = response["choices"][0]["message"]["content"]
+    raw = _extract_json(content)
+    if "remediationContent" not in raw or "newCheckpoint" not in raw:
+        raise ValueError("补救响应缺少 remediationContent 或 newCheckpoint")
+    return raw

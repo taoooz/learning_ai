@@ -12,12 +12,18 @@ import type { CheckpointDefinition, CheckpointEvaluation } from '@/types/learnin
 interface CheckpointCardProps {
   checkpoint: CheckpointDefinition;
   evaluation?: CheckpointEvaluation;
+  /** P3a：补救内容（§2.7 首次错误后展示） */
+  remediationContent?: string;
   onSubmit: (answer: string | string[]) => void;
   onRetry: () => void;
+  /** P3a：请求补救内容 + 等价新题（remediate_here 时由宿主传入） */
+  onRequestRemediation?: () => void;
+  /** 补救内容生成中 */
+  remediating?: boolean;
   disabled?: boolean;
 }
 
-export function CheckpointCard({ checkpoint, evaluation, onSubmit, onRetry, disabled }: CheckpointCardProps) {
+export function CheckpointCard({ checkpoint, evaluation, remediationContent, onSubmit, onRetry, onRequestRemediation, remediating, disabled }: CheckpointCardProps) {
   const [selected, setSelected] = useState<string>('');
   const [order, setOrder] = useState<string[]>(() =>
     checkpoint.kind === 'sequence' && checkpoint.sequenceItems
@@ -107,6 +113,14 @@ export function CheckpointCard({ checkpoint, evaluation, onSubmit, onRetry, disa
         </button>
       )}
 
+      {/* 补救内容（§2.7：首次错误后 LLM 生成） */}
+      {remediationContent && (
+        <div className="mt-4 rounded-xl bg-blue-50 p-3 text-[13px] leading-relaxed text-blue-900">
+          <p className="mb-1 font-semibold">补救讲解</p>
+          <p>{remediationContent}</p>
+        </div>
+      )}
+
       {/* 评估结果 */}
       {hasResult && evaluation && (
         <div className={`rounded-xl p-3 text-[13px] leading-relaxed ${evaluation.correct ? 'bg-green-50 text-green-800' : 'bg-orange-50 text-orange-800'}`}>
@@ -118,9 +132,13 @@ export function CheckpointCard({ checkpoint, evaluation, onSubmit, onRetry, disa
             </p>
           )}
           {evaluation.nextAction === 'remediate_here' && (
-            <button type="button" onClick={onRetry}
-              className="mt-3 rounded-full bg-orange-600 px-4 py-1.5 text-[12px] font-semibold text-white hover:opacity-90">
-              再试一次
+            <button
+              type="button"
+              onClick={onRequestRemediation ?? onRetry}
+              disabled={remediating}
+              className="mt-3 rounded-full bg-orange-600 px-4 py-1.5 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {remediating ? '正在生成补救内容…' : '获取补救内容并重试'}
             </button>
           )}
         </div>

@@ -47,6 +47,7 @@ export function upsertCheckpointItem(
     sequence: lesson.runtime.latestSequence + 1,
     createdAt: now,
     checkpoint,
+    remediationAttempt: 0,
     status: 'pending',
   };
   return {
@@ -112,4 +113,40 @@ export function collectEvidence(lesson: NodeLessonV2): LearningEvidence[] {
     });
   }
   return evidence;
+}
+
+
+/**
+ * 补救流程（§2.7）：首次错误后 LLM 生成补救内容 + 等价不同题。
+ * 补救内容写入条目、新 checkpoint 定义替换旧题、回到 pending 状态等待用户重试。
+ */
+export function applyRemediation(
+  lesson: NodeLessonV2,
+  checkpointId: string,
+  remediationContent: string,
+  newCheckpoint: CheckpointDefinition,
+  now: number,
+): NodeLessonV2 {
+  const item = lesson.streamItems.find(
+    (existing): existing is CheckpointItem =>
+      existing.type === 'checkpoint' && existing.checkpoint.checkpointId === checkpointId,
+  );
+  if (!item) return lesson;
+
+  const updated: CheckpointItem = {
+    ...item,
+    checkpoint: newCheckpoint,
+    remediationContent,
+    remediationAttempt: item.remediationAttempt + 1,
+    submission: undefined,
+    evaluation: undefined,
+    status: 'pending',
+  };
+
+  return {
+    ...lesson,
+    streamItems: lesson.streamItems.map((s) => (s === item ? updated : s)),
+    runtime: { ...lesson.runtime, lastActiveAt: now },
+    updatedAt: now,
+  };
 }

@@ -38,6 +38,7 @@ export function LearningStreamV2({
   tutorBusy = false,
   onSubmitCheckpoint,
   onRetryCheckpoint,
+  onRequestRemediation,
 }: {
   lesson: NodeLessonV2;
   phase: ChapterPhase;
@@ -51,6 +52,8 @@ export function LearningStreamV2({
   onSubmitCheckpoint?: (checkpointId: string, answer: string | string[]) => void;
   /** P3a：重试 Checkpoint（接 hook.retryCheckpoint） */
   onRetryCheckpoint?: (checkpointId: string) => void;
+  /** P3a：请求补救内容 + 等价新题（接 hook.requestRemediation） */
+  onRequestRemediation?: (checkpointId: string) => void;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(!anchorTaskId);
@@ -128,6 +131,7 @@ export function LearningStreamV2({
           onRetryTutor={onRetryTutor}
           onSubmitCheckpoint={onSubmitCheckpoint}
           onRetryCheckpoint={onRetryCheckpoint}
+          onRequestRemediation={onRequestRemediation}
           tutorBusy={tutorBusy}
         />
       ))}
@@ -147,6 +151,7 @@ function StreamItemView({
   tutorBusy,
   onSubmitCheckpoint,
   onRetryCheckpoint,
+  onRequestRemediation,
 }: {
   item: LearningStreamItem;
   taskOrder: Map<string, number>;
@@ -158,6 +163,7 @@ function StreamItemView({
   tutorBusy: boolean;
   onSubmitCheckpoint?: (checkpointId: string, answer: string | string[]) => void;
   onRetryCheckpoint?: (checkpointId: string) => void;
+  onRequestRemediation?: (checkpointId: string) => void;
 }) {
   switch (item.type) {
     case 'task_content':
@@ -197,6 +203,7 @@ function StreamItemView({
           item={item}
           onSubmit={onSubmitCheckpoint}
           onRetry={onRetryCheckpoint}
+          onRequestRemediation={onRequestRemediation}
         />
       );
     default:
@@ -209,17 +216,21 @@ function CheckpointItemView({
   item,
   onSubmit,
   onRetry,
+  onRequestRemediation,
 }: {
   item: CheckpointItem;
   onSubmit?: (checkpointId: string, answer: string | string[]) => void;
   onRetry?: (checkpointId: string) => void;
+  onRequestRemediation?: (checkpointId: string) => void;
 }) {
   return (
     <CheckpointCard
       checkpoint={item.checkpoint}
       evaluation={item.evaluation}
+      remediationContent={item.remediationContent}
       onSubmit={(answer) => onSubmit?.(item.checkpoint.checkpointId, answer)}
       onRetry={() => onRetry?.(item.checkpoint.checkpointId)}
+      onRequestRemediation={onRequestRemediation ? () => onRequestRemediation(item.checkpoint.checkpointId) : undefined}
       disabled={item.status === 'evaluated'}
     />
   );

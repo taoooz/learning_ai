@@ -191,3 +191,59 @@ def test_evaluate_endpoint_missing_checkpoint():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+# ---- 补救流程 ----
+
+from unittest.mock import AsyncMock, patch
+from services.checkpoint_service import generate_remediation
+
+
+def test_generate_remediation_success():
+    import asyncio
+    import json
+    async def run():
+        fake_client = AsyncMock()
+        fake_response = json.dumps({
+            "remediationContent": "补救说明",
+            "newCheckpoint": {
+                "kind": "scenario_choice", "prompt": "新题",
+                "options": [
+                    {"id": "a", "text": "x"}, {"id": "b", "text": "y"},
+                    {"id": "c", "text": "z"}, {"id": "d", "text": "w"},
+                ],
+                "correctAnswer": "a", "remediationHint": "提示",
+            },
+        })
+        fake_client.chat.return_value = {"choices": [{"message": {"content": fake_response}}]}
+        return await generate_remediation(
+            course_topic="HTTP", chapter_title="缓存", task_id="t1",
+            task_title="ETag", task_goal="理解", original_prompt="原题",
+            user_answer="a", correct_answer="b", original_hint="提示",
+            task_content_summary="内容摘要", client=fake_client,
+        )
+    result = asyncio.run(run())
+    assert result["remediationContent"] == "补救说明"
+    assert result["newCheckpoint"]["correctAnswer"] == "a"
+
+
+def test_generate_remediation_missing_fields():
+    import asyncio
+    async def run():
+        fake_client = AsyncMock()
+        fake_client.chat.return_value = {"choices": [{"message": {"content": '{"wrong": true}'}}]}
+        return await generate_remediation(
+            course_topic="HTTP", chapter_title="缓存", task_id="t1",
+            task_title="ETag", task_goal="理解", original_prompt="原题",
+            user_answer="a", correct_answer="b", original_hint="提示",
+            task_content_summary="摘要", client=fake_client,
+        )
+    with pytest.raises(ValueError, match="remediationContent"):
+        asyncio.run(run())
+
+
+def test_remediate_endpoint_missing_fields():
+    client = _endpoint_client()
+    response = client.post("/api/learning/v2/checkpoints/remediate", json={"courseTopic": "HTTP"})
+    assert response.status_code == 422
+    assert "必填字段" in response.json()["message"]

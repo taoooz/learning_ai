@@ -714,3 +714,53 @@ async def learning_v2_checkpoints_evaluate(request: Request):
 
     evaluation = evaluate_checkpoint(definition, req.answer, req.attempt)
     return {"ok": True, "evaluation": evaluation.model_dump()}
+
+
+@app.post("/api/learning/v2/checkpoints/remediate")
+async def learning_v2_checkpoints_remediate(request: Request):
+    """P3a 补救内容生成：LLM 生成补救段落 + 等价不同题的新检查"""
+    from services.checkpoint_service import generate_remediation
+
+    try:
+        body = await request.json()
+        required = ["courseTopic", "chapterTitle", "taskId", "taskTitle", "taskGoal",
+                    "originalPrompt", "userAnswer", "correctAnswer", "originalHint",
+                    "taskContentSummary", "idempotencyKey"]
+        missing = [k for k in required if not body.get(k)]
+        if missing:
+            return JSONResponse(status_code=422, content={
+                "ok": False, "code": "INVALID_REQUEST",
+                "message": f"缺少必填字段：{', '.join(missing)}", "retryable": False,
+            })
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse(status_code=422, content={
+            "ok": False, "code": "INVALID_REQUEST",
+            "message": f"请求体解析失败：{exc}", "retryable": False,
+        })
+
+    try:
+        result = await generate_remediation(
+            course_topic=body["courseTopic"],
+            chapter_title=body["chapterTitle"],
+            task_id=body["taskId"],
+            task_title=body["taskTitle"],
+            task_goal=body["taskGoal"],
+            original_prompt=body["originalPrompt"],
+            user_answer=str(body["userAnswer"]),
+            correct_answer=str(body["correctAnswer"]),
+            original_hint=body["originalHint"],
+            task_content_summary=body["taskContentSummary"],
+        )
+        return {"ok": True, "remediationContent": result["remediationContent"], "newCheckpoint": result["newCheckpoint"]}
+    except ValueError as exc:
+        return JSONResponse(status_code=502, content={
+            "ok": False, "code": "REMEDIATION_FORMAT_ERROR",
+            "message": str(exc), "retryable": True,
+        })
+    except Exception as exc:  # noqa: BLE001
+        code, message = classify_llm_error(exc)
+        print(f"[Learning V2 Checkpoint Remediate] 生成失败 code={code}: {exc}")
+        return JSONResponse(
+            status_code=LLM_ERROR_STATUS.get(code, 502),
+            content={"ok": False, "code": code, "message": message, "retryable": True},
+        )

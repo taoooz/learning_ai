@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 
 import {
   applyCheckpointEvaluation,
+  applyRemediation,
   collectEvidence,
   findCheckpointForTask,
   needsCheckpoint,
@@ -139,4 +140,36 @@ test('collectEvidence 提取已评估的 checkpoint 证据', () => {
 
 test('collectEvidence: 无评估 → 空', () => {
   assert.equal(collectEvidence(baseLesson).length, 0);
+});
+
+
+// ---- applyRemediation ----
+
+const remediationContent = "用快递签收的比喻来重新理解：ETag 就像包裹上的条形码。";
+
+test('applyRemediation 写入补救内容 + 替换为新题 + 重置为 pending', () => {
+  const atBoundary = { ...baseLesson, runtime: { ...baseLesson.runtime, status: 'awaiting_user' as const } };
+  const withCp = upsertCheckpointItem(atBoundary, cpDefinition, 2000);
+  const failed = applyCheckpointEvaluation(withCp, 'cp-1', 'a', evalFail, 2001);
+
+  const newCp: CheckpointDefinition = {
+    ...cpDefinition,
+    checkpointId: 'cp-1-r1',
+    prompt: '新场景下你应该怎么做？',
+  };
+  const result = applyRemediation(failed, 'cp-1', remediationContent, newCp, 2002);
+
+  const item = findCheckpointForTask(result, 'task-1');
+  assert.ok(item);
+  assert.equal(item.status, 'pending');
+  assert.equal(item.checkpoint.checkpointId, 'cp-1-r1');
+  assert.equal(item.remediationContent, remediationContent);
+  assert.equal(item.remediationAttempt, 1);
+  assert.equal(item.evaluation, undefined);
+  assert.equal(item.submission, undefined);
+});
+
+test('applyRemediation 对不存在的 checkpointId → 不修改', () => {
+  const result = applyRemediation(baseLesson, 'nonexistent', remediationContent, cpDefinition, 2000);
+  assert.equal(result, baseLesson);
 });

@@ -82,6 +82,10 @@ export interface CheckpointItem {
   submission?: CheckpointSubmission;
   /** 最近一次评估结果 */
   evaluation?: CheckpointEvaluation;
+  /** 补救内容（首次错误后 LLM 生成，§2.7） */
+  remediationContent?: string;
+  /** 已补救轮次（0 = 未补救） */
+  remediationAttempt: number;
   status: 'pending' | 'submitted' | 'evaluated';
 }
 

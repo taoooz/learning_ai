@@ -2,6 +2,15 @@
 
 ## 2026-09-19
 
+### V2 P3a 第三切片：补救内容插入（remediate_here 完整闭环）
+- Python：REMEDIATION_PROMPT（换比喻/换角度重新解释 + 出等价不同题的 JSON 输出模板）、generate_remediation 服务、FastAPI `/checkpoints/remediate` 端点
+- Next.js：`checkpoints/remediate` 代理路由
+- 类型：RemediationPackage + CheckpointItem 新增 remediationContent / remediationAttempt 字段
+- 纯函数：`applyRemediation`（补救内容写入 + 新题替换旧题 + 重置 pending）
+- Hook：`requestRemediation`（调用补救端点 → applyRemediation；失败回退简单重试）
+- UI：CheckpointCard 首次错误显示「获取补救内容并重试」→ 补救讲解渲染 + 新题重试；二次错误 → continue + not_demonstrated
+- 验证：pytest 97/97（+3）、TS 252/252（+2）、tsc 干净、lint 0 errors
+
 ### V2 P3a 第二切片：状态机接入 + 学习流集成
 - 新增 `lib/learning-v2/checkpoint-ops.ts` 纯函数层：needsCheckpoint（evidencePolicy=checkpoint 且尚无条目）、upsertCheckpointItem（幂等 + awaiting_user→checking）、applyCheckpointEvaluation（评估写入 + checking→awaiting_user）、collectEvidence（章节完成时提取证据）
 - hook 集成：task_completed 后自动触发 checkpoint 生成（失败静默跳过不阻塞主线）；新增 CHECKPOINT_READY / CHECKPOINT_EVALUATED 两个 action（reducer + 同步镜像双路归约一致）

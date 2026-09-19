@@ -40,6 +40,7 @@ import { decideResumeAction } from '@/lib/learning-v2/resume';
 import { completeChapterV2 } from '@/lib/learning-v2/chapter-complete';
 import {
   applyCheckpointEvaluation,
+  applyRemediation,
   needsCheckpoint,
   upsertCheckpointItem,
 } from '@/lib/learning-v2/checkpoint-ops';
@@ -258,6 +259,8 @@ export interface UseChapterLearningResult {
   submitCheckpoint: (checkpointId: string, answer: string | string[]) => Promise<void>;
   /** P3a：重试 Checkpoint（清除评估结果回到 pending） */
   retryCheckpoint: (checkpointId: string) => void;
+  /** P3a：补救流程（LLM 生成补救内容 + 等价新题） */
+  requestRemediation: (checkpointId: string) => Promise<void>;
 }
 
 /** 落盘节流窗口：流式期间约 300ms 写一次，终态立即写 */
@@ -575,6 +578,76 @@ export function useChapterLearning({
       });
     },
     [commit],
+  );
+
+  /**
+   * P3a 补救流程：首次错误后 LLM 生成补救内容 + 等价不同题（§2.7）。
+   * 生成成功 → applyRemediation（补救内容入流 + 新题替换旧题）；失败 → 回退为简单重试。
+   */
+  const requestRemediation = useCallback(
+    async (checkpointId: string) => {
+      const lesson = lessonMirrorRef.current;
+      if (!lesson) return;
+      const item = lesson.streamItems.find(
+        (s): s is CheckpointItem => s.type === 'checkpoint' && s.checkpoint.checkpointId === checkpointId,
+      );
+      if (!item || !item.evaluation) return;
+      const planned = lesson.chapterPlan.tasks.find((t) => t.taskId === item.taskId);
+      const chapter = blueprint.chapters.find((c) => c.chapterId === chapterId);
+      try {
+        const contentItem = lesson.streamItems.find(
+          (s) => s.type === 'task_content' && s.taskId === item.taskId,
+        );
+        const summary = contentItem && contentItem.type === 'task_content'
+          ? contentItem.blocks
+              .map((b) => (b.type === 'markdown' ? b.markdown : b.type === 'key_point' ? b.title : ''))
+              .filter(Boolean)
+              .join('\n')
+              .slice(0, 1500)
+          : planned?.taskGoal ?? '';
+        const response = await fetch('/api/learning/v2/checkpoints/remediate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            courseId,
+            chapterId,
+            taskId: item.taskId,
+            taskTitle: planned?.title ?? '',
+            taskGoal: planned?.taskGoal ?? '',
+            originalPrompt: item.checkpoint.prompt,
+            userAnswer: item.submission?.answer ?? '',
+            correctAnswer: String(item.checkpoint.correctAnswer),
+            originalHint: item.checkpoint.remediationHint,
+            taskContentSummary: summary,
+            courseTopic: blueprint.topic,
+            chapterTitle: chapter?.title ?? '',
+            idempotencyKey: `remediate:${courseId}:${chapterId}:${lesson.chapterPlan.planVersion}:${checkpointId}:${item.remediationAttempt + 1}`,
+          }),
+        });
+        if (!response.ok) return;
+        const body = await response.json();
+        if (!body.ok || !body.remediationContent || !body.newCheckpoint) return;
+        const nc = body.newCheckpoint;
+        const newDefinition: CheckpointDefinition = {
+          ...nc,
+          checkpointId: `${checkpointId}-r${item.remediationAttempt + 1}`,
+          objectiveId: item.checkpoint.objectiveId,
+          taskId: item.taskId,
+          conceptKeys: item.checkpoint.conceptKeys,
+          estimatedSeconds: 45,
+          generationMeta: { promptVersion: 'remediate-v1', modelVersion: 'llm', generatedAt: Date.now(), durationMs: 0, degraded: false },
+        };
+        commit({
+          type: 'LESSON_PATCH',
+          lesson: applyRemediation(lesson, checkpointId, body.remediationContent, newDefinition, Date.now()),
+        });
+      } catch (error) {
+        console.warn('[useChapterLearning] 补救内容生成失败:', error);
+        // 回退：清除评估结果用原题重试
+        retryCheckpoint(checkpointId);
+      }
+    },
+    [courseId, chapterId, blueprint, commit, retryCheckpoint],
   );
 
   // ---- 任务流请求 ----
@@ -1063,5 +1136,6 @@ export function useChapterLearning({
     isTutorBusy,
     submitCheckpoint,
     retryCheckpoint,
+    requestRemediation,
   };
 }
