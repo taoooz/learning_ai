@@ -10,4 +10,12 @@ export interface GenerationMeta {
   durationMs?: number;
   /** 是否降级产物（模型失败后的兜底内容） */
   degraded?: boolean;
+  /** P5 可观测性：token 用量（来自 LLM usage 字段；流式调用暂不采集） */
+  tokenUsage?: TokenUsage;
+}
+
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
 }

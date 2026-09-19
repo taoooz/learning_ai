@@ -9,7 +9,7 @@ unresolvedQuestions 是能力证据字段，P1 阶段无任何掌握度证据—
 """
 import time
 
-from lib.minimax import MiniMaxClient, parse_json_response
+from lib.minimax import MiniMaxClient, extract_usage, parse_json_response
 from prompts import build_prompt
 from schemas.learning_v2 import ChapterRecapRequest
 from services.learning_v2_errors import RecapValidationError
@@ -131,6 +131,7 @@ async def generate_chapter_recap(request: ChapterRecapRequest, client: MiniMaxCl
                     "generatedAt": now_ms,
                     "durationMs": int((time.monotonic() - started) * 1000),
                     "degraded": False,
+                    **({"tokenUsage": usage} if (usage := extract_usage(response)) else {}),
                 },
             }
 

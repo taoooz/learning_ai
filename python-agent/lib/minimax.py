@@ -219,3 +219,24 @@ def parse_json_response(content: str) -> dict:
         if not _is_json_balanced(json_str):
             raise ValueError(f"JSON response truncated (unbalanced brackets): {json_str[:200]}")
         raise ValueError(f"Invalid JSON: {e}, content: {json_str[:200]}")
+
+
+def extract_usage(response: dict) -> dict | None:
+    """从 LLM 响应中提取 token 用量（P5 可观测性，§P5.4）
+
+    OpenAI 兼容格式：response.usage.{prompt_tokens, completion_tokens, total_tokens}
+    无 usage 字段（流式未开 include_usage 等）时返回 None，调用方省略该字段。
+    """
+    usage = response.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    prompt_tokens = usage.get("prompt_tokens")
+    completion_tokens = usage.get("completion_tokens")
+    total_tokens = usage.get("total_tokens")
+    if not isinstance(prompt_tokens, int) or not isinstance(completion_tokens, int):
+        return None
+    return {
+        "promptTokens": prompt_tokens,
+        "completionTokens": completion_tokens,
+        "totalTokens": total_tokens if isinstance(total_tokens, int) else prompt_tokens + completion_tokens,
+    }

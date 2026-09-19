@@ -5,7 +5,7 @@ V2 章节计划生成服务
 import time
 from uuid import uuid4
 
-from lib.minimax import MiniMaxClient, parse_json_response
+from lib.minimax import MiniMaxClient, extract_usage, parse_json_response
 from prompts import build_prompt
 from schemas.learning_v2 import ChapterPlanRequest
 from services.learning_v2_errors import (
@@ -317,6 +317,7 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
                     "generatedAt": now_ms,
                     "durationMs": int((time.monotonic() - started) * 1000),
                     "degraded": False,
+                    **({"tokenUsage": usage} if (usage := extract_usage(response)) else {}),
                 },
             }
 

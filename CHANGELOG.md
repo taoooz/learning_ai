@@ -2,6 +2,11 @@
 
 ## 2026-09-19
 
+### V2 P5 起步：LLM 调用 token 用量观测（P5.4 可观测性）
+- TS：GenerationMeta 新增 tokenUsage（promptTokens/completionTokens/totalTokens）
+- Python：lib/minimax.extract_usage（OpenAI 兼容 usage 字段提取，缺字段安全降级 None）；接入 chapter_plan / chapter_recap 非流式生成（streaming 暂不采集）
+- 测试：pytest 100/100（+3）、TS 269/269
+
 ### V2 P4 第二切片：调度集成与 UI（用户确认式调整）
 - Hook：`requestPlanSuggestion`（边界时收集 evidence + 剩余任务 → 调度端点 → canApplyPatch 预校验 → 存为待决策建议；无证据/超上限/空操作不打扰用户）、`acceptPlanSuggestion`（校验 → applyPlanPatch → 清除）、`dismissPlanSuggestion`
 - UI：PlanPatchPrompt 组件（用户可见的简短调整提示 + 按建议调整/按原计划双按钮）；页面边界时自动触发一次请求（组件级防抖）

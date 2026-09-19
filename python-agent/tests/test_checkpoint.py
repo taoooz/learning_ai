@@ -250,3 +250,25 @@ def test_remediate_endpoint_missing_fields():
     response = client.post("/api/learning/v2/checkpoints/remediate", json={"courseTopic": "HTTP"})
     assert response.status_code == 422
     assert "必填字段" in response.json()["message"]
+
+
+# ---- P5 可观测性：token 用量提取 ----
+
+from lib.minimax import extract_usage
+
+
+def test_extract_usage_full():
+    r = {"usage": {"prompt_tokens": 120, "completion_tokens": 80, "total_tokens": 200}}
+    u = extract_usage(r)
+    assert u == {"promptTokens": 120, "completionTokens": 80, "totalTokens": 200}
+
+
+def test_extract_usage_missing_total_computes():
+    r = {"usage": {"prompt_tokens": 120, "completion_tokens": 80}}
+    u = extract_usage(r)
+    assert u["totalTokens"] == 200
+
+
+def test_extract_usage_absent():
+    assert extract_usage({}) is None
+    assert extract_usage({"usage": None}) is None
