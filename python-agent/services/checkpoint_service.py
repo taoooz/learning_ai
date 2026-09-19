@@ -54,16 +54,22 @@ async def _call_for_json(
     system_prompt: str,
     user_message: str,
     max_tokens: int = 2000,
-    retries: int = 2,
+    retries: int = 3,
 ) -> dict:
-    """调用 LLM 并提取 JSON；解析失败时重试（模型输出不稳定，重试概率高）"""
+    """调用 LLM 并提取 JSON；解析失败时重试（glm-5.3-flash 偶尔空 content 或 JSON 内含特殊字符）"""
     last_error: Exception | None = None
     for attempt in range(1, retries + 1):
         response = await client.chat(
             messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_message}],
             max_tokens=max_tokens,
         )
-        content = response["choices"][0]["message"]["content"]
+        message = response["choices"][0]["message"]
+        content = message.get("content") or ""
+        if not content.strip():
+            # 思考模式偶尔 content 为空（全部输出进 reasoning_content）：重试
+            print(f"[Checkpoint] content 为空（第 {attempt} 次），reasoning {len(message.get('reasoning_content', '') or '')} 字")
+            last_error = ValueError("模型输出 content 为空")
+            continue
         try:
             return _extract_json(content)
         except (ValueError, json.JSONDecodeError) as exc:

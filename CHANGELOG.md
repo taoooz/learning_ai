@@ -2,6 +2,11 @@
 
 ## 2026-09-19
 
+### V2 P3a 端到端验证：Next.js 代理全链路 4/4
+- E2E 通过 Next.js 代理走完整 checkpoint 流程：generate（真实 LLM）→ evaluate（错误→remediate_here）→ remediate（真实 LLM 补救讲解+等价新题）→ evaluate 新题（正确→demonstrated）
+- 稳定性修复：glm-5.3-flash 偶尔输出空 content（思考模式，全部输出进 reasoning_content）→ 空 content 时重试；重试次数 2→3
+- 验证：pytest 97/97
+
 ### V2 P3a 第四切片：Evidence 聚合到章节状态与 Recap
 - 类型：`NodeLessonV2.evidence` 从 `unknown[]` 改为 `LearningEvidence[]`（P3 前占位 → P3a 定稿启用）
 - 写入：checkpoint 评估结果同步写入 `lesson.evidence`（同一 checkpoint 重试后以最终结果覆盖）
