@@ -20,9 +20,11 @@ interface TaskBoundaryV2Props {
   /** 当前任务连续失败次数（>=3 且失败态时给软提示，不锁按钮） */
   attempts: number;
   onContinue: () => void;
+  /** 最近 Tutor 回答是否为 proceed 意图（高亮继续按钮，§2.6.2） */
+  highlightContinue?: boolean;
 }
 
-export function TaskBoundaryV2({ lesson, phase, attempts, onContinue }: TaskBoundaryV2Props) {
+export function TaskBoundaryV2({ lesson, phase, attempts, onContinue, highlightContinue = false }: TaskBoundaryV2Props) {
   if (phase !== 'boundary' && phase !== 'completing') return null;
 
   // completing：本章收尾中，只保留一个禁用按钮提示进度，不展示边界内容
@@ -81,12 +83,19 @@ export function TaskBoundaryV2({ lesson, phase, attempts, onContinue }: TaskBoun
             本节已连续多次失败，可再试一次或稍后再来
           </p>
         )}
+        {highlightContinue && !failed && (
+          <p className="mb-3 text-[12px] text-accent">听起来你已准备好，可以继续了</p>
+        )}
         <div className="flex items-center justify-between gap-3">
           <p className="min-w-0 flex-1 truncate text-[12px] text-tertiary">{progressLabel}</p>
           <button
             type="button"
             onClick={onContinue}
-            className="shrink-0 rounded-full bg-accent px-5 py-2.5 text-[14px] font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
+            className={`shrink-0 rounded-full px-5 py-2.5 text-[14px] font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 ${
+              highlightContinue && !failed
+                ? 'animate-pulse bg-accent shadow-md shadow-accent/30'
+                : 'bg-accent'
+            }`}
           >
             {buttonLabel}
           </button>

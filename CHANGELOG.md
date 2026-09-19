@@ -2,6 +2,11 @@
 
 ## 2026-09-19
 
+### V2 P2 第二阶段补充：真实 LLM 冒烟 + proceed 高亮反馈
+- 真实 LLM 冒烟 4/4：answer_inline/expand_current(NEEDS_EXAMPLE)/switch_explanation/proceed 全部正确分类，delta 无标记泄漏，正文无标记残留
+- proceed UI 反馈：新增 `latestTutorActionIsProceed` 纯函数（当前任务最近完成回答为 proceed → true）；TaskBoundaryV2 新增 `highlightContinue` prop，proceed 时继续按钮 pulse 动画 + 提示文案「听起来你已准备好，可以继续了」
+- 验证：TS 235/235（+3 proceed 高亮测试）、tsc 干净、lint 0 errors
+
 ### V2 P2 第二阶段：教学动作四意图（answer_inline / expand_current / switch_explanation / proceed）
 - 完成定义达成：Tutor 回答携带教学动作分类（§2.6.2 四意图），模型根据问题意图自动判定 action type + reasonCode；快捷动作按钮（举例、换个讲法）发送预置问题文本触发分类
 - 协议：Python `InlineTutorResponse` 新增 `action: TutorActionField`（type + reasonCode，Pydantic Literal 校验）；TS `TutorCompletedPayload` 新增 `action: TutorAction`；`TutorAnswerItem` 持久化 `action` 字段

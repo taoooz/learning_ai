@@ -9,6 +9,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { CourseHeaderBar } from '@/components/CourseHeaderBar';
 import { LearningStreamV2 } from '@/components/learning-v2/LearningStreamV2';
 import { TaskBoundaryV2 } from '@/components/learning-v2/TaskBoundaryV2';
+import { latestTutorActionIsProceed } from '@/lib/learning-v2/tutor-queue';
 import { ChapterCompleteCard } from '@/components/learning-v2/ChapterCompleteCard';
 import { InlineTutorInput, tutorPlaceholder } from '@/components/learning-v2/InlineTutorInput';
 import { useChapterLearning } from '@/hooks/learning-v2/useChapterLearning';
@@ -211,6 +212,7 @@ function ChapterLearningView({
                 phase={phase}
                 attempts={currentTaskAttempts}
                 onContinue={continueNext}
+                highlightContinue={latestTutorActionIsProceed(lesson)}
               />
               {/* P2 提问输入框（§4）：学习流/边界卡之后常驻，流中与边界均可见；
                   completing 禁用（收尾后章节转 completed，排队问题将无人应答）；

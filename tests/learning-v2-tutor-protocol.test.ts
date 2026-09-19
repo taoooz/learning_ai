@@ -28,6 +28,7 @@ import {
   userQuestionItemId,
   tutorAnswerItemId,
 } from '../lib/learning-v2/reducers';
+import { latestTutorActionIsProceed } from '../lib/learning-v2/tutor-queue';
 import type { LearningSseEvent } from '../types/learning-v2/events';
 import type {
   ChapterPlan,
@@ -782,4 +783,34 @@ test('排队提示区分主任务生成中和边界超窗排队', () => {
   assert.equal(tutorQueuedHint(true), '本节内容会先生成完，随后回答你的问题');
   // 边界超窗排队：此时没有内容在生成，原文案错位（最终审查修复 2）
   assert.equal(tutorQueuedHint(false), '问题较多时会按顺序回答，也可继续学习');
+});
+
+
+// ---- P2 四意图：proceed 高亮判定 ----
+
+test('latestTutorActionIsProceed: 当前任务最近完成回答为 proceed → true', () => {
+  const actionEvent = makeTutorEvent({
+    eventId: 'evt-tutor-proceed',
+    type: 'tutor_completed',
+    sequence: 5,
+    timestamp: 2300,
+    payload: {
+      questionId: 'q-1',
+      blocks: [{ type: 'markdown', blockId: 'tb-1', markdown: '好，继续。' }],
+      action: { type: 'proceed', reasonCode: 'USER_READY' },
+    },
+  });
+  const withTask = { ...baseWithQuestion, runtime: { ...baseWithQuestion.runtime, currentTaskId: 'task-1' } };
+  const result = applyTutorSseEvent(withTask, actionEvent);
+  assert.equal(latestTutorActionIsProceed(result), true);
+});
+
+test('latestTutorActionIsProceed: answer_inline → false', () => {
+  const withTask = { ...baseWithQuestion, runtime: { ...baseWithQuestion.runtime, currentTaskId: 'task-1' } };
+  const result = applyTutorSseEvent(withTask, tutorCompletedEvent);
+  assert.equal(latestTutorActionIsProceed(result), false);
+});
+
+test('latestTutorActionIsProceed: 无回答 → false', () => {
+  assert.equal(latestTutorActionIsProceed(baseWithQuestion), false);
 });

@@ -40,3 +40,19 @@ export function takeNextTutorQuestion(lesson: NodeLessonV2): UserQuestionItem | 
 export function countUnansweredTutorQuestions(lesson: NodeLessonV2): number {
   return getPendingTutorQuestions(lesson).length;
 }
+
+/**
+ * 判断当前任务最近一条完成的 Tutor 回答是否为 proceed 动作（§2.6.2）。
+ * 用于边界卡高亮「继续学习」按钮：用户表达继续意图后给予视觉引导。
+ */
+export function latestTutorActionIsProceed(lesson: NodeLessonV2): boolean {
+  const currentTaskId = lesson.runtime.currentTaskId;
+  if (!currentTaskId) return false;
+  let latest: TutorAnswerItem | undefined;
+  for (const item of lesson.streamItems) {
+    if (item.type !== 'tutor_answer' || item.taskId !== currentTaskId) continue;
+    if (item.status !== 'complete' || !item.action) continue;
+    if (!latest || item.sequence > latest.sequence) latest = item;
+  }
+  return latest?.action?.type === 'proceed';
+}
