@@ -712,6 +712,19 @@ async def learning_v2_checkpoints_evaluate(request: Request):
             "message": f"请求参数校验失败：{exc}", "retryable": False,
         })
 
+    # P3b：开放式题型路由 LLM Rubric 评分
+    # 回归样本一致率 83% ≥ 80% 阈值（2026-09-19 达标），默认启用；env 置 falsy 可紧急关闭
+    import os
+    if definition.kind in ("self_explanation", "micro_practice"):
+        if os.getenv("ENABLE_OPEN_ENDED_CHECKPOINTS", "true").lower() not in ("0", "false", "no"):
+            from services.checkpoint_service import evaluate_open_ended
+            evaluation = await evaluate_open_ended(definition, str(req.answer))
+            return {"ok": True, "evaluation": evaluation.model_dump()}
+        return JSONResponse(status_code=422, content={
+            "ok": False, "code": "OPEN_ENDED_DISABLED",
+            "message": "开放式题型尚未启用（回归验证未通过或未开启）", "retryable": False,
+        })
+
     evaluation = evaluate_checkpoint(definition, req.answer, req.attempt)
     return {"ok": True, "evaluation": evaluation.model_dump()}
 

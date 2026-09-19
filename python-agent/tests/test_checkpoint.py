@@ -69,9 +69,12 @@ def test_sequence_valid():
     assert cp.correctAnswer == ["s1", "s2", "s3"]
 
 
-def test_invalid_kind_rejected():
+def test_open_ended_kind_now_valid():
+    """P3b：self_explanation 已加入类型（启用仍须过回归验证）"""
+    cp = _scenario_choice(kind="self_explanation", rubric="评分标准")
+    assert cp.kind == "self_explanation"
     with pytest.raises(ValidationError):
-        _scenario_choice(kind="self_explanation")
+        _scenario_choice(kind="error_diagnosis")  # P3b 后续启用
 
 
 def test_unknown_fields_rejected():

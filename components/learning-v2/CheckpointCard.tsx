@@ -25,15 +25,21 @@ interface CheckpointCardProps {
 
 export function CheckpointCard({ checkpoint, evaluation, remediationContent, onSubmit, onRetry, onRequestRemediation, remediating, disabled }: CheckpointCardProps) {
   const [selected, setSelected] = useState<string>('');
+  const [openAnswer, setOpenAnswer] = useState<string>('');
   const [order, setOrder] = useState<string[]>(() =>
     checkpoint.kind === 'sequence' && checkpoint.sequenceItems
       ? checkpoint.sequenceItems.map((item) => item.id)
       : []
   );
 
+  const isOpenEnded = checkpoint.kind === 'self_explanation' || checkpoint.kind === 'micro_practice';
   const hasResult = !!evaluation;
   const canSubmit = !disabled && !hasResult && (
-    checkpoint.kind === 'scenario_choice' ? !!selected : order.length > 0
+    checkpoint.kind === 'scenario_choice'
+      ? !!selected
+      : isOpenEnded
+        ? openAnswer.trim().length >= 10
+        : order.length > 0
   );
 
   const handleMove = (index: number, direction: -1 | 1) => {
@@ -46,7 +52,13 @@ export function CheckpointCard({ checkpoint, evaluation, remediationContent, onS
 
   const handleSubmit = () => {
     if (!canSubmit) return;
-    onSubmit(checkpoint.kind === 'scenario_choice' ? selected : order);
+    onSubmit(
+      checkpoint.kind === 'scenario_choice'
+        ? selected
+        : isOpenEnded
+          ? openAnswer.trim()
+          : order,
+    );
   };
 
   const idToText = (id: string) => {
@@ -101,6 +113,29 @@ export function CheckpointCard({ checkpoint, evaluation, remediationContent, onS
         </div>
       )}
 
+      {/* 开放式题型：文本输入（P3b） */}
+      {isOpenEnded && !hasResult && (
+        <div>
+          <label htmlFor={`cp-open-${checkpoint.checkpointId}`} className="sr-only">
+            你的回答
+          </label>
+          <textarea
+            id={`cp-open-${checkpoint.checkpointId}`}
+            value={openAnswer}
+            onChange={(event) => setOpenAnswer(event.target.value)}
+            disabled={disabled}
+            rows={3}
+            placeholder="用自己的话回答（至少 10 个字）…"
+            className="w-full resize-none rounded-xl border border-black/8 bg-transparent p-3 text-[13px] leading-relaxed text-primary outline-none placeholder:text-tertiary focus:border-accent/40 disabled:opacity-60"
+          />
+          {checkpoint.rubric && (
+            <p className="mt-2 text-[12px] leading-relaxed text-tertiary">
+              提示：{checkpoint.rubric}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* 提交按钮 */}
       {!hasResult && (
         <button
@@ -109,7 +144,7 @@ export function CheckpointCard({ checkpoint, evaluation, remediationContent, onS
           disabled={!canSubmit}
           className="mt-4 w-full rounded-full bg-accent py-2.5 text-[14px] font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:cursor-not-allowed disabled:bg-accent/40"
         >
-          提交答案
+          {isOpenEnded ? '提交回答' : '提交答案'}
         </button>
       )}
 

@@ -17,10 +17,29 @@ _PROMPT_VERSION = "checkpoint-gen-v1"
 _EVAL_VERSION = "checkpoint-eval-v1"
 
 
+# CJK 字符与全角标点（用于修复 LLM 在 JSON 字符串值内使用 ASCII 引号包中文的问题）
+_CJK_CLASS = r'[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]'
+
+
+def _repair_cjk_quotes(text: str) -> str:
+    """修复 JSON 字符串值内未转义的 ASCII 引号（LLM 用 "中文" 引用时的常见问题）
+
+    启发式：紧邻 CJK 字符的 ASCII 双引号是内容引号，替换为 Unicode 弯引号。
+    结构性引号（键名、冒号后、逗号前）两侧至少有一侧是 ASCII 字符，不受影响。
+    """
+    import re
+    return re.sub(
+        f'(?<={_CJK_CLASS})"(?={_CJK_CLASS})',
+        '\u201d',
+        text,
+    )
+
+
 def _extract_json(text: str) -> dict:
     """从 LLM 输出中提取 JSON 对象（容忍代码围栏和前后杂文）
 
     解析优先级：直接 loads → 围栏提取 → 花括号正则提取
+    每级失败时先尝试 CJK 引号修复再解析
     """
     text = text.strip()
     # 1. 直接解析（最常见：模型输出纯净 JSON）
@@ -31,11 +50,24 @@ def _extract_json(text: str) -> dict:
     # 2. 围栏提取
     fence_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
     if fence_match:
-        return json.loads(fence_match.group(1))
+        try:
+            return json.loads(fence_match.group(1))
+        except json.JSONDecodeError:
+            return json.loads(_repair_cjk_quotes(fence_match.group(1)))
     # 3. 花括号正则提取（贪婪匹配到最后一个 }）
     brace_match = re.search(r"\{.*\}", text, re.DOTALL)
     if brace_match:
-        return json.loads(brace_match.group(0))
+        try:
+            return json.loads(brace_match.group(0))
+        except json.JSONDecodeError:
+            repaired = _repair_cjk_quotes(brace_match.group(0))
+            return json.loads(repaired)
+    # 4. 全文修复后再试
+    repaired = _repair_cjk_quotes(text)
+    try:
+        return json.loads(repaired)
+    except json.JSONDecodeError:
+        pass
     raise ValueError("LLM 输出中未找到 JSON 对象")
 
 
@@ -217,3 +249,63 @@ def _normalize_new_checkpoint(raw: dict) -> dict:
                 normalized.append({"id": f"s{index + 1}", "text": item})
         nc["sequenceItems"] = normalized
     return raw
+
+
+async def evaluate_open_ended(
+    definition: CheckpointDefinitionModel,
+    answer: str,
+    client: MiniMaxClient | None = None,
+) -> CheckpointEvaluationModel:
+    """开放式题型 LLM Rubric 评分（§2.7：须经回归样本验证达标后启用）
+
+    P3b 红线：confidence < 0.5 时降级为 partial 且不产出证据（评分不可信）。
+    """
+    from prompts.checkpoint import OPEN_ENDED_EVAL_PROMPT
+
+    client = client or MiniMaxClient()
+    system_prompt = OPEN_ENDED_EVAL_PROMPT.format(
+        prompt=definition.prompt,
+        rubric=definition.rubric or "无具体 Rubric，请根据回答与题目的相关性及完整性评分。",
+        answer=answer,
+    )
+    raw = await _call_for_json(
+        client,
+        system_prompt,
+        "请根据 Rubric 对上述回答进行评分。只输出 JSON 对象。feedback 中引用回答内容时使用「」而非引号。",
+        max_tokens=4000,
+    )
+
+    outcome = raw.get("outcome", "not_demonstrated")
+    if outcome not in ("demonstrated", "partial", "not_demonstrated"):
+        outcome = "not_demonstrated"
+    score = raw.get("score")
+    if not isinstance(score, (int, float)) or not (0 <= score <= 1):
+        score = {"demonstrated": 0.9, "partial": 0.5, "not_demonstrated": 0.2}[outcome]
+    confidence = raw.get("confidence")
+    if not isinstance(confidence, (int, float)) or not (0 <= confidence <= 1):
+        confidence = 0.5
+
+    # P3b 红线：评分置信度过低时不产出能力证据（degraded 路径）
+    if confidence < 0.5:
+        return CheckpointEvaluationModel(
+            checkpointId=definition.checkpointId,
+            outcome="partial",
+            score=min(score, 0.5),
+            confidence=confidence,
+            feedback=f"{raw.get('feedback', '')}（评估置信度较低，此结果不作为能力证据）",
+            nextAction="continue",
+            correct=score >= 0.5,
+        )
+
+    next_action = "continue" if outcome == "demonstrated" else "remediate_here"
+    correct = outcome == "demonstrated"
+
+    return CheckpointEvaluationModel(
+        checkpointId=definition.checkpointId,
+        outcome=outcome,
+        score=round(float(score), 2),
+        confidence=round(float(confidence), 2),
+        feedback=raw.get("feedback", ""),
+        nextAction=next_action,
+        correct=correct,
+    )

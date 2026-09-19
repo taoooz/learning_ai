@@ -6,8 +6,13 @@
 
 import type { GenerationMeta } from './generation-meta';
 
-/** P3a 结构化题型（程序可判分）；开放式类型 P3b 按回归验证结果启用 */
-export type CheckpointKind = 'scenario_choice' | 'sequence';
+/**
+ * Checkpoint 题型。
+ * P3a 结构化（程序判分）：scenario_choice / sequence
+ * P3b 开放式（LLM Rubric 评分）：self_explanation / micro_practice
+ * （回归样本一致率 83% ≥ 80% 阈值，已于 2026-09-19 达标启用）
+ */
+export type CheckpointKind = 'scenario_choice' | 'sequence' | 'self_explanation' | 'micro_practice';
 
 /** Checkpoint 评估结果（§2.7） */
 export type CheckpointOutcome = 'demonstrated' | 'partial' | 'not_demonstrated' | 'skipped';
@@ -35,6 +40,8 @@ export interface CheckpointDefinition {
   kind: CheckpointKind;
   /** 题目描述 */
   prompt: string;
+  /** 评分标准（开放式题型必填） */
+  rubric?: string;
   /** scenario_choice 的选项 */
   options?: Array<{ id: string; text: string }>;
   /** sequence 题的选项（按乱序展示，用户排序后提交 id 序列） */

@@ -2,6 +2,13 @@
 
 ## 2026-09-19
 
+### V2 P3b：开放式题型（self_explanation / micro_practice）启用
+- 回归验证达标：12 个固定样本（正例/反例/边界例/陷阱题），模型 Rubric 评分 vs 人工判定一致率 83%（10/12）≥ 80% 阈值（§2.7 红线）
+- Python：OPEN_ENDED_EVAL_PROMPT（严格判定规则：事实性错误一票否决）、evaluate_open_ended 服务（confidence<0.5 降级不产出证据）、评估端点默认启用（env kill-switch）
+- 稳定性：CJK 引号修复（模型在 feedback 中用 ASCII 引号包中文导致 JSON 解析失败）、open-ended 评估 max_tokens 1500→4000（思考预算，同 9/6 TOC 教训）
+- TS/UI：CheckpointKind 扩展 + rubric 字段 + CheckpointCard 开放式 textarea 输入（≥10 字可提交）
+- 验证：pytest 97/97、TS 258/258、tsc/lint 干净
+
 ### V2 P3a 端到端验证：Next.js 代理全链路 4/4
 - E2E 通过 Next.js 代理走完整 checkpoint 流程：generate（真实 LLM）→ evaluate（错误→remediate_here）→ remediate（真实 LLM 补救讲解+等价新题）→ evaluate 新题（正确→demonstrated）
 - 稳定性修复：glm-5.3-flash 偶尔输出空 content（思考模式，全部输出进 reasoning_content）→ 空 content 时重试；重试次数 2→3

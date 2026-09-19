@@ -6,7 +6,9 @@ from typing import Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
-CheckpointKindType = Literal["scenario_choice", "sequence"]
+CheckpointKindType = Literal["scenario_choice", "sequence", "self_explanation", "micro_practice"]
+# P3b 上线红线（§2.7）：开放式类型须先通过回归样本一致性验证（agreement >= 80%）才可启用
+OPEN_ENDED_KINDS = ("self_explanation", "micro_practice")
 
 
 class CheckpointOption(BaseModel):
@@ -35,6 +37,7 @@ class CheckpointDefinitionModel(BaseModel):
     conceptKeys: list[str] = Field(default_factory=list)
     kind: CheckpointKindType
     prompt: str
+    rubric: str | None = None
     options: list[CheckpointOption] | None = None
     sequenceItems: list[SequenceItem] | None = None
     correctAnswer: Union[str, list[str]]
