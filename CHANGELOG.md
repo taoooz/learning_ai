@@ -2,6 +2,13 @@
 
 ## 2026-09-19
 
+### V2 P3a 第二切片：状态机接入 + 学习流集成
+- 新增 `lib/learning-v2/checkpoint-ops.ts` 纯函数层：needsCheckpoint（evidencePolicy=checkpoint 且尚无条目）、upsertCheckpointItem（幂等 + awaiting_user→checking）、applyCheckpointEvaluation（评估写入 + checking→awaiting_user）、collectEvidence（章节完成时提取证据）
+- hook 集成：task_completed 后自动触发 checkpoint 生成（失败静默跳过不阻塞主线）；新增 CHECKPOINT_READY / CHECKPOINT_EVALUATED 两个 action（reducer + 同步镜像双路归约一致）
+- UI 集成：LearningStreamV2 新增 checkpoint 条目渲染（CheckpointItemView→CheckpointCard）；hook 暴露 submitCheckpoint / retryCheckpoint
+- 修复：eslint 忽略 docs/ 目录（超知 HTML 案例的打包 JS 被误报 213 errors）
+- 验证：pytest 94/94、TS 250/250（+9 checkpoint-ops 测试）、tsc 干净、lint 0 errors
+
 ### V2 P3a 第一切片：结构化 Checkpoint（scenario_choice / sequence）
 - 类型：新增 `types/learning-v2/checkpoint.ts`（CheckpointDefinition/Evaluation/Submission/Item/LearningEvidence）；`LearningStreamItem` 联合新增 CheckpointItem
 - Python：`schemas/checkpoint.py`（Pydantic 严格校验）、`prompts/checkpoint.py`（JSON 输出模板）、`services/checkpoint_service.py`（LLM 生成 + 程序判分）+ FastAPI 两端点（generate/evaluate）

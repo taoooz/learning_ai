@@ -9,6 +9,7 @@
 import { useEffect, useRef } from 'react';
 import type {
   ChapterRecap,
+  CheckpointItem,
   LearningStreamItem,
   NodeLessonV2,
   SystemNoticeItem,
@@ -19,6 +20,7 @@ import type {
 import type { ChapterPhase } from '@/hooks/learning-v2/useChapterLearning';
 import { getPendingTutorQuestions, TUTOR_AUTO_WINDOW_LIMIT } from '@/lib/learning-v2/tutor-queue';
 import { TaskBlockView } from './TaskBlocksV2';
+import { CheckpointCard } from './CheckpointCard';
 
 /**
  * 排队提示文案（可测纯函数，测试锁定，勿改）：
@@ -34,6 +36,8 @@ export function LearningStreamV2({
   anchorTaskId,
   onRetryTutor,
   tutorBusy = false,
+  onSubmitCheckpoint,
+  onRetryCheckpoint,
 }: {
   lesson: NodeLessonV2;
   phase: ChapterPhase;
@@ -43,6 +47,10 @@ export function LearningStreamV2({
   onRetryTutor?: (questionId: string) => void;
   /** P2：Tutor 忙碌时禁用重试按钮（编排层忙碌期间不受理重试，§4） */
   tutorBusy?: boolean;
+  /** P3a：提交 Checkpoint 答案（接 hook.submitCheckpoint） */
+  onSubmitCheckpoint?: (checkpointId: string, answer: string | string[]) => void;
+  /** P3a：重试 Checkpoint（接 hook.retryCheckpoint） */
+  onRetryCheckpoint?: (checkpointId: string) => void;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(!anchorTaskId);
@@ -118,6 +126,8 @@ export function LearningStreamV2({
           answeringQuestionIds={answeringQuestionIds}
           mainGenerating={mainGenerating}
           onRetryTutor={onRetryTutor}
+          onSubmitCheckpoint={onSubmitCheckpoint}
+          onRetryCheckpoint={onRetryCheckpoint}
           tutorBusy={tutorBusy}
         />
       ))}
@@ -135,6 +145,8 @@ function StreamItemView({
   mainGenerating,
   onRetryTutor,
   tutorBusy,
+  onSubmitCheckpoint,
+  onRetryCheckpoint,
 }: {
   item: LearningStreamItem;
   taskOrder: Map<string, number>;
@@ -144,6 +156,8 @@ function StreamItemView({
   mainGenerating: boolean;
   onRetryTutor?: (questionId: string) => void;
   tutorBusy: boolean;
+  onSubmitCheckpoint?: (checkpointId: string, answer: string | string[]) => void;
+  onRetryCheckpoint?: (checkpointId: string) => void;
 }) {
   switch (item.type) {
     case 'task_content':
@@ -177,9 +191,38 @@ function StreamItemView({
       );
     case 'tutor_answer':
       return <TutorAnswerView item={item} busy={tutorBusy} onRetry={onRetryTutor} />;
+    case 'checkpoint':
+      return (
+        <CheckpointItemView
+          item={item}
+          onSubmit={onSubmitCheckpoint}
+          onRetry={onRetryCheckpoint}
+        />
+      );
     default:
       return null;
   }
+}
+
+/** P3a Checkpoint 条目渲染 */
+function CheckpointItemView({
+  item,
+  onSubmit,
+  onRetry,
+}: {
+  item: CheckpointItem;
+  onSubmit?: (checkpointId: string, answer: string | string[]) => void;
+  onRetry?: (checkpointId: string) => void;
+}) {
+  return (
+    <CheckpointCard
+      checkpoint={item.checkpoint}
+      evaluation={item.evaluation}
+      onSubmit={(answer) => onSubmit?.(item.checkpoint.checkpointId, answer)}
+      onRetry={() => onRetry?.(item.checkpoint.checkpointId)}
+      disabled={item.status === 'evaluated'}
+    />
+  );
 }
 
 function TaskContentView({

@@ -2,7 +2,7 @@ import nextConfig from 'eslint-config-next/core-web-vitals';
 
 export default [
   {
-    ignores: ['**/.next/**', '**/.worktrees/**', '**/node_modules/**'],
+    ignores: ['**/.next/**', '**/.worktrees/**', '**/node_modules/**', 'docs/**'],
   },
   ...nextConfig,
   {

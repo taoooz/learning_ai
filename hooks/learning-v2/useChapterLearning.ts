@@ -38,6 +38,12 @@ import {
 import { parseLearningSseStream } from '@/lib/learning-v2/sse-client';
 import { decideResumeAction } from '@/lib/learning-v2/resume';
 import { completeChapterV2 } from '@/lib/learning-v2/chapter-complete';
+import {
+  applyCheckpointEvaluation,
+  needsCheckpoint,
+  upsertCheckpointItem,
+} from '@/lib/learning-v2/checkpoint-ops';
+import type { CheckpointDefinition, CheckpointEvaluation, CheckpointItem } from '@/types/learning-v2';
 import { recordEngagementEvent } from '@/lib/learning-v2/engagement';
 import {
   canStartPrefetch,
@@ -73,7 +79,10 @@ type HookAction =
   | { type: 'CHAPTER_COMPLETING'; lesson: NodeLessonV2 }
   | { type: 'COMPLETED'; lesson: NodeLessonV2 }
   // Tutor 编排层预归约容器写回（LESSON_PATCH 只用于 Tutor 流，任务流仍走事件归约）
-  | { type: 'LESSON_PATCH'; lesson: NodeLessonV2 };
+  | { type: 'LESSON_PATCH'; lesson: NodeLessonV2 }
+  // P3a Checkpoint
+  | { type: 'CHECKPOINT_READY'; checkpoint: CheckpointDefinition; now: number }
+  | { type: 'CHECKPOINT_EVALUATED'; checkpointId: string; answer: string | string[]; evaluation: CheckpointEvaluation; now: number };
 
 /** TASK_STARTING 的容器级归约（reducer 与同步镜像共用，保证两侧完全一致） */
 function lessonAfterTaskStarting(lesson: NodeLessonV2, taskId: string, now: number): NodeLessonV2 {
@@ -131,6 +140,18 @@ function reducer(state: HookState, action: HookAction): HookState {
       return { lesson: action.lesson, phase: 'completed', planError: null };
     case 'LESSON_PATCH':
       return { ...state, lesson: action.lesson, phase: deriveChapterPhase(action.lesson, state.phase) };
+    case 'CHECKPOINT_READY': {
+      if (!state.lesson) return state;
+      const lesson = upsertCheckpointItem(state.lesson, action.checkpoint, action.now);
+      return { ...state, lesson, phase: deriveChapterPhase(lesson, state.phase) };
+    }
+    case 'CHECKPOINT_EVALUATED': {
+      if (!state.lesson) return state;
+      const lesson = applyCheckpointEvaluation(
+        state.lesson, action.checkpointId, action.answer, action.evaluation, action.now,
+      );
+      return { ...state, lesson, phase: deriveChapterPhase(lesson, state.phase) };
+    }
     default:
       return state;
   }
@@ -155,6 +176,12 @@ function mirrorLesson(current: NodeLessonV2 | null, action: HookAction): NodeLes
       return current ? applyLearningSseEvent(current, action.event) : current;
     case 'STREAM_FAILED_LOCAL':
       return current ? lessonAfterStreamFailure(current, action.message, action.code, action.now) : current;
+    case 'CHECKPOINT_READY':
+      return current ? upsertCheckpointItem(current, action.checkpoint, action.now) : current;
+    case 'CHECKPOINT_EVALUATED':
+      return current
+        ? applyCheckpointEvaluation(current, action.checkpointId, action.answer, action.evaluation, action.now)
+        : current;
     default:
       return current;
   }
@@ -227,6 +254,10 @@ export interface UseChapterLearningResult {
   tutorState: TutorUiState;
   /** P2：Tutor 是否忙碌（请求在途或回答流式中） */
   isTutorBusy: boolean;
+  /** P3a：提交 Checkpoint 答案（服务端程序判分） */
+  submitCheckpoint: (checkpointId: string, answer: string | string[]) => Promise<void>;
+  /** P3a：重试 Checkpoint（清除评估结果回到 pending） */
+  retryCheckpoint: (checkpointId: string) => void;
 }
 
 /** 落盘节流窗口：流式期间约 300ms 写一次，终态立即写 */
@@ -424,6 +455,128 @@ export function useChapterLearning({
     [courseId, chapterId, blueprint],
   );
 
+  // ---- P3a Checkpoint 生成与提交 ----
+
+  /**
+   * 任务完成后按需生成 Checkpoint（evidencePolicy=checkpoint 且尚无条目）。
+   * 生成成功 → CHECKPOINT_READY（状态机 awaiting_user → checking）；失败 → 静默跳过（不阻塞主线）。
+   */
+  const maybeGenerateCheckpoint = useCallback(
+    async (taskId: string) => {
+      const lesson = lessonMirrorRef.current;
+      if (!lesson) return;
+      if (!needsCheckpoint(lesson, taskId)) return;
+      const planned = lesson.chapterPlan.tasks.find((t) => t.taskId === taskId);
+      if (!planned) return;
+      const chapter = blueprint.chapters.find((c) => c.chapterId === chapterId);
+      try {
+        const contentItem = lesson.streamItems.find(
+          (s) => s.type === 'task_content' && s.taskId === taskId,
+        );
+        const summary = contentItem && contentItem.type === 'task_content'
+          ? contentItem.blocks
+              .map((b) => {
+                if (b.type === 'markdown') return b.markdown;
+                if (b.type === 'key_point') return [b.title, ...b.points].filter(Boolean).join('\n');
+                if (b.type === 'example') return [b.title, b.context, b.content, b.takeaway].filter(Boolean).join('\n');
+                return '';
+              })
+              .filter(Boolean)
+              .join('\n\n')
+              .slice(0, 2000)
+          : planned.taskGoal;
+        const response = await fetch('/api/learning/v2/checkpoints/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            courseId,
+            chapterId,
+            taskId,
+            objectiveId: planned.objectiveId,
+            courseTopic: blueprint.topic,
+            chapter: { title: chapter?.title ?? '', teachingGoal: chapter?.teachingGoal ?? '' },
+            task: { taskId: planned.taskId, title: planned.title, taskGoal: planned.taskGoal },
+            taskContentSummary: summary,
+            idempotencyKey: `checkpoint-gen:${courseId}:${chapterId}:${lesson.chapterPlan.planId}:${lesson.chapterPlan.planVersion}:${taskId}`,
+          }),
+        });
+        if (!response.ok) return;
+        const body = await response.json();
+        if (!body.ok || !body.checkpoint) return;
+        commit({ type: 'CHECKPOINT_READY', checkpoint: body.checkpoint, now: Date.now() });
+      } catch (error) {
+        // Checkpoint 生成失败不阻塞主线（§2.7 补救不锁死原则的同源延伸）
+        console.warn('[useChapterLearning] Checkpoint 生成失败:', error);
+      }
+    },
+    [courseId, chapterId, blueprint, commit],
+  );
+
+  /** 用户提交 Checkpoint 答案 → 服务端程序判分 → CHECKPOINT_EVALUATED */
+  const submitCheckpoint = useCallback(
+    async (checkpointId: string, answer: string | string[]) => {
+      const lesson = lessonMirrorRef.current;
+      if (!lesson) return;
+      const item = lesson.streamItems.find(
+        (s): s is CheckpointItem => s.type === 'checkpoint' && s.checkpoint.checkpointId === checkpointId,
+      );
+      if (!item) return;
+      const attempt = (item.submission?.attempt ?? 0) + 1;
+      try {
+        const response = await fetch('/api/learning/v2/checkpoints/evaluate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            courseId,
+            chapterId,
+            taskId: item.taskId,
+            checkpointId,
+            answer,
+            attempt,
+            idempotencyKey: `checkpoint-eval:${courseId}:${chapterId}:${lesson.chapterPlan.planId}:${lesson.chapterPlan.planVersion}:${checkpointId}:${attempt}`,
+            checkpoint: item.checkpoint,
+          }),
+        });
+        if (!response.ok) return;
+        const body = await response.json();
+        if (!body.ok || !body.evaluation) return;
+        commit({
+          type: 'CHECKPOINT_EVALUATED',
+          checkpointId,
+          answer,
+          evaluation: body.evaluation,
+          now: Date.now(),
+        });
+      } catch (error) {
+        console.warn('[useChapterLearning] Checkpoint 判分失败:', error);
+      }
+    },
+    [courseId, chapterId, commit],
+  );
+
+  /** 重试 Checkpoint（清除评估结果，回到 pending 状态） */
+  const retryCheckpoint = useCallback(
+    (checkpointId: string) => {
+      const lesson = lessonMirrorRef.current;
+      if (!lesson) return;
+      const item = lesson.streamItems.find(
+        (s): s is CheckpointItem => s.type === 'checkpoint' && s.checkpoint.checkpointId === checkpointId,
+      );
+      if (!item) return;
+      const updated: CheckpointItem = { ...item, submission: undefined, evaluation: undefined, status: 'pending' };
+      commit({
+        type: 'LESSON_PATCH',
+        lesson: {
+          ...lesson,
+          streamItems: lesson.streamItems.map((s) => (s === item ? updated : s)),
+          runtime: { ...lesson.runtime, status: 'checking', lastActiveAt: Date.now() },
+          updatedAt: Date.now(),
+        },
+      });
+    },
+    [commit],
+  );
+
   // ---- 任务流请求 ----
   const startTask = useCallback(
     async (taskId: string, explicitAttempt?: number, lessonArg?: NodeLessonV2 | null) => {
@@ -508,8 +661,13 @@ export function useChapterLearning({
           now: Date.now(),
         });
       }
+
+      // P3a：任务完成且 evidencePolicy=checkpoint 且尚无 checkpoint → 生成
+      if (generationRef.current === generation && sawTaskCompleted) {
+        maybeGenerateCheckpoint(taskId);
+      }
     },
-    [courseId, chapterId, buildTaskStreamBody, commit],
+    [courseId, chapterId, buildTaskStreamBody, commit, maybeGenerateCheckpoint],
   );
 
   // ---- 单任务预取：只在边界触发，事件只收进缓存、绝不 dispatch，绝不触碰 generationRef ----
@@ -903,5 +1061,7 @@ export function useChapterLearning({
     retryTutor,
     tutorState,
     isTutorBusy,
+    submitCheckpoint,
+    retryCheckpoint,
   };
 }
