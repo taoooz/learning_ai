@@ -77,20 +77,29 @@ class MiniMaxClient:
         messages: list[dict],
         model: str | None = None,
         max_tokens: int = 1500,
+        include_usage: bool = False,
     ) -> AsyncIterator[dict]:
-        """流式调用 chat API"""
+        """流式调用 chat API
+
+        include_usage=True 时请求 OpenAI 兼容的 stream_options.include_usage，
+        最后一个 chunk（choices 为空）携带 usage 字段（P5.4 token 观测）。
+        网关不支持该参数时静默降级（无 usage chunk，调用方按 None 处理）。
+        """
         model = model or self.model
+        body: dict = {
+            "model": model,
+            "messages": messages,
+            "stream": True,
+            "max_tokens": max_tokens,
+        }
+        if include_usage:
+            body["stream_options"] = {"include_usage": True}
         async with httpx.AsyncClient() as client:
             async with client.stream(
                 "POST",
                 f"{self.base_url}/chat/completions",
                 headers=self._get_headers(),
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "stream": True,
-                    "max_tokens": max_tokens,
-                },
+                json=body,
                 timeout=60.0,
             ) as response:
                 response.raise_for_status()

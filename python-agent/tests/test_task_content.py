@@ -43,7 +43,7 @@ class FakeStreamClient:
         self.error = error
         self.error_after = error_after  # 发出 N 个增量后抛错；None 表示开始前抛错
 
-    async def stream_chat(self, messages, model=None, max_tokens=1500):
+    async def stream_chat(self, messages, model=None, max_tokens=1500, include_usage=False):
         if self.error is not None and self.error_after is None:
             raise self.error
         for index, delta in enumerate(self.deltas):

@@ -8,7 +8,7 @@ import time
 from typing import AsyncGenerator
 from uuid import uuid4
 
-from lib.minimax import MiniMaxClient
+from lib.minimax import MiniMaxClient, extract_usage
 from prompts import build_prompt
 from schemas.learning_v2 import TaskStreamRequest
 from services.chapter_plan_service import TEACHING_PATTERNS
@@ -125,8 +125,13 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
     # 必须用 stream_chat（async）：stream_chat_sync 会阻塞事件循环
     accumulated = ""
     received_delta = False
+    stream_usage = None
     try:
-        async for chunk in client.stream_chat(messages=messages, max_tokens=2000):
+        async for chunk in client.stream_chat(messages=messages, max_tokens=2000, include_usage=True):
+            # include_usage：最后一个 chunk choices 为空、携带 usage（P5.4 观测）
+            if not chunk.get("choices") and chunk.get("usage"):
+                stream_usage = extract_usage(chunk)
+                continue
             delta = (chunk.get("choices") or [{}])[0].get("delta", {}).get("content", "")
             if not delta:
                 continue
@@ -170,6 +175,7 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
                 "generatedAt": now_ms,
                 "durationMs": int((time.monotonic() - started) * 1000),
                 "degraded": False,
+                **({"tokenUsage": stream_usage} if stream_usage else {}),
             },
         },
     })

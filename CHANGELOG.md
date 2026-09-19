@@ -2,6 +2,11 @@
 
 ## 2026-09-19
 
+### V2 P5.4 补充：流式调用 usage 采集（网关降级）
+- stream_chat 新增 include_usage 参数（stream_options.include_usage），task_content_service 流式链路接入 usage chunk 提取
+- 实测：muses 网关不支持 stream_options.include_usage（usage chunk 不下发）——代码按设计安全降级为 None，流式 tokenUsage 暂缺、非流式（plan/recap）正常采集；网关升级后自动生效
+- 测试桩同步：FakeClient 增加 include_usage 参数
+
 ### V2 P5 质量门（P5.3 质量系统）
 - `scripts/quality-gate.sh`：统一质量门（tsc + TS 测试 + ESLint + pytest），`--with-llm` 附加 Rubric 一致性回归；任一失败整体失败
 - 当前基线：4/4 通过（TS 269/269、pytest 100/100）
