@@ -11,7 +11,7 @@
 // TutorStreamOrchestrator 持有独立代际与 abort。Tutor 请求不取消主任务流，
 // 主任务流也不取消 Tutor；章节卸载/切换时两者一并作废。
 
-import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type {
   ChapterPlan,
   ChapterRecap,
@@ -38,6 +38,7 @@ import {
 import { parseLearningSseStream } from '@/lib/learning-v2/sse-client';
 import { decideResumeAction } from '@/lib/learning-v2/resume';
 import { completeChapterV2 } from '@/lib/learning-v2/chapter-complete';
+import { applyPlanPatch, canApplyPatch } from '@/lib/learning-v2/plan-patch';
 import {
   applyCheckpointEvaluation,
   applyRemediation,
@@ -45,6 +46,9 @@ import {
   upsertCheckpointItem,
 } from '@/lib/learning-v2/checkpoint-ops';
 import type { CheckpointDefinition, CheckpointEvaluation, CheckpointItem } from '@/types/learning-v2';
+import { collectEvidence } from '@/lib/learning-v2/checkpoint-ops';
+import { MAX_PLAN_PATCHES_PER_CHAPTER } from '@/types/learning-v2';
+import type { ChapterPlanPatch } from '@/types/learning-v2';
 import { recordEngagementEvent } from '@/lib/learning-v2/engagement';
 import {
   canStartPrefetch,
@@ -261,6 +265,14 @@ export interface UseChapterLearningResult {
   retryCheckpoint: (checkpointId: string) => void;
   /** P3a：补救流程（LLM 生成补救内容 + 等价新题） */
   requestRemediation: (checkpointId: string) => Promise<void>;
+  /** P4：待用户决策的调度建议（null = 无建议） */
+  planSuggestion: ChapterPlanPatch | null;
+  /** P4：边界时请求调度建议（有证据才发起，预校验后才展示） */
+  requestPlanSuggestion: () => Promise<void>;
+  /** P4：用户接受建议 → 应用补丁 */
+  acceptPlanSuggestion: () => void;
+  /** P4：用户忽略建议 */
+  dismissPlanSuggestion: () => void;
 }
 
 /** 落盘节流窗口：流式期间约 300ms 写一次，终态立即写 */
@@ -300,6 +312,10 @@ export function useChapterLearning({
   const bootActionRef = useRef<ReturnType<typeof decideResumeAction> | null>(null);
   // P2 刷新恢复：初始化归一结果（是否需要落盘 / 是否自动重试一次）
   const tutorResumeRef = useRef<{ persisted: boolean; shouldAutoRetry: boolean } | null>(null);
+
+  // P4：待用户决策的调度建议（UI 级状态，不落盘；接受时才写入 lesson）
+  const [planSuggestion, setPlanSuggestion] = useState<ChapterPlanPatch | null>(null);
+  const planSuggestionBusyRef = useRef(false);
 
   const [state, dispatch] = useReducer(reducer, undefined, (): HookState => {
     const lesson = loadNodeLessonV2(courseId, chapterId);
@@ -1050,6 +1066,77 @@ export function useChapterLearning({
     void fetchPlan();
   }, [fetchPlan]);
 
+  // ---- P4 动态调度入口 ----
+
+  /**
+   * 边界时请求调度建议：收集剩余任务与证据 → /plan-patch/generate → 存为待决策建议。
+   * 只在 boundary 相位触发；建议为空操作或低置信度时不打扰用户。
+   */
+  const requestPlanSuggestion = useCallback(async () => {
+    const lesson = lessonMirrorRef.current;
+    if (!lesson || phaseMirrorRef.current !== 'boundary') return;
+    if (planSuggestionBusyRef.current) return;
+    if ((lesson.chapterPlan.appliedPatchCount ?? 0) >= MAX_PLAN_PATCHES_PER_CHAPTER) return;
+    planSuggestionBusyRef.current = true;
+    try {
+      const evidence = collectEvidence(lesson);
+      if (evidence.length === 0) return; // 无证据不调度
+      const chapter = blueprint.chapters.find((c) => c.chapterId === chapterId);
+      const remainingTasks = lesson.chapterPlan.tasks
+        .filter((t) => !lesson.runtime.completedTaskIds.includes(t.taskId) && !lesson.runtime.skippedTaskIds.includes(t.taskId) && t.taskId !== lesson.runtime.currentTaskId)
+        .map((t) => ({ taskId: t.taskId, title: t.title, taskGoal: t.taskGoal, teachingPattern: t.teachingPattern }));
+      if (remainingTasks.length === 0) return;
+      const response = await fetch('/api/learning/v2/plan-patch/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          courseId,
+          chapterId,
+          planVersion: lesson.chapterPlan.planVersion,
+          courseTopic: blueprint.topic,
+          chapterTitle: chapter?.title ?? '',
+          teachingGoal: chapter?.teachingGoal ?? '',
+          remainingTasks,
+          evidenceSummary: evidence.map((e) => ({ objectiveId: e.objectiveId, outcome: e.outcome, score: e.score })),
+          idempotencyKey: `plan-patch:${courseId}:${chapterId}:${lesson.chapterPlan.planVersion}`,
+        }),
+      });
+      if (!response.ok) return;
+      const body = await response.json();
+      const patch: ChapterPlanPatch | undefined = body.patch;
+      if (!body.ok || !patch || !patch.operations || patch.operations.length === 0) return;
+      // 客户端预校验：不可应用的建议不打扰用户
+      const check = canApplyPatch(lesson, patch);
+      if (!check.ok) return;
+      setPlanSuggestion(patch);
+    } catch (error) {
+      console.warn('[useChapterLearning] 调度建议获取失败:', error);
+    } finally {
+      planSuggestionBusyRef.current = false;
+    }
+  }, [courseId, chapterId, blueprint]);
+
+  /** 用户接受建议：校验 → 应用（版本升级）→ 清除建议 */
+  const acceptPlanSuggestion = useCallback(() => {
+    const lesson = lessonMirrorRef.current;
+    if (!lesson || !planSuggestion) return;
+    const check = canApplyPatch(lesson, planSuggestion);
+    if (!check.ok) {
+      setPlanSuggestion(null); // 建议已失效（如版本变化），直接丢弃
+      return;
+    }
+    commit({
+      type: 'LESSON_PATCH',
+      lesson: applyPlanPatch(lesson, planSuggestion, Date.now()),
+    });
+    setPlanSuggestion(null);
+  }, [planSuggestion, commit]);
+
+  /** 用户忽略建议 */
+  const dismissPlanSuggestion = useCallback(() => {
+    setPlanSuggestion(null);
+  }, []);
+
   // ---- P2 流内答疑入口 ----
   const submitTutorQuestion = useCallback((text: string) => {
     const orchestrator = orchestratorRef.current;
@@ -1137,5 +1224,9 @@ export function useChapterLearning({
     submitCheckpoint,
     retryCheckpoint,
     requestRemediation,
+    planSuggestion,
+    requestPlanSuggestion,
+    acceptPlanSuggestion,
+    dismissPlanSuggestion,
   };
 }

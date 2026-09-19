@@ -4,11 +4,12 @@
 // 章节 locked 回课程页（恢复分支⑨，以读时自愈后的章节树判定）
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { CourseHeaderBar } from '@/components/CourseHeaderBar';
 import { LearningStreamV2 } from '@/components/learning-v2/LearningStreamV2';
 import { TaskBoundaryV2 } from '@/components/learning-v2/TaskBoundaryV2';
+import { PlanPatchPrompt } from '@/components/learning-v2/PlanPatchPrompt';
 import { latestTutorActionIsProceed } from '@/lib/learning-v2/tutor-queue';
 import { ChapterCompleteCard } from '@/components/learning-v2/ChapterCompleteCard';
 import { InlineTutorInput, tutorPlaceholder } from '@/components/learning-v2/InlineTutorInput';
@@ -119,6 +120,10 @@ function ChapterLearningView({
     submitCheckpoint,
     retryCheckpoint,
     requestRemediation,
+    planSuggestion,
+    requestPlanSuggestion,
+    acceptPlanSuggestion,
+    dismissPlanSuggestion,
   } = useChapterLearning({
     courseId: course.courseId,
     chapterId: chapter.chapterId,
@@ -132,6 +137,15 @@ function ChapterLearningView({
   const completedTasks = lesson ? lesson.runtime.completedTaskIds.length : 0;
   const nextChapter =
     phase === 'completed' ? findNextUnlockedChapter(course, chapter.chapterId) : undefined;
+
+  // P4：到达边界且有证据时请求一次调度建议（组件级防抖：每次章节挂载最多一次自动请求）
+  const planSuggestionRequestedRef = useRef(false);
+  useEffect(() => {
+    if (phase === 'boundary' && !planSuggestionRequestedRef.current) {
+      planSuggestionRequestedRef.current = true;
+      void requestPlanSuggestion();
+    }
+  }, [phase, requestPlanSuggestion]);
 
   return (
     <main className="min-h-[100svh] overflow-x-hidden bg-background">
@@ -212,6 +226,13 @@ function ChapterLearningView({
               />
               {phase === 'completing' && (
                 <div className="mt-6 text-center text-[13px] text-tertiary">正在收尾本章…</div>
+              )}
+              {planSuggestion && phase === 'boundary' && (
+                <PlanPatchPrompt
+                  patch={planSuggestion}
+                  onAccept={acceptPlanSuggestion}
+                  onDismiss={dismissPlanSuggestion}
+                />
               )}
               <TaskBoundaryV2
                 lesson={lesson}

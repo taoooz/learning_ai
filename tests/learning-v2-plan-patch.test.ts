@@ -137,3 +137,22 @@ test('applyPlanPatch: 不可应用时原样返回', () => {
   const result = applyPlanPatch(lesson, badPatch, 3000);
   assert.equal(result, lesson, '拒绝旧补丁时不修改 lesson');
 });
+
+
+// ---- PlanPatchPrompt 组件 ----
+
+import { PlanPatchPrompt } from '../components/learning-v2/PlanPatchPrompt';
+
+test('PlanPatchPrompt 组件可导入', () => {
+  assert.ok(typeof PlanPatchPrompt === 'function');
+});
+
+test('applyPlanPatch 后建议基于旧版本 → 不可重复应用（幂等守卫）', () => {
+  const lesson = makeLessonWithTask1Done();
+  const patch = makePatch();
+  const once = applyPlanPatch(lesson, patch, 3000);
+  // 同一补丁再次应用：basePlanVersion 已不匹配 → 原样返回
+  const twice = applyPlanPatch(once, patch, 3001);
+  assert.equal(twice, once, '同一补丁不可应用两次');
+  assert.equal(once.chapterPlan.planVersion, 2);
+});

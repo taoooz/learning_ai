@@ -2,6 +2,12 @@
 
 ## 2026-09-19
 
+### V2 P4 第二切片：调度集成与 UI（用户确认式调整）
+- Hook：`requestPlanSuggestion`（边界时收集 evidence + 剩余任务 → 调度端点 → canApplyPatch 预校验 → 存为待决策建议；无证据/超上限/空操作不打扰用户）、`acceptPlanSuggestion`（校验 → applyPlanPatch → 清除）、`dismissPlanSuggestion`
+- UI：PlanPatchPrompt 组件（用户可见的简短调整提示 + 按建议调整/按原计划双按钮）；页面边界时自动触发一次请求（组件级防抖）
+- 真实 LLM 冒烟：强证据（demonstrated 0.95）→ 建议 skip 细节节（confidence 0.85，summary 口语化）；弱证据（partial 0.5）→ operations 空，不动主线
+- 验证：TS 269/269（+2）、pytest 97/97、tsc/lint 干净
+
 ### V2 P4 第一切片：计划补丁协议层（ChapterPlanPatch）
 - 类型：PlanPatchOperation（白名单：insert_task/skip_task/reorder_tasks/adjust_depth）+ ChapterPlanPatch（basePlanVersion/reasonCode/confidence/summary）+ 每章上限 2 次 + 高影响操作置信度阈值 0.8
 - 纯函数：canApplyPatch（版本守卫拒绝旧补丁 / 上限 / 只动未展示任务 / 白名单校验）+ applyPlanPatch（planVersion+1 / 预取失效 / order 重排 / appliedPatchCount 递增）
