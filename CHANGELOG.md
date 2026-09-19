@@ -2,6 +2,14 @@
 
 ## 2026-09-19
 
+### V2 P3a 第一切片：结构化 Checkpoint（scenario_choice / sequence）
+- 类型：新增 `types/learning-v2/checkpoint.ts`（CheckpointDefinition/Evaluation/Submission/Item/LearningEvidence）；`LearningStreamItem` 联合新增 CheckpointItem
+- Python：`schemas/checkpoint.py`（Pydantic 严格校验）、`prompts/checkpoint.py`（JSON 输出模板）、`services/checkpoint_service.py`（LLM 生成 + 程序判分）+ FastAPI 两端点（generate/evaluate）
+- 程序判分：scenario_choice 精确匹配、sequence 列表顺序匹配，确定性结果 confidence=1.0；首次错误 → remediate_here，二次错误 → continue + not_demonstrated（补救最多两轮不锁死）
+- Next.js 代理：generate/evaluate 两路由（鉴权 + 必填校验 + 薄透传）
+- 前端组件：`CheckpointCard.tsx`（单选 radio / 排序上下移动 + 提交 + 评估结果渲染 + 重试按钮）
+- 验证：pytest 94/94（+16 checkpoint 测试）、TS 241/241（+6）、tsc 干净、lint 0 errors
+
 ### V2 P2 第二阶段补充：真实 LLM 冒烟 + proceed 高亮反馈
 - 真实 LLM 冒烟 4/4：answer_inline/expand_current(NEEDS_EXAMPLE)/switch_explanation/proceed 全部正确分类，delta 无标记泄漏，正文无标记残留
 - proceed UI 反馈：新增 `latestTutorActionIsProceed` 纯函数（当前任务最近完成回答为 proceed → true）；TaskBoundaryV2 新增 `highlightContinue` prop，proceed 时继续按钮 pulse 动画 + 提示文案「听起来你已准备好，可以继续了」

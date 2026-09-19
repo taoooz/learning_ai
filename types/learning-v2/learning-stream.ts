@@ -11,6 +11,7 @@ import type { ChapterPlan } from './chapter-plan';
 import type { GenerationMeta } from './generation-meta';
 import type { ChapterRuntimeState } from './runtime';
 import type { TutorAction } from './events';
+import type { CheckpointItem } from './checkpoint';
 
 // ---- 内容块（第一版 4 种） ----
 
@@ -142,7 +143,7 @@ export interface TutorAnswerItem extends StreamItemBase {
 
 /**
  * P0–P2 学习流条目联合。
- * 完整协议还包含 SupplementalItem / CheckpointItem / CheckpointResultItem，P3 引入。
+ * CheckpointItem 随 P3a 引入；SupplementalItem / CheckpointResultItem 待 P3b。
  */
 export type LearningStreamItem =
   | TaskContentItem
@@ -150,7 +151,8 @@ export type LearningStreamItem =
   | SystemNoticeItem
   | ChapterRecapItem
   | UserQuestionItem
-  | TutorAnswerItem;
+  | TutorAnswerItem
+  | CheckpointItem;
 
 // ---- 章节回顾 ----
 

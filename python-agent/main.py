@@ -651,3 +651,66 @@ async def learning_v2_chapters_recap(request: Request):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+@app.post("/api/learning/v2/checkpoints/generate")
+async def learning_v2_checkpoints_generate(request: Request):
+    """P3a 生成结构化 Checkpoint（同步 JSON）"""
+    from schemas.checkpoint import CheckpointDefinitionModel
+    from services.checkpoint_service import generate_checkpoint
+
+    try:
+        body = await request.json()
+        course_topic = body["courseTopic"]
+        chapter_title = body["chapter"]["title"]
+        teaching_goal = body["chapter"]["teachingGoal"]
+        task_id = body["task"]["taskId"]
+        task_title = body["task"]["title"]
+        task_goal = body["task"]["taskGoal"]
+        objective_id = body["objectiveId"]
+        task_content_summary = body["taskContentSummary"]
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse(status_code=422, content={
+            "ok": False, "code": "INVALID_REQUEST",
+            "message": f"请求参数校验失败：{exc}", "retryable": False,
+        })
+
+    try:
+        checkpoint = await generate_checkpoint(
+            course_topic=course_topic,
+            chapter_title=chapter_title,
+            teaching_goal=teaching_goal,
+            task_id=task_id,
+            task_title=task_title,
+            task_goal=task_goal,
+            objective_id=objective_id,
+            task_content_summary=task_content_summary,
+        )
+        return {"ok": True, "checkpoint": checkpoint.model_dump()}
+    except Exception as exc:  # noqa: BLE001
+        code, message = classify_llm_error(exc)
+        print(f"[Learning V2 Checkpoint] 生成失败 code={code}: {exc}")
+        return JSONResponse(
+            status_code=LLM_ERROR_STATUS.get(code, 502),
+            content={"ok": False, "code": code, "message": message, "retryable": True},
+        )
+
+
+@app.post("/api/learning/v2/checkpoints/evaluate")
+async def learning_v2_checkpoints_evaluate(request: Request):
+    """P3a 结构化 Checkpoint 程序判分（不经模型，确定性结果）"""
+    from schemas.checkpoint import CheckpointEvaluateRequest
+    from services.checkpoint_service import evaluate_checkpoint
+
+    try:
+        body = await request.json()
+        req = CheckpointEvaluateRequest(**body)
+        definition = req.checkpoint
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse(status_code=422, content={
+            "ok": False, "code": "INVALID_REQUEST",
+            "message": f"请求参数校验失败：{exc}", "retryable": False,
+        })
+
+    evaluation = evaluate_checkpoint(definition, req.answer, req.attempt)
+    return {"ok": True, "evaluation": evaluation.model_dump()}
