@@ -2,6 +2,11 @@
 
 ## 2026-09-19
 
+### V2 P3a 补强：真实 LLM 冒烟 4/4 + 稳定性修复
+- 真实 LLM 冒烟：checkpoint 生成（scenario_choice）→ 程序判分（正确/首错/二错三路径）→ 补救内容 + 等价新题 → 新题判分，4/4 通过
+- 稳定性修复：模型 JSON 输出不稳定（无 JSON / options 输出纯字符串）——`_extract_json` 优先直接 loads、`_call_for_json` 自动重试 2 次、`_normalize_new_checkpoint` 字符串选项转对象并分配 id
+- 验证：pytest 97/97
+
 ### V2 P3a 第三切片：补救内容插入（remediate_here 完整闭环）
 - Python：REMEDIATION_PROMPT（换比喻/换角度重新解释 + 出等价不同题的 JSON 输出模板）、generate_remediation 服务、FastAPI `/checkpoints/remediate` 端点
 - Next.js：`checkpoints/remediate` 代理路由

@@ -18,11 +18,21 @@ _EVAL_VERSION = "checkpoint-eval-v1"
 
 
 def _extract_json(text: str) -> dict:
-    """从 LLM 输出中提取 JSON 对象（容忍代码围栏和前后杂文）"""
+    """从 LLM 输出中提取 JSON 对象（容忍代码围栏和前后杂文）
+
+    解析优先级：直接 loads → 围栏提取 → 花括号正则提取
+    """
     text = text.strip()
+    # 1. 直接解析（最常见：模型输出纯净 JSON）
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    # 2. 围栏提取
     fence_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
     if fence_match:
         return json.loads(fence_match.group(1))
+    # 3. 花括号正则提取（贪婪匹配到最后一个 }）
     brace_match = re.search(r"\{.*\}", text, re.DOTALL)
     if brace_match:
         return json.loads(brace_match.group(0))
@@ -39,6 +49,29 @@ def _validate_definition(raw: dict, task_id: str, objective_id: str) -> Checkpoi
     return CheckpointDefinitionModel(**raw)
 
 
+async def _call_for_json(
+    client: MiniMaxClient,
+    system_prompt: str,
+    user_message: str,
+    max_tokens: int = 2000,
+    retries: int = 2,
+) -> dict:
+    """调用 LLM 并提取 JSON；解析失败时重试（模型输出不稳定，重试概率高）"""
+    last_error: Exception | None = None
+    for attempt in range(1, retries + 1):
+        response = await client.chat(
+            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_message}],
+            max_tokens=max_tokens,
+        )
+        content = response["choices"][0]["message"]["content"]
+        try:
+            return _extract_json(content)
+        except (ValueError, json.JSONDecodeError) as exc:
+            last_error = exc
+            print(f"[Checkpoint] JSON 提取失败（第 {attempt} 次）: {exc}，content 前 100 字: {content[:100]!r}")
+    raise last_error or ValueError("JSON 提取失败")
+
+
 async def generate_checkpoint(
     course_topic: str,
     chapter_title: str,
@@ -50,7 +83,7 @@ async def generate_checkpoint(
     task_content_summary: str,
     client: MiniMaxClient | None = None,
 ) -> CheckpointDefinitionModel:
-    """调用 LLM 生成一道结构化 Checkpoint"""
+    """调用 LLM 生成一道结构化 Checkpoint（含重试）"""
     client = client or MiniMaxClient()
     system_prompt = build_checkpoint_prompt(
         course_topic=course_topic,
@@ -60,12 +93,7 @@ async def generate_checkpoint(
         task_goal=task_goal,
         task_content_summary=task_content_summary,
     )
-    response = await client.chat(
-        messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": "请生成一道理解检查题。"}],
-        max_tokens=2000,
-    )
-    content = response["choices"][0]["message"]["content"]
-    raw = _extract_json(content)
+    raw = await _call_for_json(client, system_prompt, "请生成一道理解检查题。只输出 JSON 对象，不要输出其他文字。")
     return _validate_definition(raw, task_id, objective_id)
 
 
@@ -136,7 +164,7 @@ async def generate_remediation(
     task_content_summary: str,
     client: MiniMaxClient | None = None,
 ) -> dict:
-    """LLM 生成补救内容 + 等价不同题的新检查（§2.7 补救流程）"""
+    """LLM 生成补救内容 + 等价不同题的新检查（§2.7 补救流程，含重试）"""
     from prompts.checkpoint import REMEDIATION_PROMPT
 
     client = client or MiniMaxClient()
@@ -157,15 +185,29 @@ async def generate_remediation(
         + "\n"
         + REMEDIATION_PROMPT["output_format"]
     )
-    response = await client.chat(
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": "请生成补救内容和新检查题。"},
-        ],
-        max_tokens=2000,
-    )
-    content = response["choices"][0]["message"]["content"]
-    raw = _extract_json(content)
+    raw = await _call_for_json(client, system_prompt, "请生成补救内容和新检查题。只输出 JSON 对象，不要输出其他文字。")
     if "remediationContent" not in raw or "newCheckpoint" not in raw:
         raise ValueError("补救响应缺少 remediationContent 或 newCheckpoint")
+    return _normalize_new_checkpoint(raw)
+
+
+def _normalize_new_checkpoint(raw: dict) -> dict:
+    """模型输出格式不稳定时做类型修正（如 options 输出为纯字符串数组）"""
+    nc = raw["newCheckpoint"]
+    if nc.get("kind") == "scenario_choice" and isinstance(nc.get("options"), list):
+        normalized = []
+        for index, opt in enumerate(nc["options"]):
+            if isinstance(opt, dict) and "id" in opt and "text" in opt:
+                normalized.append(opt)
+            elif isinstance(opt, str):
+                normalized.append({"id": chr(ord("a") + index), "text": opt})
+        nc["options"] = normalized
+    if nc.get("kind") == "sequence" and isinstance(nc.get("sequenceItems"), list):
+        normalized = []
+        for index, item in enumerate(nc["sequenceItems"]):
+            if isinstance(item, dict) and "id" in item and "text" in item:
+                normalized.append(item)
+            elif isinstance(item, str):
+                normalized.append({"id": f"s{index + 1}", "text": item})
+        nc["sequenceItems"] = normalized
     return raw
