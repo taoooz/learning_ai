@@ -2,6 +2,10 @@
 
 ## 2026-09-19
 
+### V2 P5 质量门（P5.3 质量系统）
+- `scripts/quality-gate.sh`：统一质量门（tsc + TS 测试 + ESLint + pytest），`--with-llm` 附加 Rubric 一致性回归；任一失败整体失败
+- 当前基线：4/4 通过（TS 269/269、pytest 100/100）
+
 ### V2 P5 起步：LLM 调用 token 用量观测（P5.4 可观测性）
 - TS：GenerationMeta 新增 tokenUsage（promptTokens/completionTokens/totalTokens）
 - Python：lib/minimax.extract_usage（OpenAI 兼容 usage 字段提取，缺字段安全降级 None）；接入 chapter_plan / chapter_recap 非流式生成（streaming 暂不采集）
