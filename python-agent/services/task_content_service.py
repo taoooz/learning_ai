@@ -2,6 +2,9 @@
 V2 任务内容流式生成服务
 产出与 types/learning-v2/events.ts LearningSseEvent 外壳对齐的结构化事件
 （SSE 字节包装与 [DONE] 收尾在 main.py 端点层完成）
+
+Content Recipe（切片 1）：按 teachingPattern 配方输出多块内容，
+markdown 段落实时流式；:::type…::: 结构化块在完整接收后一次性产出。
 """
 import re
 import time
@@ -10,18 +13,22 @@ from uuid import uuid4
 
 from lib.minimax import MiniMaxClient, extract_usage
 from services.search_evidence import build_evidence_pack, needs_search
+from services.content_stream_parser import ContentStreamParser
 from prompts import build_prompt
+from prompts.task_content import get_recipe
 from schemas.learning_v2 import TaskStreamRequest
 from services.chapter_plan_service import TEACHING_PATTERNS
 from services.learning_v2_errors import classify_llm_error
 
-PROMPT_VERSION = "task-content-v2"
-BLOCK_ID = "b1"
+PROMPT_VERSION = "task-content-v3"
 
 _LEVEL_LABELS = {"beginner": "初级", "intermediate": "中级", "advanced": "高级"}
 
 # 首句切分：中英文句末标点之后断开
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[。！？!?])")
+
+# 清理 ::: 定界符行（用于 extract_takeaway）
+_MARKER_LINE_RE = re.compile(r"^:::(\w+)?\s*$", re.MULTILINE)
 
 
 def build_task_content_prompt(
@@ -56,6 +63,7 @@ def build_task_content_prompt(
             f"## 可引用来源\n{source_lines}\n\n"
             "引用上述证据时保持事实准确，不要编造未在证据中出现的内容。"
         )
+    pattern = request.task.teachingPattern
     return build_prompt(
         "task_content",
         course_topic=request.courseTopic,
@@ -63,16 +71,16 @@ def build_task_content_prompt(
         chapter_goal=request.chapter.teachingGoal,
         task_title=request.task.title,
         task_goal=request.task.taskGoal,
-        pattern_label=TEACHING_PATTERNS.get(request.task.teachingPattern, request.task.teachingPattern),
+        pattern_label=TEACHING_PATTERNS.get(pattern, pattern),
         observable_outcome=request.task.observableOutcome,
         learner_section="\n".join(learner_lines),
         previous_section=previous_section,
+        content_recipe=get_recipe(pattern),
         ) + evidence_section
 
 
 def extract_takeaway(markdown: str) -> str:
     """提取可带走要点：优先最后一个 > 引用块；缺省取末段第一句；再缺省为空串"""
-    # 从末尾向前收集最后一段连续的引用行
     block_lines: list[str] = []
     for line in reversed(markdown.splitlines()):
         stripped = line.strip()
@@ -85,7 +93,6 @@ def extract_takeaway(markdown: str) -> str:
         if text:
             return text
 
-    # 无引用块：取最后一个非引用段落的第一句
     paragraphs = [p.strip() for p in markdown.split("\n\n") if p.strip()]
     for paragraph in reversed(paragraphs):
         lines = [l.strip() for l in paragraph.splitlines() if l.strip() and not l.strip().startswith(">")]
@@ -98,11 +105,33 @@ def extract_takeaway(markdown: str) -> str:
     return ""
 
 
+def _parser_event_to_sse(event: dict, make_event, started_blocks: set) -> list[dict]:
+    """将解析器事件转换为 SSE 事件 dict 列表"""
+    kind = event["kind"]
+    results = []
+
+    if kind == "markdown_delta":
+        bid = event["blockId"]
+        if bid not in started_blocks:
+            started_blocks.add(bid)
+            results.append(make_event("content_block_started", {"blockId": bid, "blockType": "markdown"}))
+        results.append(make_event("content_block_delta", {"blockId": bid, "delta": event["delta"]}))
+    elif kind == "structured_block":
+        results.append(make_event("content_block_completed", {"block": event["block"]}))
+    elif kind == "markdown_end":
+        md = event["markdown"]
+        if md.strip():
+            block = {"type": "markdown", "blockId": event["blockId"], "markdown": md}
+            results.append(make_event("content_block_completed", {"block": block}))
+
+    return results
+
+
 async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient | None = None) -> AsyncGenerator[dict, None]:
     """流式生成单个任务的学习内容，yield 完整事件 dict 序列
 
-    正常序列：task_started → content_block_started → N×content_block_delta
-    → content_block_completed → task_completed → request_completed
+    正常序列：task_started → sources_ready? → N×(content_block_started/delta/completed)
+    → task_completed → request_completed
     异常时发 request_error 后必须补发 request_completed（status=failed）
     """
     client = client or MiniMaxClient()
@@ -144,19 +173,17 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
 
     started = time.monotonic()
     yield make_event("task_started", {"taskId": request.taskId, "title": request.task.title})
-    yield make_event("content_block_started", {"blockId": BLOCK_ID, "blockType": "markdown"})
     if evidence_pack and evidence_pack.get("sources"):
         yield make_event("sources_ready", {"sources": evidence_pack["sources"]})
 
-    # 必须用 stream_chat（async）：stream_chat_sync 会阻塞事件循环
+    parser = ContentStreamParser()
+    started_blocks: set = set()
     accumulated = ""
     received_delta = False
     stream_usage = None
     try:
         # glm-5.3-flash 思考长度方差大（3.4k~12k 字），max_tokens 预算必须给思考留足余量
-        # （9/6 TOC 修复同源教训：预算被思考耗尽 → content 0 字 → EMPTY_CONTENT）
         async for chunk in client.stream_chat(messages=messages, max_tokens=16000, include_usage=True):
-            # include_usage：最后一个 chunk choices 为空、携带 usage（P5.4 观测）
             if not chunk.get("choices") and chunk.get("usage"):
                 stream_usage = extract_usage(chunk)
                 continue
@@ -165,9 +192,15 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
                 continue
             received_delta = True
             accumulated += delta
-            # 每个 LLM chunk 直接发一个增量事件，不再二次缓冲
-            yield make_event("content_block_delta", {"blockId": BLOCK_ID, "delta": delta})
-    except Exception as exc:  # noqa: BLE001 流的任何异常都统一走错误事件路径
+            for pe in parser.feed(delta):
+                for sse in _parser_event_to_sse(pe, make_event, started_blocks):
+                    yield sse
+
+        for pe in parser.finish():
+            for sse in _parser_event_to_sse(pe, make_event, started_blocks):
+                yield sse
+
+    except Exception as exc:  # noqa: BLE001
         if received_delta:
             code, message = "UPSTREAM_STREAM_BROKEN", "内容流中断，请重试"
         else:
@@ -182,11 +215,12 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
         yield make_event("request_completed", {"requestId": request_id, "status": "failed", "errorCode": "EMPTY_CONTENT"})
         return
 
-    now_ms = time.time_ns() // 1_000_000
-    block = {"type": "markdown", "blockId": BLOCK_ID, "markdown": accumulated}
-    yield make_event("content_block_completed", {"block": block})
+    final_blocks = parser.collect_blocks()
+    if not final_blocks:
+        final_blocks = [{"type": "markdown", "blockId": "b1", "markdown": accumulated.strip()}]
 
-    boundary_prompt: dict = {"takeaway": extract_takeaway(accumulated)}
+    clean_text = _MARKER_LINE_RE.sub("", accumulated)
+    boundary_prompt: dict = {"takeaway": extract_takeaway(clean_text)}
     if request.nextTaskTitle:
         boundary_prompt["nextHint"] = f"接下来：{request.nextTaskTitle}"
 
@@ -195,17 +229,19 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
             "taskId": request.taskId,
             "planVersion": request.planVersion,
             "title": request.task.title,
-            "blocks": [block],
+            "blocks": final_blocks,
             "boundaryPrompt": boundary_prompt,
             **({"sourceRefs": evidence_pack["sources"]} if evidence_pack and evidence_pack.get("sources") else {}),
             "generationMeta": {
                 "promptVersion": PROMPT_VERSION,
-                "modelVersion": getattr(client, "model", None) or "unknown",
-                "generatedAt": now_ms,
+                "modelVersion": client.model,
+                "generatedAt": time.time_ns() // 1_000_000,
                 "durationMs": int((time.monotonic() - started) * 1000),
                 "degraded": False,
                 **({"tokenUsage": stream_usage} if stream_usage else {}),
             },
-        },
+        }
     })
     yield make_event("request_completed", {"requestId": request_id, "status": "completed"})
+
+    print(f"[任务流] requestId={request_id} 完成 {len(final_blocks)} 块 耗时 {int((time.monotonic() - started) * 1000)}ms")

@@ -1,5 +1,13 @@
 # 项目迭代日志
 
+### 切片 1：内容配方（Content Recipe）——多块流式输出
+- 问题：task_content prompt 只有「300~500字正文+结尾引用块」，无块类型/结构约束 → 实测退化为纯文字 markdown（与竞品 HyperKnow 差距最大项）
+- 实现：prompts/task_content.py 新增 CONTENT_RECIPES（8 种 teachingPattern 各定义显式块序列+内容量下限，循证依据 education-agent-skills 显性教学/记忆科学）
+- 协议：LLM 按 :::type…::: 定界符输出混合内容；services/content_stream_parser.py 增量解析器（行缓冲状态机）将混合文本拆为 markdown 流式增量 + 结构化块一次性产出
+- 前端零改动：applyContentBlockStarted 对非 markdown 块已 no-op、applyContentBlockCompleted 通用 upsert、task_completed 替换完整 blocks 数组
+- 无定界符时优雅退化单 markdown 块；未闭合块降级 markdown；PROMPT_VERSION → task-content-v3
+- 测试：pytest 126/126（+7：多块序列/comparison/example 解析/增量一致性/退化兜底/未闭合降级）、TS 276/276、质量门 4/4
+
 ### 补全：V2 任务内容接入搜索证据包（设计文档 §搜索策略）
 - 背景走查发现：V1 链路（outline/toc/cards/questions）搜索工具齐全，但 **V2 新链路（chapter_plan/task_content）从未接搜索**——新课默认走 V2 后任务内容纯靠模型知识，时效性主题会过时
 - 实现：`services/search_evidence.py`（时效性关键词启发式 needs_search：版本/最新/价格/对比/实践等命中才搜，DISABLE_WEB_SEARCH 可整体关闭；build_evidence_pack 复用 web_search，失败安全降级 None）
