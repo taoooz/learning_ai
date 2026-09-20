@@ -138,6 +138,8 @@ export interface QuotaFallbackResult {
   saved: boolean;
   /** 为腾出配额而被压缩归档的章节 id（按 index 升序） */
   archivedChapterIds: string[];
+  /** P5.1：服务端乐观锁冲突（409），调用方提示用户决策 */
+  conflict?: boolean;
 }
 
 /**

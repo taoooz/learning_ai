@@ -50,12 +50,88 @@ export class LocalLessonRepository implements LessonRepository {
   }
 }
 
-/** 仓库单例：按环境变量切换（P5.1 server 实装时新增 ServerLessonRepository 分支） */
+/**
+ * 服务端实现（P5.1）：走 /api/user/* 代理（鉴权由代理层完成）
+ * 设计文档 §3 API 契约；409 乐观锁冲突原样上抛给调用方决策
+ */
+export class ServerLessonRepository implements LessonRepository {
+  async loadCourse(courseId: string): Promise<StoredCourseV2 | null> {
+    const response = await fetch('/api/user/courses', { method: 'GET' });
+    if (!response.ok) return null;
+    const body = await response.json();
+    if (!body.ok) return null;
+    const courses = body.courses as StoredCourseV2[];
+    return courses.find((c) => c.courseId === courseId) ?? null;
+  }
+
+  async saveCourse(course: StoredCourseV2): Promise<boolean> {
+    // 全量保存账户课程列表：先读后写（课程列表低频写入，可接受）
+    const listResponse = await fetch('/api/user/courses', { method: 'GET' });
+    const courses: StoredCourseV2[] = listResponse.ok
+      ? (await listResponse.json()).courses ?? []
+      : [];
+    const next = [...courses.filter((c) => c.courseId !== course.courseId), course];
+    const response = await fetch('/api/user/courses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ courses: next }),
+    });
+    return response.ok;
+  }
+
+  async loadLesson(courseId: string, chapterId: string): Promise<NodeLessonV2 | null> {
+    const response = await fetch(
+      `/api/user/lessons?courseId=${encodeURIComponent(courseId)}&chapterId=${encodeURIComponent(chapterId)}`,
+    );
+    if (!response.ok) return null;
+    const body = await response.json();
+    return body.ok ? (body.lesson as NodeLessonV2 | null) : null;
+  }
+
+  async saveLesson(
+    courseId: string,
+    chapterId: string,
+    lesson: NodeLessonV2,
+  ): Promise<QuotaFallbackResult> {
+    const response = await fetch('/api/user/lessons', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        courseId,
+        chapterId,
+        lesson,
+        expectUpdatedAt: lesson.updatedAt,
+      }),
+    });
+    if (response.status === 409) {
+      // 乐观锁冲突：设计文档 §5 第一版策略——交给调用方提示用户决策
+      console.warn('[ServerLessonRepository] 409 冲突：服务端数据更新');
+      return { saved: false, archivedChapterIds: [], conflict: true };
+    }
+    return { saved: response.ok, archivedChapterIds: [] };
+  }
+
+  async appendEngagement(courseId: string, events: EngagementEvent[]): Promise<void> {
+    // fire-and-forget：失败静默（设计文档 §5 离线降级）
+    try {
+      await fetch('/api/user/engagement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ courseId, events }),
+      });
+    } catch {
+      // 静默：埋点不阻断教学
+    }
+  }
+}
+
+/** 仓库单例：按环境变量切换（NEXT_PUBLIC_LESSON_STORE=server|local，默认 local） */
 let repositoryInstance: LessonRepository | null = null;
 
 export function getLessonRepository(): LessonRepository {
   if (!repositoryInstance) {
-    repositoryInstance = new LocalLessonRepository();
+    const mode = typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_LESSON_STORE : undefined;
+    repositoryInstance = mode === 'server' ? new ServerLessonRepository() : new LocalLessonRepository();
   }
   return repositoryInstance;
 }

@@ -2,6 +2,14 @@
 
 ## 2026-09-19
 
+### V2 P5.1 第二步：服务端存储实装 + 端到端验证 8/8
+- Python：`services/user_data_store.py`（按账户隔离的文件持久化 data/user_data/{accountId}/，原子写入、损坏跳过、路径清洗防注入、乐观锁 409）+ 5 个用户数据端点（courses GET/POST、lessons GET/PUT、engagement POST，鉴权由 Next 代理以 X-Account-Id 传递）
+- Next.js：`/api/user/*` 三条代理路由（requireAuth + 身份透传 + 错误体透传）
+- TS：`ServerLessonRepository`（实现 LessonRepository 接口，409 冲突标记 conflict 返回调用方决策）；`getLessonRepository` 按 NEXT_PUBLIC_LESSON_STORE 切换，默认 local 零行为变化
+- E2E 8/8（经 Next.js 代理）：保存/读取课程、lesson roundtrip、乐观锁 409 冲突、新版本覆盖、engagement 追加、无鉴权 401
+- 部署说明：本地开发即用；Vercel/生产需 python-agent 宿主配置持久卷（Railway volume 等）
+- 验证：pytest 110/110（+10）、TS 271/271、质量门 4/4
+
 ### V2 P5.1 第一步：存储抽象层 + 迁移设计
 - 设计文档：`docs/architecture/p5-服务端持久化迁移设计.md`（LessonRepository 接口 / API 契约 / 数据模型 / 乐观锁冲突策略 / 迁移路径 / 后端选型对比——实施待选型确认，设计后端无关）
 - 代码：`lib/learning-v2/lesson-repository.ts`——LessonRepository 接口 + LocalLessonRepository（现有 localStorage 函数的 Promise 薄包装，SSR 安全）+ 环境切换单例；hook 业务层后续只依赖接口
