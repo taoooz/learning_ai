@@ -2,6 +2,12 @@
 
 ## 2026-09-19
 
+### V2 P5.1 第三步：Hook 接入仓库抽象（多设备恢复闭环）
+- `useChapterLearning` 持久化与启动装载全部改走 `getLessonRepository()`：persist 异步化（fire-and-forget + 409 冲突告警）、local 保持同步启动路径、server 走异步 BOOT_READY 装载（bootStateFor 纯函数复用，两条启动路径同构）
+- 本地模式零行为变化（LocalLessonRepository 包装原函数）；`NEXT_PUBLIC_LESSON_STORE=server` 一键切换服务端存储
+- 多设备恢复：设备 A 学习进度 → 设备 B 打开同章节经 ServerLessonRepository 读到同一学习容器
+- 验证：TS 271/271、pytest 110/110、质量门 4/4
+
 ### V2 P5.1 第二步：服务端存储实装 + 端到端验证 8/8
 - Python：`services/user_data_store.py`（按账户隔离的文件持久化 data/user_data/{accountId}/，原子写入、损坏跳过、路径清洗防注入、乐观锁 409）+ 5 个用户数据端点（courses GET/POST、lessons GET/PUT、engagement POST，鉴权由 Next 代理以 X-Account-Id 传递）
 - Next.js：`/api/user/*` 三条代理路由（requireAuth + 身份透传 + 错误体透传）

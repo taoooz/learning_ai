@@ -27,7 +27,8 @@ import {
   createInitialNodeLessonV2,
 } from '@/lib/learning-v2/reducers';
 import { transitionChapter, transitionTask } from '@/lib/learning-v2/state-machine';
-import { loadNodeLessonV2, saveNodeLessonV2WithQuotaFallback } from '@/lib/learning-v2/storage';
+import { loadNodeLessonV2 } from '@/lib/learning-v2/storage';
+import { getLessonRepository } from '@/lib/learning-v2/lesson-repository';
 import { validateChapterPlan } from '@/lib/learning-v2/validators';
 import {
   buildChapterCompleteIdempotencyKey,
@@ -36,7 +37,7 @@ import {
   IdempotencyRegistry,
 } from '@/lib/learning-v2/idempotency';
 import { parseLearningSseStream } from '@/lib/learning-v2/sse-client';
-import { decideResumeAction } from '@/lib/learning-v2/resume';
+import { decideResumeAction, type ResumeAction } from '@/lib/learning-v2/resume';
 import { completeChapterV2 } from '@/lib/learning-v2/chapter-complete';
 import { applyPlanPatch, canApplyPatch } from '@/lib/learning-v2/plan-patch';
 import {
@@ -87,7 +88,30 @@ type HookAction =
   | { type: 'LESSON_PATCH'; lesson: NodeLessonV2 }
   // P3a Checkpoint
   | { type: 'CHECKPOINT_READY'; checkpoint: CheckpointDefinition; now: number }
-  | { type: 'CHECKPOINT_EVALUATED'; checkpointId: string; answer: string | string[]; evaluation: CheckpointEvaluation; now: number };
+  | { type: 'CHECKPOINT_EVALUATED'; checkpointId: string; answer: string | string[]; evaluation: CheckpointEvaluation; now: number }
+  // P5.1 server 模式：异步启动装载完成（local 同步启动不走此路径）
+  | { type: 'BOOT_READY'; lesson: NodeLessonV2 | null; phase: ChapterPhase };
+
+/** 存储模式（构建期内联）：server 走 LessonRepository 异步启动，local 保持同步启动 */
+const STORE_MODE: 'local' | 'server' =
+  process.env.NEXT_PUBLIC_LESSON_STORE === 'server' ? 'server' : 'local';
+
+/** 启动决策 → 初始容器/相位（纯函数；同步启动与异步启动共用，保证两侧一致） */
+function bootStateFor(
+  lesson: NodeLessonV2 | null,
+  action: ResumeAction,
+): { lesson: NodeLessonV2 | null; phase: ChapterPhase } {
+  switch (action.kind) {
+    case 'generate_plan':
+      return { lesson: null, phase: 'planning' };
+    case 'render_completed':
+      return { lesson, phase: 'completed' };
+    case 'render_boundary':
+      return { lesson, phase: 'boundary' };
+    case 'start_task':
+      return { lesson, phase: 'generating' };
+  }
+}
 
 /** TASK_STARTING 的容器级归约（reducer 与同步镜像共用，保证两侧完全一致） */
 function lessonAfterTaskStarting(lesson: NodeLessonV2, taskId: string, now: number): NodeLessonV2 {
@@ -145,6 +169,8 @@ function reducer(state: HookState, action: HookAction): HookState {
       return { lesson: action.lesson, phase: 'completed', planError: null };
     case 'LESSON_PATCH':
       return { ...state, lesson: action.lesson, phase: deriveChapterPhase(action.lesson, state.phase) };
+    case 'BOOT_READY':
+      return { lesson: action.lesson, phase: action.phase, planError: null };
     case 'CHECKPOINT_READY': {
       if (!state.lesson) return state;
       const lesson = upsertCheckpointItem(state.lesson, action.checkpoint, action.now);
@@ -174,6 +200,8 @@ function mirrorLesson(current: NodeLessonV2 | null, action: HookAction): NodeLes
     case 'CHAPTER_COMPLETING':
     case 'COMPLETED':
     case 'LESSON_PATCH':
+      return action.lesson;
+    case 'BOOT_READY':
       return action.lesson;
     case 'TASK_STARTING':
       return current ? lessonAfterTaskStarting(current, action.taskId, action.now) : current;
@@ -317,7 +345,14 @@ export function useChapterLearning({
   const [planSuggestion, setPlanSuggestion] = useState<ChapterPlanPatch | null>(null);
   const planSuggestionBusyRef = useRef(false);
 
+  // P5.1：server 模式启动装载是异步的——先返回未装载态，由挂载 effect 完成启动
+  const bootPendingRef = useRef(STORE_MODE === 'server');
+
   const [state, dispatch] = useReducer(reducer, undefined, (): HookState => {
+    if (STORE_MODE === 'server') {
+      bootActionRef.current = null;
+      return { lesson: null, phase: 'planning', planError: null };
+    }
     const lesson = loadNodeLessonV2(courseId, chapterId);
     // Tutor 刷新归一（§5）：只处理 Tutor，不触碰主任务状态；归一后再决策主线恢复
     const prepared = prepareTutorBoot(lesson, Date.now());
@@ -328,28 +363,29 @@ export function useChapterLearning({
     const bootLesson = prepared.lesson;
     const action = decideResumeAction(bootLesson);
     bootActionRef.current = action;
-    switch (action.kind) {
-      case 'generate_plan':
-        return { lesson: null, phase: 'planning', planError: null };
-      case 'render_completed':
-        return { lesson: bootLesson, phase: 'completed', planError: null };
-      case 'render_boundary':
-        return { lesson: bootLesson, phase: 'boundary', planError: null };
-      case 'start_task':
-        return { lesson: bootLesson, phase: 'generating', planError: null };
-    }
+    return { ...bootStateFor(bootLesson, action), planError: null };
   });
 
   // 同步镜像：初始值 = 启动容器/相位；之后只由 commit 同步更新，不被 React 渲染覆盖
   const lessonMirrorRef = useRef<NodeLessonV2 | null>(state.lesson);
   const phaseMirrorRef = useRef<ChapterPhase>(state.phase);
 
-  // 落盘走配额兜底：写失败时先压缩历史已完成章节再重试（§6.1.1）
+  // 落盘走仓库抽象（P5.1）：local = 配额兜底包装；server = PUT /api/user/lessons（乐观锁冲突仅告警，由用户刷新决策）
   const persist = useCallback(
     (lesson: NodeLessonV2 | null) => {
-      if (lesson) saveNodeLessonV2WithQuotaFallback(courseId, lesson, blueprint);
+      if (!lesson) return;
+      void getLessonRepository()
+        .saveLesson(courseId, chapterId, lesson, blueprint)
+        .then((result) => {
+          if (result.conflict) {
+            console.warn('[useChapterLearning] 服务端存在更新版本（可能其他设备已写入），本地版本未覆盖');
+          }
+        })
+        .catch((error) => {
+          console.warn('[useChapterLearning] 持久化失败（静默降级）:', error);
+        });
     },
-    [courseId, blueprint],
+    [courseId, chapterId, blueprint],
   );
 
   // 统一提交入口：同步更新镜像 + dispatch 到 React state（所有状态变更必须走这里）
@@ -1178,6 +1214,40 @@ export function useChapterLearning({
         saveTimerRef.current = null;
       }
       persist(lessonMirrorRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ---- P5.1 server 模式：异步启动装载（local 模式 bootPendingRef 为 false，直接跳过） ----
+  useEffect(() => {
+    if (!bootPendingRef.current) return;
+    bootPendingRef.current = false;
+    let cancelled = false;
+    void (async () => {
+      const lesson = await getLessonRepository().loadLesson(courseId, chapterId);
+      if (cancelled) return;
+      const prepared = prepareTutorBoot(lesson, Date.now());
+      tutorResumeRef.current = {
+        persisted: prepared.persisted,
+        shouldAutoRetry: prepared.shouldAutoRetry,
+      };
+      const action = decideResumeAction(prepared.lesson);
+      bootActionRef.current = action;
+      const boot = bootStateFor(prepared.lesson, action);
+      commit({ type: 'BOOT_READY', lesson: boot.lesson, phase: boot.phase });
+
+      // 启动转换（与挂载 effect 同构）：计划生成 / 失败任务自动重试
+      if (action.kind === 'generate_plan') {
+        void fetchPlan();
+      } else if (action.kind === 'start_task') {
+        void startTask(action.taskId, action.attempt, lessonMirrorRef.current);
+      }
+      const tutorResume = tutorResumeRef.current;
+      if (tutorResume?.persisted) persist(lessonMirrorRef.current);
+      orchestratorRef.current?.resumeFromBoot(tutorResume?.shouldAutoRetry ?? false);
+    })();
+    return () => {
+      cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
