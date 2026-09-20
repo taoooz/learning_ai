@@ -15,7 +15,8 @@ export type EngagementEventType =
   | 'tutor_question_submitted' // P2 流内答疑：用户提交问题（含入队与立即回答）
   | 'tutor_answer_completed' // P2 流内答疑：回答完成终态
   | 'tutor_answer_failed' // P2 流内答疑：回答失败终态（含本地合成失败）
-  | 'exited'; // 离开章节学习页（卸载）
+  | 'exited' // 离开章节学习页（卸载）
+  | 'experiment_exposed'; // P5.5 A/B 实验曝光
 
 export interface EngagementEvent {
   eventType: EngagementEventType;
