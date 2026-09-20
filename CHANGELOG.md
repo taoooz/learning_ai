@@ -1,5 +1,12 @@
 # 项目迭代日志
 
+### 补全：V2 任务内容接入搜索证据包（设计文档 §搜索策略）
+- 背景走查发现：V1 链路（outline/toc/cards/questions）搜索工具齐全，但 **V2 新链路（chapter_plan/task_content）从未接搜索**——新课默认走 V2 后任务内容纯靠模型知识，时效性主题会过时
+- 实现：`services/search_evidence.py`（时效性关键词启发式 needs_search：版本/最新/价格/对比/实践等命中才搜，DISABLE_WEB_SEARCH 可整体关闭；build_evidence_pack 复用 web_search，失败安全降级 None）
+- task_content_service：命中启发式 → 先搜后写（证据包注入 system prompt + 引用来源要求）→ sources_ready 事件（协议预留字段首次启用）→ task_completed 携带 sourceRefs；PROMPT_VERSION → task-content-v2
+- 真实搜索 + 真实 LLM 冒烟（React 19 主题）：4 个真实来源注入、sourceRefs 完整、正文 849 字提及来源、无 EMPTY_CONTENT；反例（认识 HTTP 缓存）正确跳过搜索
+- 测试：pytest 119/119（+8）、TS 276/276
+
 ### 修复：glm-5.3-flash 思考预算全面排查（网页实测暴露 EMPTY_CONTENT）
 - 症状：浏览器实测建课走章节时任务流返回 EMPTY_CONTENT（"任务内容生成为空"失败态），偶发；chapters/plan 也曾空内容（靠 repair 重试兜底成功）
 - 根因：9/6 TOC 修复只调了 toc/outline/cards 的预算，**task_content(2000)/chapter_plan(3000)/tutor(1500)/recap(1500)/toc_service 非代理路径(2000)/chat(1500)/plan_patch(3000) 仍按旧模型 deepseek-v4-flash 思考短的假设设定**——glm-5.3-flash 思考 3.4k~12k 字耗尽预算后 content 0 字

@@ -9,12 +9,13 @@ from typing import AsyncGenerator
 from uuid import uuid4
 
 from lib.minimax import MiniMaxClient, extract_usage
+from services.search_evidence import build_evidence_pack, needs_search
 from prompts import build_prompt
 from schemas.learning_v2 import TaskStreamRequest
 from services.chapter_plan_service import TEACHING_PATTERNS
 from services.learning_v2_errors import classify_llm_error
 
-PROMPT_VERSION = "task-content-v1"
+PROMPT_VERSION = "task-content-v2"
 BLOCK_ID = "b1"
 
 _LEVEL_LABELS = {"beginner": "初级", "intermediate": "中级", "advanced": "高级"}
@@ -23,8 +24,12 @@ _LEVEL_LABELS = {"beginner": "初级", "intermediate": "中级", "advanced": "�
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[。！？!?])")
 
 
-def build_task_content_prompt(request: TaskStreamRequest) -> str:
-    """构建任务内容 system prompt"""
+def build_task_content_prompt(
+    request: TaskStreamRequest,
+    evidence: str | None = None,
+    sources: list[dict] | None = None,
+) -> str:
+    """构建任务内容 system prompt（evidence 非空时注入搜索证据包，§搜索策略）"""
     learner = request.learnerStartingPoint
     learner_lines = [f"当前水平：{_LEVEL_LABELS.get(learner.estimatedLevel, learner.estimatedLevel)}"]
     if learner.confirmedKnowledge:
@@ -43,6 +48,14 @@ def build_task_content_prompt(request: TaskStreamRequest) -> str:
     else:
         previous_section = "无（这是本章第一个任务）"
 
+    evidence_section = ""
+    if evidence:
+        source_lines = "\n".join(f"- {s.get('title', '')}（{s.get('url', '')}）" for s in (sources or []))
+        evidence_section = (
+            f"\n\n## 搜索证据包（外部资料，引用时须注明来源）\n{evidence}\n\n"
+            f"## 可引用来源\n{source_lines}\n\n"
+            "引用上述证据时保持事实准确，不要编造未在证据中出现的内容。"
+        )
     return build_prompt(
         "task_content",
         course_topic=request.courseTopic,
@@ -54,7 +67,7 @@ def build_task_content_prompt(request: TaskStreamRequest) -> str:
         observable_outcome=request.task.observableOutcome,
         learner_section="\n".join(learner_lines),
         previous_section=previous_section,
-    )
+        ) + evidence_section
 
 
 def extract_takeaway(markdown: str) -> str:
@@ -112,7 +125,18 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
             "payload": payload,
         }
 
-    system_prompt = build_task_content_prompt(request)
+    # 搜索证据包（设计文档 §搜索策略：时效性/工具类主题先搜后写；失败安全降级）
+    evidence_pack = None
+    if needs_search(request.task.title, request.task.taskGoal):
+        evidence_pack = await build_evidence_pack(f"{request.courseTopic} {request.task.title} {request.task.taskGoal}")
+        if evidence_pack:
+            print(f"[任务流] 搜索证据包: {len(evidence_pack['sources'])} 个来源")
+
+    system_prompt = build_task_content_prompt(
+        request,
+        evidence=evidence_pack["evidence"] if evidence_pack else None,
+        sources=evidence_pack["sources"] if evidence_pack else None,
+    )
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": f"请撰写任务「{request.task.title}」的学习正文。"},
@@ -121,6 +145,8 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
     started = time.monotonic()
     yield make_event("task_started", {"taskId": request.taskId, "title": request.task.title})
     yield make_event("content_block_started", {"blockId": BLOCK_ID, "blockType": "markdown"})
+    if evidence_pack and evidence_pack.get("sources"):
+        yield make_event("sources_ready", {"sources": evidence_pack["sources"]})
 
     # 必须用 stream_chat（async）：stream_chat_sync 会阻塞事件循环
     accumulated = ""
@@ -171,6 +197,7 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
             "title": request.task.title,
             "blocks": [block],
             "boundaryPrompt": boundary_prompt,
+            **({"sourceRefs": evidence_pack["sources"]} if evidence_pack and evidence_pack.get("sources") else {}),
             "generationMeta": {
                 "promptVersion": PROMPT_VERSION,
                 "modelVersion": getattr(client, "model", None) or "unknown",

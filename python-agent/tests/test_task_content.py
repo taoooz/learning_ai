@@ -106,7 +106,7 @@ def test_full_event_sequence():
     assert task["boundaryPrompt"]["takeaway"] == "好指令一次只说一件事。"
     assert task["boundaryPrompt"]["nextHint"] == "接下来：对比好坏指令"
     meta = task["generationMeta"]
-    assert meta["promptVersion"] == "task-content-v1"
+    assert meta["promptVersion"] == "task-content-v2"
     assert meta["modelVersion"] == "fake-model"
     assert meta["degraded"] is False
     assert isinstance(meta["generatedAt"], int)
