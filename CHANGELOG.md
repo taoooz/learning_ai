@@ -2,6 +2,11 @@
 
 ## 2026-09-19
 
+### V2 P5.1 第一步：存储抽象层 + 迁移设计
+- 设计文档：`docs/architecture/p5-服务端持久化迁移设计.md`（LessonRepository 接口 / API 契约 / 数据模型 / 乐观锁冲突策略 / 迁移路径 / 后端选型对比——实施待选型确认，设计后端无关）
+- 代码：`lib/learning-v2/lesson-repository.ts`——LessonRepository 接口 + LocalLessonRepository（现有 localStorage 函数的 Promise 薄包装，SSR 安全）+ 环境切换单例；hook 业务层后续只依赖接口
+- 测试：TS 271/271（+2 roundtrip/miss）、质量门 4/4
+
 ### V2 P5.4 补充：流式调用 usage 采集（网关降级）
 - stream_chat 新增 include_usage 参数（stream_options.include_usage），task_content_service 流式链路接入 usage chunk 提取
 - 实测：muses 网关不支持 stream_options.include_usage（usage chunk 不下发）——代码按设计安全降级为 None，流式 tokenUsage 暂缺、非流式（plan/recap）正常采集；网关升级后自动生效
