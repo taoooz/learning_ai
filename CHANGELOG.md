@@ -1,5 +1,11 @@
 # 项目迭代日志
 
+### 修复：glm-5.3-flash 思考预算全面排查（网页实测暴露 EMPTY_CONTENT）
+- 症状：浏览器实测建课走章节时任务流返回 EMPTY_CONTENT（"任务内容生成为空"失败态），偶发；chapters/plan 也曾空内容（靠 repair 重试兜底成功）
+- 根因：9/6 TOC 修复只调了 toc/outline/cards 的预算，**task_content(2000)/chapter_plan(3000)/tutor(1500)/recap(1500)/toc_service 非代理路径(2000)/chat(1500)/plan_patch(3000) 仍按旧模型 deepseek-v4-flash 思考短的假设设定**——glm-5.3-flash 思考 3.4k~12k 字耗尽预算后 content 0 字
+- 修复：task_content 2000→16000、chapter_plan 3000→16000、tutor 1500→8000、recap 1500→8000、toc_service 2000→16000（两处）、plan_patch 3000→8000、chat 1500→8000
+- 验证：真实 LLM 连跑 3 次任务流 3/3 无 EMPTY_CONTENT、task_completed 全出；pytest 111/111
+
 ## 2026-09-19
 
 ### V2 P5.5 A/B 实验框架（最小可用，计划最后项）

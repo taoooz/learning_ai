@@ -151,7 +151,8 @@ async def stream_tutor_events(
     marker_resolved = False
     marker_check_buffer = ""
     try:
-        async for chunk in client.stream_chat(messages=messages, max_tokens=1500):
+        # 思考预算与正文分离计数：1500 曾致答疑偶发空内容（9/6 同源教训）
+        async for chunk in client.stream_chat(messages=messages, max_tokens=8000):
             delta = (chunk.get("choices") or [{}])[0].get("delta", {}).get("content", "")
             if not delta:
                 continue

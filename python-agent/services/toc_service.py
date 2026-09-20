@@ -126,7 +126,7 @@ async def generate_toc(blueprint: dict, planning_payload: dict = None, user_prof
     content = ""
     for chunk in client.stream_chat_sync(
         messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": "请生成课程目录。"}],
-        max_tokens=2000,
+        max_tokens=16000,
     ):
         delta = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
         content += delta
@@ -205,7 +205,7 @@ async def stream_toc_events(blueprint: dict, planning_payload: dict = None, user
 
     for chunk in client.stream_chat_sync(
         messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": "请生成课程目录。"}],
-        max_tokens=2000,
+        max_tokens=16000,
     ):
         delta = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
         if not delta:

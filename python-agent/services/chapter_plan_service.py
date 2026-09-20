@@ -280,7 +280,7 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message},
             ],
-            max_tokens=3000,
+            max_tokens=16000,
         )
         content = (response.get("choices") or [{}])[0].get("message", {}).get("content", "")
 

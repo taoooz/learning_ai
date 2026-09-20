@@ -53,7 +53,7 @@ async def generate_plan_patch(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": "请分析证据并给出调度建议。只输出 JSON 对象。"},
         ],
-        max_tokens=3000,
+        max_tokens=8000,
     )
     content = response["choices"][0]["message"]["content"]
 

@@ -127,7 +127,9 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
     received_delta = False
     stream_usage = None
     try:
-        async for chunk in client.stream_chat(messages=messages, max_tokens=2000, include_usage=True):
+        # glm-5.3-flash 思考长度方差大（3.4k~12k 字），max_tokens 预算必须给思考留足余量
+        # （9/6 TOC 修复同源教训：预算被思考耗尽 → content 0 字 → EMPTY_CONTENT）
+        async for chunk in client.stream_chat(messages=messages, max_tokens=16000, include_usage=True):
             # include_usage：最后一个 chunk choices 为空、携带 usage（P5.4 观测）
             if not chunk.get("choices") and chunk.get("usage"):
                 stream_usage = extract_usage(chunk)

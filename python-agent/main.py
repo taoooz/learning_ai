@@ -223,7 +223,7 @@ async def answer_question(req: OutlineAnswerRequest):
         llm_messages.append({"role": "user", "content": req.answer})
 
         try:
-            async for event in stream_llm_and_parse(llm_messages, max_tokens=1500):
+            async for event in stream_llm_and_parse(llm_messages, max_tokens=8000):
                 if event["type"] == "__full_content__":
                     # 流式完成，解析并保存到 session
                     parsed = event.get("parsed", {})
