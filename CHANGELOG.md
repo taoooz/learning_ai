@@ -2,6 +2,11 @@
 
 ## 2026-09-19
 
+### V2 P5.5 数据保留：服务端 engagement 环形上限
+- `UserDataStore.append_engagement` 从纯追加改为读取→合并→裁剪→原子写回，每课程保留最近 500 条（对齐客户端环形语义）；损坏行跳过
+- A/B 实验框架明确推迟：依赖真实使用数据与运营假设，当前版本无在跑实验需求
+- 测试：pytest 111/111（+1 保留上限）
+
 ### V2 P5.1 第三步：Hook 接入仓库抽象（多设备恢复闭环）
 - `useChapterLearning` 持久化与启动装载全部改走 `getLessonRepository()`：persist 异步化（fire-and-forget + 409 冲突告警）、local 保持同步启动路径、server 走异步 BOOT_READY 装载（bootStateFor 纯函数复用，两条启动路径同构）
 - 本地模式零行为变化（LocalLessonRepository 包装原函数）；`NEXT_PUBLIC_LESSON_STORE=server` 一键切换服务端存储

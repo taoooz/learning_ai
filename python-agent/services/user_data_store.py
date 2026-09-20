@@ -104,16 +104,26 @@ class UserDataStore:
         self._atomic_write(path, json.dumps(lesson, ensure_ascii=False))
         return {"saved": True, "serverUpdatedAt": int(lesson.get("updatedAt", 0))}
 
-    # ---- 参与信号（append-only JSONL） ----
+    # ---- 参与信号（环形保留，P5.5 数据保留） ----
+
+    ENGAGEMENT_RETENTION_LIMIT = 500
 
     def append_engagement(self, account_id: str, course_id: str, events: list[dict]) -> int:
-        """批量追加参与信号；返回追加条数。单条格式非法即跳过"""
+        """批量追加参与信号并按保留上限裁剪；返回追加条数。单条格式非法即跳过"""
         valid = [e for e in events if isinstance(e, dict) and e.get("eventType")]
         if not valid:
             return 0
         path = self._engagement_path(account_id, course_id)
         path.parent.mkdir(parents=True, exist_ok=True)
-        lines = "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in valid)
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(lines)
+        existing: list[dict] = []
+        if path.exists():
+            for line in path.read_text(encoding="utf-8").splitlines():
+                try:
+                    item = json.loads(line)
+                    if isinstance(item, dict) and item.get("eventType"):
+                        existing.append(item)
+                except json.JSONDecodeError:
+                    continue
+        merged = (existing + valid)[-self.ENGAGEMENT_RETENTION_LIMIT:]
+        self._atomic_write(path, "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in merged))
         return len(valid)

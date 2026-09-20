@@ -1,5 +1,7 @@
 # tests/test_user_data_store.py — P5.1 服务端用户数据存储：roundtrip / 乐观锁 / engagement / 目录隔离
 
+import json
+
 import pytest
 
 from services.user_data_store import OptimisticLockConflict, UserDataStore
@@ -85,3 +87,17 @@ def test_corrupt_courses_file_returns_empty(store, tmp_path):
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+def test_engagement_retention_cap(store):
+    """P5.5 数据保留：超过 500 条裁剪到最近 500 条"""
+    for batch in range(6):
+        store.append_engagement("user-a", "c1", [
+            {"eventType": "task_completed", "at": i} for i in range(batch * 100, batch * 100 + 100)
+        ])
+    path = store._engagement_path("user-a", "c1")
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 500
+    # 保留的是最新的（at 值最大的 500 条）
+    first = json.loads(lines[0])
+    assert first["at"] == 100  # 前 100 条（at 0~99）被裁掉
