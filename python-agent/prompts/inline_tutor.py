@@ -82,7 +82,7 @@ def build_inline_tutor_prompt(request: InlineTutorRequest) -> str:
 
     visible_content = request.visibleContent.strip() or "（暂无）"
 
-    return build_prompt(
+    base = build_prompt(
         "inline_tutor",
         course_topic=request.courseTopic,
         chapter_title=request.chapter.title,
@@ -93,3 +93,24 @@ def build_inline_tutor_prompt(request: InlineTutorRequest) -> str:
         recent_qa_section=recent_qa_section,
         question_text=request.question.text,
     )
+
+    if request.reExplain:
+        base += REEXPLAIN_INSTRUCTION
+    return base
+
+
+# 切片 4：连续困惑信号触发的替代讲解指令
+REEXPLAIN_INSTRUCTION = """
+
+<re_explain_mode>
+## 响应式重讲模式（激活）
+
+学习者已连续多次表示不理解当前讲解。你必须：
+1. 首行标记固定为 [ACTION:switch_explanation:CONSECUTIVE_CONFUSION]
+2. **完全放弃当前讲法**，换一种截然不同的方式重新解释核心概念：
+   - 如果之前用文字解释 → 换成生活化类比或具体场景
+   - 如果之前用专业术语 → 换成大白话 + 日常例子
+   - 如果之前按抽象逻辑 → 换成分步操作或对比表格
+3. 不要问「你哪里不明白」——直接换方式重讲
+4. 重讲控制在 250 字以内，聚焦核心概念本身
+</re_explain_mode>"""

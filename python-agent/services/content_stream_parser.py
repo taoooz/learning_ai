@@ -13,7 +13,7 @@ import re
 _START_RE = re.compile(r"^:::(\w+)\s*$")
 _END_RE = re.compile(r"^:::\s*$")
 
-_STRUCTURED_TYPES = {"key_point", "example", "comparison"}
+_STRUCTURED_TYPES = {"key_point", "example", "comparison", "diagram"}
 
 
 def _after_colon(s: str) -> str:
@@ -122,6 +122,7 @@ class ContentStreamParser:
             "key_point": self._parse_key_point,
             "example": self._parse_example,
             "comparison": self._parse_comparison,
+            "diagram": self._parse_diagram,
         }.get(block_type)
         if not parser_fn:
             return None
@@ -208,6 +209,12 @@ class ContentStreamParser:
         if not columns or not rows:
             return None
         return {"type": "comparison", "blockId": block_id, "columns": columns, "rows": rows}
+
+    def _parse_diagram(self, lines: list[str], block_id: str) -> dict | None:
+        source = chr(10).join(line for line in lines).strip()
+        if not source:
+            return None
+        return {"type": "diagram", "blockId": block_id, "language": "mermaid", "source": source}
 
 
 def parse_content_blocks(text: str) -> list[dict]:

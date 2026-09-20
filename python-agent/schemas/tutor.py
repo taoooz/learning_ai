@@ -16,6 +16,7 @@ TutorReasonCode = Literal[
     "NEEDS_MORE_DETAIL",
     "EXPLANATION_MISMATCH",
     "USER_READY",
+    "CONSECUTIVE_CONFUSION",
 ]
 
 
@@ -67,6 +68,10 @@ class InlineTutorRequest(BaseModel):
         description="当前任务最近 3 组问答（问题 ≤300 字符、回答 ≤1200 字符）",
     )
     question: InlineTutorCurrentQuestion
+    reExplain: bool = Field(
+        default=False,
+        description="连续困惑信号 ≥ 阈值时为 true，后端强制换类比/换表征重讲（切片 4）",
+    )
     idempotencyKey: str = Field(..., description="Tutor 请求幂等键（tutor:{chapterId}:v{planVersion}:{taskId}:{questionId}）")
 
 

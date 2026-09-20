@@ -367,6 +367,7 @@ test('载荷字段固定为最小契约，不含课程全量字段', () => {
     'idempotencyKey',
     'mode',
     'question',
+    'reExplain',
     'recentInlineQA',
     'task',
     'visibleContent',

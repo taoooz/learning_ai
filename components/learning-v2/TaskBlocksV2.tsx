@@ -4,6 +4,7 @@
 // V2 任务内容块渲染：4 种块类型（markdown / key_point / example / comparison）
 // markdown 复用 V1 MarkdownContent；其余块类型按学习场景做轻量卡片化呈现
 
+import { useEffect, useRef, useState } from 'react';
 import type { LearningContentBlock } from '@/types/learning-v2';
 import { MarkdownContent } from '../ui/MarkdownContent';
 
@@ -17,6 +18,8 @@ export function TaskBlockView({ block }: { block: LearningContentBlock }) {
       return <ExampleBlockView title={block.title} context={block.context} content={block.content} takeaway={block.takeaway} />;
     case 'comparison':
       return <ComparisonBlockView columns={block.columns} rows={block.rows} />;
+    case 'diagram':
+      return <DiagramBlockView source={block.source} />;
     default:
       return null;
   }
@@ -93,6 +96,42 @@ function ComparisonBlockView({ columns, rows }: { columns: string[]; rows: strin
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function DiagramBlockView({ source }: { source: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const mermaid = (await import('mermaid')).default;
+        mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'strict' });
+        const { svg } = await mermaid.render(`diagram-${Date.now()}-${Math.random().toString(36).slice(2)}`, source);
+        if (!cancelled && el) el.innerHTML = svg;
+      } catch {
+        if (!cancelled) setError(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [source]);
+
+  if (error) {
+    return (
+      <pre className="overflow-x-auto rounded-2xl bg-subtle px-4 py-3 text-[12px] leading-relaxed text-secondary">
+        <code>{source}</code>
+      </pre>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-2xl border border-accent/10 bg-surface px-3 py-4">
+      <div ref={containerRef} className="flex justify-center [&_svg]:max-w-full [&_svg]:h-auto" />
     </div>
   );
 }

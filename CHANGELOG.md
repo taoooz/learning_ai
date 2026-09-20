@@ -1,5 +1,11 @@
 # 项目迭代日志
 
+### 切片 2/3/4：质量评测基线 + diagram 块 + 响应式重讲
+- **切片 2**：`python-agent/scripts/evaluate_content_quality.py`（3 主题固定评测集 + 程序结构判分 + 可选 LLM rubric 质量评分）；`data/content-quality-topics.json`（评测主题配置）
+- **切片 3**：`types/learning-v2` 新增 `DiagramBlock`（mermaid）；`content_stream_parser.py` 支持 :::diagram 块；`TaskBlocksV2` 新增 DiagramBlockView（动态 import mermaid 渲染，语法错误降级为代码块）；prompt 中 process/derive 配方加入 diagram 步骤 + Mermaid 语法规则
+- **切片 4**：`lib/learning-v2/confusion-signal.ts`（困惑关键词匹配 + 连续计数）；`tutor-context.ts` 请求载荷新增 `reExplain` 字段（连续 ≥2 次困惑触发）；`inline_tutor.py` 新增 re_explain_mode 指令（强制 switch_explanation + 换类比/换表征重讲）
+- 质量：pytest 131/131（+5 diagram + 6 confusion signal）、TS 全绿、质量门 4/4
+
 ### 切片 1：内容配方（Content Recipe）——多块流式输出
 - 问题：task_content prompt 只有「300~500字正文+结尾引用块」，无块类型/结构约束 → 实测退化为纯文字 markdown（与竞品 HyperKnow 差距最大项）
 - 实现：prompts/task_content.py 新增 CONTENT_RECIPES（8 种 teachingPattern 各定义显式块序列+内容量下限，循证依据 education-agent-skills 显性教学/记忆科学）

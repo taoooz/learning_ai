@@ -311,3 +311,55 @@ def test_parse_content_blocks_unterminated_block():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+# ---- 切片 2：结构判分 ----
+
+from scripts.evaluate_content_quality import score_structure  # noqa: E402
+
+
+def test_score_structure_all_pass():
+    topic = {
+        "expectedBlocks": ["markdown", "key_point"],
+        "minMarkdownChars": 100,
+        "minKeyPointCount": 2,
+    }
+    blocks = [
+        {"type": "markdown", "blockId": "b1", "markdown": "x" * 150},
+        {"type": "key_point", "blockId": "b2", "points": ["a", "b"]},
+    ]
+    result = score_structure(topic, blocks)
+    assert result["percent"] == 100
+    assert all(c["pass"] for c in result["checks"])
+
+
+def test_score_structure_missing_block():
+    topic = {"expectedBlocks": ["markdown", "comparison"], "minMarkdownChars": 50}
+    blocks = [{"type": "markdown", "blockId": "b1", "markdown": "x" * 100}]
+    result = score_structure(topic, blocks)
+    assert result["percent"] < 100
+    failed = [c for c in result["checks"] if not c["pass"]]
+    assert any("comparison" in c["name"] for c in failed)
+
+
+def test_score_structure_empty_blocks():
+    topic = {"expectedBlocks": ["markdown"], "minMarkdownChars": 100}
+    result = score_structure(topic, [])
+    assert result["percent"] == 0
+
+
+# ---- 切片 3：diagram 块 ----
+
+def test_parser_diagram_block():
+    text = '正文。\n:::diagram\nflowchart TD\nA["开始"] --> B["结束"]\n:::\n'
+    blocks = parse_content_blocks(text)
+    assert len(blocks) == 2
+    assert blocks[1]["type"] == "diagram"
+    assert blocks[1]["language"] == "mermaid"
+    assert "flowchart TD" in blocks[1]["source"]
+    assert '-->' in blocks[1]["source"]
+
+
+def test_parser_diagram_empty_source():
+    blocks = parse_content_blocks(":::diagram\n:::\n")
+    assert all(b["type"] != "diagram" for b in blocks)

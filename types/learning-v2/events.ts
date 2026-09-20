@@ -92,7 +92,8 @@ export type TutorReasonCode =
   | 'NEEDS_EXAMPLE'
   | 'NEEDS_MORE_DETAIL'
   | 'EXPLANATION_MISMATCH'
-  | 'USER_READY';
+  | 'USER_READY'
+  | 'CONSECUTIVE_CONFUSION';
 
 export interface TutorAction {
   type: TutorActionType;

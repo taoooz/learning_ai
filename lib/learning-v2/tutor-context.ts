@@ -7,6 +7,7 @@
 // 载荷契约与 python-agent/schemas/tutor.py InlineTutorRequest 逐字段对齐（严格模式拒收多余字段）
 
 import type { LearningContentBlock, NodeLessonV2 } from '@/types/learning-v2';
+import { countConsecutiveConfusions, REEXPLAIN_THRESHOLD } from './confusion-signal';
 
 /** 当前任务已展示内容总字符上限（设计文档 §3.2 固定上限） */
 export const TUTOR_VISIBLE_CONTENT_LIMIT = 6000;
@@ -44,6 +45,8 @@ export interface InlineTutorRequestPayload {
   visibleContent: string;
   recentInlineQA: InlineTutorQA[];
   question: { questionId: string; text: string };
+  /** 切片 4：连续困惑信号 ≥ 阈值时为 true，后端强制换类比/换表征重讲 */
+  reExplain: boolean;
   idempotencyKey: string;
 }
 
@@ -80,6 +83,8 @@ function contentBlockToText(block: LearningContentBlock): string {
         .join('\n');
     case 'comparison':
       return [block.columns, ...block.rows].map((row) => row.join(' | ')).join('\n');
+    case 'diagram':
+      return block.source;
   }
 }
 
@@ -142,6 +147,8 @@ function extractRecentInlineQA(
  * 入参 lesson 只用于提取当前任务的最小上下文，不整体进入请求。
  */
 export function buildInlineTutorContext(args: BuildInlineTutorContextArgs): InlineTutorRequestPayload {
+  const confusionCount = countConsecutiveConfusions(args.lesson, args.task.taskId);
+
   return {
     mode: 'inline_tutor',
     courseId: args.courseId,
@@ -158,6 +165,7 @@ export function buildInlineTutorContext(args: BuildInlineTutorContextArgs): Inli
       questionId: args.questionId,
       text: truncateText(args.question.trim(), TUTOR_QUESTION_CHAR_LIMIT),
     },
+    reExplain: confusionCount >= REEXPLAIN_THRESHOLD,
     idempotencyKey: args.idempotencyKey,
   };
 }

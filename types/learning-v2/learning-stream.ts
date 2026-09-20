@@ -45,7 +45,14 @@ export interface ComparisonBlock {
   rows: string[][];
 }
 
-export type LearningContentBlock = MarkdownBlock | KeyPointBlock | ExampleBlock | ComparisonBlock;
+export interface DiagramBlock {
+  type: 'diagram';
+  blockId: string;
+  language: 'mermaid';
+  source: string;
+}
+
+export type LearningContentBlock = MarkdownBlock | KeyPointBlock | ExampleBlock | ComparisonBlock | DiagramBlock;
 
 // ---- 任务生成结果 ----
 
