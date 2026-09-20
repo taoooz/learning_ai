@@ -126,8 +126,17 @@ async def score_quality_llm(topic: dict, blocks: list[dict]) -> dict:
     )
 
     client = MiniMaxClient()
-    response = await client.chat(messages=[{"role": "user", "content": prompt}], max_tokens=8000)
-    text = (response.get("choices") or [{}])[0].get("message", {}).get("content", "").strip()
+    text = ""
+    for attempt in range(3):
+        try:
+            response = await client.chat(messages=[{"role": "user", "content": prompt}], max_tokens=8000)
+            text = (response.get("choices") or [{}])[0].get("message", {}).get("content", "").strip()
+            if text:
+                break
+        except Exception:
+            if attempt == 2:
+                return {"error": "LLM rubric 评分超时（3 次重试均失败）"}
+            await asyncio.sleep(2)
     # 提取 JSON
     import re
     match = re.search(r"\{.*\}", text, re.DOTALL)
