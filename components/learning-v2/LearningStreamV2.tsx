@@ -92,7 +92,7 @@ export function LearningStreamV2({
   // 完成态的 recap 由 ChapterCompleteCard 展示（同一份 lesson.recap），流内不重复渲染
   const items = [...lesson.streamItems]
     .filter((item) => !(item.type === 'chapter_recap' && phase === 'completed'))
-    .sort((a, b) => a.sequence - b.sequence);
+    .sort((a, b) => a.createdAt - b.createdAt || a.sequence - b.sequence);
   // 正在流式的任务：只有它的内容区显示光标
   const streamingTaskId =
     phase === 'streaming' && lesson.runtime.currentTaskStatus === 'streaming'
