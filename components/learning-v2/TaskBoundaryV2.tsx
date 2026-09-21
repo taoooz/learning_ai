@@ -71,9 +71,10 @@ export function TaskBoundaryV2({ lesson, phase, attempts, onContinue, highlightC
     <div className="sticky bottom-4 z-10 mt-8">
       <div className="rounded-3xl border border-black/6 bg-surface/95 p-4 shadow-lg shadow-black/5 backdrop-blur">
         {!failed && boundaryPrompt?.takeaway && (
-          <blockquote className="mb-3 border-l-2 border-accent/50 pl-3 text-[13px] leading-relaxed text-secondary">
-            {boundaryPrompt.takeaway}
-          </blockquote>
+          <div className="mb-3 rounded-xl bg-accent/5 px-3.5 py-2.5">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-accent mb-1">本节要点</p>
+            <p className="text-[13px] leading-relaxed text-primary">{boundaryPrompt.takeaway}</p>
+          </div>
         )}
         {!failed && boundaryPrompt?.nextHint && (
           <p className="mb-3 text-[12px] text-tertiary">下一步：{boundaryPrompt.nextHint}</p>

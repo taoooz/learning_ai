@@ -253,9 +253,11 @@ function TaskContentView({
         )}
         <h2 className="text-[17px] font-semibold leading-snug text-primary">{item.title}</h2>
       </header>
-      {item.blocks.map((block) => (
-        <TaskBlockView key={block.blockId} block={block} />
-      ))}
+      <div className="space-y-5">
+        {item.blocks.map((block) => (
+          <TaskBlockView key={block.blockId} block={block} />
+        ))}
+      </div>
       {isStreaming && (
         <span className="inline-block h-4 w-2 animate-pulse rounded-[2px] bg-accent align-middle" />
       )}
@@ -331,9 +333,11 @@ function TutorAnswerView({
   return (
     <section className="space-y-2 rounded-2xl border border-accent/15 bg-surface px-4 py-3.5">
       <p className="text-[12px] font-medium tracking-wide text-tertiary">回答</p>
-      {item.blocks.map((block) => (
-        <TaskBlockView key={block.blockId} block={block} />
-      ))}
+      <div className="space-y-3">
+        {item.blocks.map((block) => (
+          <TaskBlockView key={block.blockId} block={block} />
+        ))}
+      </div>
       {streaming && item.blocks.length === 0 && (
         <p className="text-[13px] leading-relaxed text-tertiary">正在准备回答…</p>
       )}
