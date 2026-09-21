@@ -310,7 +310,12 @@ function UserQuestionView({
       {item.status === 'pending' && (
         <p className="pr-1 text-[12px] text-tertiary">{pendingHint}</p>
       )}
-      {item.status === 'failed' && <p className="pr-1 text-[12px] text-error">回答失败</p>}
+      {item.status === 'failed' && (
+        <div className="pr-1 inline-flex items-center gap-1.5 rounded-full bg-error/8 px-2.5 py-1">
+          <span className="h-1.5 w-1.5 rounded-full bg-error/60" />
+          <p className="text-[12px] text-error">回答失败</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -345,18 +350,24 @@ function TutorAnswerView({
         <span className="inline-block h-4 w-2 animate-pulse rounded-[2px] bg-accent align-middle" />
       )}
       {failed && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-error/8 px-3 py-2.5">
-          <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-error">
-            {item.errorMessage ?? '回答生成失败，请重试'}
-          </p>
+        <div className="flex items-center gap-3 rounded-xl bg-error/6 pl-3 pr-3 py-2.5">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-error/12 text-[14px]">
+            ⚠️
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-medium text-error">回答生成失败</p>
+            <p className="mt-0.5 truncate text-[12px] text-error/70">
+              {item.errorMessage ?? '请检查网络后重试'}
+            </p>
+          </div>
           {onRetry && (
             <button
               type="button"
               onClick={() => onRetry(item.questionId)}
               disabled={busy}
-              className="min-h-[44px] shrink-0 rounded-full bg-accent px-5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+              className="shrink-0 rounded-full bg-accent px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              重试回答
+              重试
             </button>
           )}
         </div>
