@@ -12,7 +12,8 @@ from typing import AsyncGenerator
 from uuid import uuid4
 
 from lib.minimax import MiniMaxClient, extract_usage
-from services.search_evidence import build_evidence_pack, needs_search
+from services.search_evidence import build_evidence_pack_with_context, needs_search
+from services.evidence_store import evidence_to_prompt, get_chapter_evidence, task_evidence_coverage
 from services.content_stream_parser import ContentStreamParser
 from prompts import build_prompt
 from prompts.task_content import get_recipe
@@ -154,12 +155,47 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
             "payload": payload,
         }
 
-    # 搜索证据包（设计文档 §搜索策略：时效性/工具类主题先搜后写；失败安全降级）
+    # 证据策略：先判断章节 EvidencePack 是否覆盖当前任务；
+    # 覆盖则直接复用，不足且任务本身需要外部证据时，才用章节标题联合任务标题补搜一次。
     evidence_pack = None
-    if needs_search(request.task.title, request.task.taskGoal):
-        evidence_pack = await build_evidence_pack(f"{request.courseTopic} {request.task.title} {request.task.taskGoal}")
-        if evidence_pack:
-            print(f"[任务流] 搜索证据包: {len(evidence_pack['sources'])} 个来源")
+    chapter_pack = get_chapter_evidence(request.courseId, request.chapterId)
+    coverage = task_evidence_coverage(
+        chapter_pack,
+        request.task.title,
+        request.task.taskGoal,
+    )
+    if coverage.get("covered"):
+        evidence, sources = evidence_to_prompt(
+            chapter_pack,
+            request.task.title,
+            request.task.taskGoal,
+            max_sources=3,
+        )
+        if evidence:
+            evidence_pack = {"evidence": evidence, "sources": sources}
+            print(f"[任务流] 复用章节证据包: {len(sources)} 个来源")
+    elif needs_search(request.task.title, request.task.taskGoal):
+        pack = await build_evidence_pack_with_context(
+            request.courseTopic,
+            request.task.title,
+            request.task.taskGoal,
+            request.chapter.title,
+        )
+        if pack:
+            evidence_pack = pack
+            print(f"[任务流] 任务级补搜证据包: {len(pack['sources'])} 个来源")
+
+    # 章节证据未覆盖但任务无需外部证据时，仍用章节证据做轻量兜底，
+    # 避免稳定概念任务因为中文分词偶然不匹配而额外搜索。
+    if evidence_pack is None and chapter_pack:
+        evidence, sources = evidence_to_prompt(
+            chapter_pack,
+            request.task.title,
+            request.task.taskGoal,
+            max_sources=2,
+        )
+        if evidence:
+            evidence_pack = {"evidence": evidence, "sources": sources}
 
     system_prompt = build_task_content_prompt(
         request,

@@ -5,6 +5,7 @@
 // P2 四意图：tutor_completed 载荷携带 action（教学动作分类），供 UI 与持久化使用
 
 import type {
+  ChapterRecap,
   GeneratedTask,
   LearningContentBlock,
   MarkdownBlock,
@@ -27,9 +28,18 @@ export type TutorSseEventType =
   | 'tutor_block_completed'
   | 'tutor_completed';
 
+export type RecapSseEventType =
+  | 'recap_started'
+  | 'recap_takeaway'
+  | 'recap_completed';
+
 export type CommonSseEventType = 'request_warning' | 'request_error' | 'request_completed';
 
-export type LearningSseEventType = TaskSseEventType | TutorSseEventType | CommonSseEventType;
+export type LearningSseEventType =
+  | TaskSseEventType
+  | TutorSseEventType
+  | RecapSseEventType
+  | CommonSseEventType;
 
 /** 统一事件外壳：所有学习流请求共用 */
 export interface LearningSseEvent<T = unknown> {
@@ -125,6 +135,19 @@ export interface TutorCompletedPayload {
   questionId: string;
   blocks: MarkdownBlock[];
   action: TutorAction;
+}
+
+// ---- Recap 事件载荷 ----
+
+export interface RecapStartedPayload {}
+
+export interface RecapTakeawayPayload {
+  index: number;
+  takeaway: string;
+}
+
+export interface RecapCompletedPayload {
+  recap: ChapterRecap;
 }
 
 // ---- 通用事件载荷 ----

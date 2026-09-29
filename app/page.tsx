@@ -45,12 +45,13 @@ export default function HomePage() {
 
   const handleSystemCourseClick = (courseId: string) => {
     setStartingSystemCourseId(courseId);
-    try {
-      startSystemCourse(courseId);
-      router.push(`/course/${courseId}/learn/0`);
-    } finally {
-      setStartingSystemCourseId(null);
-    }
+    setError('');
+    void startSystemCourse(courseId)
+      .then(() => router.push(`/course/${courseId}`))
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : '系统课程启动失败，请稍后再试');
+      })
+      .finally(() => setStartingSystemCourseId(null));
   };
 
   const sortedCourses = [...courses].reverse();

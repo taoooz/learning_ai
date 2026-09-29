@@ -29,12 +29,14 @@ export function getInviteCodeAllowlist(): string[] {
 
 /**
  * 邀请码是否被允许。
- * 名单为空时放行所有格式有效的邀请码——保证本地调试（无 Redis、未配名单）可用；
- * 生产环境应显式配置 INVITE_CODES。
+ * 本地为空名单放行，保证本地调试（无 Redis、未配名单）可用；
+ * 生产必须显式配置 INVITE_CODES，缺失时拒绝登录，避免意外开放注册。
  */
 export function isAllowedInviteCode(code: string): boolean {
   const allowlist = getInviteCodeAllowlist()
-  if (allowlist.length === 0) return true
+  if (allowlist.length === 0) {
+    return process.env.NODE_ENV !== 'production'
+  }
   return allowlist.includes(code)
 }
 

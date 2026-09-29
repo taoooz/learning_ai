@@ -2,7 +2,7 @@
 // P5.1 参与信号服务端追加代理（fire-and-forget，前端写失败静默）
 
 import { NextRequest } from 'next/server';
-import { PYTHON_AGENT_URL } from '@/lib/agent-config';
+import { PYTHON_AGENT_URL, pythonAgentHeaders } from '@/lib/agent-config';
 import { requireAuth } from '@/lib/api-response';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
   try {
     const response = await fetch(`${PYTHON_AGENT_URL}/api/user/engagement`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Account-Id': auth.inviteCode },
+      headers: pythonAgentHeaders({ 'X-Account-Id': auth.inviteCode }),
       body: await request.text(),
     });
     const text = await response.text();

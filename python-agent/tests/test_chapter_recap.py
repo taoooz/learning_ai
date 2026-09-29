@@ -4,7 +4,7 @@ import json
 import pytest
 
 from schemas.learning_v2 import ChapterRecapRequest
-from services.chapter_recap_service import generate_chapter_recap
+from services.chapter_recap_service import generate_chapter_recap, stream_chapter_recap_events, TakeawayStreamParser
 from services.learning_v2_errors import RecapValidationError
 
 
@@ -152,3 +152,63 @@ def test_empty_tasks_section_fallback():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class FakeStreamClient:
+    """假 LLM 客户端：stream_chat 产出预置增量"""
+    model = "fake-stream-model"
+
+    def __init__(self, deltas: list[str], error: Exception | None = None, error_after: int | None = None):
+        self.deltas = deltas
+        self.error = error
+        self.error_after = error_after
+
+    async def stream_chat(self, messages, model=None, max_tokens=1500, include_usage=False):
+        for index, delta in enumerate(self.deltas):
+            if self.error is not None and self.error_after == index:
+                raise self.error
+            yield {"choices": [{"delta": {"content": delta}}]}
+
+
+async def _collect_stream(gen):
+    return [event async for event in gen]
+
+
+def test_takeaway_stream_parser_emits_completed_strings_only():
+    parser = TakeawayStreamParser()
+    assert parser.feed('{"keyTakeaways": ["第一') == []
+    assert parser.feed('条", "第二"') == ["第一条", "第二"]
+    assert parser.feed(', "第三"]') == ["第三"]
+
+
+def test_stream_success_emits_takeaways_then_completed_recap():
+    payload = '{"keyTakeaways": ["要点一", "要点二"], "recommendedReview": "复习一下"}'
+    client = FakeStreamClient([
+        payload[:12], payload[12:38], payload[38:],
+    ])
+    events = asyncio.run(_collect_stream(stream_chapter_recap_events(_recap_request(), client=client)))
+    types = [event["type"] for event in events]
+    assert types == [
+        "recap_started",
+        "recap_takeaway",
+        "recap_takeaway",
+        "recap_completed",
+        "request_completed",
+    ]
+    takeaway_events = [event for event in events if event["type"] == "recap_takeaway"]
+    assert [event["payload"]["takeaway"] for event in takeaway_events] == ["要点一", "要点二"]
+    recap = events[-2]["payload"]["recap"]
+    assert recap["keyTakeaways"] == ["要点一", "要点二"]
+    assert recap["demonstratedObjectives"] == []
+    assert recap["generationMeta"]["modelVersion"] == "fake-stream-model"
+
+
+def test_stream_error_after_partial_takeaways_is_retryable():
+    client = FakeStreamClient(
+        ['{"keyTakeaways": ["部分', '要点"'],
+        error=RuntimeError("boom"),
+        error_after=1,
+    )
+    events = asyncio.run(_collect_stream(stream_chapter_recap_events(_recap_request(), client=client)))
+    assert events[-2]["type"] == "request_error"
+    assert events[-2]["payload"]["code"] == "UPSTREAM_STREAM_BROKEN"

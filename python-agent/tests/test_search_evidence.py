@@ -47,7 +47,10 @@ def test_build_evidence_pack_parses_sources():
         "  服务组件相关变化\n"
         "  来源: https://example.com/react19"
     )
-    with patch("lib.tools.search_tools.web_search", return_value=fake):
+    with patch("lib.tools.search_tools.search_web_structured", return_value=[
+        {"title":"Next.js 15 发布说明","url":"https://example.com/next15","body":"新版本带来了大量更新","authorityScore":60},
+        {"title":"React 19 对比","url":"https://example.com/react19","body":"服务组件相关变化","authorityScore":60},
+    ]):
         import asyncio
         pack = asyncio.run(build_evidence_pack("Next.js 15 新特性"))
     assert pack is not None
@@ -57,13 +60,13 @@ def test_build_evidence_pack_parses_sources():
 
 
 def test_build_evidence_pack_no_results_returns_none():
-    with patch("lib.tools.search_tools.web_search", return_value="未找到相关结果"):
+    with patch("lib.tools.search_tools.search_web_structured", side_effect=RuntimeError("no results")):
         import asyncio
         assert asyncio.run(build_evidence_pack("完全不存在的主题xyzq")) is None
 
 
 def test_build_evidence_pack_search_error_returns_none():
-    with patch("lib.tools.search_tools.web_search", side_effect=RuntimeError("网络错误")):
+    with patch("lib.tools.search_tools.search_web_structured", side_effect=RuntimeError("网络错误")):
         import asyncio
         assert asyncio.run(build_evidence_pack("任意查询")) is None
 

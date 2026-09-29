@@ -20,6 +20,8 @@ import type {
   RequestCompletedPayload,
   RequestErrorPayload,
   RequestWarningPayload,
+  RecapCompletedPayload,
+  RecapTakeawayPayload,
   SourcesReadyPayload,
   SystemNoticeItem,
   TaskCompletedPayload,
@@ -117,28 +119,63 @@ function findTaskContentItem(
   return found?.type === 'task_content' ? found : undefined;
 }
 
-/** 追加系统通知（无 SSE 事件时也可用，如存储写入失败提示） */
+/**
+ * 追加系统通知；错误通知若已位于流末尾则原地替换。
+ * 这避免网络抖动/连续失败把“任务流不可用 / 答疑不可用 / 回答生成失败”刷成错误瀑布。
+ */
 export function appendSystemNotice(
   lesson: NodeLessonV2,
-  notice: { tone: SystemNoticeItem['tone']; message: string; code?: string },
+  notice: {
+    tone: SystemNoticeItem['tone'];
+    message: string;
+    code?: string;
+    taskId?: string;
+    questionId?: string;
+    retryable?: boolean;
+  },
   now: number,
 ): NodeLessonV2 {
-  const item: SystemNoticeItem = {
-    itemId: systemNoticeItemId(`local-${now}-${lesson.runtime.latestSequence + 1}`),
-    type: 'system_notice',
-    chapterId: lesson.chapterId,
-    planVersion: lesson.chapterPlan.planVersion,
-    sequence: lesson.runtime.latestSequence + 1,
-    createdAt: now,
-    status: 'complete',
-    tone: notice.tone,
-    message: notice.message,
-    code: notice.code,
-  };
+  const lastItem = lesson.streamItems[lesson.streamItems.length - 1];
+  const replacingError =
+    notice.tone === 'error' &&
+    lastItem?.type === 'system_notice' &&
+    lastItem.tone === 'error';
+
+  const item: SystemNoticeItem = replacingError
+    ? {
+        ...lastItem,
+        message: notice.message,
+        code: notice.code,
+        taskId: notice.taskId,
+        questionId: notice.questionId,
+        retryable: notice.retryable,
+        createdAt: now,
+        status: 'complete',
+      }
+    : {
+        itemId: systemNoticeItemId(`local-${now}-${lesson.runtime.latestSequence + 1}`),
+        type: 'system_notice',
+        chapterId: lesson.chapterId,
+        planVersion: lesson.chapterPlan.planVersion,
+        sequence: lesson.runtime.latestSequence + 1,
+        createdAt: now,
+        status: 'complete',
+        tone: notice.tone,
+        message: notice.message,
+        code: notice.code,
+        taskId: notice.taskId,
+        questionId: notice.questionId,
+        retryable: notice.retryable,
+      };
+
   return {
     ...lesson,
-    streamItems: [...lesson.streamItems, item],
-    runtime: { ...lesson.runtime, latestSequence: item.sequence, lastActiveAt: now },
+    streamItems: upsertItem(lesson.streamItems, item),
+    runtime: {
+      ...lesson.runtime,
+      latestSequence: Math.max(lesson.runtime.latestSequence, item.sequence),
+      lastActiveAt: now,
+    },
     updatedAt: now,
   };
 }
@@ -184,6 +221,68 @@ export function applyChapterRecap(
     },
     updatedAt: now,
   };
+}
+
+function buildPartialRecap(lesson: NodeLessonV2, takeaways: string[]): ChapterRecap {
+  const aggregated = aggregateEvidenceToObjectives(lesson.evidence);
+  return {
+    chapterId: lesson.chapterId,
+    keyTakeaways: takeaways,
+    demonstratedObjectives: aggregated.demonstratedObjectives,
+    fragileObjectives: aggregated.fragileObjectives,
+    unresolvedQuestions: [],
+  };
+}
+
+function upsertRecapItem(
+  lesson: NodeLessonV2,
+  recap: ChapterRecap,
+  now: number,
+  status: 'streaming' | 'complete',
+): NodeLessonV2 {
+  const itemId = chapterRecapItemId(lesson.chapterId);
+  const existing = lesson.streamItems.find((item) => item.itemId === itemId);
+  const sequence = existing?.sequence ?? lesson.runtime.latestSequence + 1;
+  const item: ChapterRecapItem = {
+    itemId,
+    type: 'chapter_recap',
+    chapterId: lesson.chapterId,
+    planVersion: lesson.chapterPlan.planVersion,
+    sequence,
+    createdAt: existing?.createdAt ?? now,
+    status,
+    recap,
+  };
+  return {
+    ...lesson,
+    streamItems: upsertItem(lesson.streamItems, item),
+    recap,
+    runtime: {
+      ...lesson.runtime,
+      latestSequence: Math.max(lesson.runtime.latestSequence, sequence),
+      lastActiveAt: now,
+    },
+    updatedAt: now,
+  };
+}
+
+function applyRecapStarted(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+  return upsertRecapItem(lesson, buildPartialRecap(lesson, []), event.timestamp, 'streaming');
+}
+
+function applyRecapTakeaway(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+  const payload = event.payload as RecapTakeawayPayload;
+  const current = lesson.recap?.keyTakeaways ?? [];
+  if (payload.index > current.length) return lesson;
+  const takeaways = [...current];
+  takeaways[payload.index] = payload.takeaway.trim();
+  if (!takeaways[payload.index]) return lesson;
+  return upsertRecapItem(lesson, buildPartialRecap(lesson, takeaways), event.timestamp, 'streaming');
+}
+
+function applyRecapCompletedEvent(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+  const payload = event.payload as RecapCompletedPayload;
+  return applyChapterRecap(lesson, payload.recap, event.timestamp);
 }
 
 /**
@@ -261,6 +360,12 @@ export function applyLearningSseEvent(
     case 'tutor_block_completed':
     case 'tutor_completed':
       return applyTutorSseEvent(lesson, event);
+    case 'recap_started':
+      return applyRecapStarted(lesson, event);
+    case 'recap_takeaway':
+      return applyRecapTakeaway(lesson, event);
+    case 'recap_completed':
+      return applyRecapCompletedEvent(lesson, event);
     default:
       return lesson;
   }
@@ -544,7 +649,13 @@ function applyRequestError(lesson: NodeLessonV2, event: LearningSseEvent): NodeL
       streamItems,
       runtime: { ...runtime, latestSequence: Math.max(runtime.latestSequence, event.sequence) },
     },
-    { tone: 'error', message: payload.message, code: payload.code },
+    {
+      tone: 'error',
+      message: payload.message,
+      code: payload.code,
+      taskId: event.taskId,
+      retryable: payload.retryable,
+    },
     event.timestamp,
   );
 
@@ -864,7 +975,7 @@ function applyTutorCompleted(lesson: NodeLessonV2, event: LearningSseEvent): Nod
   };
 }
 
-/** Tutor 请求错误：回答标记失败（未开始也补失败条目）、问题标记失败但不删除、追加幂等错误通知 */
+/** Tutor 请求错误：回答标记失败、问题保留；错误卡片复用全局“末尾错误替换”策略 */
 function applyTutorRequestError(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
   const guarded = requireTutorQuestion(lesson, event);
   if (!guarded) return lesson;
@@ -892,40 +1003,38 @@ function applyTutorRequestError(lesson: NodeLessonV2, event: LearningSseEvent): 
       };
   const failedQuestion: UserQuestionItem = { ...question, status: 'failed' };
 
-  // 通知按 eventId 确定性 upsert：重复错误事件不追加重复通知、序号不漂移
-  const noticeItemId = systemNoticeItemId(tutorEvent.eventId);
-  const existingNotice = lesson.streamItems.find((item) => item.itemId === noticeItemId);
-  const noticeSequence =
-    existingNotice?.sequence ?? Math.max(runtime.latestSequence, answer.sequence) + 1;
-  const notice: SystemNoticeItem = {
-    itemId: noticeItemId,
-    type: 'system_notice',
-    chapterId: lesson.chapterId,
-    planVersion: tutorEvent.planVersion,
-    sequence: noticeSequence,
-    createdAt: existingNotice?.createdAt ?? now,
-    status: 'complete',
-    tone: 'error',
-    message: payload.message,
-    code: payload.code,
+  const withAnswer: NodeLessonV2 = {
+    ...lesson,
+    streamItems: upsertItem(upsertItem(lesson.streamItems, answer), failedQuestion),
+    runtime: {
+      ...runtime,
+      latestSequence: Math.max(runtime.latestSequence, tutorEvent.sequence, answer.sequence),
+      lastActiveAt: now,
+    },
+    updatedAt: now,
   };
 
-  const streamItems = upsertItem(
-    upsertItem(upsertItem(lesson.streamItems, answer), failedQuestion),
-    notice,
+  const withNotice = appendSystemNotice(
+    withAnswer,
+    {
+      tone: 'error',
+      message: payload.message,
+      code: payload.code,
+      taskId: tutorEvent.taskId,
+      questionId: tutorEvent.questionId,
+      retryable: payload.retryable,
+    },
+    now,
   );
 
   return {
-    ...lesson,
-    streamItems,
+    ...withNotice,
     runtime: {
-      ...runtime,
-      latestSequence: Math.max(runtime.latestSequence, tutorEvent.sequence, noticeSequence),
-      lastActiveAt: now,
+      ...withNotice.runtime,
       pendingRequest:
         runtime.pendingRequest && runtime.pendingRequest.requestId === tutorEvent.requestId
           ? { ...runtime.pendingRequest, status: 'failed', errorCode: payload.code }
-          : runtime.pendingRequest,
+          : withNotice.runtime.pendingRequest,
     },
     updatedAt: now,
   };

@@ -2,7 +2,7 @@
 // P3a Checkpoint 生成代理：薄透传层（鉴权 + 必填校验 → Python Agent）
 
 import { NextRequest } from 'next/server';
-import { PYTHON_AGENT_URL } from '@/lib/agent-config';
+import { PYTHON_AGENT_URL, pythonAgentHeaders } from '@/lib/agent-config';
 import { requireAuth } from '@/lib/api-response';
 
 export const dynamic = 'force-dynamic';
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
   try {
     const response = await fetch(`${PYTHON_AGENT_URL}/api/learning/v2/checkpoints/generate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: pythonAgentHeaders(),
       body: JSON.stringify(body),
     });
     const text = await response.text();

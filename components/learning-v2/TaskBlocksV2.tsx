@@ -11,21 +11,27 @@
 import { useEffect, useRef, useState } from 'react';
 import type { LearningContentBlock } from '@/types/learning-v2';
 import { MarkdownContent } from '../ui/MarkdownContent';
+import { StreamingMarkdown } from '../ui/StreamingMarkdown';
 
 /** 块类型标签的通用样式：小 chip + 图标 */
-function BlockLabel({ icon, label }: { icon: string; label: string }) {
+function BlockLabel({ label, tone = 'accent' }: { label: string; tone?: 'accent' | 'neutral' | 'blue' }) {
+  const toneStyles = {
+    accent: 'bg-accent/10 text-accent',
+    neutral: 'bg-black/[0.04] text-secondary',
+    blue: 'bg-info/10 text-info',
+  } as const;
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent">
-      <span aria-hidden>{icon}</span>
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${toneStyles[tone]}`}>
+      <span className="h-1 w-1 rounded-full bg-current opacity-70" aria-hidden />
       {label}
     </span>
   );
 }
 
-export function TaskBlockView({ block }: { block: LearningContentBlock }) {
+export function TaskBlockView({ block, streaming = false }: { block: LearningContentBlock; streaming?: boolean }) {
   switch (block.type) {
     case 'markdown':
-      return <MarkdownContent content={block.markdown} />;
+      return streaming ? <StreamingMarkdown content={block.markdown} streaming={streaming} /> : <MarkdownContent content={block.markdown} />;
     case 'key_point':
       return <KeyPointBlockView title={block.title} points={block.points} />;
     case 'example':
@@ -42,17 +48,18 @@ export function TaskBlockView({ block }: { block: LearningContentBlock }) {
 /** 关键点定义卡：左侧色条 + 标签 + 要点列表 */
 function KeyPointBlockView({ title, points }: { title?: string; points: string[] }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-accent/4 pl-4 pr-4 py-3.5">
-      {/* 左侧色条：accent 半透明竖条 */}
-      <div className="absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-accent/30" />
-      <div className="mb-2.5 flex items-center gap-2">
-        <BlockLabel icon="📌" label={title || '关键点'} />
+    <div className="relative overflow-hidden rounded-2xl border border-accent/12 bg-accent/[0.045] pl-4 pr-4 py-4 shadow-sm">
+      <div className="absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-accent/35" />
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <BlockLabel label={title || '关键点'} />
       </div>
-      <ul className="space-y-2">
+      <ul className="space-y-3">
         {points.map((point, i) => (
-          <li key={i} className="flex gap-2.5 text-[14px] leading-relaxed text-primary/90">
-            <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-accent/50" />
-            <span>{point}</span>
+          <li key={i} className="relative pl-4 text-[14px] leading-[1.72] text-primary/90">
+            <span className="absolute left-0 top-[9px] h-1.5 w-1.5 rounded-full bg-accent/55" aria-hidden />
+            <div className="key-point-prose">
+              <MarkdownContent content={point} />
+            </div>
           </li>
         ))}
       </ul>
@@ -73,20 +80,20 @@ export function ExampleBlockView({
   takeaway: string;
 }) {
   return (
-    <div className="rounded-2xl border border-accent/12 bg-surface">
-      <div className="px-4 pt-3 pb-1">
-        <div className="flex items-baseline gap-2">
-          <BlockLabel icon="💡" label="示例" />
-          <span className="text-[14px] font-semibold text-primary">{title}</span>
+    <div className="overflow-hidden rounded-2xl border border-black/[0.06] bg-surface shadow-sm">
+      <div className="border-b border-black/[0.045] bg-gradient-to-b from-white to-subtle/55 px-4 pt-3.5 pb-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <BlockLabel label="示例" tone="blue" />
+          <span className="text-[14px] font-semibold leading-snug text-primary">{title}</span>
         </div>
-        {context && <p className="mt-1 text-[12px] text-tertiary">{context}</p>}
+        {context && <p className="mt-1.5 text-[12px] leading-relaxed text-tertiary">{context}</p>}
       </div>
-      <div className="px-4 py-2">
+      <div className="px-4 py-3.5">
         <MarkdownContent content={content} />
       </div>
       {takeaway && (
-        <p className="border-t border-black/4 px-4 py-2.5 text-[13px] leading-relaxed text-secondary">
-          <span className="font-medium text-accent">要点：</span>{takeaway}
+        <p className="border-t border-black/[0.05] bg-subtle/40 px-4 py-3 text-[13px] leading-relaxed text-secondary">
+          <span className="font-semibold text-accent">要点：</span>{takeaway}
         </p>
       )}
     </div>
@@ -96,10 +103,10 @@ export function ExampleBlockView({
 /** 对比表格：卡片包装 + 表头着色 + 行间隔 */
 function ComparisonBlockView({ columns, rows }: { columns: string[]; rows: string[][] }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-black/6">
-      {/* 标签行 */}
-      <div className="bg-accent/4 px-4 py-2">
-        <BlockLabel icon="📊" label="对比" />
+    <div className="overflow-hidden rounded-2xl border border-black/[0.06] bg-surface shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b border-black/[0.045] bg-subtle/60 px-4 py-3">
+        <BlockLabel label="对比" />
+        <span className="text-[11px] text-tertiary">左右滑动查看</span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[320px] border-collapse text-[13px]">
@@ -114,7 +121,7 @@ function ComparisonBlockView({ columns, rows }: { columns: string[]; rows: strin
           </thead>
           <tbody>
             {rows.map((row, rowIndex) => (
-              <tr key={rowIndex} className={rowIndex % 2 === 1 ? 'bg-accent/[0.03]' : ''}>
+              <tr key={rowIndex} className={rowIndex % 2 === 1 ? 'bg-subtle/50' : ''}>
                 {row.map((cell, cellIndex) => (
                   <td key={cellIndex} className={`px-3.5 py-2.5 align-top leading-relaxed ${cellIndex === 0 ? 'font-medium text-primary' : 'text-secondary'}`}>
                     {cell}
@@ -141,7 +148,26 @@ function DiagramBlockView({ source }: { source: string }) {
     (async () => {
       try {
         const mermaid = (await import('mermaid')).default;
-        mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'strict' });
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: 'base',
+          securityLevel: 'strict',
+          themeVariables: {
+            background: '#FFFFFF',
+            fontFamily: "'Baloo 2', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif",
+            fontSize: '14px',
+            primaryColor: '#FFF4E6',
+            primaryTextColor: '#1F1F1F',
+            primaryBorderColor: '#FFD8A8',
+            lineColor: '#D9D9D9',
+            secondaryColor: '#F5F5F5',
+            tertiaryColor: '#F5F5F5',
+            edgeLabelBackground: '#FFFFFF',
+            clusterBkg: '#F7F7F5',
+            clusterBorder: '#E5E5E0',
+          },
+          flowchart: { curve: 'basis', padding: 18, nodeSpacing: 44, rankSpacing: 52, useMaxWidth: true },
+        });
         const { svg } = await mermaid.render(`diagram-${Date.now()}-${Math.random().toString(36).slice(2)}`, source);
         if (!cancelled && el) el.innerHTML = svg;
       } catch {
@@ -152,17 +178,21 @@ function DiagramBlockView({ source }: { source: string }) {
   }, [source]);
 
   return (
-    <div className="rounded-2xl border border-black/6 bg-surface overflow-hidden">
-      <div className="bg-accent/4 px-4 py-2">
-        <BlockLabel icon="🗺️" label="流程图" />
+    <div className="rounded-2xl border border-black/[0.06] bg-surface shadow-card overflow-hidden">
+      <div className="flex items-center justify-between gap-3 border-b border-black/[0.045] bg-subtle/60 px-4 py-3">
+        <BlockLabel label="流程图" />
+        <span className="text-[11px] text-tertiary">示意图</span>
       </div>
       <div className="px-4 py-4">
         {error ? (
-          <pre className="overflow-x-auto text-[12px] leading-relaxed text-secondary">
+          <pre className="overflow-x-auto rounded-xl bg-subtle p-3 text-[12px] leading-relaxed text-secondary">
             <code>{source}</code>
           </pre>
         ) : (
-          <div ref={containerRef} className="flex justify-center [&_svg]:max-w-full [&_svg]:h-auto" />
+          <div
+            ref={containerRef}
+            className="flex min-h-[180px] justify-center [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full [&_svg]:overflow-visible [&_.nodeLabel]:font-medium [&_.nodeLabel]:text-[#1F1F1F] [&_.edgeLabel]:bg-white [&_.flowchart-link]:stroke-[#D9D9D9]"
+          />
         )}
       </div>
     </div>

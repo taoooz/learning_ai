@@ -67,6 +67,31 @@ class UserDataStore:
     def save_courses(self, account_id: str, courses: list[dict]) -> None:
         self._atomic_write(self._courses_path(account_id), json.dumps(courses, ensure_ascii=False))
 
+    def delete_course(self, account_id: str, course_id: str) -> bool:
+        """删除课程主对象、章节学习容器和参与信号，返回课程是否原本存在。"""
+        courses = self.load_courses(account_id)
+        next_courses = [course for course in courses if course.get("courseId") != course_id]
+        existed = len(next_courses) != len(courses)
+        if existed:
+            self.save_courses(account_id, next_courses)
+
+        lessons_dir = self._account_dir(account_id) / "lessons"
+        prefix = "".join(c for c in course_id if c.isalnum() or c == "-") + "__"
+        if lessons_dir.exists():
+            for path in lessons_dir.glob(f"{prefix}*.json"):
+                try:
+                    path.unlink()
+                except OSError:
+                    print(f"[UserDataStore] lesson 删除失败: {path.name}")
+
+        try:
+            self._engagement_path(account_id, course_id).unlink()
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            print(f"[UserDataStore] engagement 删除失败: {exc}")
+        return existed
+
     # ---- 学习容器（乐观锁） ----
 
     def load_lesson(self, account_id: str, course_id: str, chapter_id: str) -> dict | None:

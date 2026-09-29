@@ -140,6 +140,8 @@ export interface QuotaFallbackResult {
   archivedChapterIds: string[];
   /** P5.1：服务端乐观锁冲突（409），调用方提示用户决策 */
   conflict?: boolean;
+  /** P5.1：服务端返回的最新 revision；冲突恢复与下一次 CAS 更新需要 */
+  serverUpdatedAt?: number;
 }
 
 /**

@@ -3,7 +3,7 @@ Content Recipe 流式解析器
 
 LLM 按 prompt 约束输出 :::type…::: 定界符标记的结构化块。
 解析器将混合输出实时拆分：
-- markdown 段落 → 逐行作为 markdown 块增量（过滤 ::: 标记行）
+- markdown 段落 → 尽可能按字符增量输出；完整行用于识别 ::: 标记
 - :::type…::: 结构化块 → 缓存到完整后解析为结构化块 dict 一次性产出
 
 块 ID 全局递增（b1、b2…），markdown 与结构化块共享序号。
@@ -24,7 +24,11 @@ def _after_colon(s: str) -> str:
 
 
 class ContentStreamParser:
-    """逐行状态机：markdown 模式 ↔ 结构化块模式"""
+    """流式状态机：markdown 模式 ↔ 结构化块模式
+
+    markdown 内容按字符增量输出；只有可能成为 ::: 标记的前缀会等到换行后再判定，
+    避免把半截标记误当成正文。结构化块仍缓存到完整后一次性产出。
+    """
 
     def __init__(self):
         self._line_buf = ""
@@ -41,6 +45,15 @@ class ContentStreamParser:
         while "\n" in self._line_buf:
             line, self._line_buf = self._line_buf.split("\n", 1)
             events.extend(self._handle_line(line))
+
+        # 行缓冲原本会让 markdown 一直等到换行才展示。为了更接近文字流，
+        # 这里在安全时把未满一行的正文立即发出；::: 标记前缀继续缓冲。
+        if self._mode == "markdown" and self._line_buf and not self._line_buf.lstrip().startswith(":"):
+            delta = self._line_buf
+            self._line_buf = ""
+            self._ensure_markdown_block()
+            self._markdown_text[self._markdown_id] += delta
+            events.append({"kind": "markdown_delta", "blockId": self._markdown_id, "delta": delta})
         return events
 
     def finish(self) -> list[dict]:

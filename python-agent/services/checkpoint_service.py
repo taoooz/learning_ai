@@ -119,9 +119,11 @@ async def generate_checkpoint(
     task_goal: str,
     objective_id: str,
     task_content_summary: str,
+    evidence: str | None = None,
+    sources: list[dict] | None = None,
     client: MiniMaxClient | None = None,
 ) -> CheckpointDefinitionModel:
-    """调用 LLM 生成一道结构化 Checkpoint（含重试）"""
+    """调用 LLM 生成一道结构化 Checkpoint（含重试；证据包约束正确答案）"""
     client = client or MiniMaxClient()
     system_prompt = build_checkpoint_prompt(
         course_topic=course_topic,
@@ -130,9 +132,18 @@ async def generate_checkpoint(
         task_title=task_title,
         task_goal=task_goal,
         task_content_summary=task_content_summary,
+        evidence=evidence,
+        sources=sources,
     )
     raw = await _call_for_json(client, system_prompt, "请生成一道理解检查题。只输出 JSON 对象，不要输出其他文字。")
-    return _validate_definition(raw, task_id, objective_id)
+    definition = _validate_definition(raw, task_id, objective_id)
+    # sourceRefs 由服务端确定性附加，不采信模型输出，避免幻觉来源。
+    definition.sourceRefs = [
+        {"title": str(source.get("title") or "")[:80], "url": str(source.get("url") or "")}
+        for source in (sources or [])
+        if source.get("url")
+    ][:4]
+    return definition
 
 
 def evaluate_checkpoint(
@@ -200,12 +211,24 @@ async def generate_remediation(
     correct_answer: str,
     original_hint: str,
     task_content_summary: str,
+    evidence: str | None = None,
+    sources: list[dict] | None = None,
     client: MiniMaxClient | None = None,
 ) -> dict:
     """LLM 生成补救内容 + 等价不同题的新检查（§2.7 补救流程，含重试）"""
     from prompts.checkpoint import REMEDIATION_PROMPT
 
     client = client or MiniMaxClient()
+    evidence_section = ""
+    if evidence:
+        source_lines = "\n".join(
+            f"- {source.get('title', '')}（{source.get('url', '')}）"
+            for source in (sources or [])
+        )
+        evidence_section = REMEDIATION_PROMPT["remediation_evidence"].format(
+            evidence=evidence,
+            source_lines=source_lines,
+        )
     system_prompt = (
         REMEDIATION_PROMPT["role"]
         + "\n"
@@ -220,13 +243,21 @@ async def generate_remediation(
             original_hint=original_hint,
             task_content_summary=task_content_summary,
         )
+        + evidence_section
         + "\n"
         + REMEDIATION_PROMPT["output_format"]
     )
     raw = await _call_for_json(client, system_prompt, "请生成补救内容和新检查题。只输出 JSON 对象，不要输出其他文字。")
     if "remediationContent" not in raw or "newCheckpoint" not in raw:
         raise ValueError("补救响应缺少 remediationContent 或 newCheckpoint")
-    return _normalize_new_checkpoint(raw)
+    result = _normalize_new_checkpoint(raw)
+    # 与原始检查题一致：来源由服务端确定性附加，不采信模型输出。
+    result["newCheckpoint"]["sourceRefs"] = [
+        {"title": str(source.get("title") or "")[:80], "url": str(source.get("url") or "")}
+        for source in (sources or [])
+        if source.get("url")
+    ][:4]
+    return result
 
 
 def _normalize_new_checkpoint(raw: dict) -> dict:

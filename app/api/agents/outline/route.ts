@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { PYTHON_AGENT_URL } from '@/lib/agent-config';
+import { PYTHON_AGENT_URL, pythonAgentHeaders } from '@/lib/agent-config';
 import { requireAuth } from '@/lib/api-response';
 
 export const dynamic = 'force-dynamic';
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
 
     const response = await fetch(agentUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: pythonAgentHeaders(),
       body: JSON.stringify(agentBody),
     });
 

@@ -6,6 +6,10 @@
 import type { CourseBlueprintV2, NodeLessonV2, StoredCourseV2 } from '@/types/learning-v2';
 import type { EngagementEvent } from './engagement';
 import {
+  getStoredDataV2,
+  saveStoredDataV2,
+} from '@/lib/storage';
+import {
   getStoredCourseV2,
   loadNodeLessonV2,
   saveNodeLessonV2WithQuotaFallback,
@@ -16,10 +20,27 @@ import {
 export interface LessonRepository {
   loadCourse(courseId: string): Promise<StoredCourseV2 | null>;
   saveCourse(course: StoredCourseV2): Promise<boolean>;
+  deleteCourse(courseId: string): Promise<boolean>;
   loadLesson(courseId: string, chapterId: string): Promise<NodeLessonV2 | null>;
-  /** 返回 saved=false = 配额失败且归档后仍失败（调用方走既有用户提示路径） */
-  saveLesson(courseId: string, chapterId: string, lesson: NodeLessonV2, blueprint: CourseBlueprintV2): Promise<QuotaFallbackResult>;
+  /**
+   * expectedUpdatedAt 必须是「最后一次读到的服务端 revision」；server 模式用于乐观锁。
+   * 返回 saved=false = 配额失败/冲突且归档后仍失败（调用方走用户可见恢复路径）。
+   */
+  saveLesson(
+    courseId: string,
+    chapterId: string,
+    lesson: NodeLessonV2,
+    blueprint: CourseBlueprintV2,
+    expectedUpdatedAt?: number | null,
+  ): Promise<QuotaFallbackResult>;
   appendEngagement(courseId: string, events: EngagementEvent[]): Promise<void>;
+}
+
+export type LessonStoreMode = 'local' | 'server';
+
+/** 当前仓库模式；server 时课程主对象与章节容器以服务端为主。 */
+export function getLessonStoreMode(): LessonStoreMode {
+  return process.env.NEXT_PUBLIC_LESSON_STORE === 'server' ? 'server' : 'local';
 }
 
 /** localStorage 实现：现有函数的薄 Promise 包装（保持现有行为与 SSR 安全） */
@@ -30,6 +51,16 @@ export class LocalLessonRepository implements LessonRepository {
 
   async saveCourse(course: StoredCourseV2): Promise<boolean> {
     return saveStoredCourseV2(course);
+  }
+
+  async deleteCourse(courseId: string): Promise<boolean> {
+    const data = getStoredDataV2();
+    const courses = data.v2Courses ?? [];
+    if (!courses.some((course) => course.courseId === courseId)) return false;
+    return saveStoredDataV2({
+      ...data,
+      v2Courses: courses.filter((course) => course.courseId !== courseId),
+    });
   }
 
   async loadLesson(courseId: string, chapterId: string): Promise<NodeLessonV2 | null> {
@@ -55,6 +86,8 @@ export class LocalLessonRepository implements LessonRepository {
  * 设计文档 §3 API 契约；409 乐观锁冲突原样上抛给调用方决策
  */
 export class ServerLessonRepository implements LessonRepository {
+  private courseSaveQueue: Promise<unknown> = Promise.resolve();
+
   async loadCourse(courseId: string): Promise<StoredCourseV2 | null> {
     const response = await fetch('/api/user/courses', { method: 'GET' });
     if (!response.ok) return null;
@@ -64,19 +97,33 @@ export class ServerLessonRepository implements LessonRepository {
     return courses.find((c) => c.courseId === courseId) ?? null;
   }
 
-  async saveCourse(course: StoredCourseV2): Promise<boolean> {
-    // 全量保存账户课程列表：先读后写（课程列表低频写入，可接受）
-    const listResponse = await fetch('/api/user/courses', { method: 'GET' });
-    const courses: StoredCourseV2[] = listResponse.ok
-      ? (await listResponse.json()).courses ?? []
-      : [];
-    const next = [...courses.filter((c) => c.courseId !== course.courseId), course];
-    const response = await fetch('/api/user/courses', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ courses: next }),
-    });
-    return response.ok;
+  saveCourse(course: StoredCourseV2): Promise<boolean> {
+    // 同一客户端内串行 read-modify-write，避免课程自愈与章节完成互相覆盖。
+    const operation = async (): Promise<boolean> => {
+      const listResponse = await fetch('/api/user/courses', { method: 'GET' });
+      const courses: StoredCourseV2[] = listResponse.ok
+        ? (await listResponse.json()).courses ?? []
+        : [];
+      const next = [...courses.filter((c) => c.courseId !== course.courseId), course];
+      const response = await fetch('/api/user/courses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ courses: next }),
+      });
+      return response.ok;
+    };
+    this.courseSaveQueue = this.courseSaveQueue.then(operation, operation);
+    return this.courseSaveQueue as Promise<boolean>;
+  }
+
+  async deleteCourse(courseId: string): Promise<boolean> {
+    const response = await fetch(
+      `/api/user/courses?courseId=${encodeURIComponent(courseId)}`,
+      { method: 'DELETE' },
+    );
+    if (!response.ok) return false;
+    const body = await response.json().catch(() => null) as { ok?: unknown; existed?: unknown } | null;
+    return Boolean(body?.ok) && body?.existed === true;
   }
 
   async loadLesson(courseId: string, chapterId: string): Promise<NodeLessonV2 | null> {
@@ -92,6 +139,8 @@ export class ServerLessonRepository implements LessonRepository {
     courseId: string,
     chapterId: string,
     lesson: NodeLessonV2,
+    _blueprint: CourseBlueprintV2,
+    expectedUpdatedAt?: number | null,
   ): Promise<QuotaFallbackResult> {
     const response = await fetch('/api/user/lessons', {
       method: 'PUT',
@@ -100,15 +149,20 @@ export class ServerLessonRepository implements LessonRepository {
         courseId,
         chapterId,
         lesson,
-        expectUpdatedAt: lesson.updatedAt,
+        expectUpdatedAt: expectedUpdatedAt ?? undefined,
       }),
     });
     if (response.status === 409) {
-      // 乐观锁冲突：设计文档 §5 第一版策略——交给调用方提示用户决策
-      console.warn('[ServerLessonRepository] 409 冲突：服务端数据更新');
-      return { saved: false, archivedChapterIds: [], conflict: true };
+      const body = await response.json().catch(() => null) as { serverUpdatedAt?: unknown } | null;
+      const serverUpdatedAt = typeof body?.serverUpdatedAt === 'number' ? body.serverUpdatedAt : undefined;
+      return { saved: false, archivedChapterIds: [], conflict: true, serverUpdatedAt };
     }
-    return { saved: response.ok, archivedChapterIds: [] };
+    const body = response.ok ? await response.json().catch(() => null) as { serverUpdatedAt?: unknown } | null : null;
+    return {
+      saved: response.ok,
+      archivedChapterIds: [],
+      serverUpdatedAt: typeof body?.serverUpdatedAt === 'number' ? body.serverUpdatedAt : undefined,
+    };
   }
 
   async appendEngagement(courseId: string, events: EngagementEvent[]): Promise<void> {

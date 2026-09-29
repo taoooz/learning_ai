@@ -64,7 +64,7 @@ def _events(request: TaskStreamRequest, client) -> list[dict]:
 
 
 def test_full_event_sequence_single_markdown():
-    """无定界符纯 markdown → 单块流式（行缓冲粒度）"""
+    """无定界符纯 markdown → 单块流式（未满一行的正文立即发出）"""
     client = FakeStreamClient(deltas=["指令的核心是", "说清楚。\n\n", "> 好指令一次只说一件事。"])
     events = _events(_request(nextTaskTitle="对比好坏指令"), client)
 
@@ -72,6 +72,7 @@ def test_full_event_sequence_single_markdown():
     assert types == [
         "task_started",
         "content_block_started",
+        "content_block_delta",
         "content_block_delta",
         "content_block_delta",
         "content_block_delta",
@@ -84,11 +85,11 @@ def test_full_event_sequence_single_markdown():
     request_id = events[0]["requestId"]
     assert request_id.startswith("req-")
 
-    # 行缓冲：chunk 1-2 合并为一个完整行
-    full_text = "指令的核心是说清楚。\n\n> 好指令一次只说一件事。\n"
-    assert events[5]["payload"]["block"]["markdown"] == full_text
+    # 未满一行的正文立即流式；换行后的完整行仍合并输出
+    full_text = "指令的核心是说清楚。\n\n> 好指令一次只说一件事。"
+    assert events[6]["payload"]["block"]["markdown"] == full_text
 
-    task = events[6]["payload"]["task"]
+    task = events[7]["payload"]["task"]
     assert task["blocks"][0]["markdown"] == full_text
     assert task["boundaryPrompt"]["takeaway"] == "好指令一次只说一件事。"
     assert task["boundaryPrompt"]["nextHint"] == "接下来：对比好坏指令"
@@ -228,12 +229,18 @@ def test_rate_limited_maps_to_llm_rate_limited():
 
 
 def test_stream_broken_midway():
-    """流中断（已有增量但未满一行）→ UPSTREAM_STREAM_BROKEN"""
+    """流中断（已输出过增量）→ UPSTREAM_STREAM_BROKEN"""
     client = FakeStreamClient(deltas=["第一段。", "第二段。"], error=httpx.ReadError("boom"), error_after=1)
     events = _events(_request(), client)
     types = [e["type"] for e in events]
-    assert types == ["task_started", "request_error", "request_completed"]
-    assert events[1]["payload"]["code"] == "UPSTREAM_STREAM_BROKEN"
+    assert types == [
+        "task_started",
+        "content_block_started",
+        "content_block_delta",
+        "request_error",
+        "request_completed",
+    ]
+    assert events[-2]["payload"]["code"] == "UPSTREAM_STREAM_BROKEN"
 
 
 # ---- takeaway 提取 ----
@@ -293,6 +300,28 @@ def test_parser_incremental_feed():
     blocks_2 = p2.collect_blocks()
 
     assert blocks_1 == blocks_2
+
+
+def test_parser_streams_markdown_before_newline():
+    """markdown 未满一行时也能立即输出，而不是等换行"""
+    parser = ContentStreamParser()
+    first = parser.feed("第一段")
+    second = parser.feed("继续")
+    finish = parser.finish()
+    all_events = first + second + finish
+    deltas = [e["delta"] for e in all_events if e["kind"] == "markdown_delta"]
+    assert deltas == ["第一段", "继续"]
+    blocks = parser.collect_blocks()
+    assert blocks[0]["markdown"] == "第一段继续"
+
+
+def test_parser_holds_marker_prefix_until_newline():
+    """::: 前缀必须缓冲，不能把半截标记当正文输出"""
+    parser = ContentStreamParser()
+    assert parser.feed(":::") == []
+    assert parser.feed("key_point\n标题：定义\n- 要点1\n:::\n")
+    blocks = parser.collect_blocks()
+    assert [b["type"] for b in blocks] == ["key_point"]
 
 
 def test_parse_content_blocks_no_delimiter():
@@ -363,3 +392,77 @@ def test_parser_diagram_block():
 def test_parser_diagram_empty_source():
     blocks = parse_content_blocks(":::diagram\n:::\n")
     assert all(b["type"] != "diagram" for b in blocks)
+
+
+def test_task_level_search_uses_chapter_title_when_chapter_evidence_is_insufficient():
+    """章节证据不足且任务需要外部证据时：任务级补搜携带章节标题联合查询。"""
+    from unittest.mock import patch
+    import services.task_content_service as service
+
+    captured = {}
+
+    async def fake_build(course_topic, task_title, task_goal, chapter_title=""):
+        captured.update({
+            "courseTopic": course_topic,
+            "taskTitle": task_title,
+            "taskGoal": task_goal,
+            "chapterTitle": chapter_title,
+        })
+        return {
+            "evidence": "- React useActionState\n  官方 API\n  来源: https://react.dev/reference/react/useactionstate",
+            "sources": [{"title": "React useActionState", "url": "https://react.dev/reference/react/useactionstate"}],
+        }
+
+    fake_pack = {
+        "sources": [{
+            "title": "React 19 release notes",
+            "url": "https://react.dev/blog/react-19",
+            "summary": "React 19 changes",
+            "authorityScore": 90,
+        }]
+    }
+
+    request = _request()
+    request.chapter.title = "表单与状态"
+
+    with patch.object(service, "get_chapter_evidence", return_value=fake_pack), \
+         patch.object(service, "task_evidence_coverage", return_value={"covered": False, "matchedTerms": 0}), \
+         patch.object(service, "needs_search", return_value=True), \
+         patch.object(service, "build_evidence_pack_with_context", side_effect=fake_build):
+        events = _events(request, FakeStreamClient(deltas=["正文。\n\n> 要点。"]))
+
+    assert captured == {
+        "courseTopic": "提示词工程实践",
+        "taskTitle": "指令为什么需要说清楚",
+        "taskGoal": "理解指令三要素",
+        "chapterTitle": "表单与状态",
+    }
+    sources_event = next(event for event in events if event["type"] == "sources_ready")
+    assert sources_event["payload"]["sources"][0]["url"] == "https://react.dev/reference/react/useactionstate"
+
+
+def test_stable_task_reuses_chapter_evidence_without_extra_search():
+    """章节证据弱覆盖但任务本身无需搜索：仍复用章节证据，不额外请求。"""
+    from unittest.mock import patch
+    import services.task_content_service as service
+
+    fake_pack = {
+        "sources": [{
+            "title": "React 19 release notes",
+            "url": "https://react.dev/blog/react-19",
+            "summary": "React 19 changes",
+            "authorityScore": 90,
+        }]
+    }
+
+    async def fail_build(*args, **kwargs):
+        raise AssertionError("稳定任务不应触发补搜")
+
+    request = _request()
+    with patch.object(service, "get_chapter_evidence", return_value=fake_pack), \
+         patch.object(service, "task_evidence_coverage", return_value={"covered": False, "matchedTerms": 0}), \
+         patch.object(service, "needs_search", return_value=False), \
+         patch.object(service, "build_evidence_pack_with_context", side_effect=fail_build):
+        events = _events(request, FakeStreamClient(deltas=["正文。\n\n> 要点。"]))
+
+    assert any(event["type"] == "sources_ready" for event in events)

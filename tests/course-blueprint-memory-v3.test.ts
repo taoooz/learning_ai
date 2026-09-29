@@ -11,10 +11,10 @@ import {
   createEmptyMemoryStoreV3,
 } from '../lib/memory/aggregator';
 import { getPlanningMemoryPayload } from '../lib/memory/memory-agent';
-import { activateSystemCourse, clearLegacyLearningData, getStoredData, getSystemCourseRecommendations } from '../lib/storage';
+import { clearLegacyLearningData, getSystemCourseRecommendations } from '../lib/storage';
+import { createSystemCourseV2 } from '../lib/data/system-courses';
 import { buildCompactCourseBlueprintPrompt } from '../lib/prompt';
 import { validateCourseBlueprint } from '../lib/validation/course-validator';
-import { validateNodeLesson } from '../lib/validation/node-validator';
 
 test('deriveCourseTreeViewFromBlueprint maps blueprint nodes into lightweight course tree view', () => {
   const blueprint = {
@@ -288,50 +288,21 @@ test('clearLegacyLearningData removes old storage keys before v2 storage boots',
   assert.equal(data.has('ai-learning-data-v2'), true);
 });
 
-test('system course recommendations expose two preset guides and activation writes course into storage', () => {
+test('system course recommendations expose two presets and map into V2 courses', () => {
   const recommendations = getSystemCourseRecommendations();
   assert.equal(recommendations.length, 2);
-  assert.equal(recommendations.some((item) => item.title === 'AI 实战进阶课'), true);
+  assert.equal(recommendations.some((item) => item.title === 'AI实战进阶课'), true);
   assert.equal(recommendations.some((item) => item.title === '实战投资进阶课'), true);
 
-  const storageMap = new Map<string, string>();
-  const fakeStorage = {
-    getItem(key: string) {
-      return storageMap.get(key) ?? null;
-    },
-    setItem(key: string, value: string) {
-      storageMap.set(key, value);
-    },
-    removeItem(key: string) {
-      storageMap.delete(key);
-    },
-  };
-
-  const originalWindow = (globalThis as { window?: unknown }).window;
-  const originalLocalStorage = (globalThis as { localStorage?: unknown }).localStorage;
-  (globalThis as { window?: unknown }).window = { localStorage: fakeStorage };
-  (globalThis as { localStorage?: unknown }).localStorage = fakeStorage;
-
-  try {
-    const course = activateSystemCourse('system-ai-for-everyone');
-    const storedData = getStoredData();
-
-    assert.equal(course?.courseId, 'system-ai-for-everyone');
-    assert.equal(storedData.courses.some((item) => item.courseId === 'system-ai-for-everyone'), true);
-    assert.equal(storedData.currentCourseId, 'system-ai-for-everyone');
-  } finally {
-    if (originalWindow === undefined) {
-      delete (globalThis as { window?: unknown }).window;
-    } else {
-      (globalThis as { window?: unknown }).window = originalWindow;
-    }
-
-    if (originalLocalStorage === undefined) {
-      delete (globalThis as { localStorage?: unknown }).localStorage;
-    } else {
-      (globalThis as { localStorage?: unknown }).localStorage = originalLocalStorage;
-    }
-  }
+  const mapped = createSystemCourseV2('system-ai-for-everyone');
+  assert.equal(mapped?.courseId, 'system-ai-for-everyone');
+  assert.equal(mapped?.blueprint.protocolVersion, 2);
+  assert.equal(mapped?.treeView.chapters.length, 4);
+  // 首章可用，其余锁定，用户从头学起
+  assert.equal(mapped?.treeView.chapters[0]?.status, 'available');
+  assert.equal(mapped?.treeView.chapters[1]?.status, 'locked');
+  // 未注册的 courseId 返回 null，由页面提示
+  assert.equal(createSystemCourseV2('system-not-exist'), null);
 });
 
 test('appendEventToMemoryStoreV3 projects question and chat events into concept and topic views', () => {
@@ -582,110 +553,4 @@ test('validateCourseBlueprint accepts lightweight blueprint without assessment a
 
   assert.equal(result.passed, true);
   assert.deepEqual(result.issues, []);
-});
-
-test('validateNodeLesson accepts explicit concept coverage and target concept binding', () => {
-  const lesson = {
-    courseId: 'course-agent',
-    nodeIndex: 1,
-    title: '搞清工具调用为什么必要',
-    teachingGoal: '理解工具调用边界',
-    teachConceptIds: ['concept-tool-use'],
-    assessmentTargetIds: ['concept-tool-use'],
-    cards: [
-      {
-        id: 'card-1',
-        title: '为什么需要工具调用',
-        content: '工具调用让 Agent 能访问模型参数外的信息。',
-        imageUrl: null,
-        coveredConceptIds: ['concept-tool-use'],
-      },
-    ],
-    questions: [
-      {
-        id: 'q-1',
-        type: 'single' as const,
-        question: '什么时候应该调用工具？',
-        options: ['A. 需要外部信息时', 'B. 任何时候都调用'],
-        answer: 'A',
-        cardId: 'card-1',
-        targetConceptId: 'concept-tool-use',
-      },
-    ],
-  };
-
-  const result = validateNodeLesson(lesson, {
-    teachConceptIds: ['concept-tool-use'],
-    assessmentTargetIds: ['concept-tool-use'],
-    riskConceptIds: ['concept-tool-use'],
-  });
-
-  assert.equal(result.passed, true);
-  assert.deepEqual(result.issues, []);
-});
-
-test('validateNodeLesson rejects missing coveredConceptIds and invalid target concept ids', () => {
-  const lesson = {
-    courseId: 'course-agent',
-    nodeIndex: 1,
-    title: '搞清工具调用为什么必要',
-    teachingGoal: '理解工具调用边界',
-    teachConceptIds: ['concept-tool-use'],
-    assessmentTargetIds: ['concept-tool-use'],
-    cards: [
-      {
-        id: 'card-1',
-        title: '为什么需要工具调用',
-        content: '工具调用让 Agent 能访问模型参数外的信息。',
-        imageUrl: null,
-        coveredConceptIds: [],
-      },
-    ],
-    questions: [
-      {
-        id: 'q-1',
-        type: 'single' as const,
-        question: '什么时候应该调用工具？',
-        options: ['A. 需要外部信息时', 'B. 任何时候都调用'],
-        answer: 'A',
-        cardId: 'card-missing',
-        targetConceptId: 'concept-non-existent',
-      },
-    ],
-  };
-
-  const result = validateNodeLesson(lesson, {
-    teachConceptIds: ['concept-tool-use'],
-    assessmentTargetIds: ['concept-tool-use'],
-    riskConceptIds: ['concept-tool-use'],
-  });
-
-  assert.equal(result.passed, false);
-  assert.equal(result.issues.some((item) => item.includes('coveredConceptIds')), true);
-  assert.equal(result.issues.some((item) => item.includes('targetConceptId')), true);
-  assert.equal(result.issues.some((item) => item.includes('cardId')), true);
-});
-
-test('new blueprint prompt injects structured planning signals', () => {
-  const coursePrompt = buildCompactCourseBlueprintPrompt('Agent', {
-    learnerSnapshot: {
-      estimatedLevel: 'beginner',
-      confidence: 0.82,
-      targetGoal: '希望课程服务于 AI 产品经理相关成长',
-    },
-    mustCoverConceptIds: ['concept-tool-use'],
-    mustCoverConceptNames: ['工具调用'],
-    skippableConceptIds: ['concept-react-basic'],
-    skippableConceptNames: ['基础前端组件概念'],
-    riskConceptIds: ['concept-tool-use'],
-    riskConceptNames: ['工具调用'],
-    analogyFacts: [{ id: 'fact-1', text: '负责过埋点分析和实验设计' }],
-    recentEpisodes: [{ topic: 'Agent', summary: '上一门 Agent 课程已完成 3/6 节' }],
-  });
-
-  assert.match(coursePrompt, /课程目录大纲/);
-  assert.match(coursePrompt, /工具调用/);
-  assert.doesNotMatch(coursePrompt, /generationNotes/);
-  assert.doesNotMatch(coursePrompt, /coverage/);
-  assert.doesNotMatch(coursePrompt, /assessmentTargetIds/);
 });

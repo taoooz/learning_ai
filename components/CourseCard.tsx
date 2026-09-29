@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import type { CourseTree } from '@/types/course';
+import type { CourseListEntry } from '@/lib/learning-v2/course-list';
 
 const COURSE_PALETTES = [
   'bg-[linear-gradient(135deg,rgba(255,138,0,0.12),rgba(255,250,244,0.95)_42%,rgba(255,255,255,0.98))]',
@@ -10,24 +10,13 @@ const COURSE_PALETTES = [
   'bg-[linear-gradient(135deg,rgba(249,115,22,0.10),rgba(255,247,240,0.95)_42%,rgba(255,255,255,0.98))]',
 ];
 
-function getCourseProgress(course: CourseTree) {
-  const completed = course.nodes.filter((node) => node.status === 'completed').length;
-  const total = course.nodes.length;
-  const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
-  return { completed, total, percent };
-}
-
-function getNextNodeTitle(course: CourseTree) {
-  const nextNode = course.nodes.find((node) => node.status !== 'completed');
-  return nextNode?.title ?? '复习已完成内容';
-}
-
 interface CourseCardProps {
-  course: CourseTree;
+  course: CourseListEntry;
   index: number;
   onContinue: (courseId: string) => void;
   onDelete: (courseId: string) => void;
 }
+
 
 export function CourseCard({ course, index, onContinue, onDelete }: CourseCardProps) {
   const [showMenu, setShowMenu] = useState(false);
@@ -56,8 +45,7 @@ export function CourseCard({ course, index, onContinue, onDelete }: CourseCardPr
     };
   }, [showMenu]);
 
-  const progress = getCourseProgress(course);
-  const nextNodeTitle = getNextNodeTitle(course);
+  const nextChapterTitle = course.nextChapterTitle ?? '复习已完成内容';
   const palette = COURSE_PALETTES[index % COURSE_PALETTES.length];
 
   return (
@@ -68,11 +56,11 @@ export function CourseCard({ course, index, onContinue, onDelete }: CourseCardPr
         <div className="min-w-0 flex-1">
           <h3 className="text-[20px] font-bold text-primary line-clamp-2">{course.topic}</h3>
           <p className="mt-2 text-[15px] text-secondary line-clamp-1">
-            下一节：{nextNodeTitle}
+            下一节：{nextChapterTitle}
           </p>
         </div>
         <div className="rounded-2xl bg-white/80 px-3.5 py-2.5 text-right shadow-sm">
-          <div className="text-[24px] font-bold text-accent">{progress.percent}%</div>
+          <div className="text-[24px] font-bold text-accent">{course.percent}%</div>
           <div className="text-xs text-secondary">进度</div>
         </div>
       </div>

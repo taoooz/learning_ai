@@ -64,20 +64,17 @@ export function TaskBoundaryV2({ lesson, phase, attempts, onContinue, highlightC
   const progressLabel = failed
     ? '本节生成失败，可以重试'
     : nextTask
-      ? `第 ${currentIndex + 1}/${sortedTasks.length} 节 · 接下来：${nextTask.title}`
-      : `第 ${sortedTasks.length}/${sortedTasks.length} 节 · 本章内容已全部完成`;
+      ? `本章还剩 ${sortedTasks.length - currentIndex - 1} 节 · 接下来：${nextTask.title}`
+      : '本章内容已全部完成';
 
   return (
     <div className="sticky bottom-4 z-10 mt-8">
-      <div className="rounded-3xl border border-black/6 bg-surface/95 p-4 shadow-lg shadow-black/5 backdrop-blur">
-        {!failed && boundaryPrompt?.takeaway && (
-          <div className="mb-3 rounded-xl bg-accent/5 px-3.5 py-2.5">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-accent mb-1">本节要点</p>
-            <p className="text-[13px] leading-relaxed text-primary">{boundaryPrompt.takeaway}</p>
-          </div>
-        )}
+      <div className="rounded-3xl border border-black/[0.05] bg-surface/95 p-3.5 shadow-[0_10px_32px_rgba(15,23,42,0.10)] backdrop-blur-md">
         {!failed && boundaryPrompt?.nextHint && (
-          <p className="mb-3 text-[12px] text-tertiary">下一步：{boundaryPrompt.nextHint}</p>
+          <p className="mb-3 flex items-center gap-1.5 text-[12px] leading-relaxed text-tertiary">
+            <span aria-hidden>→</span>
+            <span>{boundaryPrompt.nextHint}</span>
+          </p>
         )}
         {failed && attempts >= 3 && (
           <p className="mb-3 text-[12px] leading-relaxed text-tertiary">
@@ -85,20 +82,26 @@ export function TaskBoundaryV2({ lesson, phase, attempts, onContinue, highlightC
           </p>
         )}
         {highlightContinue && !failed && (
-          <p className="mb-3 text-[12px] text-accent">听起来你已准备好，可以继续了</p>
+          <p className="mb-3 text-[12px] font-medium text-accent">听起来你已准备好，可以继续了</p>
         )}
-        <div className="flex items-center justify-between gap-3">
-          <p className="min-w-0 flex-1 truncate text-[12px] text-tertiary">{progressLabel}</p>
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px] font-medium text-primary">{nextTask ? '继续学习' : '完成本章'}</p>
+            <p className="mt-0.5 truncate text-[11px] text-tertiary">{progressLabel}</p>
+          </div>
           <button
             type="button"
             onClick={onContinue}
-            className={`shrink-0 rounded-full px-5 py-2.5 text-[14px] font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 ${
+            className={`flex h-11 shrink-0 items-center gap-2 rounded-full px-5 text-[14px] font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:shadow-none ${
               highlightContinue && !failed
                 ? 'animate-pulse bg-accent shadow-md shadow-accent/30'
-                : 'bg-accent'
+                : 'bg-accent shadow-sm shadow-accent/20'
             }`}
           >
-            {buttonLabel}
+            <span>{buttonLabel}</span>
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
           </button>
         </div>
       </div>

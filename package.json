@@ -12,8 +12,7 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "node --import tsx --test tests/*.test.ts",
-    "typecheck": "tsc --noEmit",
-    "generate:system-courses": "node --import tsx scripts/generate-system-courses.ts"
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",

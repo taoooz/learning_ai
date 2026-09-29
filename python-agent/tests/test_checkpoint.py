@@ -272,3 +272,134 @@ def test_extract_usage_missing_total_computes():
 def test_extract_usage_absent():
     assert extract_usage({}) is None
     assert extract_usage({"usage": None}) is None
+
+# ---- 证据化生成 ----
+
+from prompts.checkpoint import build_checkpoint_prompt  # noqa: E402
+
+
+def test_checkpoint_prompt_injects_evidence_constraints():
+    prompt = build_checkpoint_prompt(
+        course_topic="React 进阶实战",
+        chapter_title="Actions 与表单",
+        teaching_goal="理解 useActionState",
+        task_title="useActionState 的执行时机",
+        task_goal="理解状态更新与提交流程",
+        task_content_summary="讲解 useActionState 的参数和返回值。",
+        evidence="- useActionState 接受 Action 和 initial state\n  来源: https://react.dev/reference/react/useActionState",
+        sources=[{"title": "useActionState", "url": "https://react.dev/reference/react/useActionState"}],
+    )
+    assert "题目证据包" in prompt
+    assert "正确答案必须能被任务摘要或证据包直接支撑" in prompt
+    assert "证据不足时避免考版本号、默认值、边界细节" in prompt
+    assert "https://react.dev/reference/react/useActionState" in prompt
+
+
+def test_checkpoint_prompt_without_evidence_has_no_section():
+    prompt = build_checkpoint_prompt(
+        course_topic="写作表达",
+        chapter_title="结构化表达",
+        teaching_goal="能组织清晰段落",
+        task_title="总分总结构",
+        task_goal="理解段落组织",
+        task_content_summary="讲解总分总结构。",
+    )
+    assert "题目证据包" not in prompt
+
+
+def test_generate_checkpoint_attaches_deterministic_source_refs():
+    import asyncio
+    import json as jsonlib
+    from unittest.mock import AsyncMock
+
+    from services.checkpoint_service import generate_checkpoint
+
+    fake_client = AsyncMock()
+    fake_client.chat.return_value = {
+        "choices": [{
+            "message": {
+                "content": jsonlib.dumps({
+                    "kind": "scenario_choice",
+                    "prompt": "浏览器收到 304 时应该怎么做？",
+                    "options": [
+                        {"id": "a", "text": "重新下载资源"},
+                        {"id": "b", "text": "使用本地缓存"},
+                        {"id": "c", "text": "清空缓存"},
+                        {"id": "d", "text": "报错退出"},
+                    ],
+                    "correctAnswer": "b",
+                    "remediationHint": "304 表示资源未变化。",
+                }, ensure_ascii=False)
+            }
+        }]
+    }
+
+    checkpoint = asyncio.run(generate_checkpoint(
+        course_topic="Web 前端性能优化",
+        chapter_title="HTTP 缓存",
+        teaching_goal="理解协商缓存",
+        task_id="task-1",
+        task_title="HTTP 缓存",
+        task_goal="理解 304",
+        objective_id="obj-1",
+        task_content_summary="304 表示资源未变化。",
+        evidence="- HTTP 304 Not Modified\n  来源: https://developer.mozilla.org/docs/Web/HTTP/Status/304",
+        sources=[{"title": "HTTP 304", "url": "https://developer.mozilla.org/docs/Web/HTTP/Status/304"}],
+        client=fake_client,
+    ))
+
+    assert checkpoint.sourceRefs == [{
+        "title": "HTTP 304",
+        "url": "https://developer.mozilla.org/docs/Web/HTTP/Status/304",
+    }]
+
+
+def test_generate_remediation_injects_evidence_and_attaches_sources():
+    import asyncio
+    import json as jsonlib
+
+    fake_client = AsyncMock()
+    fake_client.chat.return_value = {
+        "choices": [{
+            "message": {
+                "content": jsonlib.dumps({
+                    "remediationContent": "补救说明",
+                    "newCheckpoint": {
+                        "kind": "scenario_choice",
+                        "prompt": "新题",
+                        "options": [
+                            {"id": "a", "text": "x"},
+                            {"id": "b", "text": "y"},
+                            {"id": "c", "text": "z"},
+                            {"id": "d", "text": "w"},
+                        ],
+                        "correctAnswer": "a",
+                        "remediationHint": "提示",
+                    },
+                }, ensure_ascii=False)
+            }
+        }]
+    }
+    result = asyncio.run(generate_remediation(
+        course_topic="Web 前端性能优化",
+        chapter_title="HTTP 缓存",
+        task_id="task-1",
+        task_title="协商缓存",
+        task_goal="理解 304",
+        original_prompt="原题",
+        user_answer="a",
+        correct_answer="b",
+        original_hint="提示",
+        task_content_summary="304 表示资源未变化。",
+        evidence="- HTTP 304 Not Modified\n  来源: https://developer.mozilla.org/docs/Web/HTTP/Status/304",
+        sources=[{"title": "HTTP 304", "url": "https://developer.mozilla.org/docs/Web/HTTP/Status/304"}],
+        client=fake_client,
+    ))
+
+    system_prompt = fake_client.chat.call_args.kwargs["messages"][0]["content"]
+    assert "补救证据包" in system_prompt
+    assert "补救讲解中的事实性结论必须能被任务摘要或证据包直接支撑" in system_prompt
+    assert result["newCheckpoint"]["sourceRefs"] == [{
+        "title": "HTTP 304",
+        "url": "https://developer.mozilla.org/docs/Web/HTTP/Status/304",
+    }]

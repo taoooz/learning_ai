@@ -6,9 +6,10 @@
 // - Enter 提交、Shift+Enter 换行；中文输入法组词期间（isComposing）Enter 不提交
 // - 触摸区域至少 44px（输入区与提交按钮均满足）
 // - tutorPlaceholder(phase) 为可测纯函数：边界提问直接回答，其余相位提交将排队（§3.3/§4）
-// - P2 四意图：快捷动作按钮发送预置问题文本触发模型意图分类（§2.6.2）
 
-import type { KeyboardEvent } from 'react';
+import { motion } from 'framer-motion';
+import { useEffect, useRef, type KeyboardEvent } from 'react';
+import { AssistantGlyph } from '../ui/chat/AssistantGlyph';
 import type { ChapterPhaseName } from '@/lib/learning-v2/tutor-orchestration';
 
 /** 输入框占位文案：边界可直接提问；其余相位提交后先排队（测试锁定，勿改） */
@@ -59,6 +60,38 @@ export function InlineTutorInput({
   queuedCount,
   busy,
 }: InlineTutorInputProps) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // 聚焦本身不滚动页面。软键盘打开后，仅当输入框确实被压缩后的可视区域遮挡时才滚动。
+  useEffect(() => {
+    const element = textareaRef.current;
+    if (!element) return;
+
+    const checkOcclusion = () => {
+      const visualViewport = window.visualViewport;
+      const rect = element.getBoundingClientRect();
+      const visibleTop = visualViewport?.offsetTop ?? 0;
+      const visibleBottom = visibleTop + (visualViewport?.height ?? window.innerHeight);
+      if (rect.bottom > visibleBottom + 8 || rect.top < visibleTop - 8) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    };
+
+    const handleFocus = () => {
+      // focus 时键盘通常尚未完全打开；分帧检查，避免用固定比例误判。
+      window.requestAnimationFrame(checkOcclusion);
+      window.setTimeout(checkOcclusion, 250);
+      window.setTimeout(checkOcclusion, 600);
+    };
+
+    element.addEventListener('focus', handleFocus);
+    window.visualViewport?.addEventListener('resize', checkOcclusion);
+    return () => {
+      element.removeEventListener('focus', handleFocus);
+      window.visualViewport?.removeEventListener('resize', checkOcclusion);
+    };
+  }, []);
+
   const handleSubmit = (text?: string) => {
     if (disabled) return;
     const trimmed = (text ?? value).trim();
@@ -77,48 +110,43 @@ export function InlineTutorInput({
   const hint = tutorHint(busy, queuedCount);
 
   return (
-    <div className="mt-4">
+    <div className="relative mt-5">
+      <div className="pointer-events-none absolute inset-0 rounded-[24px] bg-[radial-gradient(circle_at_24%_18%,rgba(152,184,232,0.13),rgba(152,184,232,0)_48%),radial-gradient(circle_at_78%_80%,rgba(127,191,195,0.12),rgba(127,191,195,0)_52%)]" />
       <div
-        className={`flex items-end gap-2 rounded-2xl border border-black/6 bg-surface p-2 shadow-sm ${
-          disabled ? 'opacity-60' : ''
+        className={`relative flex items-end gap-2 rounded-[22px] border bg-white/90 p-2 shadow-[0_8px_24px_rgba(15,23,42,0.05)] backdrop-blur-sm transition-colors ${
+          disabled
+            ? 'border-black/[0.05] opacity-60'
+            : 'border-black/[0.06] focus-within:border-[rgba(127,191,195,0.42)] focus-within:shadow-[0_10px_28px_rgba(127,191,195,0.14)]'
         }`}
       >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[14px] bg-[linear-gradient(180deg,rgba(255,255,255,0.72),rgba(221,232,246,0.72))] shadow-[0_8px_16px_rgba(127,191,195,0.12)]">
+          <AssistantGlyph className="h-5 w-5" />
+        </span>
         <label htmlFor="inline-tutor-input" className="sr-only">
           针对本节内容提问
         </label>
         <textarea
+          ref={textareaRef}
           id="inline-tutor-input"
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder}
+          placeholder={placeholder ?? '哪里卡住了，直接问我'}
           disabled={disabled}
           rows={1}
-          className="max-h-28 min-h-[44px] flex-1 resize-none bg-transparent px-2 py-2.5 text-[14px] leading-relaxed text-primary outline-none placeholder:text-tertiary disabled:cursor-not-allowed"
+          className="max-h-28 min-h-[44px] flex-1 resize-none bg-transparent px-2 py-2.5 text-[14px] leading-relaxed text-primary outline-none placeholder:text-secondary/70 disabled:cursor-not-allowed"
         />
-        <button
+        <motion.button
           type="button"
           onClick={() => handleSubmit()}
+          whileHover={disabled || !value.trim() ? undefined : { y: -1 }}
+          whileTap={disabled || !value.trim() ? undefined : { y: 1, scale: 0.98 }}
           disabled={disabled || value.trim().length === 0}
-          className="h-11 shrink-0 rounded-full bg-accent px-5 text-[14px] font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:cursor-not-allowed disabled:bg-accent/40"
+          className="inline-flex h-11 min-w-[76px] shrink-0 items-center justify-center rounded-[16px] bg-[linear-gradient(135deg,#98B8E8,#7FBFC3)] px-4 text-[14px] font-semibold text-white shadow-[0_10px_20px_rgba(127,191,195,0.20)] disabled:cursor-not-allowed disabled:opacity-45"
         >
-          提问
-        </button>
+          {busy ? '思考中' : '发送'}
+        </motion.button>
       </div>
-      {!disabled && (
-        <div className="mt-2 flex gap-2 px-1">
-          {QUICK_ACTIONS.map((action) => (
-            <button
-              key={action.label}
-              type="button"
-              onClick={() => handleSubmit(action.question)}
-              className="rounded-full border border-black/8 px-3 py-1.5 text-[12px] text-secondary transition-colors hover:bg-black/4 active:bg-black/8"
-            >
-              {action.label}
-            </button>
-          ))}
-        </div>
-      )}
       {hint && (
         <p role="status" className="mt-2 px-1 text-[12px] text-tertiary">
           {hint}

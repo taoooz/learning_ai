@@ -5,6 +5,7 @@
 // 开放式类型（self_explanation / micro_practice / error_diagnosis）待回归样本验证后启用
 
 import type { GenerationMeta } from './generation-meta';
+import type { SourceRef } from './learning-stream';
 
 /**
  * Checkpoint 题型。
@@ -51,6 +52,8 @@ export interface CheckpointDefinition {
   /** 补救提示（首次回答错误后展示） */
   remediationHint: string;
   estimatedSeconds: number;
+  /** 题目生成时参考的权威来源（服务端确定性附加，不采信模型输出） */
+  sourceRefs?: SourceRef[];
   generationMeta: GenerationMeta;
 }
 

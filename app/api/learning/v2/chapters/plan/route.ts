@@ -4,7 +4,7 @@
 // 上游错误体含 {ok, code, message, retryable}，状态码与 code 原样转发，前端据此决定重试与提示
 
 import { NextRequest } from 'next/server';
-import { PYTHON_AGENT_URL } from '@/lib/agent-config';
+import { PYTHON_AGENT_URL, pythonAgentHeaders } from '@/lib/agent-config';
 import { requireAuth } from '@/lib/api-response';
 
 export const dynamic = 'force-dynamic';
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
   try {
     const response = await fetch(`${PYTHON_AGENT_URL}/api/learning/v2/chapters/plan`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: pythonAgentHeaders(),
       body: JSON.stringify(body),
     });
 

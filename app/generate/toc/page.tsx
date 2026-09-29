@@ -5,14 +5,14 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useCourse } from '@/contexts/CourseContext';
 import { CourseHeaderBar } from '@/components/CourseHeaderBar';
-import { createStoredCourseBundleFromBlueprint } from '@/lib/course-blueprint';
 import { getUserProfile } from '@/lib/storage';
 import { getPlanningMemoryPayload, getUserMemoryStoreSnapshot } from '@/lib/memory';
 import { parseSSEStream } from '../chat/utils/sseParser';
 import { mapTocToBlueprintV2 } from '@/lib/learning-v2/blueprint-map';
 import { validateCourseBlueprintV2 } from '@/lib/learning-v2/validators';
-import { createStoredCourseV2, saveStoredCourseV2 } from '@/lib/learning-v2/storage';
-import type { CourseBlueprint, StoredCourseBundle, OutlineLearnerPositioning } from '@/types/course';
+import { createStoredCourseV2 } from '@/lib/learning-v2/storage';
+import { createAndSaveStoredCourseV2 } from '@/lib/learning-v2/dispatch';
+import type { OutlineLearnerPositioning } from '@/types/course';
 
 interface PendingOutline {
   topic: string;
@@ -25,7 +25,7 @@ function TocPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const topic = searchParams.get('topic') || '';
-  const { addCourse, generateNodeContent } = useCourse();
+  const { refreshCourses } = useCourse();
   const [error, setError] = useState<string | null>(null);
 
   // 流式展示状态
@@ -110,59 +110,32 @@ function TocPageContent() {
 
         setIsComplete(true);
 
-        const blueprint: CourseBlueprint = {
-          courseId: `course-${Date.now()}`,
-          topic: finalCourseName,
-          learnerPositioning: {
-            estimatedLevel: outline.learnerPositioning.estimatedLevel,
+        // TOC 结果映射为 V2 蓝图（唯一课程协议）。校验或落盘失败都视为生成失败，不再降级到 V1。
+        const courseId = `course-${Date.now()}`;
+        const v2Blueprint = mapTocToBlueprintV2({
+          courseId,
+          courseName: finalCourseName,
+          description: finalDescription || outline.learningGoal,
+          nodes: finalNodes,
+          outline: {
+            topic: outline.topic,
+            learningDirection: outline.learningDirection,
+            learningGoal: outline.learningGoal,
+            learnerPositioning: outline.learnerPositioning,
           },
-          courseGoal: finalDescription || outline.learningGoal,
-          globalConcepts: [],
-          nodes: finalNodes.map((n: { index: number; title: string; description: string }) => ({
-            index: n.index,
-            title: n.title,
-            teachingGoal: n.description,
-            teachConceptIds: [],
-            prerequisiteConceptIds: [],
-            bridgeFromPreviousNode: '',
-            status: 'available' as const,
-          })),
-        };
+        });
 
-        addCourse(createStoredCourseBundleFromBlueprint(blueprint));
-
-        // V2 双写：TOC 结果映射为 V2 蓝图。校验通过且落盘成功 → 课程走 V2 学习流，
-        // 跳过 V1 节点预热（章节内容按需生成）；任何一步失败 → 降级纯 V1 全链路（含预热），绝不半写
-        let v2Saved = false;
-        try {
-          const v2Blueprint = mapTocToBlueprintV2({
-            courseId: blueprint.courseId,
-            courseName: finalCourseName,
-            description: finalDescription || outline.learningGoal,
-            nodes: finalNodes,
-            outline: {
-              topic: outline.topic,
-              learningDirection: outline.learningDirection,
-              learningGoal: outline.learningGoal,
-              learnerPositioning: outline.learnerPositioning,
-            },
-          });
-          const validation = validateCourseBlueprintV2(v2Blueprint);
-          if (validation.passed) {
-            v2Saved = saveStoredCourseV2(createStoredCourseV2(blueprint.courseId, v2Blueprint));
-            if (!v2Saved) {
-              console.warn('[TOC Page] V2 课程落盘失败，降级纯 V1');
-            }
-          } else {
-            console.warn('[TOC Page] V2 蓝图校验未通过，降级纯 V1：', validation.issues);
-          }
-        } catch (err) {
-          console.warn('[TOC Page] V2 蓝图映射失败，降级纯 V1：', err);
+        const validation = validateCourseBlueprintV2(v2Blueprint);
+        if (!validation.passed) {
+          throw new Error(`课程结构校验未通过：${validation.issues.join('；')}`);
         }
 
-        if (!v2Saved) {
-          generateNodeContent(blueprint.courseId, 0).catch(() => {});
+        const saved = await createAndSaveStoredCourseV2(createStoredCourseV2(courseId, v2Blueprint));
+        if (!saved) {
+          throw new Error('课程保存失败，请检查存储空间后重试');
         }
+        refreshCourses();
+
         sessionStorage.removeItem('pendingOutline');
 
         // 倒计时跳转
@@ -172,7 +145,7 @@ function TocPageContent() {
           remaining -= 1;
           if (remaining <= 0) {
             clearInterval(countdownInterval);
-            router.push(`/course/${blueprint.courseId}`);
+            router.push(`/course/${courseId}`);
           } else {
             setCountdown(remaining);
           }
@@ -187,7 +160,7 @@ function TocPageContent() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [addCourse, generateNodeContent, router]);
+  }, [refreshCourses, router]);
 
   // 错误状态
   if (error) {

@@ -8,6 +8,7 @@ import re
 from typing import Generator
 from lib.minimax_agent import AgentClient
 from lib.tools.search_tools import SEARCH_TOOLS, TOOL_FUNCTIONS
+from services.evidence_store import ensure_topic_evidence_pack_sync, evidence_to_prompt
 from services.toc_service import (
     build_toc_prompt,
     _extract_json_string_field,
@@ -34,7 +35,14 @@ def stream_toc_with_tools(
     Yields: SSE 格式字符串（data: {...}\n\n）
     """
     client = AgentClient()
-    system_prompt = build_toc_prompt(blueprint, planning_payload, user_profile)
+    topic = blueprint.get('topic', blueprint.get('learningDirection', ''))
+    evidence_pack = None
+    try:
+        evidence_pack = ensure_topic_evidence_pack_sync(topic)
+    except Exception as exc:  # noqa: BLE001 目录生成不因搜索失败阻塞
+        print(f"[TOC Agent] 课程证据包构建失败: {exc}")
+    evidence, sources = evidence_to_prompt(evidence_pack)
+    system_prompt = build_toc_prompt(blueprint, planning_payload, user_profile, evidence=evidence, sources=sources)
 
     messages = [
         {"role": "system", "content": system_prompt},

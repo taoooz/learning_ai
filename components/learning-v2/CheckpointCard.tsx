@@ -8,6 +8,7 @@
 
 import { useState } from 'react';
 import type { CheckpointDefinition, CheckpointEvaluation } from '@/types/learning-v2';
+import { SourceRefsView } from './SourceRefsView';
 
 interface CheckpointCardProps {
   checkpoint: CheckpointDefinition;
@@ -67,9 +68,15 @@ export function CheckpointCard({ checkpoint, evaluation, remediationContent, onS
   };
 
   return (
-    <div className="my-4 rounded-2xl border border-accent/20 bg-surface p-4 shadow-sm" data-checkpoint-id={checkpoint.checkpointId}>
-      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-accent">理解检查</p>
-      <p className="mb-4 text-[14px] font-medium leading-relaxed text-primary">{checkpoint.prompt}</p>
+    <section className="my-5 overflow-hidden rounded-3xl border border-accent/18 bg-surface shadow-card" data-checkpoint-id={checkpoint.checkpointId}>
+      <div className="border-b border-black/[0.045] bg-accent/[0.045] px-4 py-3.5">
+        <div className="flex items-center gap-2">
+          <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-accent">理解检查</p>
+        </div>
+        <p className="mt-2 text-[15px] font-semibold leading-[1.68] text-primary">{checkpoint.prompt}</p>
+      </div>
+      <div className="p-4">
 
       {/* scenario_choice：单选 */}
       {checkpoint.kind === 'scenario_choice' && checkpoint.options && !hasResult && (
@@ -77,8 +84,10 @@ export function CheckpointCard({ checkpoint, evaluation, remediationContent, onS
           {checkpoint.options.map((option) => (
             <label
               key={option.id}
-              className={`flex cursor-pointer items-start gap-2 rounded-xl border p-3 text-[13px] leading-relaxed transition-colors ${
-                selected === option.id ? 'border-accent bg-accent/8' : 'border-black/8 hover:bg-black/3'
+              className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-3.5 text-[13px] leading-[1.68] transition-all duration-200 ${
+                selected === option.id
+                  ? 'border-accent/45 bg-accent/[0.07] shadow-sm shadow-accent/10'
+                  : 'border-black/[0.08] bg-surface hover:border-accent/20 hover:bg-subtle/40'
               }`}
             >
               <input
@@ -87,7 +96,7 @@ export function CheckpointCard({ checkpoint, evaluation, remediationContent, onS
                 value={option.id}
                 checked={selected === option.id}
                 onChange={() => setSelected(option.id)}
-                className="mt-0.5 accent-[var(--color-accent)]"
+                className="mt-1 h-4 w-4 accent-[var(--color-accent)]"
               />
               <span>{option.text}</span>
             </label>
@@ -99,14 +108,14 @@ export function CheckpointCard({ checkpoint, evaluation, remediationContent, onS
       {checkpoint.kind === 'sequence' && checkpoint.sequenceItems && !hasResult && (
         <div className="space-y-2">
           {order.map((id, index) => (
-            <div key={id} className="flex items-center gap-2 rounded-xl border border-black/8 p-3 text-[13px]">
-              <span className="w-5 shrink-0 text-center font-semibold text-accent">{index + 1}</span>
+            <div key={id} className="flex items-center gap-3 rounded-2xl border border-black/[0.08] bg-surface p-3.5 text-[13px] shadow-sm transition-colors hover:border-accent/20">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-[11px] font-bold text-accent">{index + 1}</span>
               <span className="flex-1">{idToText(id)}</span>
               <div className="flex shrink-0 gap-1">
                 <button type="button" onClick={() => handleMove(index, -1)} disabled={index === 0}
-                  className="rounded p-1 text-tertiary hover:bg-black/5 disabled:opacity-30" aria-label="上移">↑</button>
+                  className="flex h-8 w-8 items-center justify-center rounded-xl text-tertiary transition-colors hover:bg-black/[0.05] hover:text-primary disabled:opacity-30" aria-label="上移">↑</button>
                 <button type="button" onClick={() => handleMove(index, 1)} disabled={index === order.length - 1}
-                  className="rounded p-1 text-tertiary hover:bg-black/5 disabled:opacity-30" aria-label="下移">↓</button>
+                  className="flex h-8 w-8 items-center justify-center rounded-xl text-tertiary transition-colors hover:bg-black/[0.05] hover:text-primary disabled:opacity-30" aria-label="下移">↓</button>
               </div>
             </div>
           ))}
@@ -126,7 +135,7 @@ export function CheckpointCard({ checkpoint, evaluation, remediationContent, onS
             disabled={disabled}
             rows={3}
             placeholder="用自己的话回答（至少 10 个字）…"
-            className="w-full resize-none rounded-xl border border-black/8 bg-transparent p-3 text-[13px] leading-relaxed text-primary outline-none placeholder:text-tertiary focus:border-accent/40 disabled:opacity-60"
+            className="w-full resize-none rounded-2xl border border-black/[0.08] bg-surface p-3.5 text-[13px] leading-relaxed text-primary outline-none transition-colors placeholder:text-tertiary focus:border-accent/35 disabled:opacity-60"
           />
           {checkpoint.rubric && (
             <p className="mt-2 text-[12px] leading-relaxed text-tertiary">
@@ -136,13 +145,19 @@ export function CheckpointCard({ checkpoint, evaluation, remediationContent, onS
         </div>
       )}
 
+      {checkpoint.sourceRefs && checkpoint.sourceRefs.length > 0 && (
+        <div className="mt-3">
+          <SourceRefsView sources={checkpoint.sourceRefs} label="题目来源" />
+        </div>
+      )}
+
       {/* 提交按钮 */}
       {!hasResult && (
         <button
           type="button"
           onClick={handleSubmit}
           disabled={!canSubmit}
-          className="mt-4 w-full rounded-full bg-accent py-2.5 text-[14px] font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:cursor-not-allowed disabled:bg-accent/40"
+          className="mt-5 w-full rounded-full bg-accent py-3 text-[14px] font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-accent/20 active:translate-y-0 disabled:cursor-not-allowed disabled:translate-y-0 disabled:bg-accent/35 disabled:shadow-none"
         >
           {isOpenEnded ? '提交回答' : '提交答案'}
         </button>
@@ -150,15 +165,15 @@ export function CheckpointCard({ checkpoint, evaluation, remediationContent, onS
 
       {/* 补救内容（§2.7：首次错误后 LLM 生成） */}
       {remediationContent && (
-        <div className="mt-4 rounded-xl bg-blue-50 p-3 text-[13px] leading-relaxed text-blue-900">
-          <p className="mb-1 font-semibold">补救讲解</p>
+        <div className="mt-4 rounded-2xl border border-info/15 bg-info/[0.055] p-3.5 text-[13px] leading-[1.7] text-primary">
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-info">补救讲解</p>
           <p>{remediationContent}</p>
         </div>
       )}
 
       {/* 评估结果 */}
       {hasResult && evaluation && (
-        <div className={`rounded-xl p-3 text-[13px] leading-relaxed ${evaluation.correct ? 'bg-green-50 text-green-800' : 'bg-orange-50 text-orange-800'}`}>
+        <div className={`rounded-2xl border p-3.5 text-[13px] leading-[1.7] ${evaluation.correct ? 'border-success/15 bg-success/[0.065] text-success' : 'border-warning/20 bg-warning/[0.07] text-warning'}`}>
           <p className="mb-1 font-semibold">{evaluation.correct ? '✓ 回答正确' : '✗ 回答不正确'}</p>
           <p>{evaluation.feedback}</p>
           {!evaluation.correct && evaluation.correctAnswer && (
@@ -171,13 +186,14 @@ export function CheckpointCard({ checkpoint, evaluation, remediationContent, onS
               type="button"
               onClick={onRequestRemediation ?? onRetry}
               disabled={remediating}
-              className="mt-3 rounded-full bg-orange-600 px-4 py-1.5 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50"
+              className="mt-3 rounded-full bg-warning px-4 py-2 text-[12px] font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:shadow-warning/20 disabled:translate-y-0 disabled:opacity-50 disabled:shadow-none"
             >
               {remediating ? '正在生成补救内容…' : '获取补救内容并重试'}
             </button>
           )}
         </div>
       )}
-    </div>
+      </div>
+    </section>
   );
 }

@@ -600,6 +600,40 @@ test('retrying a failed task resets half-written blocks instead of appending (§
   assert.equal(finalBlock.markdown, '完整内容');
 });
 
+test('consecutive tail errors replace the prior error card instead of stacking', () => {
+  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
+  lesson = applyLearningSseEvent(
+    lesson,
+    makeEvent({
+      type: 'request_error',
+      taskId: 'task-1',
+      sequence: 1,
+      payload: { code: 'NETWORK_ERROR', message: '网络连接失败，请检查网络后重试', retryable: true },
+    }),
+  );
+  const firstNotice = lesson.streamItems.find((item) => item.type === 'system_notice');
+  assert.ok(firstNotice && firstNotice.type === 'system_notice');
+
+  lesson = applyLearningSseEvent(
+    lesson,
+    makeEvent({
+      type: 'request_error',
+      taskId: 'task-1',
+      sequence: 2,
+      payload: { code: 'LLM_UNAVAILABLE', message: '任务流服务不可用，请稍后重试', retryable: true },
+    }),
+  );
+  const notices = lesson.streamItems.filter((item) => item.type === 'system_notice');
+  assert.equal(notices.length, 1);
+  const notice = notices[0];
+  assert.ok(notice && notice.type === 'system_notice');
+  assert.equal(notice.itemId, firstNotice.itemId);
+  assert.equal(notice.message, '任务流服务不可用，请稍后重试');
+  assert.equal(notice.taskId, 'task-1');
+  assert.equal(notice.retryable, true);
+  assert.equal(lesson.runtime.latestSequence >= 2, true);
+});
+
 test('request_warning appends a warning notice and advances sequence monotonically', () => {
   let lesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
   lesson = applyLearningSseEvent(lesson, makeEvent({ type: 'request_warning', sequence: 5, payload: { code: 'W1', message: '注意' } }));
@@ -626,6 +660,47 @@ test('appendSystemNotice works without an SSE event and increments sequence', ()
   const notice = next.streamItems.at(-1);
   assert.ok(notice && notice.type === 'system_notice');
   assert.equal(notice.message, '本地提示');
+});
+
+test('recap SSE events build a streaming recap then finalize it', () => {
+  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
+  lesson = applyLearningSseEvent(
+    lesson,
+    makeEvent({ type: 'recap_started', sequence: 1, timestamp: 1500, payload: {} }),
+  );
+  assert.equal(lesson.recap?.keyTakeaways.length, 0);
+  let recapItem = lesson.streamItems.find((item) => item.type === 'chapter_recap');
+  assert.ok(recapItem && recapItem.type === 'chapter_recap');
+  assert.equal(recapItem.status, 'streaming');
+
+  lesson = applyLearningSseEvent(
+    lesson,
+    makeEvent({ type: 'recap_takeaway', sequence: 2, timestamp: 1510, payload: { index: 0, takeaway: '要点一' } }),
+  );
+  lesson = applyLearningSseEvent(
+    lesson,
+    makeEvent({ type: 'recap_takeaway', sequence: 3, timestamp: 1520, payload: { index: 1, takeaway: '要点二' } }),
+  );
+  assert.deepEqual(lesson.recap?.keyTakeaways, ['要点一', '要点二']);
+  recapItem = lesson.streamItems.find((item) => item.type === 'chapter_recap');
+  assert.ok(recapItem && recapItem.type === 'chapter_recap');
+  assert.equal(recapItem.status, 'streaming');
+
+  const finalRecap: ChapterRecap = {
+    chapterId: 'ch-1',
+    keyTakeaways: ['要点一', '要点二', '要点三'],
+    demonstratedObjectives: [],
+    fragileObjectives: [],
+    unresolvedQuestions: [],
+  };
+  lesson = applyLearningSseEvent(
+    lesson,
+    makeEvent({ type: 'recap_completed', sequence: 4, timestamp: 1530, payload: { recap: finalRecap } }),
+  );
+  assert.deepEqual(lesson.recap?.keyTakeaways, ['要点一', '要点二', '要点三']);
+  recapItem = lesson.streamItems.find((item) => item.type === 'chapter_recap');
+  assert.ok(recapItem && recapItem.type === 'chapter_recap');
+  assert.equal(recapItem.status, 'complete');
 });
 
 test('applyChapterRecap is idempotent and does not drift sequence on re-apply', () => {

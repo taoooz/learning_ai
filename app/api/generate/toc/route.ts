@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { PYTHON_AGENT_URL } from '@/lib/agent-config';
+import { PYTHON_AGENT_URL, pythonAgentHeaders } from '@/lib/agent-config';
 import { requireAuth } from '@/lib/api-response';
 
 /**
@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
 
     const response = await fetch(`${PYTHON_AGENT_URL}/api/agents/toc/generate_agent`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: pythonAgentHeaders(),
       body: JSON.stringify({ blueprint, userProfile, planningPayload }),
     });
 

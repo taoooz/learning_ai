@@ -3,20 +3,19 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
-import type { CourseTree } from '@/types/course';
 import { useStreak } from '@/hooks/useStreak';
 
 interface CourseCelebrationSheetProps {
   isOpen: boolean;
   onClose: () => void;
-  course: CourseTree;
+  topic: string;
+  totalChapters: number;
 }
 
-export function CourseCelebrationSheet({ isOpen, onClose, course }: CourseCelebrationSheetProps) {
+export function CourseCelebrationSheet({ isOpen, onClose, topic, totalChapters }: CourseCelebrationSheetProps) {
   const router = useRouter();
   const { streakData } = useStreak();
 
-  const totalNodes = course.totalNodes || course.nodes.length;
 
   return (
     <AnimatePresence>
@@ -82,7 +81,7 @@ export function CourseCelebrationSheet({ isOpen, onClose, course }: CourseCelebr
               {/* 统计信息 */}
               <div className="mb-6 grid grid-cols-2 gap-3">
                 <div className="rounded-2xl bg-black/[0.03] p-4 text-center">
-                  <p className="text-[24px] font-bold text-primary">{totalNodes}</p>
+                  <p className="text-[24px] font-bold text-primary">{totalChapters}</p>
                   <p className="mt-0.5 text-[13px] text-secondary">章节完成</p>
                 </div>
                 <div className="rounded-2xl bg-black/[0.03] p-4 text-center">
@@ -94,7 +93,7 @@ export function CourseCelebrationSheet({ isOpen, onClose, course }: CourseCelebr
               {/* 课程名称 */}
               <div className="mb-6 rounded-2xl border border-black/[0.06] p-4">
                 <p className="text-[12px] font-medium uppercase tracking-wider text-tertiary">已完成课程</p>
-                <p className="mt-1 text-[15px] font-semibold text-primary">{course.topic}</p>
+                <p className="mt-1 text-[15px] font-semibold text-primary">{topic}</p>
               </div>
             </div>
 

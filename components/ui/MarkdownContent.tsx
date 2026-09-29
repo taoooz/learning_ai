@@ -10,8 +10,9 @@ interface MarkdownContentProps {
 
 export function MarkdownContent({ content }: MarkdownContentProps) {
   return (
-    <ReactMarkdown
-      components={{
+    <div className="prose">
+      <ReactMarkdown
+        components={{
         code({ inline, className, children, ...props }: any) {
           const match = /language-(\w+)/.exec(className || '');
           return !inline && match ? (
@@ -37,7 +38,8 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
         },
       }}
     >
-      {content}
-    </ReactMarkdown>
+        {content}
+      </ReactMarkdown>
+    </div>
   );
 }

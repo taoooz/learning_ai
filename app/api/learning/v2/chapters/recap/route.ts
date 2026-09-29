@@ -4,7 +4,7 @@
 // 上游错误体含 {ok, code, message, retryable}，状态码与 code 原样转发，前端据此决定兜底与提示
 
 import { NextRequest } from 'next/server';
-import { PYTHON_AGENT_URL } from '@/lib/agent-config';
+import { PYTHON_AGENT_URL, pythonAgentHeaders } from '@/lib/agent-config';
 import { requireAuth } from '@/lib/api-response';
 
 export const dynamic = 'force-dynamic';
@@ -44,17 +44,29 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const response = await fetch(`${PYTHON_AGENT_URL}/api/learning/v2/chapters/recap`, {
+    const response = await fetch(`${PYTHON_AGENT_URL}/api/learning/v2/chapters/recap/stream`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: pythonAgentHeaders(),
       body: JSON.stringify(body),
     });
 
     // 上游响应（成功或错误）原样转发，保留状态码与 code/message
-    const text = await response.text();
-    return new Response(text, {
+    if (!response.ok || !response.body) {
+      const text = await response.text();
+      return new Response(text || JSON.stringify({ ok: false, code: 'UPSTREAM_ERROR', message: '小结服务不可用，请稍后重试', retryable: true }), {
+        status: response.status || 502,
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      });
+    }
+
+    return new Response(response.body, {
       status: response.status,
-      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      },
     });
   } catch (error) {
     console.error('[V2 Recap Proxy] error:', error);

@@ -31,35 +31,46 @@ def needs_search(task_title: str, task_goal: str) -> bool:
     return bool(_SEARCH_HINT_RE.search(text))
 
 
-def _do_search(query: str) -> dict | None:
-    """同步执行搜索（在线程池中调用），返回证据包或 None"""
-    from lib.tools.search_tools import web_search
-
+def _do_search(query: str, preferred_domains: list[str] | None = None) -> dict | None:
+    """同步执行免费搜索；优先权威域，失败安全降级。"""
+    from lib.tools.search_tools import search_web_structured
     try:
-        result_text = web_search(query, max_results=4)
+        results = search_web_structured(query, max_results=4, preferred_domains=preferred_domains or [])
     except Exception as exc:  # noqa: BLE001
         print(f"[SearchEvidence] 搜索异常: {exc}")
         return None
-    if not result_text or "未找到相关结果" in result_text or "搜索出错" in result_text:
+    if not results:
         return None
 
-    # 解析来源（web_search 行格式：- title\n  body\n  来源: href）
-    sources: list[dict] = []
-    current_title = ""
-    for line in result_text.splitlines():
-        line = line.strip()
-        if line.startswith("- ") and "\n" not in line:
-            current_title = line[2:].strip()
-        elif line.startswith("来源: ") and current_title:
-            sources.append({"title": current_title[:60], "url": line[4:].strip()})
-            current_title = ""
-    return {"evidence": result_text, "sources": sources}
+    lines = [f"- {item['title']}\n  {item['body']}\n  来源: {item['url']}" for item in results]
+    sources = [
+        {"title": item["title"][:60], "url": item["url"], "authorityScore": item["authorityScore"]}
+        for item in results
+    ]
+    return {"evidence": "\n\n".join(lines)[:3000], "sources": sources}
 
 
-async def build_evidence_pack(query: str) -> dict | None:
+async def build_evidence_pack(query: str, preferred_domains: list[str] | None = None) -> dict | None:
     """构建搜索证据包（线程池执行同步搜索）；失败返回 None 安全降级"""
     try:
-        return await asyncio.to_thread(_do_search, query)
+        return await asyncio.to_thread(_do_search, query, preferred_domains)
     except Exception as exc:  # noqa: BLE001
         print(f"[SearchEvidence] 证据包构建失败: {exc}")
         return None
+
+
+async def build_evidence_pack_with_context(
+    course_topic: str,
+    task_title: str,
+    task_goal: str,
+    chapter_title: str = "",
+) -> dict | None:
+    """结合课程/章节/任务上下文推断权威域，再走免费搜索。
+
+    章节标题会参与联合查询：章节证据不足以覆盖任务时，补搜结果更贴近当前教学块。
+    """
+    from lib.tools.source_registry import infer_preferred_domains
+
+    preferred_domains = infer_preferred_domains(course_topic, chapter_title, task_title, task_goal)
+    query = " ".join(part for part in (course_topic, chapter_title, task_title, task_goal) if part)
+    return await build_evidence_pack(query, preferred_domains)

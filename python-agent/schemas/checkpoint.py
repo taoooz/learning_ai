@@ -19,6 +19,14 @@ class CheckpointOption(BaseModel):
     text: str
 
 
+class SourceRefModel(BaseModel):
+    """Checkpoint 题目引用的权威来源"""
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    url: str
+
+
 class SequenceItem(BaseModel):
     """sequence 排序项"""
     model_config = ConfigDict(extra="forbid")
@@ -43,6 +51,7 @@ class CheckpointDefinitionModel(BaseModel):
     correctAnswer: Union[str, list[str]]
     remediationHint: str
     estimatedSeconds: int = Field(default=45, ge=10, le=120)
+    sourceRefs: list[SourceRefModel] = Field(default_factory=list)
 
 
 class CheckpointEvaluateRequest(BaseModel):

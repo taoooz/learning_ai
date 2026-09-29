@@ -85,6 +85,24 @@ def test_corrupt_courses_file_returns_empty(store, tmp_path):
     assert store.load_courses("user-a") == []
 
 
+def test_delete_course_removes_course_lessons_and_engagement(store):
+    store.save_courses("user-a", [
+        {"courseId": "c1", "blueprint": {"chapters": []}},
+        {"courseId": "c2", "blueprint": {"chapters": []}},
+    ])
+    store.save_lesson("user-a", "c1", "ch-1", {"updatedAt": 100})
+    store.save_lesson("user-a", "c2", "ch-1", {"updatedAt": 200})
+    store.append_engagement("user-a", "c1", [{"eventType": "chapter_opened", "at": 1}])
+
+    assert store.delete_course("user-a", "c1") is True
+    assert [course["courseId"] for course in store.load_courses("user-a")] == ["c2"]
+    assert store.load_lesson("user-a", "c1", "ch-1") is None
+    assert store.load_lesson("user-a", "c2", "ch-1") is not None
+    assert store._engagement_path("user-a", "c1").exists() is False
+
+    assert store.delete_course("user-a", "c1") is False
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
 

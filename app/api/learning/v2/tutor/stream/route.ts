@@ -4,7 +4,7 @@
 // 上游非 2xx 时原样转发错误体（如校验失败的 422 JSON），而不是抛通用 500
 
 import { NextRequest } from 'next/server';
-import { PYTHON_AGENT_URL } from '@/lib/agent-config';
+import { PYTHON_AGENT_URL, pythonAgentHeaders } from '@/lib/agent-config';
 import { requireAuth } from '@/lib/api-response';
 
 export const dynamic = 'force-dynamic';
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
   try {
     const response = await fetch(`${PYTHON_AGENT_URL}/api/learning/v2/tutor/stream`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: pythonAgentHeaders(),
       body: JSON.stringify(body),
       signal: nextRequest.signal,
     });

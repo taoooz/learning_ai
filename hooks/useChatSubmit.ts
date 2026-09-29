@@ -76,13 +76,8 @@ export function useChatSubmit(params: UseChatSubmitParams) {
     );
 
     try {
-      const { getStoredData } = await import('@/lib/storage');
-      const storedData = getStoredData();
-      const course = storedData.courses.find((c: any) => c.courseId === courseId);
-
-      if (!course) {
-        throw new Error('Course not found');
-      }
+      const { getCourseTopicV2 } = await import('@/lib/learning-v2/course-list');
+      const courseTopic = getCourseTopicV2(courseId) ?? courseTitle;
 
       // 限制历史消息：最多10条，且总长度不超过2000字符
       // 过期消息已凝结为对话摘要（conversationSummary）单独传递，不再重复发送原文
@@ -102,10 +97,10 @@ export function useChatSubmit(params: UseChatSubmitParams) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          courseTopic: course.topic,
+          courseTopic,
           messages: limitedMessages,
           chatMemory: getChatMemoryPayload({
-            topic: course.topic,
+            topic: courseTopic,
             currentNodeTitle: contextInfo?.currentNodeTitle,
             currentQuestion: questionContextRef.current?.question,
             userMemory: userMemory.memoryStore,

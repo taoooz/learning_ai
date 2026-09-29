@@ -120,6 +120,10 @@ export interface SystemNoticeItem extends StreamItemBase {
   tone: 'info' | 'warning' | 'error';
   message: string;
   code?: string;
+  /** 错误通知的可重试上下文：任务流错误绑定任务，答疑错误绑定问题 */
+  taskId?: string;
+  questionId?: string;
+  retryable?: boolean;
 }
 
 /**

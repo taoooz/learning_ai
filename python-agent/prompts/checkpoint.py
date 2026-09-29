@@ -86,8 +86,28 @@ def build_checkpoint_prompt(
     task_title: str,
     task_goal: str,
     task_content_summary: str,
+    evidence: str | None = None,
+    sources: list[dict] | None = None,
 ) -> str:
-    """构建 Checkpoint 生成 prompt"""
+    """构建 Checkpoint 生成 prompt；有证据包时约束题目与正确答案来源"""
+    evidence_section = ""
+    if evidence:
+        source_lines = "\n".join(
+            f"- {source.get('title', '')}（{source.get('url', '')}）"
+            for source in (sources or [])
+        )
+        evidence_section = (
+            "\n\n<checkpoint_evidence>\n"
+            "## 题目证据包\n"
+            f"{evidence}\n\n## 可引用来源\n{source_lines}\n\n"
+            "## 证据约束\n"
+            "- 正确答案必须能被任务摘要或证据包直接支撑\n"
+            "- 干扰项优先来自常见误解，但不得与证据矛盾\n"
+            "- 证据不足时避免考版本号、默认值、边界细节\n"
+            "- 所有选项必须互斥且只有一个最合理答案\n"
+            "- 排序题必须有唯一正确顺序，不能把并行事项强行排序\n"
+            "</checkpoint_evidence>"
+        )
     return build_prompt(
         "checkpoint",
         course_topic=course_topic,
@@ -96,7 +116,7 @@ def build_checkpoint_prompt(
         task_title=task_title,
         task_goal=task_goal,
         task_content_summary=task_content_summary,
-    )
+    ) + evidence_section
 
 REMEDIATION_PROMPT = {
     "role": """<role>
@@ -134,6 +154,21 @@ REMEDIATION_PROMPT = {
 {task_content_summary}
 </remediation_context>""",
 
+    "remediation_evidence": """
+
+## 补救证据包
+{evidence}
+
+## 可引用来源
+{source_lines}
+
+## 证据约束
+- 补救讲解中的事实性结论必须能被任务摘要或证据包直接支撑
+- 新题正确答案必须与原题考查同一核心概念，且仍被任务摘要或证据包支撑
+- 新题干扰项不得与证据矛盾，优先针对学习者的错误理解设计
+- 证据不足时避免补充版本号、默认值或边界细节
+""",
+
     "output_format": """<output_format>
 输出一个 JSON 对象（不要用代码围栏包裹，不要输出其他文字）：
 
@@ -153,6 +188,7 @@ REMEDIATION_PROMPT = {
 - remediationContent 必须与原任务内容的讲解方式不同（换比喻、换角度）
 - newCheckpoint 考查同一概念但绝不重复原题的场景和选项
 - 中文输出
+- 不要输出 sourceRefs；来源由服务端确定性附加
 </output_format>""",
 }
 

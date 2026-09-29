@@ -5,6 +5,7 @@
 
 import type { CourseTreeViewV2, NodeLessonV2, StoredCourseV2 } from '@/types/learning-v2';
 import { deriveCourseTreeViewV2, getStoredCourseV2, loadNodeLessonV2, saveStoredCourseV2 } from './storage';
+import { getLessonRepository, getLessonStoreMode } from './lesson-repository';
 
 /**
  * 章节是否可完成：所有章节状态停在边界，且计划任务全部完成/跳过。
@@ -22,7 +23,18 @@ export function canCompleteChapter(lesson: NodeLessonV2): boolean {
  * 章节完成后刷新课程主对象：以各章 lesson 真实状态重派生 treeView（解锁下一章）。
  * 走读时自愈同一条派生路径，主对象写失败也不影响 lesson 侧事实——课程页会再次自愈。
  */
-export function completeChapterV2(courseId: string, chapterId: string): boolean {
+export async function completeChapterV2(courseId: string, chapterId: string): Promise<boolean> {
+  if (getLessonStoreMode() === 'server') {
+    const repository = getLessonRepository();
+    const course = await repository.loadCourse(courseId);
+    if (!course) return false;
+    const completedChapterIds = course.treeView.chapters
+      .filter((chapter) => chapter.status === 'completed' || chapter.chapterId === chapterId)
+      .map((chapter) => chapter.chapterId);
+    const treeView = deriveCourseTreeViewV2(courseId, course.blueprint, completedChapterIds);
+    return repository.saveCourse({ ...course, treeView });
+  }
+
   const course = getStoredCourseV2(courseId);
   if (!course) return false;
   const lesson = loadNodeLessonV2(courseId, chapterId);

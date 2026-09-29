@@ -18,12 +18,6 @@ let getChatMemoryPayload: typeof import('../lib/memory/memory-agent').getChatMem
 let getPlanningMemoryPayload: typeof import('../lib/memory/memory-agent').getPlanningMemoryPayload;
 let getTeachingMemoryPayload: typeof import('../lib/memory/memory-agent').getTeachingMemoryPayload;
 let normalizeConceptKey: typeof import('../lib/memory/aggregator').normalizeConceptKey;
-let shouldEnterLearningPhase: typeof import('../contexts/CourseContext').shouldEnterLearningPhase;
-let hasResolvedQuestions: typeof import('../contexts/CourseContext').hasResolvedQuestions;
-let buildNodeContentPatch: typeof import('../contexts/CourseContext').buildNodeContentPatch;
-let buildNodeInfoPayload: typeof import('../contexts/CourseContext').buildNodeInfoPayload;
-let buildLearningSteps: typeof import('../contexts/CourseContext').buildLearningSteps;
-let getPendingNextNodeIndex: typeof import('../contexts/CourseContext').getPendingNextNodeIndex;
 
 test.before(async () => {
   const layoutModule = await import('../lib/course-tree-layout');
@@ -36,14 +30,6 @@ test.before(async () => {
 
   const repositoryModule = await import('../lib/memory/repository');
   createMemoryRepository = repositoryModule.createMemoryRepository;
-
-  const courseContextModule = await import('../contexts/CourseContext');
-  shouldEnterLearningPhase = courseContextModule.shouldEnterLearningPhase;
-  hasResolvedQuestions = courseContextModule.hasResolvedQuestions;
-  buildNodeContentPatch = courseContextModule.buildNodeContentPatch;
-  buildNodeInfoPayload = courseContextModule.buildNodeInfoPayload;
-  buildLearningSteps = courseContextModule.buildLearningSteps;
-  getPendingNextNodeIndex = courseContextModule.getPendingNextNodeIndex;
 
   const aggregatorModule = await import('../lib/memory/aggregator');
   CHAT_CONCEPT_ALIASES = aggregatorModule.CHAT_CONCEPT_ALIASES;
@@ -203,119 +189,6 @@ test('parseStreamContent yields incomplete quiz block as soon as opening tag app
 test('parseSSELine ignores done sentinel without warning noise', () => {
   assert.equal(parseSSELine('data: [DONE]'), null);
   assert.equal(parseSSELine('[DONE]'), null);
-});
-
-test('shouldEnterLearningPhase starts once cards are ready even if questions are still empty', () => {
-  assert.equal(shouldEnterLearningPhase({ cards: [{ id: 'card-1', title: '标题', content: '内容', coveredConceptIds: [] }], questions: [] }), true);
-  assert.equal(shouldEnterLearningPhase({ cards: [{ id: 'card-1', title: '标题', content: '内容', coveredConceptIds: [] }] }), true);
-  assert.equal(shouldEnterLearningPhase({ cards: [], questions: [] }), false);
-  assert.equal(shouldEnterLearningPhase({ questions: [] }), false);
-});
-
-test('hasResolvedQuestions only returns true for non-empty questions array', () => {
-  assert.equal(hasResolvedQuestions({ questions: [] }), false);
-  assert.equal(hasResolvedQuestions({ questions: [{ id: 'q-1', type: 'single', question: '问题', options: ['A. 选项'], answer: 'A', difficulty: 1, dimension: 'understanding', targetConceptId: 'concept-1' }] }), true);
-  assert.equal(hasResolvedQuestions({}), false);
-});
-
-test('buildLearningSteps allows learning with cards before questions are generated', () => {
-  const steps = buildLearningSteps(
-    [{ id: 'card-1', title: '标题', content: '内容' }],
-    undefined,
-  );
-
-  assert.equal(steps.length, 1);
-  assert.equal(steps[0]?.type, 'card');
-});
-
-test('getPendingNextNodeIndex only targets the immediate next node instead of skipping ahead', () => {
-  assert.equal(
-    getPendingNextNodeIndex(
-      [
-        { cards: [{ id: 'card-0' }] },
-        { cards: [{ id: 'card-1' }] },
-        {},
-      ],
-      0,
-    ),
-    null,
-  );
-
-  assert.equal(
-    getPendingNextNodeIndex(
-      [
-        { cards: [{ id: 'card-0' }] },
-        {},
-        {},
-      ],
-      0,
-    ),
-    1,
-  );
-});
-
-test('buildNodeContentPatch preserves cards and falls back to empty questions when generation fails', () => {
-  const patch = buildNodeContentPatch({
-    courseId: 'course-1',
-    nodeIndex: 2,
-    cards: [{ id: 'card-1', title: '什么是 Agent', content: 'Agent 是围绕目标行动的系统。', coveredConceptIds: [] }],
-  });
-
-  assert.equal(patch.courseId, 'course-1');
-  assert.equal(patch.nodeIndex, 2);
-  assert.equal(patch.cards.length, 1);
-  assert.deepEqual(patch.questions, []);
-});
-
-test('buildNodeInfoPayload includes course and adjacent node context for generation', () => {
-  const payload = buildNodeInfoPayload({
-    blueprint: {
-      courseId: 'course-1',
-      topic: 'Agent 入门课',
-      learnerPositioning: {
-        estimatedLevel: 'beginner',
-      },
-      courseGoal: '理解 Agent 的基本结构',
-      globalConcepts: [],
-      nodes: [
-        {
-          index: 0,
-          title: '什么是 Agent',
-          teachingGoal: '建立整体概念',
-          teachConceptIds: ['agent'],
-          prerequisiteConceptIds: [],
-          bridgeFromPreviousNode: '',
-          status: 'available',
-        },
-        {
-          index: 1,
-          title: '工具调用',
-          teachingGoal: '理解工具调用边界',
-          teachConceptIds: ['tool-calling'],
-          prerequisiteConceptIds: ['agent'],
-          bridgeFromPreviousNode: '',
-          status: 'locked',
-        },
-        {
-          index: 2,
-          title: '工作流编排',
-          teachingGoal: '理解工作流的多步性',
-          teachConceptIds: ['workflow'],
-          prerequisiteConceptIds: ['tool-calling'],
-          bridgeFromPreviousNode: '',
-          status: 'locked',
-        },
-      ],
-    },
-    treeView: {} as never,
-    lessons: {},
-  }, 1);
-
-  assert.equal(payload.courseName, 'Agent 入门课');
-  assert.equal(payload.courseDescription, '理解 Agent 的基本结构');
-  assert.equal(payload.backgroundSummary, undefined);
-  assert.equal(payload.prevNode?.title, '什么是 Agent');
-  assert.equal(payload.nextNode?.title, '工作流编排');
 });
 
 test('normalizeVisualization supports legacy aliases and nested data payload', () => {

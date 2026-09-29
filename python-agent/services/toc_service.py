@@ -94,7 +94,7 @@ def _format_recent_courses(planning_payload: dict) -> str:
     return '\n'.join(courses)
 
 
-def build_toc_prompt(blueprint: dict, planning_payload: dict = None, user_profile: dict = None) -> str:
+def build_toc_prompt(blueprint: dict, planning_payload: dict = None, user_profile: dict = None, evidence: str | None = None, sources: list[dict] | None = None) -> str:
     """构建 system prompt（角色 + 指令 + 用户数据 + 格式约束）"""
     topic = blueprint.get('topic', blueprint.get('learningDirection', ''))
     learning_plan = _format_learning_plan(blueprint)
@@ -106,6 +106,17 @@ def build_toc_prompt(blueprint: dict, planning_payload: dict = None, user_profil
         if recent_text:
             recent_section = f"\n\n{recent_text}"
 
+    evidence_section = ''
+    if evidence:
+        source_lines = '\n'.join(f"- {s.get('title', '')}（{s.get('url', '')}）" for s in (sources or []))
+        evidence_section = (
+            "\n\n<course_evidence>\n"
+            "## 课程证据包\n"
+            f"{evidence}\n\n## 可参考来源\n{source_lines}\n\n"
+            "规划目录时优先覆盖这些权威来源中的核心变化与基础结构；不要规划证据未支持的高风险版本细节。\n"
+            "</course_evidence>"
+        )
+
     from datetime import date
     today = date.today().isoformat()
 
@@ -115,13 +126,21 @@ def build_toc_prompt(blueprint: dict, planning_payload: dict = None, user_profil
         learning_plan=learning_plan,
         profile_section=profile_section,
         recent_section=recent_section,
-    )
+    ) + evidence_section
 
 
 async def generate_toc(blueprint: dict, planning_payload: dict = None, user_profile: dict = None) -> dict:
     """生成 TOC"""
+    import asyncio
+    from services.evidence_store import ensure_topic_evidence_pack_sync, evidence_to_prompt
     client = get_client()
-    system_prompt = build_toc_prompt(blueprint, planning_payload, user_profile)
+    try:
+        topic = blueprint.get('topic', blueprint.get('learningDirection', ''))
+        evidence_pack = await asyncio.to_thread(ensure_topic_evidence_pack_sync, topic)
+    except Exception:
+        evidence_pack = None
+    evidence, sources = evidence_to_prompt(evidence_pack)
+    system_prompt = build_toc_prompt(blueprint, planning_payload, user_profile, evidence=evidence, sources=sources)
 
     content = ""
     for chunk in client.stream_chat_sync(

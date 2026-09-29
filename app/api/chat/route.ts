@@ -2,7 +2,7 @@
 // 前端发送结构化数据，直接 pipe 到 Python Agent
 // Python Agent 负责构建 system prompt 并调用 LLM
 import { NextRequest } from 'next/server';
-import { PYTHON_AGENT_URL } from '@/lib/agent-config';
+import { PYTHON_AGENT_URL, pythonAgentHeaders } from '@/lib/agent-config';
 import { requireAuth } from '@/lib/api-response';
 
 export const dynamic = 'force-dynamic';
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     // 直接转发到 Python Agent（prompt 构建已迁移到 chat_agent.py）
     const response = await fetch(`${PYTHON_AGENT_URL}/api/agents/chat/generate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: pythonAgentHeaders(),
       body: JSON.stringify(body),
     });
 

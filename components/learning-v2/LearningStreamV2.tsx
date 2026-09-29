@@ -4,9 +4,9 @@
 // V2 学习流渲染：streamItems 按显式 sequence 排序（文档 §2.5，顺序不能依赖数组写入竞态）
 // 条目类型：task_content（标题+内容块+流式光标）/ task_transition（过渡分隔）/
 // system_notice（按 tone 着色）/ chapter_recap / user_question + tutor_answer（P2 流内答疑，§2.1/§4）
-// 自动滚动：上滑离底部 >120px 暂停跟随，回到底部恢复
+// 自动滚动：同一任务内贴底跟随；任务切换不抢位置，用户回到底部后恢复跟随
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type {
   ChapterRecap,
   CheckpointItem,
@@ -20,7 +20,11 @@ import type {
 import type { ChapterPhase } from '@/hooks/learning-v2/useChapterLearning';
 import { getPendingTutorQuestions, TUTOR_AUTO_WINDOW_LIMIT } from '@/lib/learning-v2/tutor-queue';
 import { TaskBlockView } from './TaskBlocksV2';
+import { resolveAutoFollowOnTaskChange } from '@/lib/learning-v2/stream-scroll';
+
 import { CheckpointCard } from './CheckpointCard';
+import { SourceRefsView } from './SourceRefsView';
+import { AssistantGlyph } from '../ui/chat/AssistantGlyph';
 
 /**
  * 排队提示文案（可测纯函数，测试锁定，勿改）：
@@ -34,6 +38,7 @@ export function LearningStreamV2({
   lesson,
   phase,
   anchorTaskId,
+  onRetryTask,
   onRetryTutor,
   tutorBusy = false,
   onSubmitCheckpoint,
@@ -44,6 +49,8 @@ export function LearningStreamV2({
   phase: ChapterPhase;
   /** 恢复分支④锚点：挂载时滚到该任务位置，且不自动贴底（用户上滑即视为跟随关闭） */
   anchorTaskId?: string | null;
+  /** 错误卡片重试指定任务 */
+  onRetryTask?: (taskId: string) => void;
   /** P2：失败回答的重试入口（接 hook.retryTutor）；未提供时不渲染重试按钮 */
   onRetryTutor?: (questionId: string) => void;
   /** P2：Tutor 忙碌时禁用重试按钮（编排层忙碌期间不受理重试，§4） */
@@ -58,6 +65,7 @@ export function LearningStreamV2({
   const bottomRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(!anchorTaskId);
   const anchoredRef = useRef(false);
+  const previousTaskIdRef = useRef<string | null | undefined>(undefined);
 
   // 滚动监听：距底部 <120px 视为「跟随模式」
   useEffect(() => {
@@ -70,6 +78,18 @@ export function LearningStreamV2({
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  // 任务切换不抢滚动位置：点「继续学习」/命中预取时，新内容出现在原位置下方；
+  // 用户手动回到底部后，滚动监听会恢复跟随。
+  useEffect(() => {
+    const nextTaskId = lesson.runtime.currentTaskId;
+    autoScrollRef.current = resolveAutoFollowOnTaskChange(
+      previousTaskIdRef.current,
+      nextTaskId,
+      autoScrollRef.current,
+    );
+    previousTaskIdRef.current = nextTaskId;
+  }, [lesson.runtime.currentTaskId]);
+
   // 挂载锚点定位（只执行一次）：先于底部跟随生效
   useEffect(() => {
     if (!anchorTaskId || anchoredRef.current) return;
@@ -80,19 +100,20 @@ export function LearningStreamV2({
 
   // 每次内容变化：跟随模式下滚到底部哨兵
   useEffect(() => {
-    if (autoScrollRef.current) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (autoScrollRef.current) bottomRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
   });
 
-  // taskId → 计划内序号（用于「第 x 节」标注）
-  const taskOrder = new Map(
-    [...lesson.chapterPlan.tasks]
-      .sort((a, b) => a.order - b.order)
-      .map((task, index) => [task.taskId, index + 1] as const),
+  // 完成态的 recap 由 ChapterCompleteCard 展示（同一份 lesson.recap），流内不重复渲染。
+  // 用数组位置作为主排序：新任务内容始终追加在用户问题/回答之后，符合用户视角的时间线。
+  const items = useMemo(
+    () =>
+      lesson.streamItems
+        .map((item, index) => ({ item, index }))
+        .filter(({ item }) => !(item.type === 'chapter_recap' && phase === 'completed'))
+        .sort((a, b) => a.index - b.index)
+        .map(({ item }) => item),
+    [lesson.streamItems, phase],
   );
-  // 完成态的 recap 由 ChapterCompleteCard 展示（同一份 lesson.recap），流内不重复渲染
-  const items = [...lesson.streamItems]
-    .filter((item) => !(item.type === 'chapter_recap' && phase === 'completed'))
-    .sort((a, b) => a.createdAt - b.createdAt || a.sequence - b.sequence);
   // 正在流式的任务：只有它的内容区显示光标
   const streamingTaskId =
     phase === 'streaming' && lesson.runtime.currentTaskStatus === 'streaming'
@@ -118,13 +139,13 @@ export function LearningStreamV2({
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {items.map((item) => (
         <StreamItemView
           key={item.itemId}
           item={item}
-          taskOrder={taskOrder}
           streamingTaskId={streamingTaskId}
+          onRetryTask={onRetryTask}
           queuedQuestionIds={queuedQuestionIds}
           answeringQuestionIds={answeringQuestionIds}
           mainGenerating={mainGenerating}
@@ -142,8 +163,8 @@ export function LearningStreamV2({
 
 function StreamItemView({
   item,
-  taskOrder,
   streamingTaskId,
+  onRetryTask,
   queuedQuestionIds,
   answeringQuestionIds,
   mainGenerating,
@@ -154,8 +175,8 @@ function StreamItemView({
   onRequestRemediation,
 }: {
   item: LearningStreamItem;
-  taskOrder: Map<string, number>;
   streamingTaskId: string | null;
+  onRetryTask?: (taskId: string) => void;
   queuedQuestionIds: Set<string>;
   answeringQuestionIds: Set<string>;
   mainGenerating: boolean;
@@ -170,22 +191,21 @@ function StreamItemView({
       return (
         <TaskContentView
           item={item}
-          order={taskOrder.get(item.taskId)}
           isStreaming={streamingTaskId === item.taskId}
         />
       );
     case 'task_transition':
       return (
-        <div className="flex items-center gap-3 py-1 text-tertiary" aria-hidden>
-          <span className="h-px flex-1 bg-black/6" />
-          <span className="text-[12px]">下一节</span>
-          <span className="h-px flex-1 bg-black/6" />
+        <div className="flex items-center gap-3 py-2" aria-hidden>
+          <span className="h-px flex-1 bg-gradient-to-r from-transparent to-black/10" />
+          <span className="h-1.5 w-1.5 rounded-full bg-black/10" />
+          <span className="h-px flex-1 bg-gradient-to-l from-transparent to-black/10" />
         </div>
       );
     case 'system_notice':
-      return <SystemNoticeView item={item} />;
+      return <SystemNoticeView item={item} onRetryTask={onRetryTask} onRetryTutor={onRetryTutor} />;
     case 'chapter_recap':
-      return <ChapterRecapView recap={item.recap} />;
+      return <ChapterRecapView recap={item.recap} streaming={item.status === 'streaming'} />;
     case 'user_question':
       return (
         <UserQuestionView
@@ -238,44 +258,94 @@ function CheckpointItemView({
 
 function TaskContentView({
   item,
-  order,
   isStreaming,
 }: {
   item: TaskContentItem;
-  order?: number;
   isStreaming: boolean;
 }) {
   return (
-    <section data-task-item={item.taskId} className="space-y-3">
-      <header>
-        {order != null && (
-          <p className="mb-1 text-[12px] font-medium tracking-wide text-tertiary">第 {order} 节</p>
-        )}
-        <h2 className="text-[17px] font-semibold leading-snug text-primary">{item.title}</h2>
-      </header>
-      <div className="space-y-5">
+    <article data-task-item={item.taskId} className="relative space-y-4 pl-0 sm:pl-0">
+      {/* 任务标题保留为轻量段落锚点，但不暴露“第几节”这类内部教学编号。 */}
+      <h2 className="text-[17px] font-semibold leading-[1.45] tracking-[-0.01em] text-primary">
+        {item.title}
+      </h2>
+      <div className="space-y-4">
         {item.blocks.map((block) => (
-          <TaskBlockView key={block.blockId} block={block} />
+          <TaskBlockView key={block.blockId} block={block} streaming={isStreaming} />
         ))}
       </div>
       {isStreaming && (
         <span className="inline-block h-4 w-2 animate-pulse rounded-[2px] bg-accent align-middle" />
       )}
-    </section>
+      {item.sourceRefs && item.sourceRefs.length > 0 && (
+        <div className="pt-1">
+          <SourceRefsView sources={item.sourceRefs} />
+        </div>
+      )}
+    </article>
   );
 }
 
 const NOTICE_TONE_STYLES: Record<SystemNoticeItem['tone'], string> = {
-  info: 'bg-subtle text-secondary',
-  warning: 'bg-amber-500/8 text-amber-700',
-  error: 'bg-error/8 text-error',
+  info: 'border-black/[0.06] bg-subtle',
+  warning: 'border-amber-500/20 bg-amber-500/[0.05]',
+  error: 'border-error/15 bg-error/[0.045]',
 };
 
-function SystemNoticeView({ item }: { item: SystemNoticeItem }) {
+const NOTICE_ICON_STYLES: Record<SystemNoticeItem['tone'], string> = {
+  info: 'bg-black/[0.04] text-secondary',
+  warning: 'bg-amber-500/12 text-amber-700',
+  error: 'bg-error/10 text-error',
+};
+
+function getNoticeTitle(item: SystemNoticeItem): string {
+  if (item.tone === 'error') {
+    return item.questionId ? '回答生成失败' : item.taskId ? '内容生成中断' : '出现问题';
+  }
+  return item.tone === 'warning' ? '需要留意' : '提示';
+}
+
+function SystemNoticeView({
+  item,
+  onRetryTask,
+  onRetryTutor,
+}: {
+  item: SystemNoticeItem;
+  onRetryTask?: (taskId: string) => void;
+  onRetryTutor?: (questionId: string) => void;
+}) {
+  const canRetryTask = item.tone === 'error' && item.retryable !== false && !!item.taskId && !item.questionId;
+  const canRetryTutor = item.tone === 'error' && item.retryable !== false && !!item.questionId;
+  const retryLabel = canRetryTutor ? '重试回答' : '重新生成本节';
+
   return (
-    <div className={`rounded-xl px-4 py-3 text-[13px] leading-relaxed ${NOTICE_TONE_STYLES[item.tone]}`}>
-      {item.message}
-    </div>
+    <section className={`fade-in rounded-2xl border px-3.5 py-3 ${NOTICE_TONE_STYLES[item.tone]}`}>
+      <div className="flex items-start gap-3">
+        <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-bold ${NOTICE_ICON_STYLES[item.tone]}`}>
+          {item.tone === 'error' ? '!' : item.tone === 'warning' ? '!' : 'i'}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <p className={`text-[13px] font-semibold ${item.tone === 'error' ? 'text-error' : 'text-primary'}`}>
+              {getNoticeTitle(item)}
+            </p>
+            {(canRetryTask || canRetryTutor) && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (canRetryTutor && item.questionId) onRetryTutor?.(item.questionId);
+                  else if (item.taskId) onRetryTask?.(item.taskId);
+                }}
+                className="rounded-full border border-current/20 bg-white/70 px-3 py-1 text-[11px] font-semibold text-current opacity-80 transition-opacity hover:opacity-100"
+              >
+                {retryLabel}
+              </button>
+            )}
+          </div>
+          <p className="mt-1 text-[12.5px] leading-[1.65] text-secondary">{item.message}</p>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -304,7 +374,7 @@ function UserQuestionView({
       : '待回答';
   return (
     <div className="flex flex-col items-end gap-1">
-      <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent/10 px-4 py-2.5 text-[14px] leading-relaxed text-primary">
+      <div className="max-w-[85%] rounded-3xl rounded-br-lg bg-accent/10 px-4 py-2.5 text-[14px] leading-relaxed text-primary shadow-sm">
         {item.text}
       </div>
       {item.status === 'pending' && (
@@ -336,27 +406,36 @@ function TutorAnswerView({
   const streaming = item.status === 'streaming';
   const failed = item.status === 'failed';
   return (
-    <section className="space-y-2 rounded-2xl border border-accent/15 bg-surface px-4 py-3.5">
-      <p className="text-[12px] font-medium tracking-wide text-tertiary">回答</p>
+    <section className="relative overflow-hidden rounded-2xl border border-black/[0.05] bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(246,250,249,0.94))] pl-4 pr-4 py-4 shadow-sm">
+      <div className="absolute left-0 top-0 h-full w-[3px] bg-[linear-gradient(180deg,#98B8E8,#7FBFC3)]" />
+      <div className="mb-3 flex items-center gap-2.5">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(180deg,rgba(255,255,255,0.72),rgba(221,232,246,0.72))] shadow-sm">
+          <AssistantGlyph className="h-5 w-5" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-secondary/75">AI 回答</p>
+          {streaming && (
+            <p className="text-[11px] text-secondary/60">生成中…</p>
+          )}
+        </div>
+      </div>
       <div className="space-y-3">
         {item.blocks.map((block) => (
-          <TaskBlockView key={block.blockId} block={block} />
+          <TaskBlockView key={block.blockId} block={block} streaming={streaming} />
         ))}
       </div>
       {streaming && item.blocks.length === 0 && (
-        <p className="text-[13px] leading-relaxed text-tertiary">正在准备回答…</p>
-      )}
-      {streaming && (
-        <span className="inline-block h-4 w-2 animate-pulse rounded-[2px] bg-accent align-middle" />
+        <div className="space-y-2">
+          <div className="h-3 w-[72%] animate-pulse rounded-full bg-black/[0.05]" />
+          <div className="h-3 w-[56%] animate-pulse rounded-full bg-black/[0.04]" />
+        </div>
       )}
       {failed && (
-        <div className="flex items-center gap-3 rounded-xl bg-error/6 pl-3 pr-3 py-2.5">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-error/12 text-[14px]">
-            ⚠️
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-medium text-error">回答生成失败</p>
-            <p className="mt-0.5 truncate text-[12px] text-error/70">
+        <div className="mt-1 flex flex-wrap items-center gap-3 rounded-xl border border-error/15 bg-error/[0.04] px-3.5 py-3">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-error/10 text-[13px] font-bold text-error">!</span>
+          <div className="min-w-[180px] flex-1">
+            <p className="text-[13px] font-semibold text-error">回答生成失败</p>
+            <p className="mt-0.5 text-[12px] leading-relaxed text-error/75">
               {item.errorMessage ?? '请检查网络后重试'}
             </p>
           </div>
@@ -365,13 +444,36 @@ function TutorAnswerView({
               type="button"
               onClick={() => onRetry(item.questionId)}
               disabled={busy}
-              className="shrink-0 rounded-full bg-accent px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-full border border-[rgba(127,191,195,0.28)] bg-[rgba(127,191,195,0.10)] px-4 py-2 text-[12px] font-semibold text-[#4C6F84] transition-all duration-200 hover:bg-[rgba(127,191,195,0.16)] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              重试
+              重试回答
             </button>
           )}
         </div>
       )}
+    </section>
+  );
+}
+
+/**
+ * 章节小结加载骨架：Recap 请求期间保持学习流完整，用占位结构减少等待突兀感。
+ */
+export function ChapterRecapSkeleton() {
+  return (
+    <section className="rounded-2xl border border-accent/20 bg-accent/5 p-4 sm:p-5">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="text-[15px] font-semibold text-primary">正在生成本章小结</h3>
+        <span className="text-[11px] text-tertiary">通常几秒内完成</span>
+      </div>
+      <div className="space-y-2.5">
+        {[0, 1, 2].map((index) => (
+          <div
+            key={index}
+            className="h-3.5 animate-pulse rounded-full bg-accent/10"
+            style={{ width: `${100 - index * 12}%` }}
+          />
+        ))}
+      </div>
     </section>
   );
 }
@@ -382,19 +484,36 @@ function TutorAnswerView({
  * UI 一律不渲染这些字段——即使未来拿到非空值也不展示，避免呈现不可信证据。
  * degraded（本地兜底小结）时显式标注，避免误导。
  */
-export function ChapterRecapView({ recap }: { recap: ChapterRecap }) {
+export function ChapterRecapView({
+  recap,
+  streaming = false,
+}: {
+  recap: ChapterRecap;
+  streaming?: boolean;
+}) {
+  const empty = recap.keyTakeaways.length === 0;
   return (
-    <section className="rounded-2xl border border-accent/20 bg-accent/5 p-4 sm:p-5">
+    <section className="fade-in rounded-2xl border border-accent/20 bg-accent/5 p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="text-[15px] font-semibold text-primary">本章小结</h3>
-        {recap.degraded && (
+        <h3 className="text-[15px] font-semibold text-primary">
+          {streaming && empty ? '正在生成本章小结' : '本章小结'}
+        </h3>
+        {streaming ? (
+          <span className="inline-flex items-center gap-1.5 text-[11px] text-tertiary">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+            生成中
+          </span>
+        ) : recap.degraded ? (
           <span className="shrink-0 text-[11px] text-tertiary">小结为自动提炼，仅供参考</span>
-        )}
+        ) : null}
       </div>
+      {empty && streaming && (
+        <p className="text-[13px] leading-relaxed text-tertiary">正在提炼本章要点…</p>
+      )}
       {recap.keyTakeaways.length > 0 && (
         <ul className="space-y-2">
           {recap.keyTakeaways.map((takeaway, index) => (
-            <li key={index} className="flex gap-2 text-[13px] leading-relaxed text-secondary">
+            <li key={`${index}-${takeaway}`} className="fade-in flex gap-2 text-[13px] leading-relaxed text-secondary">
               <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-accent/60" aria-hidden />
               <span>{takeaway}</span>
             </li>

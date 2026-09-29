@@ -8,11 +8,13 @@ from uuid import uuid4
 from lib.minimax import MiniMaxClient, extract_usage, parse_json_response
 from prompts import build_prompt
 from schemas.learning_v2 import ChapterPlanRequest
+from services.evidence_store import ensure_chapter_evidence_pack, evidence_to_prompt
 from services.learning_v2_errors import (
     BlueprintDataError,
     ChapterNotFoundError,
     PlanValidationError,
 )
+from services.search_evidence import needs_search
 
 PROMPT_VERSION = "chapter-plan-v1"
 
@@ -73,8 +75,16 @@ def _format_learner(starting_point: dict) -> str:
     return "\n".join(parts) if parts else "无"
 
 
-def build_chapter_plan_prompt(topic: str, chapter: dict, objectives: list[dict], learner: dict) -> str:
-    """构建章节计划 system prompt"""
+def build_chapter_plan_prompt(topic: str, chapter: dict, objectives: list[dict], learner: dict, evidence: str | None = None, sources: list[dict] | None = None) -> str:
+    """构建章节计划 system prompt；有证据包时约束规划来源"""
+    evidence_section = ""
+    if evidence:
+        source_lines = "\n".join(f"- {s.get('title', '')}（{s.get('url', '')}）" for s in (sources or []))
+        evidence_section = (
+            "\n\n## 课程证据包\n"
+            f"{evidence}\n\n## 可参考来源\n{source_lines}\n\n"
+            "规划任务时优先围绕这些权威来源；不要规划证据未支持的高风险事实细节。"
+        )
     return build_prompt(
         "chapter_plan",
         topic=topic,
@@ -82,7 +92,7 @@ def build_chapter_plan_prompt(topic: str, chapter: dict, objectives: list[dict],
         teaching_goal=chapter.get("teachingGoal", ""),
         objectives_section=_format_objectives(objectives),
         learner_section=_format_learner(learner),
-    )
+    ) + evidence_section
 
 
 def _resolve_chapter(blueprint: dict, chapter_id: str) -> tuple[dict, list[dict]]:
@@ -259,11 +269,27 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
     chapter, objectives = _resolve_chapter(blueprint, request.chapterId)
     objective_ids = list(chapter.get("objectiveIds", []))
 
+    # 章节级证据：首次规划时搜索一次并持久化，后续任务与计划复用；失败不阻塞规划。
+    evidence_pack = None
+    try:
+        if needs_search(chapter.get("title", ""), chapter.get("teachingGoal", "")):
+            evidence_pack = await ensure_chapter_evidence_pack(
+                request.courseId,
+                request.chapterId,
+                blueprint.get("topic", ""),
+                chapter.get("title", ""),
+            )
+    except Exception as exc:  # noqa: BLE001
+        print(f"[章节计划] 证据包构建失败: {exc}")
+    evidence, sources = evidence_to_prompt(evidence_pack)
+
     system_prompt = build_chapter_plan_prompt(
         topic=blueprint.get("topic", ""),
         chapter=chapter,
         objectives=objectives,
         learner=blueprint.get("learnerStartingPoint", {}),
+        evidence=evidence,
+        sources=sources,
     )
 
     started = time.monotonic()
