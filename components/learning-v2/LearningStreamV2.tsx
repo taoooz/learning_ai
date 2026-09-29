@@ -21,6 +21,7 @@ import type { ChapterPhase } from '@/hooks/learning-v2/useChapterLearning';
 import { getPendingTutorQuestions, TUTOR_AUTO_WINDOW_LIMIT } from '@/lib/learning-v2/tutor-queue';
 import { TaskBlockView } from './TaskBlocksV2';
 import { resolveAutoFollowOnTaskChange } from '@/lib/learning-v2/stream-scroll';
+import { isResolvedErrorNotice } from '@/lib/learning-v2/stream-item-presentation';
 
 import { CheckpointCard } from './CheckpointCard';
 import { SourceRefsView } from './SourceRefsView';
@@ -109,10 +110,13 @@ export function LearningStreamV2({
     () =>
       lesson.streamItems
         .map((item, index) => ({ item, index }))
-        .filter(({ item }) => !(item.type === 'chapter_recap' && phase === 'completed'))
+        .filter(({ item }) => (
+          !(item.type === 'chapter_recap' && phase === 'completed') &&
+          !isResolvedErrorNotice(item, lesson)
+        ))
         .sort((a, b) => a.index - b.index)
         .map(({ item }) => item),
-    [lesson.streamItems, phase],
+    [lesson, phase],
   );
   // 正在流式的任务：只有它的内容区显示光标
   const streamingTaskId =

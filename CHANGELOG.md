@@ -2,6 +2,12 @@
 
 > 详细历史见 `docs/archive/CHANGELOG-2026-09.md`（2026-09-28 及更早）。
 
+### 学习体验收尾与 Hook 继续拆分
+- 修复体验问题：任务/答疑重试成功后，历史错误通知不再继续显示；原始 system_notice 仍保留在数据中用于恢复与审计
+- 新增 `stream-item-presentation` 纯函数与 4 项测试锁定展示规则
+- `next.config.ts` 增加 `allowedDevOrigins`，消除本地 127.0.0.1 ↔ localhost 开发警告
+- `useChapterLearning` 继续拆出 Checkpoint（生成/判分/补救）、章节完成（Recap）、动态调度建议三个 Hook；1174 → 799 行
+
 ### 服务端删除、交接文档与热点文件拆分
 - server 模式补齐课程删除：`LessonRepository.deleteCourse` → Next `DELETE /api/user/courses` → Python `DELETE /api/user/courses`，同时清理课程、章节 lesson 与 engagement 文件
 - 新增产品功能交接包 `docs/architecture/2026-09-29-产品功能交接包.md`，按功能契约整理 V1 下线后的单一学习流

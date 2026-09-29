@@ -15,37 +15,28 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import type {
   ChapterPlan,
   ChapterRecap,
+  ChapterPlanPatch,
   CourseBlueprintV2,
   LearningSseEvent,
   NodeLessonV2,
   TutorAnswerItem,
 } from '@/types/learning-v2';
 import {
-  applyChapterRecap,
   createInitialNodeLessonV2,
 } from '@/lib/learning-v2/reducers';
-import { transitionChapter } from '@/lib/learning-v2/state-machine';
 import { loadNodeLessonV2 } from '@/lib/learning-v2/storage';
 import { getLessonRepository } from '@/lib/learning-v2/lesson-repository';
 import { validateChapterPlan } from '@/lib/learning-v2/validators';
 import {
-  buildChapterCompleteIdempotencyKey,
   buildChapterPlanIdempotencyKey,
   buildTaskAttemptIdempotencyKey,
   IdempotencyRegistry,
 } from '@/lib/learning-v2/idempotency';
 import { decideResumeAction } from '@/lib/learning-v2/resume';
 import { parseLearningSseStream } from '@/lib/learning-v2/sse-client';
-import { completeChapterV2 } from '@/lib/learning-v2/chapter-complete';
-import { applyPlanPatch, canApplyPatch } from '@/lib/learning-v2/plan-patch';
-import {
-  applyRemediation,
-  needsCheckpoint,
-} from '@/lib/learning-v2/checkpoint-ops';
-import type { CheckpointDefinition, CheckpointEvaluation, CheckpointItem } from '@/types/learning-v2';
-import { collectEvidence } from '@/lib/learning-v2/checkpoint-ops';
-import { MAX_PLAN_PATCHES_PER_CHAPTER } from '@/types/learning-v2';
-import type { ChapterPlanPatch } from '@/types/learning-v2';
+import { useChapterCompletion } from './useChapterCompletion';
+import { usePlanSuggestion } from './usePlanSuggestion';
+import { useCheckpointActions } from './useCheckpointActions';
 import { recordEngagementEvent } from '@/lib/learning-v2/engagement';
 import {
   canStartPrefetch,
@@ -56,7 +47,6 @@ import {
   runTaskPrefetch,
   type PrefetchSlot,
 } from '@/lib/learning-v2/task-prefetch-runtime';
-import { buildLocalFallbackRecap } from '@/lib/learning-v2/recap';
 import { countUnansweredTutorQuestions, TUTOR_AUTO_WINDOW_LIMIT } from '@/lib/learning-v2/tutor-queue';
 import {
   deriveChapterPhase,
@@ -171,8 +161,6 @@ export function useChapterLearning({
   const tutorResumeRef = useRef<{ persisted: boolean; shouldAutoRetry: boolean } | null>(null);
 
   // P4：待用户决策的调度建议（UI 级状态，不落盘；接受时才写入 lesson）
-  const [planSuggestion, setPlanSuggestion] = useState<ChapterPlanPatch | null>(null);
-  const planSuggestionBusyRef = useRef(false);
 
   // P5.1：server 模式启动装载是异步的——先返回未装载态，由挂载 effect 完成启动
   const bootPendingRef = useRef(STORE_MODE === 'server');
@@ -371,197 +359,19 @@ export function useChapterLearning({
     [courseId, chapterId, blueprint],
   );
 
-  // ---- P3a Checkpoint 生成与提交 ----
-
-  /**
-   * 任务完成后按需生成 Checkpoint（evidencePolicy=checkpoint 且尚无条目）。
-   * 生成成功 → CHECKPOINT_READY（状态机 awaiting_user → checking）；失败 → 静默跳过（不阻塞主线）。
-   */
-  const maybeGenerateCheckpoint = useCallback(
-    async (taskId: string) => {
-      const lesson = lessonMirrorRef.current;
-      if (!lesson) return;
-      if (!needsCheckpoint(lesson, taskId)) return;
-      const planned = lesson.chapterPlan.tasks.find((t) => t.taskId === taskId);
-      if (!planned) return;
-      const chapter = blueprint.chapters.find((c) => c.chapterId === chapterId);
-      try {
-        const contentItem = lesson.streamItems.find(
-          (s) => s.type === 'task_content' && s.taskId === taskId,
-        );
-        const summary = contentItem && contentItem.type === 'task_content'
-          ? contentItem.blocks
-              .map((b) => {
-                if (b.type === 'markdown') return b.markdown;
-                if (b.type === 'key_point') return [b.title, ...b.points].filter(Boolean).join('\n');
-                if (b.type === 'example') return [b.title, b.context, b.content, b.takeaway].filter(Boolean).join('\n');
-                return '';
-              })
-              .filter(Boolean)
-              .join('\n\n')
-              .slice(0, 2000)
-          : planned.taskGoal;
-        const response = await fetch('/api/learning/v2/checkpoints/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            courseId,
-            chapterId,
-            taskId,
-            objectiveId: planned.objectiveId,
-            courseTopic: blueprint.topic,
-            chapter: { title: chapter?.title ?? '', teachingGoal: chapter?.teachingGoal ?? '' },
-            task: { taskId: planned.taskId, title: planned.title, taskGoal: planned.taskGoal },
-            taskContentSummary: summary,
-            idempotencyKey: `checkpoint-gen:${courseId}:${chapterId}:${lesson.chapterPlan.planId}:${lesson.chapterPlan.planVersion}:${taskId}`,
-          }),
-        });
-        if (!response.ok) return;
-        const body = await response.json();
-        if (!body.ok || !body.checkpoint) return;
-        commit({ type: 'CHECKPOINT_READY', checkpoint: body.checkpoint, now: Date.now() });
-      } catch (error) {
-        // Checkpoint 生成失败不阻塞主线（§2.7 补救不锁死原则的同源延伸）
-        console.warn('[useChapterLearning] Checkpoint 生成失败:', error);
-      }
-    },
-    [courseId, chapterId, blueprint, commit],
-  );
-
-  /** 用户提交 Checkpoint 答案 → 服务端程序判分 → CHECKPOINT_EVALUATED */
-  const submitCheckpoint = useCallback(
-    async (checkpointId: string, answer: string | string[]) => {
-      const lesson = lessonMirrorRef.current;
-      if (!lesson) return;
-      const item = lesson.streamItems.find(
-        (s): s is CheckpointItem => s.type === 'checkpoint' && s.checkpoint.checkpointId === checkpointId,
-      );
-      if (!item) return;
-      const attempt = (item.submission?.attempt ?? 0) + 1;
-      try {
-        const response = await fetch('/api/learning/v2/checkpoints/evaluate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            courseId,
-            chapterId,
-            taskId: item.taskId,
-            checkpointId,
-            answer,
-            attempt,
-            idempotencyKey: `checkpoint-eval:${courseId}:${chapterId}:${lesson.chapterPlan.planId}:${lesson.chapterPlan.planVersion}:${checkpointId}:${attempt}`,
-            checkpoint: item.checkpoint,
-          }),
-        });
-        if (!response.ok) return;
-        const body = await response.json();
-        if (!body.ok || !body.evaluation) return;
-        commit({
-          type: 'CHECKPOINT_EVALUATED',
-          checkpointId,
-          answer,
-          evaluation: body.evaluation,
-          now: Date.now(),
-        });
-      } catch (error) {
-        console.warn('[useChapterLearning] Checkpoint 判分失败:', error);
-      }
-    },
-    [courseId, chapterId, commit],
-  );
-
-  /** 重试 Checkpoint（清除评估结果，回到 pending 状态） */
-  const retryCheckpoint = useCallback(
-    (checkpointId: string) => {
-      const lesson = lessonMirrorRef.current;
-      if (!lesson) return;
-      const item = lesson.streamItems.find(
-        (s): s is CheckpointItem => s.type === 'checkpoint' && s.checkpoint.checkpointId === checkpointId,
-      );
-      if (!item) return;
-      const updated: CheckpointItem = { ...item, submission: undefined, evaluation: undefined, status: 'pending' };
-      commit({
-        type: 'LESSON_PATCH',
-        lesson: {
-          ...lesson,
-          streamItems: lesson.streamItems.map((s) => (s === item ? updated : s)),
-          runtime: { ...lesson.runtime, status: 'checking', lastActiveAt: Date.now() },
-          updatedAt: Date.now(),
-        },
-      });
-    },
-    [commit],
-  );
-
-  /**
-   * P3a 补救流程：首次错误后 LLM 生成补救内容 + 等价不同题（§2.7）。
-   * 生成成功 → applyRemediation（补救内容入流 + 新题替换旧题）；失败 → 回退为简单重试。
-   */
-  const requestRemediation = useCallback(
-    async (checkpointId: string) => {
-      const lesson = lessonMirrorRef.current;
-      if (!lesson) return;
-      const item = lesson.streamItems.find(
-        (s): s is CheckpointItem => s.type === 'checkpoint' && s.checkpoint.checkpointId === checkpointId,
-      );
-      if (!item || !item.evaluation) return;
-      const planned = lesson.chapterPlan.tasks.find((t) => t.taskId === item.taskId);
-      const chapter = blueprint.chapters.find((c) => c.chapterId === chapterId);
-      try {
-        const contentItem = lesson.streamItems.find(
-          (s) => s.type === 'task_content' && s.taskId === item.taskId,
-        );
-        const summary = contentItem && contentItem.type === 'task_content'
-          ? contentItem.blocks
-              .map((b) => (b.type === 'markdown' ? b.markdown : b.type === 'key_point' ? b.title : ''))
-              .filter(Boolean)
-              .join('\n')
-              .slice(0, 1500)
-          : planned?.taskGoal ?? '';
-        const response = await fetch('/api/learning/v2/checkpoints/remediate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            courseId,
-            chapterId,
-            taskId: item.taskId,
-            taskTitle: planned?.title ?? '',
-            taskGoal: planned?.taskGoal ?? '',
-            originalPrompt: item.checkpoint.prompt,
-            userAnswer: item.submission?.answer ?? '',
-            correctAnswer: String(item.checkpoint.correctAnswer),
-            originalHint: item.checkpoint.remediationHint,
-            taskContentSummary: summary,
-            courseTopic: blueprint.topic,
-            chapterTitle: chapter?.title ?? '',
-            idempotencyKey: `remediate:${courseId}:${chapterId}:${lesson.chapterPlan.planVersion}:${checkpointId}:${item.remediationAttempt + 1}`,
-          }),
-        });
-        if (!response.ok) return;
-        const body = await response.json();
-        if (!body.ok || !body.remediationContent || !body.newCheckpoint) return;
-        const nc = body.newCheckpoint;
-        const newDefinition: CheckpointDefinition = {
-          ...nc,
-          checkpointId: `${checkpointId}-r${item.remediationAttempt + 1}`,
-          objectiveId: item.checkpoint.objectiveId,
-          taskId: item.taskId,
-          conceptKeys: item.checkpoint.conceptKeys,
-          estimatedSeconds: 45,
-          generationMeta: { promptVersion: 'remediate-v1', modelVersion: 'llm', generatedAt: Date.now(), durationMs: 0, degraded: false },
-        };
-        commit({
-          type: 'LESSON_PATCH',
-          lesson: applyRemediation(lesson, checkpointId, body.remediationContent, newDefinition, Date.now()),
-        });
-      } catch (error) {
-        console.warn('[useChapterLearning] 补救内容生成失败:', error);
-        // 回退：清除评估结果用原题重试
-        retryCheckpoint(checkpointId);
-      }
-    },
-    [courseId, chapterId, blueprint, commit, retryCheckpoint],
-  );
+  // ---- P3a Checkpoint 编排（生成/判分/重试/补救） ----
+  const {
+    maybeGenerateCheckpoint,
+    submitCheckpoint,
+    retryCheckpoint,
+    requestRemediation,
+  } = useCheckpointActions({
+    courseId,
+    chapterId,
+    blueprint,
+    lessonMirrorRef,
+    commit,
+  });
 
   // ---- 任务流请求 ----
   const startTask = useCallback(
@@ -743,147 +553,17 @@ export function useChapterLearning({
     }
   }, [courseId, chapterId, blueprint, persist, startTask, commit]);
 
-  // ---- 章节完成（异步）：completing → Recap → 归档 → completed，落盘后刷新课程树 ----
-  const finishChapter = useCallback(async () => {
-    const lesson = lessonMirrorRef.current;
-    if (!lesson) return;
-    const generation = generationRef.current;
-    const now = Date.now();
-
-    // ① 进入 completing；容忍从 completing 重入（刷新恢复分支②-bis 后再次点击）
-    let workingLesson: NodeLessonV2;
-    if (lesson.runtime.status === 'completing') {
-      workingLesson = lesson;
-    } else {
-      const toCompleting = transitionChapter(lesson.runtime, 'completing', now);
-      if (!toCompleting.ok) {
-        commit({
-          type: 'STREAM_FAILED_LOCAL',
-          message: toCompleting.reason,
-          code: 'TRANSITION_BLOCKED',
-          now: Date.now(),
-        });
-        return;
-      }
-      workingLesson = {
-        ...lesson,
-        runtime: {
-          ...toCompleting.runtime,
-          pendingRequest: {
-            requestId: `req-recap-${now.toString(36)}`,
-            kind: 'recap',
-            status: 'streaming',
-            attempt: 1,
-            startedAt: now,
-          },
-        },
-        updatedAt: now,
-      };
-    }
-    commit({ type: 'CHAPTER_COMPLETING', lesson: workingLesson });
-
-    // ② Recap 请求：失败必须 throw（注册表只缓存成功）；彻底失败走本地兜底（§7）
-    let recap: ChapterRecap;
-    try {
-      const idempotencyKey = buildChapterCompleteIdempotencyKey(
-        courseId,
-        chapterId,
-        workingLesson.chapterPlan.planId,
-        workingLesson.chapterPlan.planVersion,
-      );
-      recap = await recapRegistryRef.current.run(idempotencyKey, async () => {
-        const chapter = blueprint.chapters.find((c) => c.chapterId === chapterId);
-        const chapterIndex = blueprint.chapters.findIndex((c) => c.chapterId === chapterId);
-        const nextChapter = blueprint.chapters[chapterIndex + 1];
-        const sortedTasks = [...workingLesson.chapterPlan.tasks].sort((a, b) => a.order - b.order);
-        const tasks = sortedTasks
-          .filter((t) => workingLesson.runtime.completedTaskIds.includes(t.taskId))
-          .map((t) => {
-            const item = workingLesson.streamItems.find(
-              (s) => s.type === 'task_content' && s.taskId === t.taskId,
-            );
-            return {
-              title: t.title,
-              takeaway: item && item.type === 'task_content' ? item.boundaryPrompt?.takeaway : undefined,
-            };
-          });
-        const response = await fetch('/api/learning/v2/chapters/recap', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            courseId,
-            chapterId,
-            planId: workingLesson.chapterPlan.planId,
-            planVersion: workingLesson.chapterPlan.planVersion,
-            idempotencyKey,
-            courseTopic: blueprint.topic,
-            chapter: {
-              title: chapter?.title ?? '',
-              teachingGoal: chapter?.teachingGoal ?? '',
-            },
-            tasks,
-            nextChapterTitle: nextChapter?.title ?? null,
-          }),
-        });
-
-        if (!response.ok || !response.body) {
-          const errorBody = await response.json().catch(() => null) as { message?: string } | null;
-          throw new Error(errorBody?.message ?? `小结生成失败（${response.status}）`);
-        }
-
-        let completedRecap: ChapterRecap | undefined;
-        let sawCompleted = false;
-        for await (const event of parseLearningSseStream(response)) {
-          if (event.type === 'request_error') {
-            const payload = event.payload as { message?: string };
-            throw new Error(payload.message ?? '小结生成中断，请重试');
-          }
-          if (event.type === 'recap_started' || event.type === 'recap_takeaway') {
-            commit({ type: 'SSE_EVENT', event });
-          }
-          if (event.type === 'recap_completed') {
-            completedRecap = (event.payload as { recap: ChapterRecap }).recap;
-            commit({ type: 'SSE_EVENT', event });
-            sawCompleted = true;
-          }
-        }
-        if (!sawCompleted || !completedRecap) throw new Error('小结生成中断，请重试');
-        return completedRecap;
-      });
-    } catch {
-      recap = buildLocalFallbackRecap(workingLesson);
-    }
-    if (generationRef.current !== generation) return; // 已卸载或被新流程取代
-
-    // ③ 写入 Recap（幂等纯函数）。这里不立即压缩正文；
-    // 归档只作为存储配额不足时的兜底，避免完成小结改变用户刚阅读过的学习流。
-    const recapAt = Date.now();
-    const recappedLesson = applyChapterRecap(workingLesson, recap, recapAt);
-
-    // ④ completing → completed
-    const toCompleted = transitionChapter(recappedLesson.runtime, 'completed', recapAt);
-    if (!toCompleted.ok) {
-      commit({
-        type: 'STREAM_FAILED_LOCAL',
-        message: toCompleted.reason,
-        code: 'TRANSITION_BLOCKED',
-        now: Date.now(),
-      });
-      return;
-    }
-    const completedLesson: NodeLessonV2 = {
-      ...recappedLesson,
-      runtime: { ...toCompleted.runtime, pendingRequest: undefined },
-      updatedAt: recapAt,
-    };
-
-    // ⑥ 持久化章节事实并刷新课程树；local/server 分别在仓库模式内选择数据源
-    persist(completedLesson);
-    completeChapterV2(courseId, chapterId);
-    recordEngagementEvent(courseId, { eventType: 'recap_completed', chapterId });
-    recordEngagementEvent(courseId, { eventType: 'chapter_completed', chapterId });
-    commit({ type: 'COMPLETED', lesson: completedLesson });
-  }, [courseId, chapterId, blueprint, persist, commit]);
+  // ---- 章节完成编排（completing → Recap → completed） ----
+  const { finishChapter } = useChapterCompletion({
+    courseId,
+    chapterId,
+    blueprint,
+    lessonMirrorRef,
+    generationRef,
+    recapRegistryRef,
+    commit,
+    persist,
+  });
 
   /** 错误卡片重试指定任务 */
   const retryTask = useCallback((taskId: string) => {
@@ -946,76 +626,20 @@ export function useChapterLearning({
     void fetchPlan();
   }, [fetchPlan]);
 
-  // ---- P4 动态调度入口 ----
-
-  /**
-   * 边界时请求调度建议：收集剩余任务与证据 → /plan-patch/generate → 存为待决策建议。
-   * 只在 boundary 相位触发；建议为空操作或低置信度时不打扰用户。
-   */
-  const requestPlanSuggestion = useCallback(async () => {
-    const lesson = lessonMirrorRef.current;
-    if (!lesson || phaseMirrorRef.current !== 'boundary') return;
-    if (planSuggestionBusyRef.current) return;
-    if ((lesson.chapterPlan.appliedPatchCount ?? 0) >= MAX_PLAN_PATCHES_PER_CHAPTER) return;
-    planSuggestionBusyRef.current = true;
-    try {
-      const evidence = collectEvidence(lesson);
-      if (evidence.length === 0) return; // 无证据不调度
-      const chapter = blueprint.chapters.find((c) => c.chapterId === chapterId);
-      const remainingTasks = lesson.chapterPlan.tasks
-        .filter((t) => !lesson.runtime.completedTaskIds.includes(t.taskId) && !lesson.runtime.skippedTaskIds.includes(t.taskId) && t.taskId !== lesson.runtime.currentTaskId)
-        .map((t) => ({ taskId: t.taskId, title: t.title, taskGoal: t.taskGoal, teachingPattern: t.teachingPattern }));
-      if (remainingTasks.length === 0) return;
-      const response = await fetch('/api/learning/v2/plan-patch/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          courseId,
-          chapterId,
-          planVersion: lesson.chapterPlan.planVersion,
-          courseTopic: blueprint.topic,
-          chapterTitle: chapter?.title ?? '',
-          teachingGoal: chapter?.teachingGoal ?? '',
-          remainingTasks,
-          evidenceSummary: evidence.map((e) => ({ objectiveId: e.objectiveId, outcome: e.outcome, score: e.score })),
-          idempotencyKey: `plan-patch:${courseId}:${chapterId}:${lesson.chapterPlan.planVersion}`,
-        }),
-      });
-      if (!response.ok) return;
-      const body = await response.json();
-      const patch: ChapterPlanPatch | undefined = body.patch;
-      if (!body.ok || !patch || !patch.operations || patch.operations.length === 0) return;
-      // 客户端预校验：不可应用的建议不打扰用户
-      const check = canApplyPatch(lesson, patch);
-      if (!check.ok) return;
-      setPlanSuggestion(patch);
-    } catch (error) {
-      console.warn('[useChapterLearning] 调度建议获取失败:', error);
-    } finally {
-      planSuggestionBusyRef.current = false;
-    }
-  }, [courseId, chapterId, blueprint]);
-
-  /** 用户接受建议：校验 → 应用（版本升级）→ 清除建议 */
-  const acceptPlanSuggestion = useCallback(() => {
-    const lesson = lessonMirrorRef.current;
-    if (!lesson || !planSuggestion) return;
-    const check = canApplyPatch(lesson, planSuggestion);
-    if (!check.ok) {
-      setPlanSuggestion(null); // 建议已失效（如版本变化），直接丢弃
-      return;
-    }
-    commit({
-      type: 'LESSON_PATCH',
-      lesson: applyPlanPatch(lesson, planSuggestion, Date.now()),
-    });
-    setPlanSuggestion(null);
-  }, [planSuggestion, commit]);
-
-  /** 用户忽略建议 */
-  const dismissPlanSuggestion = useCallback(() => {
-    setPlanSuggestion(null);
-  }, []);
+  // ---- P4 动态调度（建议请求/接受/忽略） ----
+  const {
+    planSuggestion,
+    requestPlanSuggestion,
+    acceptPlanSuggestion,
+    dismissPlanSuggestion,
+  } = usePlanSuggestion({
+    courseId,
+    chapterId,
+    blueprint,
+    lessonMirrorRef,
+    phaseMirrorRef,
+    commit,
+  });
 
   /** 冲突恢复 A：用服务端版本替换本机未保存改动。 */
   const loadServerVersion = useCallback(async () => {
