@@ -2,6 +2,11 @@
 
 > 详细历史见 `docs/archive/CHANGELOG-2026-09.md`（2026-09-28 及更早）。
 
+### 当前架构速览
+- 新增 `docs/architecture/当前架构速览.md`：当前工程事实分层图、课程/学习数据流、local/server 存储、模块状态、V2 规格差距与工程约束
+- `docs/README.md` 和根 README 将其列为当前事实第一入口；与 V2 长期规格或历史设计冲突时，以速览和代码为准
+- `docs:check` 增加速览存在性、行数上限和“当前工程事实”优先级声明检查
+
 ### 文档目录按时效分类
 - 新增 `docs/README.md` 文档索引：区分当前事实、长期规格、长期参考、历史材料和 archive，并明确阅读优先级
 - `docs/architecture` 仅保留产品功能交接包与 V2 长期规格；调研与课程质量计划移入 `docs/reference`

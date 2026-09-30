@@ -9,6 +9,7 @@ const CHANGELOG_PATH = 'CHANGELOG.md';
 const AGENTS_PATH = 'AGENTS.md';
 const DOCS_README_PATH = 'docs/README.md';
 const DOCS_HISTORY_README_PATH = 'docs/history/README.md';
+const CURRENT_ARCHITECTURE_PATH = 'docs/architecture/当前架构速览.md';
 
 const REQUIRED_README_SECTIONS = [
   '# AI Learning',
@@ -23,6 +24,7 @@ const REQUIRED_README_SECTIONS = [
 const README_MAX_LINES = 150;
 const CHANGELOG_MAX_LINES = 50;
 const DOCS_README_MAX_LINES = 120;
+const CURRENT_ARCHITECTURE_MAX_LINES = 180;
 
 type Check = { name: string; passed: boolean; detail?: string };
 
@@ -52,6 +54,7 @@ const changelogLines = readLines(CHANGELOG_PATH);
 const agents = readFileSync(AGENTS_PATH, 'utf8');
 const docsReadme = readFileSync(DOCS_README_PATH, 'utf8');
 const docsReadmeLines = readLines(DOCS_README_PATH);
+const currentArchitectureLines = readLines(CURRENT_ARCHITECTURE_PATH);
 
 checks.push({
   name: 'README 必需章节齐全',
@@ -88,6 +91,20 @@ checks.push({
   passed: docsReadmeLines.length <= DOCS_README_MAX_LINES,
   detail: `当前 ${docsReadmeLines.length} 行`,
 });
+checks.push({
+  name: '当前架构速览存在且不超过限行',
+  passed: existsSync(CURRENT_ARCHITECTURE_PATH) && currentArchitectureLines.length <= CURRENT_ARCHITECTURE_MAX_LINES,
+  detail: existsSync(CURRENT_ARCHITECTURE_PATH)
+    ? `当前 ${currentArchitectureLines.length} 行，上限 ${CURRENT_ARCHITECTURE_MAX_LINES} 行`
+    : '文件不存在',
+});
+
+checks.push({
+  name: '当前架构速览声明当前工程事实优先级',
+  passed: readFileSync(CURRENT_ARCHITECTURE_PATH, 'utf8').includes('当前工程事实') &&
+    readFileSync(CURRENT_ARCHITECTURE_PATH, 'utf8').includes('与 V2 长期规格或历史设计冲突时，以本文和代码为准'),
+});
+
 checks.push({
   name: 'docs history README 存在',
   passed: existsSync(DOCS_HISTORY_README_PATH),
@@ -134,6 +151,7 @@ console.log(JSON.stringify({
   readmeLines: readmeLines.length,
   changelogLines: changelogLines.length,
   docsReadmeLines: docsReadmeLines.length,
+  currentArchitectureLines: currentArchitectureLines.length,
   checkedPaths: paths.length,
 }, null, 2));
 
