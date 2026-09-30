@@ -1,7 +1,7 @@
 {
   "name": "duolingo-for-anything",
   "version": "1.0.0",
-  "description": "",
+  "description": "面向中文用户的 AI 学习产品：生成课程并按章节流式学习",
   "main": "index.js",
   "directories": {
     "doc": "docs"
@@ -11,8 +11,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "node --import tsx --test tests/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "test": "npm run docs:check && node --import tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "docs:check": "node --import tsx scripts/check-docs.ts"
   },
   "keywords": [],
   "author": "",

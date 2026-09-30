@@ -2,6 +2,12 @@
 
 > 详细历史见 `docs/archive/CHANGELOG-2026-09.md`（2026-09-28 及更早）。
 
+### AI 快速入口与文档回流机制
+- 新增根 `README.md`（83 行）：当前架构、核心用户路径、模块地图、关键不变量和详细文档索引
+- `AGENTS.md` 增加“架构文档回流”规则：契约变化必须同步 README，纯内部实现不强制更新
+- 新增 `npm run docs:check`：检查 README 章节/行数、CHANGELOG 行数、AGENTS 回流规则和本地文档路径
+- `npm test` 前置执行 `docs:check`，让文档过期直接影响回归结果
+
 ### 学习体验收尾与 Hook 继续拆分
 - 修复体验问题：任务/答疑重试成功后，历史错误通知不再继续显示；原始 system_notice 仍保留在数据中用于恢复与审计
 - 新增 `stream-item-presentation` 纯函数与 4 项测试锁定展示规则
