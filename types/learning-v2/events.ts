@@ -1,6 +1,6 @@
 // types/learning-v2/events.ts
 // V2 SSE 事件协议：统一外壳 + 任务事件 + Tutor 事件 + 通用事件
-// 依据 docs/architecture/v2_课程生成逻辑.md §5 与 docs/architecture/p2-流内答疑第一阶段设计.md §2.2
+// 依据 docs/architecture/v2_课程生成逻辑.md §5 与 docs/history/designs/p2-流内答疑第一阶段设计.md §2.2
 // P2 范围说明：Tutor 回答事件已引入；请求错误仍用 request_error，传输收尾仍用 request_completed
 // P2 四意图：tutor_completed 载荷携带 action（教学动作分类），供 UI 与持久化使用
 

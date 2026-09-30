@@ -56,15 +56,17 @@
 
 ## 5. 详细文档索引
 
+- [文档索引](docs/README.md)：先读这里，区分当前事实、长期规格、长期参考和历史材料。
 - [产品功能交接包](docs/architecture/2026-09-29-产品功能交接包.md)：当前 V2 单一学习流的功能契约、数据契约和 API 契约；读代码前先读这份。
-- [V2 项目综述](docs/architecture/v2_项目综述.md)：V2 阶段规划与总体背景。
+- [V2 项目综述](docs/architecture/v2_项目综述.md)：V2 目标架构、阶段边界和文档阅读顺序。
 - [V2 课程生成逻辑](docs/architecture/v2_课程生成逻辑.md)：课程蓝图、章节计划和协议设计。
-- [P5 服务端持久化迁移设计](docs/architecture/p5-服务端持久化迁移设计.md)：local/server 存储抽象与冲突策略。
-- [课程质量提升计划](docs/architecture/课程质量提升计划-对齐竞品.md)：内容质量目标与迭代计划。
-- [开源方案调研](docs/architecture/开源方案调研-课程内容丰富度.md)：内容丰富度竞品调研。
+- [V2 用户画像维护逻辑](docs/architecture/v2_用户画像维护逻辑.md)：学习证据、画像状态和个性化数据边界。
+- [课程质量提升计划](docs/reference/课程质量提升计划-对齐竞品.md)：内容质量目标与迭代方向。
+- [开源方案调研](docs/reference/开源方案调研-课程内容丰富度.md)：内容丰富度竞品调研。
+- [历史材料](docs/history/README.md)：历史设计、评审、记忆方案和 superpowers 计划。
 - [历史更新日志](docs/archive/CHANGELOG-2026-09.md)：2026-09-28 及更早的归档记录。
 
-历史设计文档保留在 `docs/architecture`，其中未标注“当前”的文档可能包含阶段性方案；判断当前行为时以交接包和代码为准。
+判断当前行为时，优先级是：代码与产品功能交接包 > V2 长期规格 > reference 调研 > history/archive。
 
 ## 6. 开发与验证
 

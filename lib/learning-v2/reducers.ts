@@ -1,7 +1,7 @@
 // lib/learning-v2/reducers.ts
 // V2 学习流归约器：SSE 事件 → NodeLessonV2
 // 依据 docs/architecture/v2_课程生成逻辑.md §2.5 / §5 / §6.3
-// 与 docs/architecture/p2-流内答疑第一阶段设计.md §2.1 / §2.2
+// 与 docs/history/designs/p2-流内答疑第一阶段设计.md §2.1 / §2.2
 // 幂等保证：所有 Item 以确定性 itemId upsert，重复应用同一事件不产生重复条目；
 // 版本守卫：planVersion/chapterId 不匹配的事件直接丢弃（旧版本结果拒绝写入）；
 // Tutor 守卫：问题/回答经 taskId + questionId 绑定，requestId 不匹配进行中请求的事件拒写

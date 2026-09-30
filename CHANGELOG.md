@@ -2,6 +2,12 @@
 
 > 详细历史见 `docs/archive/CHANGELOG-2026-09.md`（2026-09-28 及更早）。
 
+### 文档目录按时效分类
+- 新增 `docs/README.md` 文档索引：区分当前事实、长期规格、长期参考、历史材料和 archive，并明确阅读优先级
+- `docs/architecture` 仅保留产品功能交接包与 V2 长期规格；调研与课程质量计划移入 `docs/reference`
+- 历史 P2/P5 设计、旧记忆方案、评审、Markdown 协议和 superpowers 计划移入 `docs/history`
+- 根 README 与代码注释同步更新文档路径；`docs:check` 扩展为校验 docs 索引分类、行数和链接
+
 ### AI 快速入口与文档回流机制
 - 新增根 `README.md`（83 行）：当前架构、核心用户路径、模块地图、关键不变量和详细文档索引
 - `AGENTS.md` 增加“架构文档回流”规则：契约变化必须同步 README，纯内部实现不强制更新

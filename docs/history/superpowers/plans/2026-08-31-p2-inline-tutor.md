@@ -8,7 +8,7 @@
 
 **Tech Stack:** Next.js App Router、React 19、TypeScript、Tailwind CSS v4、localStorage、FastAPI、Pydantic、OpenAI 兼容 LLM SSE、node:test、pytest。
 
-**Spec:** `docs/architecture/p2-流内答疑第一阶段设计.md`
+**Spec:** `docs/history/designs/p2-流内答疑第一阶段设计.md`
 
 ## Global Constraints
 
