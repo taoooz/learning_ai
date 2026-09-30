@@ -128,8 +128,8 @@ def test_generate_plan_success_fills_fields():
     tasks = plan["tasks"]
     assert [t["taskId"] for t in tasks] == ["t1", "t2", "t3"]
     assert [t["order"] for t in tasks] == [1, 2, 3]
+    assert [task["evidencePolicy"] for task in tasks] == ["none", "none", "checkpoint"]
     for task in tasks:
-        assert task["evidencePolicy"] == "none"
         assert task["origin"] == "initial"
         assert task["status"] == "planned"
     assert tasks[0]["prerequisiteTaskIds"] == []
@@ -247,3 +247,53 @@ def test_request_schema_defaults():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+def test_chapter_plan_prompt_injects_course_mission():
+    from services.chapter_plan_service import build_chapter_plan_prompt
+
+    prompt = build_chapter_plan_prompt(
+        topic="AI 产品经理转型",
+        chapter={"title": "Agent 产品设计", "teachingGoal": "设计方案"},
+        objectives=[{"objectiveId": "obj-1", "description": "设计方案", "observableOutcome": "能输出方案"}],
+        learner={},
+        mission={
+            "why": "转型 AI 产品经理",
+            "targetScenario": "工作汇报",
+            "successCriteria": ["能讲清 Agent 产品方案"],
+            "outOfScope": ["模型训练"],
+        },
+    )
+    assert "课程使命" in prompt
+    assert "转型 AI 产品经理" in prompt
+    assert "工作汇报" in prompt
+    assert "能讲清 Agent 产品方案" in prompt
+    assert "模型训练" in prompt
+
+
+def test_chapter_plan_prompt_injects_teaching_state():
+    from services.chapter_plan_service import build_chapter_plan_prompt
+
+    prompt = build_chapter_plan_prompt(
+        topic="HTTP 缓存",
+        chapter={"title": "缓存策略", "teachingGoal": "设计缓存策略"},
+        objectives=[{"objectiveId": "obj-1", "description": "设计策略", "observableOutcome": "能配置策略"}],
+        learner={},
+        teaching_state={
+            "pendingArtifacts": [{
+                "kind": "checkpoint_result",
+                "chapterId": "ch-1",
+                "description": "等待第 1 章检查结果",
+            }],
+            "insights": [{
+                "content": "用户已理解缓存命中",
+                "suggestedChapterId": "ch-2",
+                "status": "candidate",
+            }],
+            "notes": [{"content": "用户偏好实操例子"}],
+        },
+    )
+    assert "teaching_state" in prompt
+    assert "等待第 1 章检查结果" in prompt
+    assert "用户已理解缓存命中" in prompt
+    assert "用户偏好实操例子" in prompt

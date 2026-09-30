@@ -65,7 +65,8 @@ PROMPT = {
 - taskId 按顺序取 t1、t2……，与 order 保持一致
 - prerequisiteTaskIds 填线性依赖（前一个任务的 taskId），首个任务为空数组
 - expectedMinutes 为 2～6 的整数
-- evidencePolicy 固定 "none"、origin 固定 "initial"、status 固定 "planned"
+- evidencePolicy 由服务端确定：除最后一个任务为 "checkpoint" 外，其余固定 "none"
+- origin 固定 "initial"、status 固定 "planned"
 
 ## JSON 书写规范
 - 字符串值内部不要出现英文双引号，引述内容改用中文引号「」

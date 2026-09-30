@@ -18,24 +18,36 @@
 ### 1.1 色彩系统
 
 ```css
+/* 唯一事实来源：app/globals.css 的 :root，本表只做说明 */
 /* 背景色 */
---bg-primary: #F7F7F5;      /* 主背景 - 偏暖灰白 */
---bg-card: #FFFFFF;          /* 卡片背景 */
---border-subtle: #EAEAEA;     /* 分隔线 */
+--color-background: #F7F7F5;      /* 主背景 - 偏暖灰白 */
+--color-surface: #FFFFFF;         /* 卡片背景 */
+--border-subtle: #EAEAEA;         /* 分隔线 */
 
-/* 文字色 */
---text-primary: #1F1F1F;     /* 标题 - 近黑 */
---text-secondary: #8A8A8A;    /* 正文 - 中灰（比我之前分析的浅！） */
+/* 文字色（对比度按 #F7F7F5 背景计算） */
+--color-text-primary: #1F1F1F;    /* 标题 - 近黑 */
+--color-text-secondary: #5C5C5C;  /* 正文 - 6.2:1 */
+--color-text-tertiary: #707070;   /* 辅助文字 - 4.6:1，正文可用下限 */
+--color-text-disabled: #999999;   /* 仅禁用态，2.9:1，不得承载信息 */
+--color-text-placeholder: #BDBDBD;/* 仅 placeholder */
 
-/* 强调色 */
---accent-primary: #FF8A00;    /* 主操作 - 橙色 */
---accent-signal: #38BDF8;     /* 信号冷蓝 - 只用于头部科技感 */
+/* CTA 与强调色 */
+--color-cta: #1A1A1A;             /* 主 CTA 背景，白字 17:1 */
+--color-accent: #FF8A00;          /* 橙色点缀 */
+--accent-signal: #38BDF8;         /* 信号冷蓝 - 只用于头部科技感 */
 
 /* 语义色 */
---color-success: #34C759;     /* 柔和绿 */
---color-warning: #FF9500;      /* 橙色 */
---color-disabled: #BDBDBD;     /* 低对比灰 */
+--color-success: #34C759;
+--color-warning: #FF9500;
+--color-error: #EF476F;
+--color-locked: #BDBDBD;
 ```
+
+**对比度约束（WCAG AA）**
+- 正文文字 ≥ 4.5:1；大字（≥18px 粗体 / ≥24px）和图标 ≥ 3:1
+- `#8A8A8A` 在主背景上只有 3.2:1，**禁止**再作为正文色
+- 橙色 `#FF8A00`、绿色 `#34C759`、`#FF9500` 上放白字只有 2.2–2.4:1，**禁止**用于承载文字的按钮；文字按钮用 `--color-cta` 黑底白字，橙色填充上的文字改用近黑 `#1F1F1F`（7:1）
+- 状态不能只靠颜色区分，需配合图标或文字
 
 ### 1.2 字体系统
 
@@ -47,6 +59,10 @@
 | Caption | 12px | 辅助信息 |
 
 **特点**: 字少，行距大，不堆信息
+
+**字体栈**: `'Baloo 2', -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif`
+- Baloo 2 只覆盖拉丁字符与数字；中文实际由 PingFang SC 等系统字体渲染，调字重时以中文效果为准
+- 正文最小 14px（移动端输入框 16px，防止 iOS 自动缩放），行高 1.5–1.75
 
 ### 1.3 间距系统 (8pt Grid)
 
@@ -67,23 +83,23 @@
 
 ### 1.4 圆角系统
 
-| 类型 | 数值 |
-|------|------|
-| Button | 24-28px |
-| Card | 24-28px |
-| Tag/Sticker | 9999px |
-| Avatar | 50% (圆形) |
+| Token | 数值 | 用途 |
+|------|------|------|
+| `--radius-sm` | 12px | 小控件、图标底 |
+| `--radius-md` | 16px | 内嵌块、菜单浮层 |
+| `--radius-lg` | 24px | 卡片 |
+| `--radius-xl` | 32px | Hero 输入区等大面板 |
+| `--radius-pill` | 9999px | 按钮、标签、头像 |
 
-**禁止**: 出现其他圆角值
+**禁止**: 新增 `rounded-[Npx]` 任意值；现有 18/20/22/28/30/36px 属于历史债，改到相关组件时收敛到上表
 
 ### 1.5 阴影层级
 
 ```css
-/* Level 1 - 卡片 */
---shadow-card: 0 2px 8px rgba(0, 0, 0, 0.05);
-
-/* Level 2 - 浮层 */
---shadow-float: 0 4px 16px rgba(0, 0, 0, 0.08);
+--shadow-card: 0 2px 12px rgba(0, 0, 0, 0.06);    /* 卡片 */
+--shadow-nav: 0 4px 20px rgba(0, 0, 0, 0.08);     /* 导航 */
+--shadow-sheet: 0 8px 40px rgba(0, 0, 0, 0.1);    /* 底部面板 */
+--shadow-float: 0 12px 36px rgba(17, 24, 39, 0.12); /* 菜单/弹窗浮层 */
 ```
 
 **禁止**: 使用更重的阴影
@@ -201,6 +217,10 @@
 | 页面切换 | 200-300ms |
 | 成功反馈 | ≤400ms |
 
+- 统一使用 `--duration-fast/normal/slow`（150/200/300ms）与 `--ease-out`
+- 只动画 `transform` / `opacity`，不动画 width/height/top 等引发重排的属性
+- 必须尊重 `prefers-reduced-motion`：Framer Motion 用 `useReducedMotion()` 或全局 `<MotionConfig reducedMotion="user">`，降级为淡入或静态终态
+
 ### 3.2 反馈原则 (强约束)
 
 **所有用户行为必须有**:
@@ -222,7 +242,19 @@
 
 ---
 
-## 5. Tailwind 配置
+## 5. 可访问性与交互底线
+
+- 可点击元素触控区 ≥ 44×44px（`--touch-target-min`），相邻目标间距 ≥ 8px
+- 键盘焦点必须可见：用 `focus-visible:` 显示 2px 焦点环，禁止只写 `outline-none`
+- 图标按钮必须有 `aria-label`；图标统一用 SVG（Lucide），禁止用 emoji 当图标
+- 异步操作按钮在请求中禁用并显示加载态；错误提示放在出错位置附近，说明原因和下一步
+- 布局验证宽度：375 / 768 / 1024 / 1440px，移动端不得横向滚动
+
+---
+
+## 6. Tailwind 配置
+
+> Tailwind v4 未通过 `@config` 加载 `tailwind.config.ts`；颜色、圆角、阴影 token 以 `app/globals.css` 的 `:root` 和其中的工具类为准。下方为语义映射参考，新增 token 先加到 globals.css。
 
 ```ts
 colors: {
@@ -233,7 +265,7 @@ colors: {
 
   // 文字
   'text-primary': '#1F1F1F',
-  'text-secondary': '#8A8A8A',
+  'text-secondary': '#5C5C5C',
 
   // 强调
   accent: '#FF8A00',
@@ -244,21 +276,17 @@ colors: {
   disabled: '#BDBDBD',
 },
 
-borderRadius: {
-  btn: '24px',
-  card: '16px',
-  sticker: '12px',
-},
+borderRadius: { sm: '12px', md: '16px', lg: '24px', xl: '32px', pill: '9999px' },
 
 boxShadow: {
-  card: '0 2px 8px rgba(0, 0, 0, 0.05)',
-  float: '0 4px 16px rgba(0, 0, 0, 0.08)',
+  card: '0 2px 12px rgba(0, 0, 0, 0.06)',
+  float: '0 12px 36px rgba(17, 24, 39, 0.12)',
 },
 ```
 
 ---
 
-## 6. 禁止事项 (Anti-Patterns)
+## 7. 禁止事项 (Anti-Patterns)
 
 | ❌ 禁止 | ✅ 正确 |
 |---------|--------|
@@ -268,3 +296,18 @@ boxShadow: {
 | 课程卡五颜六色无规则 | 课程卡只在暖色族内轮换 |
 | 管理入口比主按钮更抢眼 | 主按钮始终是视觉第一动作 |
 | 弹窗/菜单和背景融为一体 | 浮层必须有独立层次 |
+| 橙/绿底上放白字 | 文字按钮用黑底白字，橙底配近黑字 |
+| 新增任意圆角值 | 只用 radius token |
+| 动效无视系统减少动态设置 | 尊重 `prefers-reduced-motion` |
+
+---
+
+## 8. 交付前自检
+
+- [ ] 颜色、圆角、阴影全部来自 token，无新增硬编码色值
+- [ ] 文字对比度达标（正文 4.5:1，大字/图标 3:1）
+- [ ] 同屏只有一个 Primary 按钮
+- [ ] 所有可点击元素有 hover / active / focus-visible / disabled 状态
+- [ ] 动效 150–300ms，且已处理 reduced motion
+- [ ] 375px 宽度下无横向滚动、无内容被固定栏遮挡
+- [ ] 空状态、加载态、错误态都已设计

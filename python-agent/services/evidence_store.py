@@ -201,6 +201,13 @@ def _topic_pack(
             "summary": item.get("body", "")[:260],
             "authorityScore": int(item.get("authorityScore", 0)),
             "preferred": bool(item.get("preferred", False)),
+            "kind": item.get("kind") or "knowledge",
+            "useFor": (
+                "官方或高权威资料，用于支撑事实性结论"
+                if item.get("kind") != "wisdom"
+                else "社区或经验型来源，用于理解实践差异，不可作为唯一事实依据"
+            ),
+            "isPrimary": bool(item.get("isPrimary") or item.get("preferred")),
             "retrievedAt": int(now * 1000),
         })
     return {
@@ -306,6 +313,13 @@ def _new_pack(course_id: str, chapter_id: str, course_topic: str, chapter_title:
             "summary": item.get("body", "")[:260],
             "authorityScore": int(item.get("authorityScore", 0)),
             "preferred": bool(item.get("preferred", False)),
+            "kind": item.get("kind") or "knowledge",
+            "useFor": (
+                "官方或高权威资料，用于支撑事实性结论"
+                if item.get("kind") != "wisdom"
+                else "社区或经验型来源，用于理解实践差异，不可作为唯一事实依据"
+            ),
+            "isPrimary": bool(item.get("isPrimary") or item.get("preferred")),
             "retrievedAt": int(now * 1000),
         })
 
@@ -509,7 +523,15 @@ def evidence_to_prompt(
         url = str(source.get("url") or "").strip()
         if not title or not url:
             continue
-        lines.append(f"- {title}\n  {summary}\n  来源: {url}")
+        evidence_id = str(source.get("evidenceId") or "").strip()
+        kind = str(source.get("kind") or "knowledge")
+        use_for = str(source.get("useFor") or "").strip()
+        lines.append(
+            f"- {title}\n  {summary}\n  来源: {url}\n  "
+            f"证据ID: {evidence_id or '未分配'} | 类型: {kind}"
+            + (" | 主推来源" if source.get("isPrimary") else "")
+            + (f" | 用途: {use_for}" if use_for else "")
+        )
 
     if not lines:
         return None, None
@@ -517,6 +539,10 @@ def evidence_to_prompt(
     clean_sources = [{
         "title": str(source.get("title") or "")[:80],
         "url": str(source.get("url") or ""),
+        "evidenceId": str(source.get("evidenceId") or "") or None,
+        "kind": str(source.get("kind") or "knowledge"),
+        "useFor": str(source.get("useFor") or "") or None,
+        "isPrimary": bool(source.get("isPrimary")),
         "authorityScore": int(source.get("authorityScore") or 0),
     } for source in sources if isinstance(source, dict) and source.get("url")]
 

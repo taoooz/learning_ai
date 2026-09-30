@@ -47,7 +47,14 @@ export function getDisplaySourceRefs(sources: SourceRef[] | undefined): SourceRe
     if (!title && !getSourceDomain(url)) continue;
 
     seenUrls.add(url);
-    result.push({ title: title || getSourceDomain(url), url });
+    result.push({
+      title: title || getSourceDomain(url),
+      url,
+      evidenceId: source.evidenceId,
+      kind: source.kind,
+      useFor: source.useFor,
+      isPrimary: source.isPrimary,
+    });
     if (result.length >= MAX_VISIBLE_SOURCE_REFS) break;
   }
 

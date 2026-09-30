@@ -64,6 +64,7 @@ export interface MemoryEvent {
     | 'question_answered'
     | 'chat_user_message'
     | 'chat_session_summarized'
+    | 'checkpoint_evaluated'
     | 'node_completed';
   topic: string;
   courseId?: string;

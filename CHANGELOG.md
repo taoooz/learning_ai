@@ -1,49 +1,30 @@
 # 项目迭代日志
 
-> 详细历史见 `docs/archive/CHANGELOG-2026-09.md`（2026-09-28 及更早）。
+> 详细历史见 `docs/archive/CHANGELOG-2026-09.md`（2026-09-29 及更早）。
 
-### 当前架构速览
-- 新增 `docs/architecture/当前架构速览.md`：当前工程事实分层图、课程/学习数据流、local/server 存储、模块状态、V2 规格差距与工程约束
-- `docs/README.md` 和根 README 将其列为当前事实第一入口；与 V2 长期规格或历史设计冲突时，以速览和代码为准
-- `docs:check` 增加速览存在性、行数上限和“当前工程事实”优先级声明检查
+### 设计规范对齐（2026-09-30）
+- `design-system/MASTER.md` 与 `globals.css` 实际 token 对齐：正文色改为 #5C5C5C，圆角/阴影以 token 为准
+- 新增 WCAG 对比度约束、reduced motion、焦点可见、触控区与交付前自检；登记到 docs 索引
 
-### 文档目录按时效分类
-- 新增 `docs/README.md` 文档索引：区分当前事实、长期规格、长期参考、历史材料和 archive，并明确阅读优先级
-- `docs/architecture` 仅保留产品功能交接包与 V2 长期规格；调研与课程质量计划移入 `docs/reference`
-- 历史 P2/P5 设计、旧记忆方案、评审、Markdown 协议和 superpowers 计划移入 `docs/history`
-- 根 README 与代码注释同步更新文档路径；`docs:check` 扩展为校验 docs 索引分类、行数和链接
+### 学习系统分层升级（2026-09-30）
+- 新增 `CourseMission`：从 outline 派生 why / targetScenario / successCriteria / constraints / outOfScope，并贯穿 TOC、章节计划、任务内容与 Checkpoint prompt
+- 章节计划新增确定性理解闸门：最后一个任务 `evidencePolicy=checkpoint`，服务端强制写入，TS 校验兜底；测题生成同时受课程使命与证据约束
+- 章末收尾增加检查闸门：测题生成/作答/补救完成前禁用“完成本章”；检查生成失败写入可见通知且不永久锁死章节
+- 新增课程级教学状态 `CourseTeachingState`：记录当前教学焦点、待用户反馈材料、可复用教学素材和课程内备注；章节完成后确定性更新并贯穿章节计划与任务内容 prompt
+- 证据来源支持 `isPrimary` 主推来源；搜索结果优先官方域并按 knowledge/wisdom、权威分排序，来源卡突出“主推来源”
+- 扩展官方域名覆盖：Meta、Vercel、Rust、Go、Java/Spring、Kubernetes/Docker、HuggingFace 等；社区来源默认标记 wisdom
+- 补充中文权威域：`.gov.cn` 政府机构、`.edu.cn` 高校、`.cas.cn/.ac.cn` 科研机构、新华网/人民网、CNKI、阿里云/腾讯云/华为云官方文档；知乎、SegmentFault、V2EX、掘金、博客园、CSDN 等中文社区默认标记为经验参考
+- 端到端实测通过：Mission 贯穿建课、任务流式输出、来源引用、章末检查、章节完成、课程速查卡、统一术语和 Memory 概念投影
+- 新增 Checkpoint 证据到用户 Memory 的投影：`checkpoint_evaluated` 事件更新概念掌握、错误记录、误解提示和下次复习时间；覆盖不等于掌握
+- 新增课程参考资料：章节完成后从 key_point / comparison / diagram 确定性提取速查卡，课程页可展开查看
+- 新增课程统一术语表：从关键点卡提取 preferredTerm 与定义，课程页展示；后续任务 prompt 可复用
+- 证据系统升级：来源支持 `evidenceId / kind(knowledge|wisdom) / useFor`；结构化内容块支持 `evidenceRefs`，来源卡区分“事实依据 / 经验参考”
+- 存储兼容：`StoredCourseV2.references/glossary`、`CourseMission` 与块级 `evidenceRefs` 均为可选字段，旧课程可继续打开
+- 回归：TS 309/309、Python 171/171、`tsc --noEmit` 通过；文档结构检查通过
 
-### AI 快速入口与文档回流机制
-- 新增根 `README.md`（83 行）：当前架构、核心用户路径、模块地图、关键不变量和详细文档索引
-- `AGENTS.md` 增加“架构文档回流”规则：契约变化必须同步 README，纯内部实现不强制更新
-- 新增 `npm run docs:check`：检查 README 章节/行数、CHANGELOG 行数、AGENTS 回流规则和本地文档路径
-- `npm test` 前置执行 `docs:check`，让文档过期直接影响回归结果
-
-### 学习体验收尾与 Hook 继续拆分
-- 修复体验问题：任务/答疑重试成功后，历史错误通知不再继续显示；原始 system_notice 仍保留在数据中用于恢复与审计
-- 新增 `stream-item-presentation` 纯函数与 4 项测试锁定展示规则
-- `next.config.ts` 增加 `allowedDevOrigins`，消除本地 127.0.0.1 ↔ localhost 开发警告
-- `useChapterLearning` 继续拆出 Checkpoint（生成/判分/补救）、章节完成（Recap）、动态调度建议三个 Hook；1174 → 799 行
-
-### 服务端删除、交接文档与热点文件拆分
-- server 模式补齐课程删除：`LessonRepository.deleteCourse` → Next `DELETE /api/user/courses` → Python `DELETE /api/user/courses`，同时清理课程、章节 lesson 与 engagement 文件
-- 新增产品功能交接包 `docs/architecture/2026-09-29-产品功能交接包.md`，按功能契约整理 V1 下线后的单一学习流
-- 拆分 `useChapterLearning.ts`：纯状态机/reducer 抽到 `lib/learning-v2/chapter-learning-state.ts`，任务预取执行器抽到 `task-prefetch-runtime.ts`（1408 → 1174 行）
-- 拆分 `python-agent/main.py`：用户数据 API 与 Learning V2 API 分别移入 `routers/user_data.py`、`routers/learning_v2.py`（910 → 425 行）
-- 端到端实测：本地登录、系统课启动、章节计划与任务流、新建课程（outline → TOC → V2 课程页）均通过
-
-### V1 学习流下线，课程统一走 V2（P0）
-- 删除 V1 学习链路：`/learn/[nodeIndex]` 学习页、`/complete` 完成页、`CourseTree`、`/api/generate/node/*`、`ProgressContext`、`useCourseActions` 及 7 个 V1 专用组件
-- Python Agent 删除 V1 端点 `agents/cards|questions/generate[_agent]` 及对应 service、prompt；保留 `/api/agents/toc/generate`（与 V2 共用）
-- 系统推荐课程改为“大纲元数据 → `mapTocToBlueprintV2`”映射，启动即写 V2 容器，章节内容按需生成；删除 V1 预生成脚本与 `data/system-courses/`
-- `/generate/toc` 不再双写 V1，也不再降级：蓝图校验或落盘失败直接提示失败，避免半写课程
-- 旧课程不再兼容（beta 定位）：打开 V1 旧课程落到「找不到这门课程」，引导重新生成
-- 新增 `lib/learning-v2/course-list.ts`（首页课程列表派生 + 删除课程时清理章节 key），首页/课程页/卡片组件改消费 V2 数据
-- 清理 `lib/storage.ts` V1 导出（`getStoredData`/`activateSystemCourse`/`markNodeCompleted` 等）与 `node-validator`
-- 测试：TS 296/296（新增 6 项 V1 下线集成测试）、Python 168/168、`tsc --noEmit` 通过、`next build` 通过
-
-### 2026-09-20 ~ 09-28（压缩）
-- 内容侧：V2 任务流接入搜索证据包；来源引用展示；内容配方（多块流式）+ diagram 块 + 响应式重讲；本章小结流式化且不再折叠
-- 体验侧：学习流渐显与滚动优化、正文排版升级、错误卡片合并重试、章节树与输入窗视觉统一
-- 修复：glm-5.3-flash 思考预算全面排查（各链路 max_tokens 上调，消除 EMPTY_CONTENT）
-- P5.1：Hook 全面接入 `LessonRepository`，`NEXT_PUBLIC_LESSON_STORE=server` 可切服务端持久化；engagement 服务端环形上限
+### 2026-09-29（压缩）
+- 新增当前架构速览、docs 分类索引和根 README 快速入口；`npm test` 前置 `docs:check`
+- V1 学习流完整下线：新课程和系统课只写 V2；旧课程 beta 下不迁移
+- server 模式补齐课程删除；课程、章节与 engagement 同步清理
+- 学习流 Hook 与 Python main 持续拆分；错误通知在请求成功后从 UI 隐藏
+- 端到端验证覆盖本地登录、系统课、新建课程、章节任务流、删除课程和 server 刷新恢复

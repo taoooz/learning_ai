@@ -9,6 +9,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useStreak } from '@/hooks/useStreak';
 import { CourseHeaderBar } from '@/components/CourseHeaderBar';
 import { ChapterTreeV2 } from '@/components/learning-v2/ChapterTreeV2';
+import { CourseReferencePanel } from '@/components/learning-v2/CourseReferencePanel';
 import { ChatLauncher, ChatWidget } from '@/components/ui/ChatWidget';
 import { CourseCelebrationSheet } from '@/components/CourseCelebrationSheet';
 import { loadRenderableStoredCourse } from '@/lib/learning-v2/dispatch';
@@ -143,6 +144,8 @@ export default function CoursePage() {
           </div>
 
           <ChapterTreeV2 courseId={courseId} treeView={course.treeView} />
+
+          <CourseReferencePanel references={course.references} glossary={course.glossary} />
         </section>
       </div>
 

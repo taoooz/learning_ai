@@ -13,6 +13,8 @@ import { parseLearningSseStream } from '@/lib/learning-v2/sse-client';
 import { completeChapterV2 } from '@/lib/learning-v2/chapter-complete';
 import { buildLocalFallbackRecap } from '@/lib/learning-v2/recap';
 import { recordEngagementEvent } from '@/lib/learning-v2/engagement';
+import { buildCheckpointMemoryEvents } from '@/lib/memory/learning-records';
+import { createMemoryRepository } from '@/lib/memory/repository';
 import type { ChapterLearningAction } from '@/lib/learning-v2/chapter-learning-state';
 
 interface UseChapterCompletionParams {
@@ -101,7 +103,7 @@ async function requestChapterRecap(
 }
 
 export function useChapterCompletion(params: UseChapterCompletionParams) {
-  const { courseId, chapterId, lessonMirrorRef, generationRef, commit, persist } = params;
+  const { courseId, chapterId, lessonMirrorRef, generationRef, commit, persist, blueprint } = params;
 
   const finishChapter = useCallback(async () => {
     const lesson = lessonMirrorRef.current;
@@ -170,11 +172,23 @@ export function useChapterCompletion(params: UseChapterCompletionParams) {
     };
 
     persist(completedLesson);
+
+    // 课程层保留原始 evidence；这里只把“有评估结果的检查”投影到用户 Memory。
+    // 写失败不阻塞章节完成；覆盖不等于掌握，因此不会把普通任务完成写进记忆。
+    try {
+      const memoryRepository = createMemoryRepository();
+      for (const event of buildCheckpointMemoryEvents(completedLesson, blueprint.topic, courseId, recapAt)) {
+        memoryRepository.appendMemoryEvent(event);
+      }
+    } catch (error) {
+      console.warn('[useChapterCompletion] 学习记录投影失败:', error);
+    }
+
     void completeChapterV2(courseId, chapterId);
     recordEngagementEvent(courseId, { eventType: 'recap_completed', chapterId });
     recordEngagementEvent(courseId, { eventType: 'chapter_completed', chapterId });
     commit({ type: 'COMPLETED', lesson: completedLesson });
-  }, [chapterId, commit, courseId, generationRef, lessonMirrorRef, params, persist]);
+  }, [blueprint, chapterId, commit, courseId, generationRef, lessonMirrorRef, params, persist]);
 
   return { finishChapter };
 }

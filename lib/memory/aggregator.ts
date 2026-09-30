@@ -499,6 +499,39 @@ export function appendEventToMemoryStoreV3(memoryStore: MemoryStoreV3, event: Me
     recomputeTopicProjection(next, event.topic, event.occurredAt);
   }
 
+  if (event.type === 'checkpoint_evaluated') {
+    const conceptId = String(getEventPayloadValue(event.payload, 'conceptId', 'concept-unknown'));
+    const conceptName = String(getEventPayloadValue(event.payload, 'conceptName', conceptId));
+    const outcome = String(getEventPayloadValue(event.payload, 'outcome', 'not_demonstrated'));
+    const isCorrect = Boolean(getEventPayloadValue(event.payload, 'isCorrect', false));
+    const prompt = String(getEventPayloadValue(event.payload, 'prompt', ''));
+    const feedback = String(getEventPayloadValue(event.payload, 'feedback', ''));
+    const masteryDelta =
+      outcome === 'demonstrated' ? 0.22 :
+      outcome === 'partial' ? 0.1 : -0.2;
+
+    upsertConceptProjection(next, event.topic, conceptId, conceptName, (current) => {
+      current.masteryScore = Number(Math.max(0, Math.min(1, current.masteryScore + masteryDelta)).toFixed(2));
+      current.confidence = Number(Math.min(0.96, current.confidence + 0.1).toFixed(2));
+      if (isCorrect) current.recentSuccesses += 1;
+      else current.recentErrors += 1;
+      if (!isCorrect) {
+        const misconception = feedback || prompt;
+        if (misconception) {
+          current.misconceptionHints = uniqueStrings([
+            ...current.misconceptionHints,
+            summarizeEvidence(misconception),
+          ]).slice(0, 3);
+        }
+      }
+      current.nextReviewAt = event.occurredAt + (
+        outcome === 'demonstrated' ? 7 :
+        outcome === 'partial' ? 3 : 1
+      ) * 24 * 60 * 60 * 1000;
+    }, event.occurredAt);
+    recomputeTopicProjection(next, event.topic, event.occurredAt);
+  }
+
   if (event.type === 'chat_user_message') {
     const explanationStyles = getEventPayloadValue<string[]>(event.payload, 'explanationStyles', []);
     for (const style of explanationStyles) {

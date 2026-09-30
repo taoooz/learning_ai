@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 from schemas.learning_v2 import TaskStreamRequest
-from services.task_content_service import extract_takeaway, stream_task_events
+from services.task_content_service import build_task_content_prompt, extract_takeaway, stream_task_events
 from services.content_stream_parser import ContentStreamParser, parse_content_blocks
 
 
@@ -466,3 +466,49 @@ def test_stable_task_reuses_chapter_evidence_without_extra_search():
         events = _events(request, FakeStreamClient(deltas=["正文。\n\n> 要点。"]))
 
     assert any(event["type"] == "sources_ready" for event in events)
+
+
+def test_parser_extracts_block_evidence_refs_without_polluting_content():
+    text = '''正文。
+
+:::key_point
+标题：协商缓存
+- 通过 ETag 验证资源是否变化
+证据：ev-01, ev-02
+:::
+'''
+    blocks = parse_content_blocks(text)
+    assert blocks[1]["type"] == "key_point"
+    assert blocks[1]["evidenceRefs"] == ["ev-01", "ev-02"]
+    assert blocks[1]["points"] == ["通过 ETag 验证资源是否变化"]
+
+
+def test_task_content_prompt_injects_course_mission():
+    request = _request()
+    request.courseMission = {
+        "why": "我要用 HTTP 缓存优化页面",
+        "targetScenario": "前端性能优化",
+        "successCriteria": ["能配置缓存策略"],
+        "outOfScope": ["后端存储"],
+    }
+    prompt = build_task_content_prompt(request)
+    assert "课程使命" in prompt
+    assert "我要用 HTTP 缓存优化页面" in prompt
+    assert "前端性能优化" in prompt
+    assert "能配置缓存策略" in prompt
+    assert "后端存储" in prompt
+
+
+def test_task_content_prompt_injects_teaching_state():
+    request = _request()
+    request.teachingState = {
+        "insights": [{
+            "content": "前序章节已理解缓存命中",
+            "status": "candidate",
+        }],
+        "notes": [{"content": "用户偏好实操例子"}],
+    }
+    prompt = build_task_content_prompt(request)
+    assert "teaching_state" in prompt
+    assert "前序章节已理解缓存命中" in prompt
+    assert "用户偏好实操例子" in prompt

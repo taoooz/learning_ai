@@ -18,3 +18,20 @@ def test_toc_prompt_injects_course_evidence():
 def test_toc_prompt_without_evidence_has_no_section():
     prompt = build_toc_prompt({"topic": "写作表达"})
     assert "课程证据包" not in prompt
+
+
+def test_toc_prompt_injects_course_mission():
+    prompt = build_toc_prompt({
+        "topic": "React 进阶实战",
+        "mission": {
+            "why": "我要转型 AI 产品经理",
+            "targetScenario": "AI 产品方案设计",
+            "successCriteria": ["能独立设计 Agent 产品方案"],
+            "outOfScope": ["底层模型训练"],
+        },
+    })
+    assert "课程使命" in prompt
+    assert "我要转型 AI 产品经理" in prompt
+    assert "AI 产品方案设计" in prompt
+    assert "能独立设计 Agent 产品方案" in prompt
+    assert "底层模型训练" in prompt

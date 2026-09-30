@@ -403,3 +403,25 @@ def test_generate_remediation_injects_evidence_and_attaches_sources():
         "title": "HTTP 304",
         "url": "https://developer.mozilla.org/docs/Web/HTTP/Status/304",
     }]
+
+
+def test_checkpoint_prompt_injects_course_mission():
+    from prompts.checkpoint import build_checkpoint_prompt
+
+    prompt = build_checkpoint_prompt(
+        course_topic="HTTP 缓存",
+        chapter_title="缓存策略",
+        teaching_goal="理解缓存",
+        task_title="配置 Cache-Control",
+        task_goal="能配置缓存",
+        task_content_summary="讲 Cache-Control 的 max-age 和 no-cache。",
+        course_mission={
+            "why": "优化首屏加载",
+            "targetScenario": "前端性能优化",
+            "successCriteria": ["能配置缓存策略"],
+        },
+    )
+    assert "课程使命" in prompt
+    assert "优化首屏加载" in prompt
+    assert "前端性能优化" in prompt
+    assert "能配置缓存策略" in prompt

@@ -131,6 +131,17 @@ class ContentStreamParser:
     def _parse_structured(self, block_type: str, lines: list[str]) -> dict | None:
         self._id_seq += 1
         block_id = f"b{self._id_seq}"
+        # 证据行不属于教学内容，先抽出 evidenceRefs，避免混入要点/例子/图源码。
+        evidence_refs: list[str] = []
+        content_lines: list[str] = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("证据：") or stripped.startswith("证据:"):
+                refs = _after_colon(stripped)
+                evidence_refs.extend(ref.strip() for ref in refs.replace("，", ",").split(",") if ref.strip())
+            else:
+                content_lines.append(line)
+
         parser_fn = {
             "key_point": self._parse_key_point,
             "example": self._parse_example,
@@ -139,7 +150,10 @@ class ContentStreamParser:
         }.get(block_type)
         if not parser_fn:
             return None
-        return parser_fn(lines, block_id)
+        block = parser_fn(content_lines, block_id)
+        if block and evidence_refs:
+            block["evidenceRefs"] = evidence_refs
+        return block
 
     def _parse_key_point(self, lines: list[str], block_id: str) -> dict | None:
         title = None

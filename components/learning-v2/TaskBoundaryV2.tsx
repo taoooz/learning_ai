@@ -13,6 +13,7 @@
 
 import type { NodeLessonV2 } from '@/types/learning-v2';
 import type { ChapterPhase } from '@/hooks/learning-v2/useChapterLearning';
+import { evaluateChapterCheckpointGate } from '@/lib/learning-v2/checkpoint-gate';
 
 interface TaskBoundaryV2Props {
   lesson: NodeLessonV2;
@@ -60,7 +61,14 @@ export function TaskBoundaryV2({ lesson, phase, attempts, onContinue, highlightC
   const boundaryPrompt =
     contentItem && contentItem.type === 'task_content' ? contentItem.boundaryPrompt : undefined;
 
-  const buttonLabel = failed ? '重新生成本节' : nextTask ? '继续学习' : '完成本章';
+  const checkpointGate = evaluateChapterCheckpointGate(lesson);
+  const buttonLabel = failed
+    ? '重新生成本节'
+    : nextTask
+      ? '继续学习'
+      : checkpointGate.blocked
+        ? '完成理解检查'
+        : '完成本章';
   const progressLabel = failed
     ? '本节生成失败，可以重试'
     : nextTask
@@ -84,6 +92,15 @@ export function TaskBoundaryV2({ lesson, phase, attempts, onContinue, highlightC
         {highlightContinue && !failed && (
           <p className="mb-3 text-[12px] font-medium text-accent">听起来你已准备好，可以继续了</p>
         )}
+        {!failed && checkpointGate.blocked && (
+          <p className="mb-3 text-[12px] leading-relaxed text-tertiary">
+            {checkpointGate.reason === 'generating'
+              ? '正在生成本章理解检查…'
+              : checkpointGate.reason === 'awaiting_answer'
+                ? '请先完成本章理解检查，再收尾本章。'
+                : '请先查看补救讲解并完成重试，再收尾本章。'}
+          </p>
+        )}
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13px] font-medium text-primary">{nextTask ? '继续学习' : '完成本章'}</p>
@@ -92,11 +109,12 @@ export function TaskBoundaryV2({ lesson, phase, attempts, onContinue, highlightC
           <button
             type="button"
             onClick={onContinue}
+            disabled={!failed && checkpointGate.blocked}
             className={`flex h-11 shrink-0 items-center gap-2 rounded-full px-5 text-[14px] font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:shadow-none ${
               highlightContinue && !failed
                 ? 'animate-pulse bg-accent shadow-md shadow-accent/30'
                 : 'bg-accent shadow-sm shadow-accent/20'
-            }`}
+            } disabled:cursor-not-allowed disabled:translate-y-0 disabled:shadow-none disabled:opacity-45`}
           >
             <span>{buttonLabel}</span>
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -30,3 +30,26 @@ test('来源标题和域名有稳定兜底', () => {
   assert.equal(getSourceDisplayTitle({ title: '  React 官方文档  ', url: 'https://react.dev' }), 'React 官方文档');
   assert.equal(getSourceDisplayTitle({ title: '', url: 'https://react.dev' }), 'react.dev');
 });
+
+test('来源清洗保留证据 ID、类型和用途元数据', () => {
+  const refs = getDisplaySourceRefs([{
+    title: 'React useActionState',
+    url: 'https://react.dev/reference/react/useActionState',
+    evidenceId: 'ev-01',
+    kind: 'knowledge',
+    useFor: '官方 API 事实',
+  }]);
+
+  assert.equal(refs[0]?.evidenceId, 'ev-01');
+  assert.equal(refs[0]?.kind, 'knowledge');
+  assert.equal(refs[0]?.useFor, '官方 API 事实');
+});
+
+test('来源清洗保留主推来源标记', () => {
+  const refs = getDisplaySourceRefs([{
+    title: 'React 官方文档',
+    url: 'https://react.dev/reference/react',
+    isPrimary: true,
+  }]);
+  assert.equal(refs[0]?.isPrimary, true);
+});

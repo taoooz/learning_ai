@@ -119,6 +119,7 @@ async def generate_checkpoint(
     task_goal: str,
     objective_id: str,
     task_content_summary: str,
+    course_mission: dict | None = None,
     evidence: str | None = None,
     sources: list[dict] | None = None,
     client: MiniMaxClient | None = None,
@@ -132,6 +133,7 @@ async def generate_checkpoint(
         task_title=task_title,
         task_goal=task_goal,
         task_content_summary=task_content_summary,
+        course_mission=course_mission,
         evidence=evidence,
         sources=sources,
     )

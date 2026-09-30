@@ -17,11 +17,11 @@
 ## 2. 核心用户路径
 
 1. **登录：** `/login` 输入邀请码；cookie 鉴权由 `middleware.ts` 保护页面路由。
-2. **创建课程：** `/generate/chat` 生成学习纲要 → `/generate/toc` 生成课程目录 → 前端映射为 `CourseBlueprintV2` 并落库。
+2. **创建课程：** `/generate/chat` 生成学习纲要与 `CourseMission` → `/generate/toc` 生成课程目录 → 前端映射为 `CourseBlueprintV2` 并落库。
 3. **系统课程：** 首页点击系统推荐课程，由内置大纲元数据派生 V2 蓝图，章节内容按需生成。
-4. **课程页：** `/course/{courseId}` 展示章节树、进度和当前可学章节。
+4. **课程页：** `/course/{courseId}` 展示章节树、进度、当前可学章节、课程速查卡和统一术语。
 5. **章节学习：** `/course/{courseId}/chapter/{chapterId}` 按需生成章节计划，再流式输出任务内容。
-6. **学习互动：** 任务边界、流内提问、检查点判分、补救内容、计划补丁建议和章节总结。
+6. **学习互动：** 任务边界、流内提问、章末检查点、补救内容、计划补丁建议和章节总结。
 7. **完成与恢复：** 章节完成后刷新课程树并解锁下一章；刷新页面后按章节真实状态恢复。
 
 ## 3. 模块地图
@@ -35,6 +35,8 @@
 | 首页课程列表 | `lib/learning-v2/course-list.ts`, `components/CourseCard.tsx` |
 | 章节学习编排 | `hooks/learning-v2`, `lib/learning-v2/reducers.ts`, `lib/learning-v2/state-machine.ts` |
 | 学习流 UI | `components/learning-v2`, `lib/learning-v2/stream-item-presentation.ts` |
+| 课程参考资料 | `lib/learning-v2/reference.ts`, `components/learning-v2/CourseReferencePanel.tsx` |
+| 课程教学状态 | `types/learning-v2/teaching-state.ts`, `lib/learning-v2/teaching-state.ts` |
 | 存储抽象 | `lib/learning-v2/lesson-repository.ts` |
 | 本地存储 | `lib/storage.ts`, `lib/learning-v2/storage.ts` |
 | 服务端存储 | `app/api/user`, `python-agent/routers/user_data.py`, `python-agent/services/user_data_store.py` |
@@ -52,7 +54,8 @@
 5. 删除课程必须清理课程容器、章节学习流和参与信号，并走 `LessonRepository.deleteCourse`。
 6. 任务/答疑错误通知在对应请求成功后从 UI 隐藏，但数据层保留原始 `system_notice` 用于恢复与审计。
 7. 用户可见文本使用中文；API 错误应包含可理解的中文信息和可重试标记。
-8. 密钥只放 `.env*`，不得进入源码或文档。
+8. 每章最后一个任务必须触发 Checkpoint；只有评估结果可投影为用户 Memory 掌握状态。
+9. 密钥只放 `.env*`，不得进入源码或文档。
 
 ## 5. 详细文档索引
 

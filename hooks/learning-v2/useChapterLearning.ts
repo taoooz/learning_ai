@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import type {
   ChapterPlan,
   ChapterRecap,
+  CourseTeachingState,
   ChapterPlanPatch,
   CourseBlueprintV2,
   LearningSseEvent,
@@ -48,6 +49,7 @@ import {
   type PrefetchSlot,
 } from '@/lib/learning-v2/task-prefetch-runtime';
 import { countUnansweredTutorQuestions, TUTOR_AUTO_WINDOW_LIMIT } from '@/lib/learning-v2/tutor-queue';
+import { evaluateChapterCheckpointGate } from '@/lib/learning-v2/checkpoint-gate';
 import {
   deriveChapterPhase,
   prepareTutorBoot,
@@ -73,6 +75,8 @@ interface UseChapterLearningArgs {
   courseId: string;
   chapterId: string;
   blueprint: CourseBlueprintV2;
+  /** 课程级教学状态：来自 StoredCourseV2.teachingState */
+  teachingState?: CourseTeachingState;
 }
 
 /** Tutor UI 最小状态（P2 设计文档 §4）：忙闲、排队数、失败信息 */
@@ -147,6 +151,7 @@ export function useChapterLearning({
   courseId,
   chapterId,
   blueprint,
+  teachingState,
 }: UseChapterLearningArgs): UseChapterLearningResult {
   const generationRef = useRef(0); // 代际计数：每次新请求 +1，旧流程的回调一律失效
   const abortRef = useRef<AbortController | null>(null);
@@ -351,12 +356,14 @@ export function useChapterLearning({
           teachingGoal: chapter?.teachingGoal ?? '',
         },
         courseTopic: blueprint.topic,
+        courseMission: blueprint.mission,
+        teachingState,
         learnerStartingPoint: blueprint.learnerStartingPoint,
         previousTasks,
         nextTaskTitle: nextTask?.title ?? null,
       };
     },
-    [courseId, chapterId, blueprint],
+    [courseId, chapterId, blueprint, teachingState],
   );
 
   // ---- P3a Checkpoint 编排（生成/判分/重试/补救） ----
@@ -588,6 +595,8 @@ export function useChapterLearning({
     );
     const nextTask = currentIndex >= 0 ? sortedTasks[currentIndex + 1] : undefined;
     if (!nextTask) {
+      // 章末闸门：检查题生成/作答/补救完成前，不允许收尾章节。
+      if (evaluateChapterCheckpointGate(lesson).blocked) return;
       void finishChapter();
       return;
     }

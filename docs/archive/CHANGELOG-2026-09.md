@@ -463,3 +463,20 @@
 - 根因：9/6 TOC 修复只调了 toc/outline/cards 的预算，**task_content(2000)/chapter_plan(3000)/tutor(1500)/recap(1500)/toc_service 非代理路径(2000)/chat(1500)/plan_patch(3000) 仍按旧模型 deepseek-v4-flash 思考短的假设设定**——glm-5.3-flash 思考 3.4k~12k 字耗尽预算后 content 0 字
 - 修复：task_content 2000→16000、chapter_plan 3000→16000、tutor 1500→8000、recap 1500→8000、toc_service 2000→16000（两处）、plan_patch 3000→8000、chat 1500→8000
 - 验证：真实 LLM 连跑 3 次任务流 3/3 无 EMPTY_CONTENT、task_completed 全出；pytest 111/111
+
+## 2026-09-29 CHANGELOG 快照（归档）
+以下为 2026-09-30 学习系统改造前的未归档条目快照。
+
+### 当前架构速览
+- 新增当前架构速览与 docs 分类索引，`docs:check` 纳入结构校验
+- 根 README 重写为 AI/开发者快速入口，`npm test` 前置文档检查
+
+### 学习体验与 Hook 拆分
+- 修复重试成功后错误通知继续展示的问题；引入 stream-item-presentation 展示规则
+- `useChapterLearning` 拆出 Checkpoint、章节完成、动态调度建议；Python `main.py` 拆出 Learning V2 与用户数据路由
+- server 模式补齐课程删除；新增产品功能交接包
+
+### V1 学习流下线
+- 删除 V1 学习页、组件、API、Context、生成服务与系统课预生成脚本
+- 系统课程改由大纲元数据映射 V2 蓝图；旧课程 beta 下不做迁移
+- 验证：TS 296/296、Python 168/168、build 通过

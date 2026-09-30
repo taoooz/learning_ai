@@ -30,6 +30,7 @@ export function SourceRefsView({
           const title = getSourceDisplayTitle(source);
           const domain = getSourceDomain(source.url);
           const safe = isSafeHttpUrl(source.url);
+          const kindLabel = source.kind === 'wisdom' ? '经验参考' : '事实依据';
           return (
             <li key={`${source.url}-${index}`} className="flex min-w-0 items-baseline gap-2 text-[13px]">
               <span className="shrink-0 text-[12px] text-tertiary">{index + 1}</span>
@@ -44,6 +45,9 @@ export function SourceRefsView({
                     {title}
                   </span>
                   {domain && <span className="shrink-0 text-[12px] text-tertiary">{domain}</span>}
+                  <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] ${source.isPrimary ? 'bg-accent/10 text-accent' : 'bg-black/[0.04] text-secondary'}`}>
+                    {source.isPrimary ? '主推来源' : kindLabel}
+                  </span>
                 </a>
               ) : (
                 <span className="min-w-0 flex-1 truncate text-secondary">{title}</span>

@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 import httpx
 from ddgs import DDGS
 
-from lib.tools.source_registry import source_authority
+from lib.tools.source_registry import infer_source_kind, source_authority
 
 JINA_READER = "https://r.jina.ai/"
 SEARCH_BACKEND = os.getenv("FREE_SEARCH_BACKEND", "google")
@@ -104,6 +104,7 @@ def search_web_structured(
             for item in found:
                 canonical = _normalize_url(item["url"])
                 item["authorityScore"] = source_authority(item["url"], preferred_domains)
+                item["kind"] = infer_source_kind(item["url"])
                 item["preferred"] = any(
                     canonical == f"https://{domain}" or canonical.startswith(f"https://{domain}/")
                     for domain in preferred_domains
@@ -115,8 +116,17 @@ def search_web_structured(
         if len(results) >= max_results:
             break
 
-    results.sort(key=lambda item: item["authorityScore"], reverse=True)
+    results.sort(
+        key=lambda item: (
+            1 if item.get("preferred") else 0,
+            0 if item.get("kind") == "knowledge" else 1,
+            item["authorityScore"],
+        ),
+        reverse=True,
+    )
     results = results[:max_results]
+    if results:
+        results[0]["isPrimary"] = True
     if not results:
         raise RuntimeError("; ".join(errors) or "no results")
 

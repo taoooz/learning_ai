@@ -8,6 +8,7 @@
 import type {
   ChapterDefinition,
   CourseBlueprintV2,
+  CourseMission,
   LearningIntentType,
   LearningObjective,
   LearnerEstimatedLevel,
@@ -28,6 +29,8 @@ export interface TocOutlineInput {
   topic: string;
   learningDirection?: string;
   learningGoal?: string;
+  /** 前端可在 TOC 生成前先派生 mission，用于约束目录生成 */
+  mission?: CourseMission;
   learnerPositioning: {
     estimatedLevel: string;
     skipBasics?: string[];
@@ -77,10 +80,34 @@ export function inferIntentType(text: string): LearningIntentType {
  * 每章派生一个 core 目标，章节依赖为线性链；
  * observableOutcome/completionCriteria 用行为化模板句，保证通过蓝图校验。
  */
+export function buildCourseMissionFromOutline(
+  outline: TocOutlineInput,
+  courseName: string,
+  description?: string,
+): CourseMission {
+  return {
+    why: outline.learningGoal?.trim() || outline.learningDirection?.trim() || courseName,
+    targetScenario: (
+      outline.learningDirection?.trim() ||
+      description ||
+      outline.learningGoal ||
+      courseName
+    ).trim(),
+    successCriteria: [
+      (description || outline.learningGoal || `完成 ${courseName} 的核心学习目标`).trim(),
+    ],
+    constraints: [],
+    outOfScope: (outline.learnerPositioning.skipBasics ?? [])
+      .map((topic) => topic.trim())
+      .filter(Boolean),
+  };
+}
+
 export function mapTocToBlueprintV2(input: MapTocToBlueprintInput): CourseBlueprintV2 {
   const { courseId, courseName, description, nodes, outline } = input;
   const now = input.now ?? Date.now();
   const goalText = [outline.learningGoal, outline.learningDirection].filter(Boolean).join('，');
+  const mission = outline.mission ?? buildCourseMissionFromOutline(outline, courseName, description);
 
   const courseObjectives: LearningObjective[] = nodes.map((node, i) => {
     const index = node.index ?? i + 1;
@@ -112,7 +139,8 @@ export function mapTocToBlueprintV2(input: MapTocToBlueprintInput): CourseBluepr
     protocolVersion: 2,
     topic: courseName.trim() || outline.topic,
     intentType: inferIntentType(goalText),
-    targetScenario: (description || goalText || courseName).trim(),
+    targetScenario: mission.targetScenario,
+    mission,
     learnerStartingPoint: {
       estimatedLevel: normalizeEstimatedLevel(outline.learnerPositioning.estimatedLevel),
       confirmedKnowledge: [],

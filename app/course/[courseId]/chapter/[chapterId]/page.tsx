@@ -132,6 +132,7 @@ function ChapterLearningView({
     courseId: course.courseId,
     chapterId: chapter.chapterId,
     blueprint: course.blueprint,
+    teachingState: course.teachingState,
   });
 
   // P2 流内答疑草稿：受控于页面；章节切换随 key={chapterId} 重建清空

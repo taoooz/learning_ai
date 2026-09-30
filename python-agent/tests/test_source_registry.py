@@ -1,7 +1,7 @@
 """免预算搜索来源策略：权威域推断、来源排序和 URL 去重。"""
 
 from lib.tools.search_tools import search_web_structured
-from lib.tools.source_registry import infer_preferred_domains, source_authority
+from lib.tools.source_registry import infer_preferred_domains, infer_source_kind, source_authority
 
 
 def test_infer_preferred_domains_react():
@@ -43,3 +43,45 @@ def test_search_web_structured_sorts_and_dedupes():
     assert results[0]["url"] == "https://react.dev/reference/react/useActionState"
     assert results[0]["preferred"] is True
     assert len(results) == 2
+
+
+def test_source_kind_separates_knowledge_and_wisdom():
+    assert infer_source_kind("https://react.dev/reference/react/useActionState") == "knowledge"
+    assert infer_source_kind("https://news.ycombinator.com/item?id=1") == "wisdom"
+    assert infer_source_kind("https://stackoverflow.com/questions/1") == "wisdom"
+
+
+def test_more_framework_domains_are_recognized():
+    assert infer_preferred_domains("Meta Muse App")[0] == "about.fb.com"
+    assert infer_preferred_domains("Kubernetes 入门")[0] == "kubernetes.io"
+
+
+def test_chinese_official_domains_are_preferred_by_topic():
+    assert infer_preferred_domains("中国宏观经济统计数据")[:2] == ["pbc.gov.cn", "stats.gov.cn"]
+    assert infer_preferred_domains("医疗卫生政策")[:2] == ["nhc.gov.cn", "cdc.gov.cn"]
+    assert infer_preferred_domains("政府政策和国家标准")[:2] == ["gov.cn", "npc.gov.cn"]
+    assert infer_preferred_domains("学术论文与科学研究")[:2] == ["cas.cn", "cnki.net"]
+    assert infer_preferred_domains("阿里云云服务实践")[:2] == ["help.aliyun.com", "cloud.tencent.com"]
+    assert infer_preferred_domains("新华社和人民日报报道")[:2] == ["news.cn", "people.com.cn"]
+
+
+def test_chinese_official_domains_receive_high_authority():
+    assert source_authority("https://www.gov.cn/zhengce/") == 98
+    assert source_authority("https://stats.gov.cn/sj/") == 97
+    assert source_authority("https://www.tsinghua.edu.cn/") == 90
+    assert source_authority("https://www.pku.edu.cn/") == 90
+
+
+def test_chinese_community_domains_are_wisdom_sources():
+    assert infer_source_kind("https://zhuanlan.zhihu.com/p/1") == "wisdom"
+    assert infer_source_kind("https://segmentfault.com/a/1") == "wisdom"
+    assert infer_source_kind("https://www.v2ex.com/t/1") == "wisdom"
+    assert infer_source_kind("https://juejin.cn/post/1") == "wisdom"
+    assert infer_source_kind("https://blog.csdn.net/a") == "wisdom"
+
+
+def test_chinese_government_and_academic_suffixes_receive_default_authority():
+    assert source_authority("https://www.nhsa.gov.cn/") == 96
+    assert source_authority("https://www.shanghai.gov.cn/") == 96
+    assert source_authority("https://www.sjtu.edu.cn/") == 85
+    assert source_authority("https://www.ihep.cas.cn/") == 90

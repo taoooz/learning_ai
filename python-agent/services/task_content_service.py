@@ -32,6 +32,53 @@ _SENTENCE_SPLIT_RE = re.compile(r"(?<=[。！？!?])")
 _MARKER_LINE_RE = re.compile(r"^:::(\w+)?\s*$", re.MULTILINE)
 
 
+def _format_teaching_state(teaching_state: dict | None) -> str:
+    if not teaching_state:
+        return ""
+    sections = []
+
+    insights = [
+        item for item in (teaching_state.get("insights") or [])
+        if item.get("status") in ("candidate", "used") and item.get("content")
+    ]
+    if insights:
+        lines = [f"- {item.get('content')}" for item in insights[-3:]]
+        sections.append("## 前序章节素材\n" + "\n".join(lines))
+
+    notes = teaching_state.get("notes") or []
+    if notes:
+        lines = [f"- {item.get('content')}" for item in notes[-3:]]
+        sections.append("## 课程教学备注\n" + "\n".join(lines))
+
+    if not sections:
+        return ""
+    return (
+        "\n\n<teaching_state>\n"
+        + "\n".join(sections)
+        + "\n\n写作要求：任务内容应承接前序章节素材，但不要机械复述。"
+        + "\n</teaching_state>"
+    )
+
+
+def _format_course_mission(mission: dict | None) -> str:
+    if not mission:
+        return ""
+    lines = [
+        f"- 学习动机：{mission.get('why', '')}",
+        f"- 目标场景：{mission.get('targetScenario', '')}",
+    ]
+    success = mission.get("successCriteria") or []
+    if success:
+        lines.append("- 完成标准：" + "；".join(str(item) for item in success))
+    out_of_scope = mission.get("outOfScope") or []
+    if out_of_scope:
+        lines.append("- 不学：" + "、".join(str(item) for item in out_of_scope))
+    return (
+        "\n\n## 课程使命\n" + "\n".join(lines) +
+        "\n\n本任务必须服务这个使命；不要为了知识完整性扩展使命外内容。"
+    )
+
+
 def build_task_content_prompt(
     request: TaskStreamRequest,
     evidence: str | None = None,
@@ -62,7 +109,8 @@ def build_task_content_prompt(
         evidence_section = (
             f"\n\n## 搜索证据包（外部资料，引用时须注明来源）\n{evidence}\n\n"
             f"## 可引用来源\n{source_lines}\n\n"
-            "引用上述证据时保持事实准确，不要编造未在证据中出现的内容。"
+            "引用上述证据时保持事实准确，不要编造未在证据中出现的内容。\n"
+            "结构化块若依赖证据，请在块末单独写一行：证据：ev-01, ev-02（只使用证据包中的 ID）。"
         )
     pattern = request.task.teachingPattern
     return build_prompt(
@@ -77,7 +125,7 @@ def build_task_content_prompt(
         learner_section="\n".join(learner_lines),
         previous_section=previous_section,
         content_recipe=get_recipe(pattern),
-        ) + evidence_section
+        ) + _format_course_mission(request.courseMission) + _format_teaching_state(request.teachingState) + evidence_section
 
 
 def extract_takeaway(markdown: str) -> str:

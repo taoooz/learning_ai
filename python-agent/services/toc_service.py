@@ -106,6 +106,21 @@ def build_toc_prompt(blueprint: dict, planning_payload: dict = None, user_profil
         if recent_text:
             recent_section = f"\n\n{recent_text}"
 
+    mission = blueprint.get("mission") or {}
+    mission_section = ""
+    if mission:
+        mission_lines = [
+            f"- 学习动机：{mission.get('why', '')}",
+            f"- 目标场景：{mission.get('targetScenario', '')}",
+        ]
+        success = mission.get("successCriteria") or []
+        if success:
+            mission_lines.append("- 完成标准：" + "；".join(str(item) for item in success))
+        out_of_scope = mission.get("outOfScope") or []
+        if out_of_scope:
+            mission_lines.append("- 明确不学：" + "、".join(str(item) for item in out_of_scope))
+        mission_section = "\n\n## 课程使命\n" + "\n".join(mission_lines)
+
     evidence_section = ''
     if evidence:
         source_lines = '\n'.join(f"- {s.get('title', '')}（{s.get('url', '')}）" for s in (sources or []))
@@ -126,7 +141,7 @@ def build_toc_prompt(blueprint: dict, planning_payload: dict = None, user_profil
         learning_plan=learning_plan,
         profile_section=profile_section,
         recent_section=recent_section,
-    ) + evidence_section
+    ) + mission_section + evidence_section
 
 
 async def generate_toc(blueprint: dict, planning_payload: dict = None, user_profile: dict = None) -> dict:

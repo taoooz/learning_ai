@@ -20,6 +20,8 @@ export interface MarkdownBlock {
   type: 'markdown';
   blockId: string;
   markdown: string;
+  /** 支撑本块事实的证据 ID；当前主要由结构化块携带 */
+  evidenceRefs?: string[];
 }
 
 export interface KeyPointBlock {
@@ -62,10 +64,20 @@ export interface TaskBoundaryPrompt {
   nextHint?: string;
 }
 
+export type EvidenceKind = 'knowledge' | 'wisdom';
+
 /** 内容引用来源（搜索工具产出，P1b 起消费） */
 export interface SourceRef {
   title: string;
   url: string;
+  /** 稳定证据 ID，供内容块和题目引用 */
+  evidenceId?: string;
+  /** knowledge=事实依据；wisdom=经验/社区判断，不可作为唯一事实依据 */
+  kind?: EvidenceKind;
+  /** 该来源适合回答什么问题 */
+  useFor?: string;
+  /** 本任务/章节最值得用户亲自阅读的主推来源 */
+  isPrimary?: boolean;
 }
 
 export interface GeneratedTask {

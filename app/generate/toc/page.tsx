@@ -8,7 +8,7 @@ import { CourseHeaderBar } from '@/components/CourseHeaderBar';
 import { getUserProfile } from '@/lib/storage';
 import { getPlanningMemoryPayload, getUserMemoryStoreSnapshot } from '@/lib/memory';
 import { parseSSEStream } from '../chat/utils/sseParser';
-import { mapTocToBlueprintV2 } from '@/lib/learning-v2/blueprint-map';
+import { buildCourseMissionFromOutline, mapTocToBlueprintV2 } from '@/lib/learning-v2/blueprint-map';
 import { validateCourseBlueprintV2 } from '@/lib/learning-v2/validators';
 import { createStoredCourseV2 } from '@/lib/learning-v2/storage';
 import { createAndSaveStoredCourseV2 } from '@/lib/learning-v2/dispatch';
@@ -48,6 +48,11 @@ function TocPageContent() {
     hasRequestedRef.current = true;
 
     const outline: PendingOutline = JSON.parse(outlineData);
+    const mission = buildCourseMissionFromOutline(
+      outline,
+      outline.topic,
+      outline.learningGoal,
+    );
 
     (async () => {
       try {
@@ -55,7 +60,7 @@ function TocPageContent() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            blueprint: outline,
+            blueprint: { ...outline, mission },
             // 个性化透传：用户画像 + 规划记忆（近期相关课程等），缺省时服务端行为与原来一致
             userProfile: getUserProfile(),
             planningPayload: getPlanningMemoryPayload(

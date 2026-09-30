@@ -27,7 +27,12 @@ PROMPT = {
 
 ## 任务已展示内容摘要
 {task_content_summary}
-</checkpoint_context>""",
+</checkpoint_context>
+
+<course_mission>
+## 课程使命
+{mission_section}
+</course_mission>""",
 
     "output_format": """<output_format>
 ## 输出要求
@@ -86,10 +91,25 @@ def build_checkpoint_prompt(
     task_title: str,
     task_goal: str,
     task_content_summary: str,
+    course_mission: dict | None = None,
     evidence: str | None = None,
     sources: list[dict] | None = None,
 ) -> str:
     """构建 Checkpoint 生成 prompt；有证据包时约束题目与正确答案来源"""
+    mission_section = ""
+    if course_mission:
+        mission_lines = [
+            f"- 学习动机：{course_mission.get('why', '')}",
+            f"- 目标场景：{course_mission.get('targetScenario', '')}",
+        ]
+        success = course_mission.get("successCriteria") or []
+        if success:
+            mission_lines.append("- 完成标准：" + "；".join(str(item) for item in success))
+        out_of_scope = course_mission.get("outOfScope") or []
+        if out_of_scope:
+            mission_lines.append("- 不学：" + "、".join(str(item) for item in out_of_scope))
+        mission_section = "\n".join(mission_lines)
+
     evidence_section = ""
     if evidence:
         source_lines = "\n".join(
@@ -116,6 +136,7 @@ def build_checkpoint_prompt(
         task_title=task_title,
         task_goal=task_goal,
         task_content_summary=task_content_summary,
+        mission_section=mission_section,
     ) + evidence_section
 
 REMEDIATION_PROMPT = {

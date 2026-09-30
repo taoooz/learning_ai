@@ -6,6 +6,8 @@
 import type { CourseTreeViewV2, NodeLessonV2, StoredCourseV2 } from '@/types/learning-v2';
 import { deriveCourseTreeViewV2, getStoredCourseV2, loadNodeLessonV2, saveStoredCourseV2 } from './storage';
 import { getLessonRepository, getLessonStoreMode } from './lesson-repository';
+import { mergeCourseAssets } from './reference';
+import { updateTeachingStateAfterChapter } from './teaching-state';
 
 /**
  * 章节是否可完成：所有章节状态停在边界，且计划任务全部完成/跳过。
@@ -26,13 +28,24 @@ export function canCompleteChapter(lesson: NodeLessonV2): boolean {
 export async function completeChapterV2(courseId: string, chapterId: string): Promise<boolean> {
   if (getLessonStoreMode() === 'server') {
     const repository = getLessonRepository();
-    const course = await repository.loadCourse(courseId);
+    const [course, lesson] = await Promise.all([
+      repository.loadCourse(courseId),
+      repository.loadLesson(courseId, chapterId),
+    ]);
     if (!course) return false;
+    if (lesson && lesson.runtime.status !== 'completed') return false;
     const completedChapterIds = course.treeView.chapters
       .filter((chapter) => chapter.status === 'completed' || chapter.chapterId === chapterId)
       .map((chapter) => chapter.chapterId);
     const treeView = deriveCourseTreeViewV2(courseId, course.blueprint, completedChapterIds);
-    return repository.saveCourse({ ...course, treeView });
+    const chapter = course.blueprint.chapters.find((item) => item.chapterId === chapterId);
+    const withAssets = lesson
+      ? mergeCourseAssets(course, lesson, chapter?.title ?? chapterId, Date.now())
+      : course;
+    const teachingState = lesson
+      ? updateTeachingStateAfterChapter(course, lesson, Date.now())
+      : course.teachingState;
+    return repository.saveCourse({ ...withAssets, treeView, teachingState });
   }
 
   const course = getStoredCourseV2(courseId);
@@ -40,7 +53,10 @@ export async function completeChapterV2(courseId: string, chapterId: string): Pr
   const lesson = loadNodeLessonV2(courseId, chapterId);
   if (!lesson || lesson.runtime.status !== 'completed') return false;
   const treeView = refreshCourseTreeViewV2(course);
-  return saveStoredCourseV2({ ...course, treeView });
+  const chapter = course.blueprint.chapters.find((item) => item.chapterId === chapterId);
+  const withAssets = mergeCourseAssets(course, lesson, chapter?.title ?? chapterId, Date.now());
+  const teachingState = updateTeachingStateAfterChapter(course, lesson, Date.now());
+  return saveStoredCourseV2({ ...withAssets, treeView, teachingState });
 }
 
 /**

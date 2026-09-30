@@ -44,7 +44,19 @@ def _do_search(query: str, preferred_domains: list[str] | None = None) -> dict |
 
     lines = [f"- {item['title']}\n  {item['body']}\n  来源: {item['url']}" for item in results]
     sources = [
-        {"title": item["title"][:60], "url": item["url"], "authorityScore": item["authorityScore"]}
+        {
+            "title": item["title"][:60],
+            "url": item["url"],
+            "evidenceId": item.get("evidenceId"),
+            "kind": item.get("kind") or "knowledge",
+            "useFor": (
+                "官方或高权威资料，用于支撑事实性结论"
+                if item.get("kind") != "wisdom"
+                else "社区或经验型来源，用于理解实践差异，不可作为唯一事实依据"
+            ),
+            "isPrimary": bool(item.get("isPrimary") or item.get("preferred")),
+            "authorityScore": item["authorityScore"],
+        }
         for item in results
     ]
     return {"evidence": "\n\n".join(lines)[:3000], "sources": sources}

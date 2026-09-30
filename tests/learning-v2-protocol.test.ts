@@ -40,6 +40,7 @@ import {
 } from '../lib/learning-v2/storage';
 import { detectProtocolVersion, resolveStoredCourseFromData } from '../lib/learning-v2/dispatch';
 import { isV2LearningEnabled, setV2LearningEnabled } from '../lib/learning-v2/feature-flag';
+import { mapTocToBlueprintV2 } from '../lib/learning-v2/blueprint-map';
 import { getV2ChapterStorageKey } from '../lib/storage';
 
 import type { StoredCourseBundle, StoredDataV2 } from '../types/course';
@@ -181,7 +182,7 @@ function makePlan(overrides: Partial<ChapterPlan> = {}): ChapterPlan {
     tasks: [
       makeTask({ taskId: 'task-1', order: 0 }),
       makeTask({ taskId: 'task-2', order: 1, title: '练习 useState', teachingPattern: 'practice' }),
-      makeTask({ taskId: 'task-3', order: 2, title: '对比 useState 与 class state', teachingPattern: 'compare' }),
+      makeTask({ taskId: 'task-3', order: 2, title: '对比 useState 与 class state', teachingPattern: 'compare', evidencePolicy: 'checkpoint' }),
     ],
     status: 'active',
     createdAt: 1000,
@@ -873,4 +874,65 @@ test('feature flag round-trips when browser globals are present', () => {
   } finally {
     restore();
   }
+});
+
+
+// ---- Mission 与章节检查闸门 ----
+
+test('mapTocToBlueprintV2 derives a concrete course mission', () => {
+  const blueprint = mapTocToBlueprintV2({
+    courseId: 'course-mission',
+    courseName: 'React 状态管理',
+    description: '能在项目中用 useState 管理组件状态。',
+    nodes: [{ index: 1, title: 'useState 基础', description: '理解状态更新' }],
+    outline: {
+      topic: 'React 状态管理',
+      learningDirection: '前端项目开发',
+      learningGoal: '我要在项目里用 React 管理组件状态。',
+      learnerPositioning: { estimatedLevel: 'beginner', skipBasics: ['HTML 基础'] },
+    },
+    now: 1000,
+  });
+
+  assert.equal(blueprint.mission?.why, '我要在项目里用 React 管理组件状态。');
+  assert.equal(blueprint.mission?.targetScenario, '前端项目开发');
+  assert.deepEqual(blueprint.mission?.successCriteria, ['能在项目中用 useState 管理组件状态。']);
+  assert.deepEqual(blueprint.mission?.outOfScope, ['HTML 基础']);
+});
+
+test('chapter plan requires the final task to trigger a checkpoint', () => {
+  const plan = makePlan({
+    tasks: [
+      makeTask({ taskId: 'task-1', order: 0 }),
+      makeTask({ taskId: 'task-2', order: 1, evidencePolicy: 'checkpoint' }),
+    ],
+  });
+  const result = validateChapterPlan(plan);
+  assert.equal(result.valid, true);
+  assert.equal(result.errors.some((error) => error.message.includes('理解检查')), false);
+
+  const invalid = validateChapterPlan({
+    ...plan,
+    tasks: [
+      makeTask({ taskId: 'task-1', order: 0 }),
+      makeTask({ taskId: 'task-2', order: 1 }),
+    ],
+  });
+  assert.equal(invalid.valid, false);
+  assert.ok(invalid.errors.some((error) => error.message.includes('理解检查')));
+});
+
+// ---- 课程级教学状态 ----
+
+test('updateTeachingStateAfterChapter deterministically moves course focus and records reusable insight', async () => {
+  const { updateTeachingStateAfterChapter } = await import('../lib/learning-v2/teaching-state');
+  const course = makeBlueprint();
+  const lesson = makePlan();
+  const stored = createStoredCourseV2('course-teaching', course);
+  const chapterLesson = makePlan() as unknown as NodeLessonV2;
+
+  const state = updateTeachingStateAfterChapter(stored, chapterLesson, 2000);
+  assert.equal(state.currentChapterId, 'ch-2');
+  assert.equal(state.insights.length, 1);
+  assert.equal(state.insights[0]?.suggestedChapterId, 'ch-2');
 });

@@ -554,3 +554,54 @@ test('validateCourseBlueprint accepts lightweight blueprint without assessment a
   assert.equal(result.passed, true);
   assert.deepEqual(result.issues, []);
 });
+
+test('checkpoint evidence projects decision-grade memory state without treating coverage as mastery', () => {
+  let store = createEmptyMemoryStoreV3(null);
+
+  store = appendEventToMemoryStoreV3(store, {
+    type: 'checkpoint_evaluated',
+    topic: 'React 状态管理',
+    courseId: 'course-react',
+    occurredAt: 1000,
+    payload: {
+      conceptId: 'useState',
+      conceptName: 'useState',
+      objectiveId: 'obj-1',
+      checkpointId: 'cp-1',
+      outcome: 'demonstrated',
+      isCorrect: true,
+      attempt: 1,
+      prompt: '如何在点击后更新计数？',
+      feedback: '回答正确',
+    },
+  });
+
+  const concept = store.projections.conceptProjections.find((item) => item.conceptId === 'useState');
+  assert.ok(concept);
+  assert.equal(concept.masteryScore, 0.22);
+  assert.equal(concept.recentSuccesses, 1);
+  assert.equal(concept.recentErrors, 0);
+  assert.equal(concept.nextReviewAt, 1000 + 7 * 24 * 60 * 60 * 1000);
+
+  store = appendEventToMemoryStoreV3(store, {
+    type: 'checkpoint_evaluated',
+    topic: 'React 状态管理',
+    courseId: 'course-react',
+    occurredAt: 2000,
+    payload: {
+      conceptId: 'useEffect',
+      conceptName: 'useEffect',
+      outcome: 'not_demonstrated',
+      isCorrect: false,
+      prompt: '清理函数何时执行？',
+      feedback: '把清理时机理解成了渲染前。',
+    },
+  });
+
+  const fragile = store.projections.conceptProjections.find((item) => item.conceptId === 'useEffect');
+  assert.ok(fragile);
+  assert.equal(fragile.recentErrors, 1);
+  assert.equal(fragile.nextReviewAt, 2000 + 24 * 60 * 60 * 1000);
+  assert.ok(fragile.misconceptionHints.length > 0);
+  assert.equal(store.events.some((event) => event.type === 'checkpoint_evaluated'), true);
+});

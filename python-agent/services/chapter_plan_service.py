@@ -75,7 +75,57 @@ def _format_learner(starting_point: dict) -> str:
     return "\n".join(parts) if parts else "无"
 
 
-def build_chapter_plan_prompt(topic: str, chapter: dict, objectives: list[dict], learner: dict, evidence: str | None = None, sources: list[dict] | None = None) -> str:
+def _format_mission(mission: dict | None) -> str:
+    if not mission:
+        return ""
+    lines = [
+        f"- 学习动机：{mission.get('why', '')}",
+        f"- 目标场景：{mission.get('targetScenario', '')}",
+    ]
+    success = mission.get("successCriteria") or []
+    if success:
+        lines.append("- 完成标准：" + "；".join(str(item) for item in success))
+    constraints = mission.get("constraints") or []
+    if constraints:
+        lines.append("- 约束：" + "、".join(str(item) for item in constraints))
+    out_of_scope = mission.get("outOfScope") or []
+    if out_of_scope:
+        lines.append("- 不学：" + "、".join(str(item) for item in out_of_scope))
+    return "\n\n## 课程使命\n" + "\n".join(lines)
+
+
+def _format_teaching_state(teaching_state: dict) -> str:
+    if not teaching_state:
+        return ""
+
+    sections = []
+    pending = teaching_state.get("pendingArtifacts") or []
+    if pending:
+        pending_lines = [
+            f"- {item.get('description', '')}（章节：{item.get('chapterId', '未知')}）"
+            for item in pending[-5:]
+        ]
+        sections.append("## 待用户反馈材料\n" + "\n".join(pending_lines))
+
+    insights = [item for item in (teaching_state.get("insights") or []) if item.get("status") != "discarded"]
+    if insights:
+        insight_lines = [
+            f"- {item.get('content', '')}（建议章节：{item.get('suggestedChapterId', '任意')}）"
+            for item in insights[-5:]
+        ]
+        sections.append("## 可复用教学素材\n" + "\n".join(insight_lines))
+
+    notes = teaching_state.get("notes") or []
+    if notes:
+        note_lines = [f"- {item.get('content', '')}" for item in notes[-5:]]
+        sections.append("## 课程教学备注\n" + "\n".join(note_lines))
+
+    if not sections:
+        return ""
+    return "\n\n<teaching_state>\n" + "\n".join(sections) + "\n</teaching_state>"
+
+
+def build_chapter_plan_prompt(topic: str, chapter: dict, objectives: list[dict], learner: dict, evidence: str | None = None, sources: list[dict] | None = None, mission: dict | None = None, teaching_state: dict | None = None) -> str:
     """构建章节计划 system prompt；有证据包时约束规划来源"""
     evidence_section = ""
     if evidence:
@@ -92,7 +142,7 @@ def build_chapter_plan_prompt(topic: str, chapter: dict, objectives: list[dict],
         teaching_goal=chapter.get("teachingGoal", ""),
         objectives_section=_format_objectives(objectives),
         learner_section=_format_learner(learner),
-    ) + evidence_section
+    ) + _format_mission(mission) + _format_teaching_state(teaching_state or {}) + evidence_section
 
 
 def _resolve_chapter(blueprint: dict, chapter_id: str) -> tuple[dict, list[dict]]:
@@ -266,6 +316,7 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
     """生成章节计划；校验失败带修复提示重试一次，仍失败抛 PlanValidationError"""
     client = client or MiniMaxClient()
     blueprint = request.blueprint or {}
+    teaching_state = blueprint.get("teachingState") or {}
     chapter, objectives = _resolve_chapter(blueprint, request.chapterId)
     objective_ids = list(chapter.get("objectiveIds", []))
 
@@ -290,6 +341,8 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
         learner=blueprint.get("learnerStartingPoint", {}),
         evidence=evidence,
         sources=sources,
+        mission=blueprint.get("mission"),
+        teaching_state=teaching_state,
     )
 
     started = time.monotonic()
@@ -321,6 +374,10 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
         raw_tasks = raw_tasks if isinstance(raw_tasks, list) else []
         tasks = [_normalize_task(raw, index) for index, raw in enumerate(raw_tasks) if isinstance(raw, dict)]
         tasks.sort(key=lambda t: t["order"])
+        # 章节级理解闸门：最后一个任务固定触发 Checkpoint。
+        # 该字段由服务端确定性写入，模型输出不影响，避免“测题能力存在但流程不触发”。
+        if tasks:
+            tasks[-1]["evidencePolicy"] = "checkpoint"
         _normalize_prereqs(tasks)
 
         errors, warnings = validate_plan_tasks(tasks, objective_ids)

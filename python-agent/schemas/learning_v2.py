@@ -44,6 +44,7 @@ class PreviousTaskInfo(BaseModel):
 
 class TaskStreamRequest(BaseModel):
     """任务内容流式生成请求"""
+    teachingState: Optional[dict] = None
     courseId: str
     chapterId: str
     planId: str
@@ -54,6 +55,7 @@ class TaskStreamRequest(BaseModel):
     task: TaskStreamTaskInfo
     chapter: TaskStreamChapterInfo
     courseTopic: str
+    courseMission: Optional[dict] = None
     learnerStartingPoint: TaskStreamLearnerStartingPoint
     previousTasks: list[PreviousTaskInfo] = Field(default_factory=list)
     nextTaskTitle: Optional[str] = None

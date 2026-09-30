@@ -277,6 +277,24 @@ export function validateChapterPlan(
     });
   }
 
+  // 章节级理解闸门：最后一个任务必须有 Checkpoint，且只有它需要 Checkpoint。
+  const orderedTasks = [...plan.tasks].sort((a, b) => a.order - b.order);
+  const finalTask = orderedTasks.at(-1);
+  const checkpointTasks = plan.tasks.filter((task) => task.evidencePolicy === 'checkpoint');
+  if (finalTask && finalTask.evidencePolicy !== 'checkpoint') {
+    errors.push({
+      code: PLAN_VALIDATION_CODES['EMPTY_TASK_FIELD'],
+      taskId: finalTask.taskId,
+      message: '章节最后一个任务必须触发理解检查（evidencePolicy=checkpoint）',
+    });
+  }
+  if (checkpointTasks.length > 1) {
+    warnings.push({
+      code: 'EXCESS_CHECKPOINTS',
+      message: `本章有 ${checkpointTasks.length} 个 Checkpoint，建议仅保留章末一个`,
+    });
+  }
+
   // 全章同一教学模式（软约束）
   const patterns = new Set(plan.tasks.map((t) => t.teachingPattern));
   if (plan.tasks.length >= 2 && patterns.size === 1) {

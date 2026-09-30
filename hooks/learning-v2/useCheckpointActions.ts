@@ -17,6 +17,7 @@ import {
   applyRemediation,
   needsCheckpoint,
 } from '@/lib/learning-v2/checkpoint-ops';
+import { appendSystemNotice } from '@/lib/learning-v2/reducers';
 
 interface UseCheckpointActionsParams {
   courseId: string;
@@ -79,18 +80,65 @@ export function useCheckpointActions({
             taskId,
             objectiveId: planned.objectiveId,
             courseTopic: blueprint.topic,
+            courseMission: blueprint.mission,
             chapter: { title: chapter?.title ?? '', teachingGoal: chapter?.teachingGoal ?? '' },
             task: { taskId: planned.taskId, title: planned.title, taskGoal: planned.taskGoal },
             taskContentSummary: summary,
             idempotencyKey: `checkpoint-gen:${courseId}:${chapterId}:${lesson.chapterPlan.planId}:${lesson.chapterPlan.planVersion}:${taskId}`,
           }),
         });
-        if (!response.ok) return;
+        if (!response.ok) {
+          commit({
+            type: 'LESSON_PATCH',
+            lesson: appendSystemNotice(
+              lesson,
+              {
+                tone: 'warning',
+                message: '理解检查生成失败，本章可直接完成；本次不会产生掌握记录。',
+                code: 'CHECKPOINT_GENERATION_FAILED',
+                taskId,
+                retryable: true,
+              },
+              Date.now(),
+            ),
+          });
+          return;
+        }
         const body = await response.json();
-        if (!body.ok || !body.checkpoint) return;
+        if (!body.ok || !body.checkpoint) {
+          commit({
+            type: 'LESSON_PATCH',
+            lesson: appendSystemNotice(
+              lesson,
+              {
+                tone: 'warning',
+                message: '理解检查生成失败，本章可直接完成；本次不会产生掌握记录。',
+                code: 'CHECKPOINT_GENERATION_FAILED',
+                taskId,
+                retryable: true,
+              },
+              Date.now(),
+            ),
+          });
+          return;
+        }
         commit({ type: 'CHECKPOINT_READY', checkpoint: body.checkpoint, now: Date.now() });
       } catch (error) {
         console.warn('[useCheckpointActions] Checkpoint 生成失败:', error);
+        commit({
+          type: 'LESSON_PATCH',
+          lesson: appendSystemNotice(
+            lesson,
+            {
+              tone: 'warning',
+              message: '理解检查生成失败，本章可直接完成；本次不会产生掌握记录。',
+              code: 'CHECKPOINT_GENERATION_FAILED',
+              taskId,
+              retryable: true,
+            },
+            Date.now(),
+          ),
+        });
       }
     },
     [blueprint, chapterId, commit, courseId, lessonMirrorRef],

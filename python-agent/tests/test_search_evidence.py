@@ -93,3 +93,18 @@ def test_task_prompt_injects_evidence_section():
     assert "搜索证据包" in prompt_with
     assert "https://example.com/next15" in prompt_with
     assert "搜索证据包" not in prompt_without
+
+
+def test_build_evidence_pack_preserves_kind_use_for_and_primary():
+    fake_results = [
+        {"title": "React official", "url": "https://react.dev/reference/react", "body": "official", "authorityScore": 100, "preferred": True, "isPrimary": True},
+        {"title": "Hacker news", "url": "https://news.ycombinator.com/item?id=1", "body": "community", "authorityScore": 55, "kind": "wisdom"},
+    ]
+    with patch("lib.tools.search_tools.search_web_structured", return_value=fake_results):
+        import asyncio
+        pack = asyncio.run(build_evidence_pack("React useActionState"))
+    assert pack is not None
+    assert pack["sources"][0]["isPrimary"] is True
+    assert pack["sources"][0]["useFor"].startswith("官方或高权威")
+    assert pack["sources"][1]["kind"] == "wisdom"
+    assert pack["sources"][1]["useFor"].startswith("社区或经验型")
