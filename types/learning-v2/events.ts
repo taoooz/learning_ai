@@ -68,12 +68,16 @@ export interface TaskStartedPayload {
 export interface ContentBlockStartedPayload {
   blockId: string;
   blockType: LearningContentBlock['type'];
+  /** 结构化块的骨架（块壳先行渲染）；markdown 块无此字段 */
+  block?: LearningContentBlock;
 }
 
 export interface ContentBlockDeltaPayload {
   blockId: string;
-  /** markdown 文本增量 */
-  delta: string;
+  /** markdown 文本增量（markdown 块使用） */
+  delta?: string;
+  /** 结构化块的部分内容整体（example/key_point 流式使用），按 blockId 原位替换 */
+  block?: LearningContentBlock;
 }
 
 export interface ContentBlockCompletedPayload {

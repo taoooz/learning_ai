@@ -463,7 +463,27 @@ function applyContentBlockStarted(lesson: NodeLessonV2, event: LearningSseEvent)
   const item = findTaskContentItem(lesson.streamItems, taskEvent.taskId, event.planVersion);
   if (!item || item.status !== 'streaming') return lesson;
 
-  // 只有 markdown 块支持增量；其余块类型在完成事件中一次性落定
+  if (payload.block) {
+    // 结构化块骨架：立即渲染块样式容器，内容随后经 delta 渐进替换
+    if (item.blocks.some((block) => block.blockId === payload.block!.blockId)) {
+      return touchSequence(lesson, event);
+    }
+    const nextItem: TaskContentItem = {
+      ...item,
+      blocks: [...item.blocks, payload.block],
+    };
+    return {
+      ...lesson,
+      streamItems: upsertItem(lesson.streamItems, nextItem),
+      runtime: {
+        ...lesson.runtime,
+        latestSequence: Math.max(lesson.runtime.latestSequence, event.sequence),
+        lastActiveAt: event.timestamp,
+      },
+      updatedAt: event.timestamp,
+    };
+  }
+  // markdown 块：先落空骨架，内容经 delta 追加
   if (payload.blockType !== 'markdown') {
     return touchSequence(lesson, event);
   }
@@ -493,16 +513,38 @@ function applyContentBlockDelta(lesson: NodeLessonV2, event: LearningSseEvent): 
   const item = findTaskContentItem(lesson.streamItems, taskEvent.taskId, event.planVersion);
   if (!item || item.status !== 'streaming') return lesson;
 
+  if (payload.block) {
+    // 结构化块：部分内容整体替换（原位渐进更新）
+    const blockIndex = item.blocks.findIndex((block) => block.blockId === payload.block!.blockId);
+    const blocks = [...item.blocks];
+    if (blockIndex === -1) {
+      blocks.push(payload.block);
+    } else {
+      blocks[blockIndex] = payload.block;
+    }
+    const nextItem: TaskContentItem = { ...item, blocks };
+    return {
+      ...lesson,
+      streamItems: upsertItem(lesson.streamItems, nextItem),
+      runtime: {
+        ...lesson.runtime,
+        latestSequence: Math.max(lesson.runtime.latestSequence, event.sequence),
+        lastActiveAt: event.timestamp,
+      },
+      updatedAt: event.timestamp,
+    };
+  }
   const blockIndex = item.blocks.findIndex(
     (block) => block.type === 'markdown' && block.blockId === payload.blockId,
   );
   const blocks = [...item.blocks];
   if (blockIndex === -1) {
+    if (payload.delta === undefined) return touchSequence(lesson, event);
     blocks.push({ type: 'markdown', blockId: payload.blockId, markdown: payload.delta });
   } else {
     const existing = blocks[blockIndex];
     if (existing.type !== 'markdown') return touchSequence(lesson, event);
-    blocks[blockIndex] = { ...existing, markdown: existing.markdown + payload.delta };
+    blocks[blockIndex] = { ...existing, markdown: existing.markdown + (payload.delta ?? '') };
   }
   const nextItem: TaskContentItem = { ...item, blocks };
   return {

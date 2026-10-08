@@ -76,7 +76,7 @@ export function TaskBoundaryV2({ lesson, phase, attempts, onContinue, highlightC
       ? `已重试 ${attempts} 次，仍可再试`
       : '检查网络或服务后重试'
     : nextTask
-      ? `本章还剩 ${sortedTasks.length - currentIndex - 1} 节 · 接下来：${nextTask.title}`
+      ? `本章还剩 ${sortedTasks.length - currentIndex - 1} 节`
       : '本章内容已全部完成';
 
   return (
@@ -107,10 +107,20 @@ export function TaskBoundaryV2({ lesson, phase, attempts, onContinue, highlightC
         )}
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-medium text-primary">
-              {failed ? '本节没生成成功' : nextTask ? '继续学习' : '完成本章'}
-            </p>
-            <p className="mt-0.5 truncate text-[11px] text-tertiary">{progressLabel}</p>
+            {failed ? (
+              <>
+                <p className="truncate text-[13px] font-medium text-primary">本节没生成成功</p>
+                <p className="mt-0.5 truncate text-[11px] text-tertiary">{progressLabel}</p>
+              </>
+            ) : nextTask ? (
+              <>
+                <p className="text-[11px] font-medium text-tertiary">下一节</p>
+                <p className="mt-0.5 truncate text-[14px] font-medium text-primary">{nextTask.title}</p>
+                <p className="mt-0.5 text-[11px] tabular-nums text-tertiary">{progressLabel}</p>
+              </>
+            ) : (
+              <p className="truncate text-[13px] font-medium text-primary">{progressLabel}</p>
+            )}
           </div>
           <button
             type="button"

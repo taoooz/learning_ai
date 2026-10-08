@@ -14,6 +14,8 @@ _START_RE = re.compile(r"^:::(\w+)\s*$")
 _END_RE = re.compile(r"^:::\s*$")
 
 _STRUCTURED_TYPES = {"key_point", "example", "comparison", "diagram", "interactive"}
+# 支持流式渐进渲染的文本型块：开标记出现即发块壳，内容逐行更新
+_STREAMABLE_STRUCTURED = {"key_point", "example"}
 
 
 def _after_colon(s: str) -> str:
@@ -34,6 +36,7 @@ class ContentStreamParser:
         self._line_buf = ""
         self._mode = "markdown"
         self._block_lines: list[str] = []
+        self._structured_id: str | None = None
         self._id_seq = 0
         self._markdown_id: str | None = None
         self._markdown_text: dict[str, str] = {}
@@ -95,6 +98,12 @@ class ContentStreamParser:
                 if block_type in _STRUCTURED_TYPES:
                     self._mode = block_type
                     self._block_lines = []
+                    # 块壳先行：文本型块（example/key_point）在开标记出现时立即
+                    # 发出骨架块，之后每行增量更新，让样式与内容随生成逐步呈现
+                    if block_type in _STREAMABLE_STRUCTURED:
+                        self._structured_id = f"b{self._id_seq + 1}"
+                        skeleton = self._partial_structured(block_type, [], self._structured_id)
+                        events.append({"kind": "structured_started", "block": skeleton})
                 return events
 
             self._ensure_markdown_block()
@@ -106,10 +115,22 @@ class ContentStreamParser:
                 if block:
                     self._ordered_blocks.append(block)
                     events.append({"kind": "structured_block", "block": block})
+                elif self._mode in _STREAMABLE_STRUCTURED and self._structured_id:
+                    # 完整校验失败但已有部分内容：降级为 markdown，避免骨架块悬挂
+                    raw = "\n".join(self._block_lines).strip()
+                    if raw:
+                        degrade = {"type": "markdown", "blockId": self._structured_id, "markdown": raw}
+                        self._ordered_blocks.append(degrade)
+                        events.append({"kind": "structured_block", "block": degrade})
+                self._structured_id = None
                 self._mode = "markdown"
                 self._block_lines = []
             else:
                 self._block_lines.append(line)
+                if self._mode in _STREAMABLE_STRUCTURED and self._structured_id:
+                    partial = self._partial_structured(self._mode, self._block_lines, self._structured_id)
+                    if partial:
+                        events.append({"kind": "structured_delta", "block": partial})
 
         return events
 
@@ -158,6 +179,60 @@ class ContentStreamParser:
         if block and evidence_refs:
             block["evidenceRefs"] = evidence_refs
         return block
+
+    def _partial_structured(self, block_type: str, lines: list[str], block_id: str) -> dict | None:
+        """容错解析部分内容：字段缺省为空，不要求完整性。仅文本型块使用。"""
+        if block_type == "key_point":
+            title = None
+            points: list[str] = []
+            for line in lines:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                if stripped.startswith(("标题：", "标题:")):
+                    title = _after_colon(stripped)
+                elif stripped.startswith(("- ", "• ", "* ")):
+                    points.append(stripped[2:].strip())
+                else:
+                    points.append(stripped)
+            block: dict = {"type": "key_point", "blockId": block_id, "points": points}
+            if title:
+                block["title"] = title
+            return block
+        if block_type == "example":
+            title = ""
+            context = ""
+            content_lines: list[str] = []
+            takeaway = ""
+            in_content = False
+            for line in lines:
+                stripped = line.strip()
+                if not stripped:
+                    if in_content:
+                        content_lines.append("")
+                    continue
+                if stripped.startswith(("标题：", "标题:")):
+                    title = _after_colon(stripped)
+                    in_content = False
+                elif stripped.startswith(("场景：", "场景:")):
+                    context = _after_colon(stripped)
+                    in_content = False
+                elif stripped.startswith(("内容：", "内容:")):
+                    rest = _after_colon(stripped)
+                    if rest:
+                        content_lines.append(rest)
+                    in_content = True
+                elif stripped.startswith(("要点：", "要点:")):
+                    takeaway = _after_colon(stripped)
+                    in_content = False
+                elif in_content:
+                    content_lines.append(stripped)
+            return {
+                "type": "example", "blockId": block_id,
+                "title": title or "示例", "context": context,
+                "content": "\n".join(content_lines), "takeaway": takeaway,
+            }
+        return None
 
     def _parse_key_point(self, lines: list[str], block_id: str) -> dict | None:
         title = None

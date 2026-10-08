@@ -100,7 +100,7 @@ def test_full_event_sequence_single_markdown():
 
 
 def test_multi_block_event_sequence():
-    """:::key_point 定界符 → markdown 结束 + 结构化块一次性产出 + 新 markdown 开始"""
+    """:::key_point 块壳先行：started 骨架 → delta 逐行 → completed 终态落定"""
     deltas = [
         "讲解文字。\n\n",
         ":::key_point\n标题：核心概念\n- 要点一\n- 要点二\n:::\n\n",
@@ -110,13 +110,19 @@ def test_multi_block_event_sequence():
     events = _events(_request(), client)
     types = [e["type"] for e in events]
 
-    # task_started → md b1 started/delta×2/completed → kp b2 completed → md b3 started/delta×3/completed → task_completed → request_completed
+    # task_started → md b1 started/delta×2/completed
+    # → kp b2 started(骨架)/delta×2(逐行)/completed → md b3 started/delta×3/completed
+    # → task_completed → request_completed
     assert types == [
         "task_started",
         "content_block_started",    # b1
         "content_block_delta",
         "content_block_delta",
         "content_block_completed",  # b1 markdown_end
+        "content_block_started",    # b2 key_point 块壳
+        "content_block_delta",      # 标题行
+        "content_block_delta",      # 要点一
+        "content_block_delta",      # 要点二
         "content_block_completed",  # b2 key_point
         "content_block_started",    # b3
         "content_block_delta",
@@ -128,12 +134,12 @@ def test_multi_block_event_sequence():
         "request_completed",
     ]
 
-    # 结构化块在完成事件中一次性产出
-    kp_event = events[5]
-    kp_block = kp_event["payload"]["block"]
-    assert kp_block["type"] == "key_point"
-    assert kp_block["title"] == "核心概念"
-    assert kp_block["points"] == ["要点一", "要点二"]
+    # 块壳骨架先出现，delta 逐步补内容，completed 为最终校验版本
+    started_payload = events[5]["payload"]
+    assert started_payload["block"]["type"] == "key_point"
+    assert started_payload["block"]["points"] == []
+    final_payload = events[9]["payload"]["block"]
+    assert final_payload["points"] == ["要点一", "要点二"]
 
     # task_completed blocks 按序号排列
     task = events[-2]["payload"]["task"]

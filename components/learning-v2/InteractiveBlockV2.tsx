@@ -88,7 +88,7 @@ function ParameterDemoView({ block, courseId }: { block: InteractiveBlock; cours
 
       <div className="mb-4 space-y-2">
         {parameters.map((parameter) => (
-          <div key={parameter.name} className="flex items-center justify-between gap-3 rounded-lg bg-subtle px-3 py-2">
+          <div key={parameter.name} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-subtle px-3 py-2">
             <span className="text-[14px] font-medium text-primary">{parameter.name}</span>
             <div className="flex items-center gap-1">
               <button
@@ -186,18 +186,14 @@ function StepWalkthroughView({ block, courseId }: { block: InteractiveBlock; cou
     <div>
       {block.intro ? <p className="mb-3 text-[14px] leading-relaxed text-secondary">{block.intro}</p> : null}
 
-      <ol className="space-y-2">
+      <ol>
         {steps.map((step, stepIndex) => {
           const state = stepIndex < index ? 'done' : stepIndex === index ? 'current' : 'todo';
           return (
             <li
               key={`${step.title}-${stepIndex}`}
-              className={`rounded-xl border p-3 transition-colors duration-200 ${
-                state === 'current'
-                  ? 'border-brand bg-brand-soft'
-                  : state === 'done'
-                    ? 'border-border bg-surface opacity-70'
-                    : 'border-border bg-surface'
+              className={`p-3 transition-colors duration-200 ${
+                state === 'current' ? 'rounded-xl bg-brand-soft' : 'border-b border-border last:border-b-0'
               }`}
             >
               <div className="flex items-start gap-2.5">
@@ -207,7 +203,7 @@ function StepWalkthroughView({ block, courseId }: { block: InteractiveBlock; cou
                       ? 'bg-success/10 text-success'
                       : state === 'current'
                         ? 'bg-brand text-white'
-                        : 'bg-subtle text-tertiary'
+                        : 'bg-surface text-tertiary ring-1 ring-border'
                   }`}
                 >
                   {state === 'done' ? '✓' : stepIndex + 1}
@@ -362,13 +358,15 @@ export function InteractiveBlockV2({ block, courseId }: { block: InteractiveBloc
   }
 
   return (
-    <section className="my-5 overflow-hidden rounded-2xl border border-border bg-surface p-4" data-interactive-component={block.component}>
-      <div className="mb-3 flex items-center justify-between gap-2">
+    <section className="my-5 overflow-hidden rounded-2xl border border-border bg-surface" data-interactive-component={block.component}>
+      <div className="flex items-center justify-between gap-2 border-b border-border bg-brand-soft/50 px-4 py-2.5">
         <LabelChip />
-        <span className="text-[11px] text-tertiary">互动演示 · 不计入测评</span>
+        <span className="text-[11px] text-tertiary">不计入测评</span>
       </div>
-      <h3 className="mb-3 text-[16px] font-semibold leading-snug text-primary">{block.title}</h3>
-      <Renderer block={block} courseId={courseId} />
+      <div className="p-4">
+        <h3 className="mb-3 text-[16px] font-semibold leading-snug text-primary">{block.title}</h3>
+        <Renderer block={block} courseId={courseId} />
+      </div>
     </section>
   );
 }

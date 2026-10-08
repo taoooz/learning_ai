@@ -166,6 +166,19 @@ def _parser_event_to_sse(event: dict, make_event, started_blocks: set) -> list[d
             started_blocks.add(bid)
             results.append(make_event("content_block_started", {"blockId": bid, "blockType": "markdown"}))
         results.append(make_event("content_block_delta", {"blockId": bid, "delta": event["delta"]}))
+    elif kind == "structured_started":
+        bid = event["block"]["blockId"]
+        started_blocks.add(bid)
+        results.append(make_event("content_block_started", {
+            "blockId": bid,
+            "blockType": event["block"]["type"],
+            # 块壳骨架：前端立即渲染样式容器
+            "block": event["block"],
+        }))
+    elif kind == "structured_delta":
+        bid = event["block"]["blockId"]
+        # 部分块整体下发：前端按 blockId 原位替换，内容渐进呈现
+        results.append(make_event("content_block_delta", {"blockId": bid, "block": event["block"]}))
     elif kind == "structured_block":
         results.append(make_event("content_block_completed", {"block": event["block"]}))
     elif kind == "markdown_end":
