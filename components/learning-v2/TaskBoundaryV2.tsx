@@ -62,6 +62,8 @@ export function TaskBoundaryV2({ lesson, phase, attempts, onContinue, highlightC
     contentItem && contentItem.type === 'task_content' ? contentItem.boundaryPrompt : undefined;
 
   const checkpointGate = evaluateChapterCheckpointGate(lesson);
+  // 检查闸门只约束最后一个边界（“完成本章”）；中途边界的“继续学习”不受影响
+  const isFinalBoundary = !nextTask;
   const buttonLabel = failed
     ? '重新生成本节'
     : nextTask
@@ -94,7 +96,7 @@ export function TaskBoundaryV2({ lesson, phase, attempts, onContinue, highlightC
         {highlightContinue && !failed && (
           <p className="mb-3 text-[12px] font-medium text-accent">听起来你已准备好，可以继续了</p>
         )}
-        {!failed && checkpointGate.blocked && (
+        {!failed && isFinalBoundary && checkpointGate.blocked && (
           <p className="mb-3 text-[12px] leading-relaxed text-tertiary">
             {checkpointGate.reason === 'generating'
               ? '正在生成本章理解检查…'
@@ -113,7 +115,7 @@ export function TaskBoundaryV2({ lesson, phase, attempts, onContinue, highlightC
           <button
             type="button"
             onClick={onContinue}
-            disabled={!failed && checkpointGate.blocked}
+            disabled={!failed && isFinalBoundary && checkpointGate.blocked}
             className={`flex h-11 shrink-0 items-center gap-2 rounded-full px-5 text-[14px] font-semibold text-primary transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:shadow-none ${
               highlightContinue && !failed
                 ? 'animate-pulse bg-accent shadow-md shadow-accent/30'
