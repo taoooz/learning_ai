@@ -44,6 +44,11 @@
 - 交互完成接入参与信号（engagement `interactive_completed`，每块只记一次、静默失败）：parameter-demo 首次调参、step-walkthrough 走到最后一步、before-after 首次切换后记录；不计入掌握度证据（保持“只有 Checkpoint 评估投影记忆”不变量）
 - 新增 4 个单测；渲染器 courseId 透传（章节页 → 学习流 → 内容块）
 
+### 练习环节职责修正（2026-10-08）
+- 修正上一条目未完全落地的拟人化禁令（补入 style_rules），并按用户反馈调整练习职责：
+  正文直接给结论（判断标准/误区/下一步），不再输出填空式自测让用户猜；
+  检验统一由章末理解检查承担。lint 增加填空式练习观测。
+
 ### flow-diagram 交互组件（2026-10-08）
 - 新增第三个交互组件：结构总览流程图（正向链 + 循环回边徽记），替代大部分 Mermaid flowchart 场景；sequenceDiagram/复杂分支仍用 :::diagram
 - 解析/校验/降级与渲染模式同 Phase 1；新增 3 个单测；架构文档同步

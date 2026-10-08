@@ -42,3 +42,13 @@ def test_lint_prose_detects_personification():
 
 def test_lint_prose_clean_personification_free():
     assert lint_prose("出错后系统会自动生成补救内容，讲清刚才那步为什么错。") == []
+
+
+def test_lint_prose_detects_blank_fill_practice():
+    findings = lint_prose("生成式UI是______（定义）；区别在于______。")
+    rules = {f["rule"] for f in findings}
+    assert "填空式练习" in rules
+
+
+def test_lint_prose_no_false_positive_on_normal_text():
+    assert lint_prose("下划线字符 _ 单个出现是正常的。") == []
