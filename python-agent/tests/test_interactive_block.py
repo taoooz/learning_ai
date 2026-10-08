@@ -70,3 +70,35 @@ def test_row_count_limits():
     block = parse_interactive_content(lines, "b5")
     # 超出规模上限 → 整块降级为 markdown，而不是静默截断
     assert block["type"] == "markdown"
+
+
+def test_flow_diagram_parses_chain_and_loop_back():
+    lines = [
+        "组件：flow-diagram", "标题：Agent 四环节闭环", "说明：走完一圈看全局",
+        "节点：goal | 接收目标", "节点：sense | 感知", "节点：plan | 规划",
+        "节点：act | 行动", "节点：memory | 记忆",
+        "连线：goal -> sense", "连线：sense -> plan", "连线：plan -> act",
+        "连线：act -> memory", "连线：memory -> goal | 未完成，再来一轮",
+    ]
+    block = parse_interactive_content(lines, "b6")
+    assert block["component"] == "flow-diagram"
+    assert len(block["nodes"]) == 5 and len(block["edges"]) == 4
+    assert block["loopBacks"] == [{"from": "memory", "to": "goal", "label": "未完成，再来一轮"}]
+
+
+def test_flow_diagram_broken_chain_degrades():
+    lines = [
+        "组件：flow-diagram", "节点：a | 第一步", "节点：b | 第二步", "节点：c | 第三步",
+        "连线：a -> b",
+    ]
+    block = parse_interactive_content(lines, "b7")
+    assert block["type"] == "markdown"
+
+
+def test_flow_diagram_invalid_edge_degrades():
+    lines = [
+        "组件：flow-diagram", "节点：a | 第一步", "节点：b | 第二步",
+        "连线：a -> b", "连线：b -> ghost",
+    ]
+    block = parse_interactive_content(lines, "b8")
+    assert block["type"] == "markdown"

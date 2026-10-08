@@ -91,6 +91,14 @@ function contentBlockToText(block: LearningContentBlock): string {
           .filter((part) => Boolean(part))
           .join('\n');
       }
+      if (block.component === 'flow-diagram') {
+        const flow = (block.nodes ?? []).map((node) => node.text);
+        for (const loop of block.loopBacks ?? []) {
+          const target = (block.nodes ?? []).find((node) => node.id === loop.to);
+          if (target) flow.push(`回到「${target.text}」${loop.label ? `（${loop.label}）` : ''}`);
+        }
+        return [block.title, ...flow].filter((part) => Boolean(part)).join('\n');
+      }
       return [block.title, block.intro].filter((part) => Boolean(part)).join('\n');
   }
 }

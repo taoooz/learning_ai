@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 
-_ALLOWED_COMPONENTS = {"parameter-demo", "step-walkthrough"}
+_ALLOWED_COMPONENTS = {"parameter-demo", "step-walkthrough", "flow-diagram"}
 _EXPR_ALLOWED = re.compile(r"^[\dA-Za-z_\u4e00-\u9fff+\-*/().\s]+$")
 _TOKEN_RE = re.compile(r"\d+(?:\.\d+)?|[A-Za-z_\u4e00-\u9fff][\w\u4e00-\u9fff]*|[()+\-*/]")
 _KV_RE = re.compile(r"^(参数|标题|说明|列|行|步|组件)[:：]\s*(.*)$")
@@ -23,9 +23,12 @@ _LIMITS = {
     "columns": 4,   # 不含标签列
     "rows": 6,
     "steps": 8,
+    "nodes": 10,
+    "edges": 12,
     "title": 60,
     "intro": 200,
 }
+_NODE_ID_RE = re.compile(r"^[a-z0-9_-]{1,20}$")
 
 
 class FormulaError(Exception):
@@ -161,6 +164,8 @@ def parse_interactive_content(lines: list[str], block_id: str) -> dict:
         block = _build_parameter_demo(fields, block_id, title, intro)
     elif component == "step-walkthrough":
         block = _build_step_walkthrough(fields, block_id, title, intro)
+    elif component == "flow-diagram":
+        block = _build_flow_diagram(fields, block_id, title, intro)
     else:
         block = None
     return block if block is not None else _degrade(component, title, intro, fields, block_id)
@@ -253,6 +258,68 @@ def _build_step_walkthrough(fields: dict, block_id: str, title: str, intro: str)
     }
 
 
+def _build_flow_diagram(fields: dict, block_id: str, title: str, intro: str) -> dict | None:
+    """结构总览流程图：节点按执行顺序排列，正向链 + 可选回边（循环）。
+
+    约束（Phase 2 简化模型，覆盖教学中绝大多数流程图）：
+    - 节点 2~10 个，id 唯一
+    - 正向边必须构成相邻链（nodes[i] -> nodes[i+1]），每节点至多一条正向边
+    - 回边（指向更早节点）每节点至多一条，可带条件标签
+    """
+    nodes: list[dict] = []
+    seen_ids: set[str] = set()
+    for line in fields.get("节点", []):
+        parts = [p.strip() for p in line.split("|", 1)]
+        node_id = parts[0]
+        text = parts[1].strip() if len(parts) > 1 else ""
+        if not _NODE_ID_RE.match(node_id) or not text or node_id in seen_ids:
+            return None
+        seen_ids.add(node_id)
+        nodes.append({"id": node_id, "text": text[:60]})
+    if not 2 <= len(nodes) <= _LIMITS["nodes"]:
+        return None
+
+    forward_edges: list[dict] = []
+    loop_backs: list[dict] = []
+    node_index = {node["id"]: i for i, node in enumerate(nodes)}
+    for line in fields.get("连线", []):
+        body, _, label = line.partition("|")
+        parts = [p.strip() for p in body.split("->")]
+        if len(parts) != 2:
+            return None
+        src, dst = parts
+        if src not in node_index or dst not in node_index or src == dst:
+            return None
+        edge_label = label.strip()[:40]
+        src_i, dst_i = node_index[src], node_index[dst]
+        if dst_i == src_i + 1:
+            if any(e["from"] == src for e in forward_edges):
+                return None
+            forward_edges.append({"from": src, "to": dst})
+        elif dst_i < src_i:
+            if any(e["from"] == src for e in loop_backs):
+                return None
+            loop_backs.append({"from": src, "to": dst, "label": edge_label})
+        else:
+            # 跳跃边/前向分支：超出线性链模型，降级处理
+            return None
+
+    # 正向链必须首尾相接：n 个节点需要 n-1 条相邻正向边
+    if len(forward_edges) != len(nodes) - 1:
+        return None
+
+    return {
+        "type": "interactive",
+        "blockId": block_id,
+        "component": "flow-diagram",
+        "title": title or "流程图",
+        "intro": intro,
+        "nodes": nodes,
+        "edges": forward_edges,
+        "loopBacks": loop_backs,
+    }
+
+
 def _degrade(component: str, title: str, intro: str, fields: dict, block_id: str) -> dict:
     """校验失败时降级为等价 markdown 块：内容不丢，只是不再可交互。"""
     lines: list[str] = []
@@ -260,9 +327,12 @@ def _degrade(component: str, title: str, intro: str, fields: dict, block_id: str
         lines.append(f"**{title}**")
     if intro:
         lines.append(intro)
-    for key, prefix in (("参数", "参数"), ("步", None)):
+    for key, prefix in (("参数", "参数"), ("步", None), ("节点", None), ("连线", None)):
         for raw in fields.get(key, []):
-            lines.append(f"- {prefix}：{raw}")
+            if prefix:
+                lines.append(f"- {prefix}：{raw}")
+            else:
+                lines.append(f"- {raw}")
     table_rows = [[c.strip() for c in raw.split("|")] for raw in fields.get("行", [])]
     table_header = [c.strip() for c in (fields.get("列") or [""]).pop().split("|")] if fields.get("列") else []
     if table_header and table_rows:

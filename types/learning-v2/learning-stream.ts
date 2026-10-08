@@ -71,7 +71,7 @@ export interface InteractiveStep {
 export interface InteractiveBlock {
   type: 'interactive';
   blockId: string;
-  component: 'parameter-demo' | 'step-walkthrough';
+  component: 'parameter-demo' | 'step-walkthrough' | 'flow-diagram';
   title: string;
   intro: string;
   /** 仅 parameter-demo：可调参数 */
@@ -82,6 +82,12 @@ export interface InteractiveBlock {
   rows?: { label: string; values: (number | { formula: string })[] }[];
   /** 仅 step-walkthrough */
   steps?: InteractiveStep[];
+  /** 仅 flow-diagram：按执行顺序排列的节点 */
+  nodes?: { id: string; text: string }[];
+  /** 仅 flow-diagram：相邻正向边 */
+  edges?: { from: string; to: string }[];
+  /** 仅 flow-diagram：回到更早节点的循环边（至多每节点一条） */
+  loopBacks?: { from: string; to: string; label?: string }[];
 }
 
 export type LearningContentBlock = MarkdownBlock | KeyPointBlock | ExampleBlock | ComparisonBlock | DiagramBlock | InteractiveBlock;

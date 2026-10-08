@@ -11,6 +11,7 @@ import * as React from 'react';
 import { useMemo, useState } from 'react';
 import type { InteractiveBlock } from '@/types/learning-v2/learning-stream';
 import { evaluateFormula } from '@/lib/interactive/formula';
+import { FlowDiagramView } from './FlowDiagramView';
 
 const MAX_ROWS = 12;
 
@@ -253,6 +254,8 @@ export function InteractiveBlockV2({ block }: { block: InteractiveBlock }) {
         <ParameterDemoView block={block} />
       ) : block.component === 'step-walkthrough' ? (
         <StepWalkthroughView block={block} />
+      ) : block.component === 'flow-diagram' ? (
+        <FlowDiagramView block={block} />
       ) : null}
     </section>
   );
