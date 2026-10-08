@@ -22,8 +22,10 @@ function formatNumber(value: number): string {
 
 function LabelChip() {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-2.5 py-1 text-[10px] font-semibold text-brand">
-      <span aria-hidden="true">•</span>
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-brand px-2.5 py-1 text-[10px] font-semibold text-white">
+      <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} aria-hidden="true">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+      </svg>
       互动演示
     </span>
   );
@@ -315,33 +317,45 @@ function BeforeAfterView({ block, courseId }: { block: InteractiveBlock; courseI
     <div>
       {block.intro ? <p className="mb-3 text-[14px] leading-relaxed text-secondary">{block.intro}</p> : null}
       <div
-        className="mb-3 inline-flex rounded-full border border-border bg-subtle p-1"
+        className="mb-3 inline-flex rounded-full border border-border bg-surface p-1 shadow-sm"
         role="tablist"
         aria-label="前后对比切换"
       >
-        {[false, true].map((after) => (
-          <button
-            key={String(after)}
-            type="button"
-            role="tab"
-            aria-selected={showAfter === after}
-            onClick={() => toggle(after)}
-            className={`h-9 rounded-full px-4 text-[13px] font-semibold transition-colors ${
-              showAfter === after
-                ? after
-                  ? 'bg-brand text-white'
-                  : 'bg-surface text-primary shadow-sm'
-                : 'text-tertiary hover:text-secondary'
-            }`}
-          >
-            {after ? (block.afterLabel ?? '改造后') : (block.beforeLabel ?? '改造前')}
-          </button>
-        ))}
+        {[false, true].map((after) => {
+          const active = showAfter === after;
+          return (
+            <button
+              key={String(after)}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => toggle(after)}
+              className={`inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-[13px] font-semibold transition-colors ${
+                active
+                  ? after
+                    ? 'bg-brand text-white'
+                    : 'bg-surface text-primary ring-1 ring-border-strong'
+                  : 'text-tertiary hover:text-secondary'
+              }`}
+            >
+              {after ? (
+                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                </svg>
+              ) : (
+                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+              )}
+              {after ? (block.afterLabel ?? '改造后') : (block.beforeLabel ?? '改造前')}
+            </button>
+          );
+        })}
       </div>
       <div
         aria-live="polite"
         className={`rounded-xl border px-3.5 py-3 transition-colors ${
-          showAfter ? 'border-brand/30 bg-brand-soft/60' : 'border-border bg-surface'
+          showAfter ? 'border-brand/30 bg-brand-soft/60' : 'border-dashed border-border-strong bg-surface'
         }`}
       >
         <p className={`text-[14px] leading-relaxed ${showAfter ? 'text-primary' : 'text-secondary'}`}>

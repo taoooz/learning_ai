@@ -13,23 +13,55 @@ import type { LearningContentBlock, SourceRef } from '@/types/learning-v2';
 import { InteractiveBlockV2 } from './InteractiveBlockV2';
 import { getDisplaySourceRefs } from '@/lib/learning-v2/source-refs';
 
-/** 兼容旧数据：从 markdown 尾部提取“证据：ev-xx”行（新内容已在生成时剥离） */
-const RENDER_EVIDENCE_RE = /^证据[:：]\s*(ev[\w\s,，、-]+)$/gm;
+/**
+ * 行内证据引用 → 论文式角标链接：
+ * “（证据：ev-01, ev-02）”替换为 [1][2]，点击跳转到参考来源对应条目。
+ * 兼容独立成行的“证据：ev-xx”（旧数据已在生成时剥离，这里兜底）。
+ */
+const INLINE_EVIDENCE_RE = /(（|\()\s*证据[:：]\s*(ev[\w\s,，、-]+?)\s*(）|\))/g;
 
-function extractEvidenceFromMarkdown(markdown: string): { markdown: string; refs: string[] } {
+/** 提取行内证据引用：返回去掉引用文本的正文与引用到的 evidenceId 列表 */
+function extractInlineEvidence(text: string, sourceRefs?: SourceRef[]): { text: string; refs: string[] } {
   const refs: string[] = [];
-  const cleaned = markdown
-    .split('\n')
-    .filter((line) => {
-      const m = RENDER_EVIDENCE_RE.exec(line.trim());
-      if (!m) return true;
-      refs.push(...m[1].split(/[,,、]/).map((r) => r.trim()).filter(Boolean));
-      return false;
-    })
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-  return { markdown: cleaned, refs };
+  const cleaned = text.replace(INLINE_EVIDENCE_RE, (_m, _open: string, ids: string) => {
+    for (const raw of ids.split(/[,,、]/)) {
+      const evId = raw.trim();
+      if (!evId) continue;
+      // 优先按 evidenceId 精确匹配；旧数据 sourceRefs 可能缺 evidenceId，
+      // 此时按 ev-N 的序号回退（证据包编号与来源展示顺序一致）
+      if (sourceRefs?.some((source) => source.evidenceId === evId)) {
+        refs.push(evId);
+        continue;
+      }
+      const fallback = /^ev-(\d+)$/.exec(evId);
+      const index = fallback ? Number(fallback[1]) : 0;
+      if (index >= 1 && index <= (sourceRefs?.length ?? 0)) refs.push(evId);
+    }
+    return '';
+  });
+  return { text: cleaned.trim(), refs };
+}
+
+/** markdown 版：引用替换为 [n](#source-ref-n) 角标链接 */
+function transformInlineEvidence(markdown: string, sourceRefs?: SourceRef[]): { markdown: string; refs: string[] } {
+  const display = sourceRefs?.length ? getDisplaySourceRefs(sourceRefs) : [];
+  const refs: string[] = [];
+  const transformed = markdown.replace(INLINE_EVIDENCE_RE, (_m, _open: string, ids: string) => {
+    const badges = ids
+      .split(/[,,、]/)
+      .map((raw) => raw.trim())
+      .filter(Boolean)
+      .map((evId) => {
+        const index = display.findIndex((source) => source.evidenceId === evId);
+        if (index < 0) return null;
+        refs.push(evId);
+        return `[${index + 1}](#source-ref-${index + 1})`;
+      })
+      .filter(Boolean)
+      .join(' ');
+    return badges || '';
+  });
+  return { markdown: transformed, refs };
 }
 
 /** 论文式引用角标：点击跳转到本任务对应的参考来源条目 */
@@ -38,8 +70,12 @@ function EvidenceBadges({ refs, sourceRefs }: { refs: string[]; sourceRefs?: Sou
   const display = getDisplaySourceRefs(sourceRefs);
   const numbered = refs
     .map((refId) => {
-      const index = display.findIndex((source) => source.evidenceId === refId);
-      return index >= 0 ? { displayIndex: index + 1, refId } : null;
+      const byId = display.findIndex((source) => source.evidenceId === refId);
+      if (byId >= 0) return { displayIndex: byId + 1, refId };
+      // 回退：ev-N 的 N 即展示序号（证据包编号与来源顺序一致）
+      const fallback = /^ev-(\d+)$/.exec(refId);
+      const index = fallback ? Number(fallback[1]) : 0;
+      return index >= 1 && index <= display.length ? { displayIndex: index, refId } : null;
     })
     .filter((item): item is { displayIndex: number; refId: string } => item !== null);
   if (!numbered.length) return null;
@@ -88,13 +124,13 @@ export function TaskBlockView({ block, courseId, sourceRefs, streaming = false }
       if (streaming) {
         return <StreamingMarkdown content={block.markdown} streaming={streaming} />;
       }
-      const stored = block.evidenceRefs?.length
-        ? { markdown: block.markdown, refs: block.evidenceRefs }
-        : extractEvidenceFromMarkdown(block.markdown);
+      // 行内“（证据：ev-xx）”替换为角标链接；块级 evidenceRefs（生成时剥离）渲染为块尾角标
+      const inline = transformInlineEvidence(block.markdown, sourceRefs);
+      const blockLevelRefs = inline.refs.length ? [] : (block.evidenceRefs ?? []);
       return (
         <>
-          <MarkdownContent content={stored.markdown} />
-          <EvidenceBadges refs={stored.refs} sourceRefs={sourceRefs} />
+          <MarkdownContent content={inline.markdown} />
+          {blockLevelRefs.length > 0 && <EvidenceBadges refs={blockLevelRefs} sourceRefs={sourceRefs} />}
         </>
       );
     }
@@ -103,7 +139,7 @@ export function TaskBlockView({ block, courseId, sourceRefs, streaming = false }
     case 'example':
       return <ExampleBlockView title={block.title} context={block.context} content={block.content} takeaway={block.takeaway} />;
     case 'comparison':
-      return <ComparisonBlockView columns={block.columns} rows={block.rows} />;
+      return <ComparisonBlockView columns={block.columns} rows={block.rows} sourceRefs={sourceRefs} />;
     case 'diagram':
       return <DiagramBlockView source={block.source} />;
     case 'interactive':
@@ -169,7 +205,7 @@ export function ExampleBlockView({
 }
 
 /** 对比表格：卡片包装 + 表头着色 + 行间隔 */
-function ComparisonBlockView({ columns, rows }: { columns: string[]; rows: string[][] }) {
+function ComparisonBlockView({ columns, rows, sourceRefs }: { columns: string[]; rows: string[][]; sourceRefs?: SourceRef[] }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-black/[0.06] bg-surface shadow-sm">
       <div className="flex items-center justify-between gap-3 border-b border-black/[0.045] bg-subtle px-4 py-3">
@@ -190,11 +226,15 @@ function ComparisonBlockView({ columns, rows }: { columns: string[]; rows: strin
           <tbody>
             {rows.map((row, rowIndex) => (
               <tr key={rowIndex} className={rowIndex % 2 === 1 ? 'bg-subtle/50' : ''}>
-                {row.map((cell, cellIndex) => (
-                  <td key={cellIndex} className={`px-3.5 py-2.5 align-top leading-relaxed ${cellIndex === 0 ? 'font-medium text-primary' : 'text-secondary'}`}>
-                    {cell}
-                  </td>
-                ))}
+                {row.map((cell, cellIndex) => {
+                  const { text: cleanedCell, refs } = extractInlineEvidence(cell, sourceRefs);
+                  return (
+                    <td key={cellIndex} className={`px-3.5 py-2.5 align-top leading-relaxed ${cellIndex === 0 ? 'font-medium text-primary' : 'text-secondary'}`}>
+                      {cleanedCell}
+                      {refs.length > 0 && <EvidenceBadges refs={refs} sourceRefs={sourceRefs} />}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>
