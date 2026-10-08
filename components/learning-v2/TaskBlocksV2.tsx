@@ -13,6 +13,25 @@ import type { LearningContentBlock, SourceRef } from '@/types/learning-v2';
 import { InteractiveBlockV2 } from './InteractiveBlockV2';
 import { getDisplaySourceRefs } from '@/lib/learning-v2/source-refs';
 
+/** 兼容旧数据：从 markdown 尾部提取“证据：ev-xx”行（新内容已在生成时剥离） */
+const RENDER_EVIDENCE_RE = /^证据[:：]\s*(ev[\w\s,，、-]+)$/gm;
+
+function extractEvidenceFromMarkdown(markdown: string): { markdown: string; refs: string[] } {
+  const refs: string[] = [];
+  const cleaned = markdown
+    .split('\n')
+    .filter((line) => {
+      const m = RENDER_EVIDENCE_RE.exec(line.trim());
+      if (!m) return true;
+      refs.push(...m[1].split(/[,,、]/).map((r) => r.trim()).filter(Boolean));
+      return false;
+    })
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return { markdown: cleaned, refs };
+}
+
 /** 论文式引用角标：点击跳转到本任务对应的参考来源条目 */
 function EvidenceBadges({ refs, sourceRefs }: { refs: string[]; sourceRefs?: SourceRef[] }) {
   if (!refs.length || !sourceRefs?.length) return null;
@@ -65,13 +84,20 @@ function BlockLabel({ label, tone = 'accent' }: { label: string; tone?: 'accent'
 
 export function TaskBlockView({ block, courseId, sourceRefs, streaming = false }: { block: LearningContentBlock; courseId?: string; sourceRefs?: SourceRef[]; streaming?: boolean }) {
   switch (block.type) {
-    case 'markdown':
+    case 'markdown': {
+      if (streaming) {
+        return <StreamingMarkdown content={block.markdown} streaming={streaming} />;
+      }
+      const stored = block.evidenceRefs?.length
+        ? { markdown: block.markdown, refs: block.evidenceRefs }
+        : extractEvidenceFromMarkdown(block.markdown);
       return (
         <>
-          {streaming ? <StreamingMarkdown content={block.markdown} streaming={streaming} /> : <MarkdownContent content={block.markdown} />}
-          {!streaming && <EvidenceBadges refs={block.evidenceRefs ?? []} sourceRefs={sourceRefs} />}
+          <MarkdownContent content={stored.markdown} />
+          <EvidenceBadges refs={stored.refs} sourceRefs={sourceRefs} />
         </>
       );
+    }
     case 'key_point':
       return <KeyPointBlockView title={block.title} points={block.points} />;
     case 'example':
