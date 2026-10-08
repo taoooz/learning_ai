@@ -514,10 +514,29 @@ export function useChapterLearning({
       );
       // 失败必须 throw：注册表只缓存成功结果，重试才不会吃到失败缓存
       const plan = await planRegistryRef.current.run(idempotencyKey, async () => {
+        // 跨章去重：收集已完成章节的 recap 要点，供章节计划避免复讲
+        const completedChapters: Array<{ title: string; takeaways: string[] }> = [];
+        try {
+          const repository = getLessonRepository();
+          for (const chapter of blueprint.chapters) {
+            if (chapter.chapterId === chapterId) continue;
+            const previousLesson = await repository
+              .loadLesson(courseId, chapter.chapterId)
+              .catch(() => null);
+            if (previousLesson?.recap?.keyTakeaways?.length) {
+              completedChapters.push({
+                title: chapter.title,
+                takeaways: previousLesson.recap.keyTakeaways.slice(0, 5),
+              });
+            }
+          }
+        } catch {
+          // 静默：拿不到历史小结就不注入，不影响计划生成
+        }
         const response = await fetch('/api/learning/v2/chapters/plan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ courseId, chapterId, idempotencyKey, blueprint }),
+          body: JSON.stringify({ courseId, chapterId, idempotencyKey, blueprint, completedChapters }),
         });
         const body = (await response.json().catch(() => null)) as {
           ok?: boolean;

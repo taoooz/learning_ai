@@ -12,6 +12,7 @@ class ChapterPlanRequest(BaseModel):
     chapterId: str = Field(..., description="章节 ID")
     idempotencyKey: Optional[str] = Field(None, description="幂等键（P1a 仅随请求上送供日志）")
     blueprint: dict = Field(..., description="完整 CourseBlueprintV2（含 chapters / courseObjectives / learnerStartingPoint / topic）")
+    completedChapters: Optional[list[dict]] = Field(None, description="已完成章节摘要（title + keyTakeaways），供章节计划跨章去重")
 
 
 class TaskStreamTaskInfo(BaseModel):

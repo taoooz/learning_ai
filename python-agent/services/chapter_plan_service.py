@@ -125,7 +125,20 @@ def _format_teaching_state(teaching_state: dict) -> str:
     return "\n\n<teaching_state>\n" + "\n".join(sections) + "\n</teaching_state>"
 
 
-def build_chapter_plan_prompt(topic: str, chapter: dict, objectives: list[dict], learner: dict, evidence: str | None = None, sources: list[dict] | None = None, mission: dict | None = None, teaching_state: dict | None = None) -> str:
+def _format_completed_chapters(completed: list[dict] | None) -> str:
+    """已完成章节摘要：每章标题 + 要点，供计划去重"""
+    if not completed:
+        return "（这是第一章，或此前章节尚未产出小结）"
+    sections: list[str] = []
+    for item in completed:
+        title = item.get("title", "")
+        takeaways = item.get("takeaways") or []
+        lines = [f"- {point}" for point in takeaways[:5]]
+        sections.append(f"### {title}\n" + "\n".join(lines))
+    return "\n".join(sections)
+
+
+def build_chapter_plan_prompt(topic: str, chapter: dict, objectives: list[dict], learner: dict, evidence: str | None = None, sources: list[dict] | None = None, mission: dict | None = None, teaching_state: dict | None = None, completed_chapters: list[dict] | None = None, intent_type: str | None = None) -> str:
     """构建章节计划 system prompt；有证据包时约束规划来源"""
     evidence_section = ""
     if evidence:
@@ -142,7 +155,14 @@ def build_chapter_plan_prompt(topic: str, chapter: dict, objectives: list[dict],
         teaching_goal=chapter.get("teachingGoal", ""),
         objectives_section=_format_objectives(objectives),
         learner_section=_format_learner(learner),
+        intent_type=intent_type or "未指定",
+        completed_section=_format_completed_chapters(completed_chapters),
     ) + _format_mission(mission) + _format_teaching_state(teaching_state or {}) + evidence_section
+    intent_type = (chapter.get("intentType") or "") if isinstance(chapter, dict) else ""
+    # intentType 在课程级，蓝图透传时挂在 chapter 上的场景做兜底读取
+    if not intent_type:
+        pass
+    return _format_goal_alignment(intent_type) + _format_completed_chapters(completed_chapters)
 
 
 def _resolve_chapter(blueprint: dict, chapter_id: str) -> tuple[dict, list[dict]]:
@@ -334,11 +354,15 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
         print(f"[章节计划] 证据包构建失败: {exc}")
     evidence, sources = evidence_to_prompt(evidence_pack)
 
+    completed_chapters = request.completedChapters or []
+    intent_type = blueprint.get("intentType") or ""
     system_prompt = build_chapter_plan_prompt(
         topic=blueprint.get("topic", ""),
         chapter=chapter,
         objectives=objectives,
         learner=blueprint.get("learnerStartingPoint", {}),
+        intent_type=intent_type,
+        completed_chapters=completed_chapters,
         evidence=evidence,
         sources=sources,
         mission=blueprint.get("mission"),

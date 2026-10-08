@@ -73,4 +73,21 @@ PROMPT = {
 
 只返回 JSON。
 </output_format>""",
+
+    "goal_alignment": """<goal_alignment>
+## 学习目标对齐（硬约束）
+- 本章教学目标中包含“本章交付：<能力>”——本章所有任务必须服务这个交付；
+  与交付无关的生态介绍、版本对比、竞品分析内容不得进入任务。
+- 课程意图类型：{intent_type}。skill_mastery / problem_solving 类课程的任务以
+  应用与构建为主；讲解类任务不得超过一个，且必须直接服务交付。
+- 每个任务的 observableOutcome 必须是可验证的动作或产物，拼接后能支撑“本章交付”。
+</goal_alignment>""",
+
+    "completed_chapters": """<completed_chapters>
+## 已完成章节内容（硬性去重约束）
+{completed_section}
+
+本章不得复讲上面已覆盖的概念，不得重复使用相同的例子和比喻；
+举例必须换场景、换领域。如果某个概念确实需要提及，一句话带过并引用“上一章讲过”。
+</completed_chapters>""",
 }
