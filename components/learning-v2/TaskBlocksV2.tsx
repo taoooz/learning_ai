@@ -9,8 +9,42 @@
 // - 底色克制：accent/4 只用于类型识别，不大面积铺色
 
 import { useEffect, useRef, useState } from 'react';
-import type { LearningContentBlock } from '@/types/learning-v2';
+import type { LearningContentBlock, SourceRef } from '@/types/learning-v2';
 import { InteractiveBlockV2 } from './InteractiveBlockV2';
+import { getDisplaySourceRefs } from '@/lib/learning-v2/source-refs';
+
+/** 论文式引用角标：点击跳转到本任务对应的参考来源条目 */
+function EvidenceBadges({ refs, sourceRefs }: { refs: string[]; sourceRefs?: SourceRef[] }) {
+  if (!refs.length || !sourceRefs?.length) return null;
+  const display = getDisplaySourceRefs(sourceRefs);
+  const numbered = refs
+    .map((refId) => {
+      const index = display.findIndex((source) => source.evidenceId === refId);
+      return index >= 0 ? { displayIndex: index + 1, refId } : null;
+    })
+    .filter((item): item is { displayIndex: number; refId: string } => item !== null);
+  if (!numbered.length) return null;
+
+  const jump = (displayIndex: number) => {
+    document.getElementById(`source-ref-${displayIndex}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  return (
+    <span className="ml-1 inline-flex items-start gap-0.5 align-super">
+      {numbered.map(({ displayIndex, refId }) => (
+        <button
+          key={refId}
+          type="button"
+          onClick={() => jump(displayIndex)}
+          title={`查看参考来源 ${displayIndex}`}
+          className="inline-flex h-4 min-w-4 items-center justify-center rounded bg-brand-soft px-0.5 text-[10px] font-semibold leading-none text-brand transition-colors hover:bg-brand hover:text-white"
+        >
+          {displayIndex}
+        </button>
+      ))}
+    </span>
+  );
+}
 import { MarkdownContent } from '../ui/MarkdownContent';
 import { StreamingMarkdown } from '../ui/StreamingMarkdown';
 
@@ -29,10 +63,15 @@ function BlockLabel({ label, tone = 'accent' }: { label: string; tone?: 'accent'
   );
 }
 
-export function TaskBlockView({ block, courseId, streaming = false }: { block: LearningContentBlock; courseId?: string; streaming?: boolean }) {
+export function TaskBlockView({ block, courseId, sourceRefs, streaming = false }: { block: LearningContentBlock; courseId?: string; sourceRefs?: SourceRef[]; streaming?: boolean }) {
   switch (block.type) {
     case 'markdown':
-      return streaming ? <StreamingMarkdown content={block.markdown} streaming={streaming} /> : <MarkdownContent content={block.markdown} />;
+      return (
+        <>
+          {streaming ? <StreamingMarkdown content={block.markdown} streaming={streaming} /> : <MarkdownContent content={block.markdown} />}
+          {!streaming && <EvidenceBadges refs={block.evidenceRefs ?? []} sourceRefs={sourceRefs} />}
+        </>
+      );
     case 'key_point':
       return <KeyPointBlockView title={block.title} points={block.points} />;
     case 'example':

@@ -14,8 +14,14 @@ _START_RE = re.compile(r"^:::(\w+)\s*$")
 _END_RE = re.compile(r"^:::\s*$")
 
 _STRUCTURED_TYPES = {"key_point", "example", "comparison", "diagram", "interactive"}
+# markdown 块内的证据引用行（如「证据：ev-01, ev-02」），剥离为结构化引用而非正文
+_EVIDENCE_LINE_RE = re.compile(r"^证据[:：]\s*(ev[\w\s,，、-]+)$")
 # 支持流式渐进渲染的文本型块：开标记出现即发块壳，内容逐行更新
 _STREAMABLE_STRUCTURED = {"key_point", "example"}
+
+
+def _re_split_refs(raw: str) -> list[str]:
+    return [r.strip() for r in re.split(r"[,，、]", raw)]
 
 
 def _after_colon(s: str) -> str:
@@ -37,6 +43,7 @@ class ContentStreamParser:
         self._mode = "markdown"
         self._block_lines: list[str] = []
         self._structured_id: str | None = None
+        self._markdown_evidence: dict[str, list[str]] = {}
         self._id_seq = 0
         self._markdown_id: str | None = None
         self._markdown_text: dict[str, str] = {}
@@ -106,6 +113,12 @@ class ContentStreamParser:
                         events.append({"kind": "structured_started", "block": skeleton})
                 return events
 
+            m_ev = _EVIDENCE_LINE_RE.match(stripped)
+            if m_ev:
+                # 证据引用行：不计入正文，挂到当前 markdown 块的 evidenceRefs
+                refs = [r.strip() for r in _re_split_refs(m_ev.group(1)) if r.strip()]
+                self._markdown_evidence.setdefault(self._markdown_id, []).extend(refs)
+                return events
             self._ensure_markdown_block()
             self._markdown_text[self._markdown_id] += line + "\n"
             events.append({"kind": "markdown_delta", "blockId": self._markdown_id, "delta": line + "\n"})
@@ -143,6 +156,9 @@ class ContentStreamParser:
     def _close_markdown(self) -> dict:
         md = self._markdown_text[self._markdown_id]
         block = {"type": "markdown", "blockId": self._markdown_id, "markdown": md}
+        refs = self._markdown_evidence.pop(self._markdown_id, [])
+        if refs:
+            block["evidenceRefs"] = refs
         if md.strip():
             self._ordered_blocks.append(block)
         return {"kind": "markdown_end", "blockId": self._markdown_id, "markdown": md}

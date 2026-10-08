@@ -343,7 +343,7 @@ function TaskContentView({
       </h2>
       <div className="space-y-4">
         {item.blocks.map((block) => (
-          <TaskBlockView key={block.blockId} block={block} courseId={courseId} streaming={isStreaming} />
+          <TaskBlockView key={block.blockId} block={block} courseId={courseId} sourceRefs={item.sourceRefs} streaming={isStreaming} />
         ))}
       </div>
       {isStreaming && (

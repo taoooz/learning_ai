@@ -32,3 +32,13 @@ def test_lint_task_blocks_extracts_block_text():
     findings = lint_task_blocks(blocks)
     rules = {f["rule"] for f in findings}
     assert {"提示性冒号", "商业黑话"} <= rules
+
+
+def test_lint_prose_detects_personification():
+    findings = lint_prose("出错的请求会被补救内容接住，不会丢。")
+    rules = {f["rule"] for f in findings}
+    assert "拟人化比喻" in rules
+
+
+def test_lint_prose_clean_personification_free():
+    assert lint_prose("出错后系统会自动生成补救内容，讲清刚才那步为什么错。") == []

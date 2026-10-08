@@ -32,7 +32,7 @@ export function SourceRefsView({
           const safe = isSafeHttpUrl(source.url);
           const kindLabel = source.kind === 'wisdom' ? '经验参考' : '事实依据';
           return (
-            <li key={`${source.url}-${index}`} className="flex min-w-0 items-baseline gap-2 text-[13px]">
+            <li id={`source-ref-${index + 1}`} key={`${source.url}-${index}`} className="flex min-w-0 items-baseline gap-2 text-[13px] scroll-mt-24">
               <span className="shrink-0 text-[12px] text-tertiary">{index + 1}</span>
               {safe ? (
                 <a

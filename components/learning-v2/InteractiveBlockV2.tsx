@@ -314,7 +314,11 @@ function BeforeAfterView({ block, courseId }: { block: InteractiveBlock; courseI
   return (
     <div>
       {block.intro ? <p className="mb-3 text-[14px] leading-relaxed text-secondary">{block.intro}</p> : null}
-      <div className="mb-3 flex gap-2" role="tablist" aria-label="前后对比切换">
+      <div
+        className="mb-3 inline-flex rounded-full border border-border bg-subtle p-1"
+        role="tablist"
+        aria-label="前后对比切换"
+      >
         {[false, true].map((after) => (
           <button
             key={String(after)}
@@ -322,18 +326,27 @@ function BeforeAfterView({ block, courseId }: { block: InteractiveBlock; courseI
             role="tab"
             aria-selected={showAfter === after}
             onClick={() => toggle(after)}
-            className={`h-9 rounded-lg px-3.5 text-[13px] font-medium transition-colors ${
+            className={`h-9 rounded-full px-4 text-[13px] font-semibold transition-colors ${
               showAfter === after
-                ? 'bg-brand text-white'
-                : 'border border-border-strong bg-surface text-secondary hover:bg-subtle'
+                ? after
+                  ? 'bg-brand text-white'
+                  : 'bg-surface text-primary shadow-sm'
+                : 'text-tertiary hover:text-secondary'
             }`}
           >
             {after ? (block.afterLabel ?? '改造后') : (block.beforeLabel ?? '改造前')}
           </button>
         ))}
       </div>
-      <div className="rounded-xl border border-border bg-subtle px-3.5 py-3" aria-live="polite">
-        <p className="text-[14px] leading-relaxed text-primary">{showAfter ? block.afterText : block.beforeText}</p>
+      <div
+        aria-live="polite"
+        className={`rounded-xl border px-3.5 py-3 transition-colors ${
+          showAfter ? 'border-brand/30 bg-brand-soft/60' : 'border-border bg-surface'
+        }`}
+      >
+        <p className={`text-[14px] leading-relaxed ${showAfter ? 'text-primary' : 'text-secondary'}`}>
+          {showAfter ? block.afterText : block.beforeText}
+        </p>
       </div>
     </div>
   );
