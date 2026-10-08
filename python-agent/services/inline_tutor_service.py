@@ -191,7 +191,9 @@ async def stream_tutor_events(
         yield make_event("request_completed", {"requestId": request_id, "status": "failed", "errorCode": code})
         return
 
+    from services.style_lint import lint_prose, log_prose_findings
     action, markdown_content = parse_action_marker(accumulated)
+    log_prose_findings("inline_tutor", lint_prose(markdown_content))
 
     if not markdown_content.strip():
         yield make_event("request_error", {"code": "EMPTY_CONTENT", "message": "回答内容为空，请重试", "retryable": True})

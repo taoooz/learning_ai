@@ -22,6 +22,12 @@ PROMPT = {
 {next_chapter_title}
 </chapter_context>""",
 
+    "style": """<style_rules>
+## 文风规则
+- 小结只列本章新增、可带走的内容，不复述任务目录；每条不超过 40 字。
+- 禁止“一句话总结：”等提示性开场与“不是……而是……”翻案句式。
+</style_rules>""",
+
     "output_format": """<output_format>
 ## 回顾要求
 - keyTakeaways：3～6 条，每条一句话（30 字内），提炼学习者真正带走的核心要点，

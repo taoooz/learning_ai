@@ -14,6 +14,7 @@ from typing import AsyncIterator
 from uuid import uuid4
 
 from lib.minimax import MiniMaxClient, extract_usage, parse_json_response
+from services.style_lint import lint_prose, log_prose_findings
 from prompts import build_prompt
 from schemas.learning_v2 import ChapterRecapRequest
 from services.learning_v2_errors import RecapValidationError, classify_llm_error
@@ -287,6 +288,12 @@ async def stream_chapter_recap_events(
             yield make_event("request_error", {"code": "RECAP_VALIDATION_FAILED", "message": "章节小结未通过校验，请重试", "retryable": False})
             yield make_event("request_completed", {"requestId": req_id, "status": "failed", "errorCode": "RECAP_VALIDATION_FAILED"})
             return
+
+        _recap_texts = [recap_fields.get("summary", "")] + [
+            item if isinstance(item, str) else str(item)
+            for item in (recap_fields.get("keyTakeaways") or [])
+        ]
+        log_prose_findings("chapter_recap", lint_prose("\n".join(filter(None, _recap_texts))))
 
         now_ms = time.time_ns() // 1_000_000
         recap = {

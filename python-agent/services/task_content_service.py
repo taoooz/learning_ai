@@ -15,6 +15,7 @@ from lib.minimax import MiniMaxClient, extract_usage
 from services.search_evidence import build_evidence_pack_with_context, needs_search
 from services.evidence_store import evidence_to_prompt, get_chapter_evidence, task_evidence_coverage
 from services.content_stream_parser import ContentStreamParser
+from services.style_lint import lint_task_blocks, log_prose_findings
 from prompts import build_prompt
 from prompts.task_content import get_recipe
 from schemas.learning_v2 import TaskStreamRequest
@@ -300,6 +301,7 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
         return
 
     final_blocks = parser.collect_blocks()
+    log_prose_findings(f"task:{request.taskId}", lint_task_blocks(final_blocks))
     if not final_blocks:
         final_blocks = [{"type": "markdown", "blockId": "b1", "markdown": accumulated.strip()}]
 
