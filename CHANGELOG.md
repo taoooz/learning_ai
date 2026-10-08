@@ -6,6 +6,12 @@
 - `design-system/MASTER.md` 与 `globals.css` 实际 token 对齐：正文色改为 #5C5C5C，圆角/阴影以 token 为准
 - 新增 WCAG 对比度约束、reduced motion、焦点可见、触控区与交付前自检；登记到 docs 索引
 
+### 交互内容块 Phase 1（2026-10-08）
+- 新增 `interactive` 内容块类型与首批两个消费型组件：`parameter-demo`（改参数看结果，命名变量白名单公式求值）、`step-walkthrough`（分步演示）
+- Python 侧：流式解析器支持 interactive 块，schema 校验 + 公式试算，任一失败整块降级为等价 markdown（不阻塞生成流）；前端新增 InteractiveBlockV2 渲染器与 `lib/interactive/formula` 求值器（未知组件降级渲染）
+- Prompt：流程/机制类任务优先用分步演示模板，含数值参数关系用参数演示模板；交互结果不计入掌握度证据（Phase 2 再打通）
+- 新增 Python 5 个 + Node 6 个单测；架构文档补充 InteractiveBlock 数据契约
+
 ### 课程内容文风规范（精简版，2026-10-08）
 - 任务内容/流内答疑/章节小结 prompt 注入四条文风规则：篇幅随素材（禁止注水与假细节）、知识状态分层（定论/惯例/无定论）、禁提示性开场与翻案腔、按学习者问题推进
 - 新增 `services/style_lint.py` 文风观测 lint（纯正则，零依赖）：挂到任务内容、答疑、小结生成完成路径，只记日志不拦截不重试；新增 4 个单测

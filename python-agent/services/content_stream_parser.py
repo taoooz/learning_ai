@@ -13,7 +13,7 @@ import re
 _START_RE = re.compile(r"^:::(\w+)\s*$")
 _END_RE = re.compile(r"^:::\s*$")
 
-_STRUCTURED_TYPES = {"key_point", "example", "comparison", "diagram"}
+_STRUCTURED_TYPES = {"key_point", "example", "comparison", "diagram", "interactive"}
 
 
 def _after_colon(s: str) -> str:
@@ -148,6 +148,10 @@ class ContentStreamParser:
             "comparison": self._parse_comparison,
             "diagram": self._parse_diagram,
         }.get(block_type)
+        if block_type == "interactive":
+            # 交互组件块：解析/校验/降级都在 interactive_block 内完成
+            from services.interactive_block import parse_interactive_content
+            return parse_interactive_content(content_lines, block_id)
         if not parser_fn:
             return None
         block = parser_fn(content_lines, block_id)

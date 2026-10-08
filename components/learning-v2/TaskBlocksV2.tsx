@@ -10,6 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { LearningContentBlock } from '@/types/learning-v2';
+import { InteractiveBlockV2 } from './InteractiveBlockV2';
 import { MarkdownContent } from '../ui/MarkdownContent';
 import { StreamingMarkdown } from '../ui/StreamingMarkdown';
 
@@ -40,6 +41,8 @@ export function TaskBlockView({ block, streaming = false }: { block: LearningCon
       return <ComparisonBlockView columns={block.columns} rows={block.rows} />;
     case 'diagram':
       return <DiagramBlockView source={block.source} />;
+    case 'interactive':
+      return <InteractiveBlockV2 block={block} />;
     default:
       return null;
   }

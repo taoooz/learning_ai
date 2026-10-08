@@ -85,6 +85,13 @@ function contentBlockToText(block: LearningContentBlock): string {
       return [block.columns, ...block.rows].map((row) => row.join(' | ')).join('\n');
     case 'diagram':
       return block.source;
+    case 'interactive':
+      if (block.component === 'step-walkthrough') {
+        return [block.title, ...(block.steps ?? []).map((step) => `${step.title}：${step.detail}`)]
+          .filter((part) => Boolean(part))
+          .join('\n');
+      }
+      return [block.title, block.intro].filter((part) => Boolean(part)).join('\n');
   }
 }
 

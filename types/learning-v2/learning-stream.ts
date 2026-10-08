@@ -54,7 +54,37 @@ export interface DiagramBlock {
   source: string;
 }
 
-export type LearningContentBlock = MarkdownBlock | KeyPointBlock | ExampleBlock | ComparisonBlock | DiagramBlock;
+/** 交互组件块（Phase 1：消费型演示，不计入掌握度证据） */
+export interface InteractiveParameter {
+  name: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+}
+
+export interface InteractiveStep {
+  title: string;
+  detail: string;
+}
+
+export interface InteractiveBlock {
+  type: 'interactive';
+  blockId: string;
+  component: 'parameter-demo' | 'step-walkthrough';
+  title: string;
+  intro: string;
+  /** 仅 parameter-demo：可调参数 */
+  parameters?: InteractiveParameter[];
+  /** 仅 parameter-demo：数值/公式列名（第一列标签列不含在内） */
+  columns?: string[];
+  /** 仅 parameter-demo：label 为第一列标签；公式列的 cell 为 { formula } */
+  rows?: { label: string; values: (number | { formula: string })[] }[];
+  /** 仅 step-walkthrough */
+  steps?: InteractiveStep[];
+}
+
+export type LearningContentBlock = MarkdownBlock | KeyPointBlock | ExampleBlock | ComparisonBlock | DiagramBlock | InteractiveBlock;
 
 // ---- 任务生成结果 ----
 
