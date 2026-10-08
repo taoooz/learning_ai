@@ -1,6 +1,14 @@
 import os
 import json
+import asyncio
 import httpx
+
+# 流式读取的应用层空闲超时（秒）：超过该时长没有新数据行即视为上游断流
+_STREAM_IDLE_TIMEOUT = 60.0
+
+
+class IdleStreamError(Exception):
+    """上游流式响应空闲超时（区别于连接/读超时：连接仍存活但停发内容）"""
 from typing import AsyncIterator, Iterator
 
 DEFAULT_LLM_API_BASE = "http://muses-openapi-prod.weizhipin.com/v1"
@@ -103,7 +111,20 @@ class MiniMaxClient:
                 timeout=60.0,
             ) as response:
                 response.raise_for_status()
-                async for line in response.aiter_lines():
+                # 应用层空闲超时：网关可能用 keep-alive 保活连接但停发内容，
+                # httpx 读超时对“有字节但无数据行”的场景不生效，这里按
+                # “超过 60s 没有新数据行”主动断流（IdleStreamError），
+                # 由调用方决定降级/报错，避免客户端永远停留在流式中。
+                lines_aiter = response.aiter_lines()
+                while True:
+                    try:
+                        line = await asyncio.wait_for(anext(lines_aiter), timeout=_STREAM_IDLE_TIMEOUT)
+                    except StopAsyncIteration:
+                        break
+                    except asyncio.TimeoutError as exc:
+                        raise IdleStreamError(
+                            f"上游流空闲超过 {_STREAM_IDLE_TIMEOUT:.0f}s，已主动断开"
+                        ) from exc
                     if line.startswith("data: "):
                         data = line[6:]
                         if data == "[DONE]":
