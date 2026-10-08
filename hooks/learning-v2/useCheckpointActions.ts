@@ -74,6 +74,8 @@ export function useCheckpointActions({
         const response = await fetch('/api/learning/v2/checkpoints/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          // 服务断线/上游挂起时 120s 强制失败，进入下方失败通知解锁章节
+          signal: AbortSignal.timeout(120_000),
           body: JSON.stringify({
             courseId,
             chapterId,

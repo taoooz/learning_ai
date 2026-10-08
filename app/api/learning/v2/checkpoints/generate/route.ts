@@ -36,6 +36,8 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: pythonAgentHeaders(),
       body: JSON.stringify(body),
+      // 上游挂起时快速失败，避免前端无限等待
+      signal: AbortSignal.timeout(130_000),
     });
     const text = await response.text();
     return new Response(text, {
