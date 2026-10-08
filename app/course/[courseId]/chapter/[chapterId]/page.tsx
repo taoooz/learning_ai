@@ -174,15 +174,22 @@ function ChapterLearningView({
           onBack={() => router.push(`/course/${course.courseId}`)}
           trailing={
             totalTasks > 0 ? (
-              <div className="flex items-center gap-2 rounded-full bg-accent/10 px-3 py-1.5">
-                <span className="h-1.5 w-8 overflow-hidden rounded-full bg-accent/20">
-                  <span
-                    className="block h-full rounded-full bg-accent transition-all duration-500"
-                    style={{ width: `${progressPercent}%` }}
-                  />
-                </span>
-                <span className="text-[11px] font-semibold text-accent">{progressPercent}%</span>
-              </div>
+              <>
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full bg-accent sm:hidden"
+                  role="img"
+                  aria-label={`本章进度 ${progressPercent}%`}
+                />
+                <div className="hidden items-center gap-2 rounded-full bg-accent/10 px-3 py-1.5 sm:flex">
+                  <span className="h-1.5 w-8 overflow-hidden rounded-full bg-accent/20">
+                    <span
+                      className="block h-full rounded-full bg-accent transition-all duration-500"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </span>
+                  <span className="text-[11px] font-semibold text-accent">{progressPercent}%</span>
+                </div>
+              </>
             ) : undefined
           }
           maxWidthClassName="max-w-2xl"
@@ -190,7 +197,7 @@ function ChapterLearningView({
 
         <section className="pb-2 pt-[78px]">
           {saveConflict && (
-            <div className="mb-4 rounded-2xl border border-error/20 bg-error/6 px-4 py-4">
+            <div className="mb-4 rounded-2xl border border-[rgba(196,58,91,0.25)] bg-[rgba(196,58,91,0.05)] px-4 py-4">
               <p className="text-[14px] leading-relaxed text-error">{saveConflict}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
@@ -203,7 +210,7 @@ function ChapterLearningView({
                 <button
                   type="button"
                   onClick={overwriteServerVersion}
-                  className="rounded-full bg-accent px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
+                  className="rounded-full bg-accent px-4 py-2 text-[13px] font-semibold text-primary transition-opacity hover:opacity-90 active:opacity-80"
                 >
                   用本机进度覆盖
                 </button>
@@ -258,7 +265,7 @@ function ChapterLearningView({
               <button
                 type="button"
                 onClick={retryPlan}
-                className="mt-4 rounded-full bg-accent px-5 py-2.5 text-[14px] font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
+                className="mt-4 rounded-full bg-accent px-5 py-2.5 text-[14px] font-semibold text-primary transition-opacity hover:opacity-90 active:opacity-80"
               >
                 重新生成计划
               </button>

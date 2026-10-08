@@ -6,7 +6,7 @@
 // system_notice（按 tone 着色）/ chapter_recap / user_question + tutor_answer（P2 流内答疑，§2.1/§4）
 // 自动滚动：同一任务内贴底跟随；任务切换不抢位置，用户回到底部后恢复跟随
 
-import { useEffect, useMemo, useRef } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ChapterRecap,
   CheckpointItem,
@@ -65,6 +65,8 @@ export function LearningStreamV2({
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(!anchorTaskId);
+  // 浏览器滚动恢复（非恢复分支④）回到中途时，也补一个“从这里继续”cue
+  const [restoredMidPage, setRestoredMidPage] = useState(false);
   const anchoredRef = useRef(false);
   const previousTaskIdRef = useRef<string | null | undefined>(undefined);
 
@@ -97,6 +99,21 @@ export function LearningStreamV2({
     anchoredRef.current = true;
     const element = document.querySelector(`[data-task-item="${anchorTaskId}"]`);
     element?.scrollIntoView({ block: 'start' });
+  }, [anchorTaskId]);
+
+  useEffect(() => {
+    if (anchorTaskId) return;
+    // 浏览器滚动恢复可能晚于挂载，重试几次直到命中中途位置
+    const tryMark = () => {
+      if (window.scrollY < 300) return false;
+      const inView = Array.from(document.querySelectorAll('[data-task-item]'))
+        .filter((el) => el.getBoundingClientRect().top <= 120)
+        .pop();
+      if (inView) setRestoredMidPage(true);
+      return !!inView;
+    };
+    const timers = [0, 350, 900].map((delay) => setTimeout(() => tryMark(), delay));
+    return () => timers.forEach(clearTimeout);
   }, [anchorTaskId]);
 
   // 每次内容变化：跟随模式下滚到底部哨兵
@@ -142,12 +159,22 @@ export function LearningStreamV2({
       .map((item) => item.questionId),
   );
 
+  // 任务步骤序号：与头部进度同源（chapterPlan.tasks 按 order 排序）
+  const taskSteps = useMemo(() => {
+    const tasks = [...lesson.chapterPlan.tasks].sort((a, b) => a.order - b.order);
+    const map = new Map<string, { index: number; total: number }>();
+    tasks.forEach((task, i) => map.set(task.taskId, { index: i + 1, total: tasks.length }));
+    return map;
+  }, [lesson.chapterPlan.tasks]);
+
   return (
     <div className="space-y-5">
+      <ResumeCue show={Boolean(anchorTaskId) || restoredMidPage} />
       {items.map((item) => (
+        <Fragment key={item.itemId}>
         <StreamItemView
-          key={item.itemId}
           item={item}
+          step={item.type === 'task_content' ? taskSteps.get(item.taskId) : undefined}
           streamingTaskId={streamingTaskId}
           onRetryTask={onRetryTask}
           queuedQuestionIds={queuedQuestionIds}
@@ -159,14 +186,38 @@ export function LearningStreamV2({
           onRequestRemediation={onRequestRemediation}
           tutorBusy={tutorBusy}
         />
+        </Fragment>
       ))}
       <div ref={bottomRef} />
     </div>
   );
 }
 
+/** 恢复定位 cue：回到中途时提示“从这里继续”，数秒后淡出 */
+function ResumeCue({ show }: { show: boolean }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (!show) return;
+    setVisible(true);
+    const timer = setTimeout(() => setVisible(false), 4000);
+    return () => clearTimeout(timer);
+  }, [show]);
+  if (!show) return null;
+  return (
+    <div
+      aria-hidden="true"
+      className={`pointer-events-none fixed inset-x-0 top-[60px] z-30 flex justify-center transition-opacity duration-700 ${visible ? 'opacity-100' : 'opacity-0'}`}
+    >
+      <span className="rounded-full border border-border bg-surface px-3 py-1 text-[12px] font-medium text-secondary shadow-float">
+        从这里继续
+      </span>
+    </div>
+  );
+}
+
 function StreamItemView({
   item,
+  step,
   streamingTaskId,
   onRetryTask,
   queuedQuestionIds,
@@ -179,6 +230,7 @@ function StreamItemView({
   onRequestRemediation,
 }: {
   item: LearningStreamItem;
+  step?: { index: number; total: number };
   streamingTaskId: string | null;
   onRetryTask?: (taskId: string) => void;
   queuedQuestionIds: Set<string>;
@@ -195,6 +247,7 @@ function StreamItemView({
       return (
         <TaskContentView
           item={item}
+          step={step}
           isStreaming={streamingTaskId === item.taskId}
         />
       );
@@ -262,15 +315,21 @@ function CheckpointItemView({
 
 function TaskContentView({
   item,
+  step,
   isStreaming,
 }: {
   item: TaskContentItem;
+  step?: { index: number; total: number };
   isStreaming: boolean;
 }) {
   return (
-    <article data-task-item={item.taskId} className="relative space-y-4 pl-0 sm:pl-0">
-      {/* 任务标题保留为轻量段落锚点，但不暴露“第几节”这类内部教学编号。 */}
-      <h2 className="text-[17px] font-semibold leading-[1.45] tracking-[-0.01em] text-primary">
+    <article data-task-item={item.taskId} className="relative space-y-4 pt-3 pl-0 sm:pl-0">
+      {step && (
+        <p className="text-[12px] font-medium tabular-nums text-tertiary">
+          第 {step.index} 步 · 共 {step.total} 步
+        </p>
+      )}
+      <h2 className="text-[18px] font-semibold leading-[1.4] text-primary">
         {item.title}
       </h2>
       <div className="space-y-4">
@@ -290,16 +349,17 @@ function TaskContentView({
   );
 }
 
+// 错误通知用 inline 横幅（左色条 + 浅底），不与边界卡/检查点抢卡片形态
 const NOTICE_TONE_STYLES: Record<SystemNoticeItem['tone'], string> = {
-  info: 'border-black/[0.06] bg-subtle',
-  warning: 'border-amber-500/20 bg-amber-500/[0.05]',
-  error: 'border-error/15 bg-error/[0.045]',
+  info: 'rounded-xl border border-black/[0.06] bg-subtle',
+  warning: 'rounded-xl border border-amber-500/20 bg-amber-500/[0.05]',
+  error: 'relative overflow-hidden rounded-[10px] bg-[rgba(196,58,91,0.07)]',
 };
 
 const NOTICE_ICON_STYLES: Record<SystemNoticeItem['tone'], string> = {
   info: 'bg-black/[0.04] text-secondary',
   warning: 'bg-amber-500/12 text-amber-700',
-  error: 'bg-error/10 text-error',
+  error: 'bg-[rgba(196,58,91,0.12)] text-error',
 };
 
 function getNoticeTitle(item: SystemNoticeItem): string {
@@ -323,7 +383,10 @@ function SystemNoticeView({
   const retryLabel = canRetryTutor ? '重试回答' : '重新生成本节';
 
   return (
-    <section className={`fade-in rounded-2xl border px-3.5 py-3 ${NOTICE_TONE_STYLES[item.tone]}`}>
+    <section className={`fade-in px-3.5 py-3 ${NOTICE_TONE_STYLES[item.tone]}`}>
+      {item.tone === 'error' && (
+        <span aria-hidden="true" className="absolute left-0 top-0 h-full w-[3px] bg-[rgba(196,58,91,0.65)]" />
+      )}
       <div className="flex items-start gap-3">
         <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-bold ${NOTICE_ICON_STYLES[item.tone]}`}>
           {item.tone === 'error' ? '!' : item.tone === 'warning' ? '!' : 'i'}
@@ -340,9 +403,9 @@ function SystemNoticeView({
                   if (canRetryTutor && item.questionId) onRetryTutor?.(item.questionId);
                   else if (item.taskId) onRetryTask?.(item.taskId);
                 }}
-                className="rounded-full border border-current/20 bg-white/70 px-3 py-1 text-[11px] font-semibold text-current opacity-80 transition-opacity hover:opacity-100"
+                className="text-[12px] font-semibold text-current underline underline-offset-4 opacity-80 transition-opacity hover:opacity-100"
               >
-                {retryLabel}
+                {canRetryTutor ? retryLabel : '重试'}
               </button>
             )}
           </div>
@@ -385,8 +448,8 @@ function UserQuestionView({
         <p className="pr-1 text-[12px] text-tertiary">{pendingHint}</p>
       )}
       {item.status === 'failed' && (
-        <div className="pr-1 inline-flex items-center gap-1.5 rounded-full bg-error/8 px-2.5 py-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-error/60" />
+        <div className="pr-1 inline-flex items-center gap-1.5 rounded-full bg-[rgba(196,58,91,0.08)] px-2.5 py-1">
+          <span className="h-1.5 w-1.5 rounded-full bg-[rgba(196,58,91,0.6)]" />
           <p className="text-[12px] text-error">回答失败</p>
         </div>
       )}
@@ -435,11 +498,11 @@ function TutorAnswerView({
         </div>
       )}
       {failed && (
-        <div className="mt-1 flex flex-wrap items-center gap-3 rounded-xl border border-error/15 bg-error/[0.04] px-3.5 py-3">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-error/10 text-[13px] font-bold text-error">!</span>
+        <div className="mt-1 flex flex-wrap items-center gap-3 rounded-xl border border-[rgba(196,58,91,0.25)] bg-[rgba(196,58,91,0.05)] px-3.5 py-3">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[rgba(196,58,91,0.12)] text-[13px] font-bold text-error">!</span>
           <div className="min-w-[180px] flex-1">
             <p className="text-[13px] font-semibold text-error">回答生成失败</p>
-            <p className="mt-0.5 text-[12px] leading-relaxed text-error/75">
+            <p className="mt-0.5 text-[12px] leading-relaxed text-error">
               {item.errorMessage ?? '请检查网络后重试'}
             </p>
           </div>

@@ -73,7 +73,7 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 }
 
 const inputClassName =
-  'w-full rounded-[20px] border border-black/6 bg-white/82 px-4 py-3 text-[15px] text-primary outline-none transition-all duration-150 placeholder:text-secondary/55 focus:border-accent/22 focus:bg-white';
+  'w-full rounded-md border border-black/6 bg-white/82 px-4 py-3 text-[15px] text-primary outline-none transition-all duration-150 placeholder:text-secondary/55 focus:border-accent/22 focus:bg-white';
 
 const textareaClassName = `${inputClassName} resize-none leading-7`;
 
@@ -265,7 +265,7 @@ export default function ProfilePage() {
               {workExperience.map((work, index) => (
                 <div
                   key={work.id}
-                  className="relative overflow-hidden rounded-[30px] border border-white/82 bg-[linear-gradient(135deg,rgba(255,255,255,0.94),rgba(255,248,241,0.98)_58%,rgba(255,255,255,0.95))] px-5 py-5 shadow-[0_12px_28px_rgba(15,23,42,0.06)]"
+                  className="relative overflow-hidden rounded-xl border border-white/82 bg-[linear-gradient(135deg,rgba(255,255,255,0.94),rgba(255,248,241,0.98)_58%,rgba(255,255,255,0.95))] px-5 py-5 shadow-[0_12px_28px_rgba(15,23,42,0.06)]"
                 >
                   <div
                     className="pointer-events-none absolute left-0 top-0 h-28 w-36 opacity-28"
@@ -349,7 +349,7 @@ export default function ProfilePage() {
               {education.map((edu, index) => (
                 <div
                   key={edu.id}
-                  className="rounded-[28px] border border-black/6 bg-white/84 px-5 py-5 shadow-[0_8px_20px_rgba(15,23,42,0.04)]"
+                  className="rounded-lg border border-black/6 bg-white/84 px-5 py-5 shadow-[0_8px_20px_rgba(15,23,42,0.04)]"
                 >
                   <div className="mb-4 flex items-center justify-between gap-3">
                     <div className="rounded-full bg-tag px-3 py-1 text-xs font-medium text-secondary">
@@ -399,7 +399,7 @@ export default function ProfilePage() {
 
       <div className="fixed inset-x-0 bottom-0 z-20">
         <div className="mx-auto max-w-md px-5 pb-[max(16px,env(safe-area-inset-bottom))] pt-3 sm:px-6">
-          <div className="rounded-[28px] border border-white/72 bg-surface/84 p-3 shadow-[0_10px_26px_rgba(15,23,42,0.06)] backdrop-blur-md">
+          <div className="rounded-lg border border-white/72 bg-surface/84 p-3 shadow-[0_10px_26px_rgba(15,23,42,0.06)] backdrop-blur-md">
             <p className="px-2 pb-2 text-xs leading-5 text-secondary">
               保存后，后续生成的新课程会优先参考这些信息。
             </p>

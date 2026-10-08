@@ -82,7 +82,7 @@ export default function HomePage() {
       {/* 顶部导航 */}
       <div className="fixed inset-x-0 top-0 z-20 pt-4">
         <div className="mx-auto max-w-2xl px-5 pb-2 sm:px-6">
-          <div className="rounded-[24px] border border-white/72 bg-surface/80 px-3 py-2.5 shadow-[0_6px_18px_rgba(15,23,42,0.04)] backdrop-blur-md">
+          <div className="rounded-lg border border-white/72 bg-surface/80 px-3 py-2.5 shadow-[0_6px_18px_rgba(15,23,42,0.04)] backdrop-blur-md">
             <div className="flex items-center justify-between gap-3">
               <div className="rounded-full bg-background/92 px-3 py-1.5 text-xs font-medium text-secondary">
                 Learning AI
@@ -113,7 +113,7 @@ export default function HomePage() {
               <span className="block">想学什么，</span>
               <span className="relative inline-block text-slate-950 [text-shadow:0_10px_28px_rgba(56,189,248,0.12)]">
                 <span
-                  className="pointer-events-none absolute -left-1 -right-2 bottom-0 h-[0.72em] -rotate-[2.4deg] rounded-[999px] bg-gradient-to-r from-sky-400/34 via-sky-300/24 to-accent/18 blur-[0.7px]"
+                  className="pointer-events-none absolute -left-1 -right-2 bottom-0 h-[0.72em] -rotate-[2.4deg] rounded-pill bg-gradient-to-r from-sky-400/34 via-sky-300/24 to-accent/18 blur-[0.7px]"
                   aria-hidden="true"
                 />
                 <span className="relative">就从这里开始</span>
@@ -126,7 +126,7 @@ export default function HomePage() {
 
           <form onSubmit={handleSubmit} className="mt-8">
             <div className="flex flex-col gap-3">
-              <div className="relative overflow-hidden rounded-[24px] border-2 border-black/[0.08] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.04)] transition-all duration-200 focus-within:border-accent focus-within:shadow-[0_8px_24px_rgba(255,138,0,0.12)]">
+              <div className="relative overflow-hidden rounded-lg border-2 border-black/[0.08] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.04)] transition-all duration-200 focus-within:border-accent focus-within:shadow-[0_8px_24px_rgba(255,138,0,0.12)]">
                 <textarea
                   id="topic-input"
                   value={topic}

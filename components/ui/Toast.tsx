@@ -30,7 +30,7 @@ export function Toast({ message, type = 'success', isVisible, onClose, duration 
           transition={{ duration: 0.2 }}
           className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50"
         >
-          <div className={`${type === 'success' ? 'bg-primary' : 'bg-error'} text-white px-5 py-3 rounded-2xl shadow-lg flex items-center gap-2`}>
+          <div className={`${type === 'success' ? 'bg-primary text-primary' : 'bg-surface text-error border border-error/40'} px-5 py-3 rounded-2xl shadow-lg flex items-center gap-2`}>
             {type === 'success' ? (
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

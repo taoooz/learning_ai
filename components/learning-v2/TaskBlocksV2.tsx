@@ -16,9 +16,9 @@ import { StreamingMarkdown } from '../ui/StreamingMarkdown';
 /** 块类型标签的通用样式：小 chip + 图标 */
 function BlockLabel({ label, tone = 'accent' }: { label: string; tone?: 'accent' | 'neutral' | 'blue' }) {
   const toneStyles = {
-    accent: 'bg-accent/10 text-accent',
+    accent: 'bg-[rgba(255,138,0,0.10)] text-accent',
     neutral: 'bg-black/[0.04] text-secondary',
-    blue: 'bg-info/10 text-info',
+    blue: 'bg-[rgba(255,138,0,0.10)] text-accent',
   } as const;
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${toneStyles[tone]}`}>
@@ -48,15 +48,15 @@ export function TaskBlockView({ block, streaming = false }: { block: LearningCon
 /** 关键点定义卡：左侧色条 + 标签 + 要点列表 */
 function KeyPointBlockView({ title, points }: { title?: string; points: string[] }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-accent/12 bg-accent/[0.045] pl-4 pr-4 py-4 shadow-sm">
-      <div className="absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-accent/35" />
+    <div className="relative overflow-hidden rounded-2xl border border-[rgba(255,138,0,0.18)] bg-[rgba(255,138,0,0.045)] pl-4 pr-4 py-4 shadow-sm">
+      <div className="absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-[rgba(255,138,0,0.45)]" />
       <div className="mb-3 flex items-center justify-between gap-2">
         <BlockLabel label={title || '关键点'} />
       </div>
       <ul className="space-y-3">
         {points.map((point, i) => (
           <li key={i} className="relative pl-4 text-[14px] leading-[1.72] text-primary/90">
-            <span className="absolute left-0 top-[9px] h-1.5 w-1.5 rounded-full bg-accent/55" aria-hidden />
+            <span className="absolute left-0 top-[9px] h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
             <div className="key-point-prose">
               <MarkdownContent content={point} />
             </div>
@@ -81,7 +81,7 @@ export function ExampleBlockView({
 }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-black/[0.06] bg-surface shadow-sm">
-      <div className="border-b border-black/[0.045] bg-gradient-to-b from-white to-subtle/55 px-4 pt-3.5 pb-3">
+      <div className="border-b border-black/[0.045] bg-[rgba(0,0,0,0.02)] px-4 pt-3.5 pb-3">
         <div className="flex flex-wrap items-center gap-2">
           <BlockLabel label="示例" tone="blue" />
           <span className="text-[14px] font-semibold leading-snug text-primary">{title}</span>
@@ -104,7 +104,7 @@ export function ExampleBlockView({
 function ComparisonBlockView({ columns, rows }: { columns: string[]; rows: string[][] }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-black/[0.06] bg-surface shadow-sm">
-      <div className="flex items-center justify-between gap-3 border-b border-black/[0.045] bg-subtle/60 px-4 py-3">
+      <div className="flex items-center justify-between gap-3 border-b border-black/[0.045] bg-subtle px-4 py-3">
         <BlockLabel label="对比" />
         <span className="text-[11px] text-tertiary">左右滑动查看</span>
       </div>
@@ -179,7 +179,7 @@ function DiagramBlockView({ source }: { source: string }) {
 
   return (
     <div className="rounded-2xl border border-black/[0.06] bg-surface shadow-card overflow-hidden">
-      <div className="flex items-center justify-between gap-3 border-b border-black/[0.045] bg-subtle/60 px-4 py-3">
+      <div className="flex items-center justify-between gap-3 border-b border-black/[0.045] bg-subtle px-4 py-3">
         <BlockLabel label="流程图" />
         <span className="text-[11px] text-tertiary">示意图</span>
       </div>

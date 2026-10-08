@@ -92,7 +92,7 @@ export default function CoursePage() {
           <p className="text-secondary text-sm mb-6">可能已经被删除啦</p>
           <button
             onClick={() => router.push('/')}
-            className="px-6 py-3 rounded-full bg-accent text-white font-medium shadow-md hover:shadow-lg active:scale-95 transition-all duration-200"
+            className="px-6 py-3 rounded-full bg-accent text-primary font-medium shadow-md hover:shadow-lg active:scale-95 transition-all duration-200"
           >
             去看看其他探索主题
           </button>

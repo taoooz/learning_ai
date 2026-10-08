@@ -111,15 +111,14 @@ export function InlineTutorInput({
 
   return (
     <div className="relative mt-5">
-      <div className="pointer-events-none absolute inset-0 rounded-[24px] bg-[radial-gradient(circle_at_24%_18%,rgba(152,184,232,0.13),rgba(152,184,232,0)_48%),radial-gradient(circle_at_78%_80%,rgba(127,191,195,0.12),rgba(127,191,195,0)_52%)]" />
       <div
-        className={`relative flex items-end gap-2 rounded-[22px] border bg-white/90 p-2 shadow-[0_8px_24px_rgba(15,23,42,0.05)] backdrop-blur-sm transition-colors ${
+        className={`relative flex items-end gap-2 rounded-lg border bg-white p-2 transition-colors ${
           disabled
             ? 'border-black/[0.05] opacity-60'
-            : 'border-black/[0.06] focus-within:border-[rgba(127,191,195,0.42)] focus-within:shadow-[0_10px_28px_rgba(127,191,195,0.14)]'
+            : 'border-black/[0.08] focus-within:border-[rgba(127,191,195,0.55)] focus-within:shadow-[0_0_0_3px_rgba(127,191,195,0.15)]'
         }`}
       >
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[14px] bg-[linear-gradient(180deg,rgba(255,255,255,0.72),rgba(221,232,246,0.72))] shadow-[0_8px_16px_rgba(127,191,195,0.12)]">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm bg-[linear-gradient(180deg,rgba(255,255,255,0.72),rgba(221,232,246,0.72))] shadow-[0_8px_16px_rgba(127,191,195,0.12)]">
           <AssistantGlyph className="h-5 w-5" />
         </span>
         <label htmlFor="inline-tutor-input" className="sr-only">
@@ -142,7 +141,7 @@ export function InlineTutorInput({
           whileHover={disabled || !value.trim() ? undefined : { y: -1 }}
           whileTap={disabled || !value.trim() ? undefined : { y: 1, scale: 0.98 }}
           disabled={disabled || value.trim().length === 0}
-          className="inline-flex h-11 min-w-[76px] shrink-0 items-center justify-center rounded-[16px] bg-[linear-gradient(135deg,#98B8E8,#7FBFC3)] px-4 text-[14px] font-semibold text-white shadow-[0_10px_20px_rgba(127,191,195,0.20)] disabled:cursor-not-allowed disabled:opacity-45"
+          className="inline-flex h-11 min-w-[76px] shrink-0 items-center justify-center rounded-md bg-[linear-gradient(135deg,#98B8E8,#7FBFC3)] px-4 text-[14px] font-semibold text-primary shadow-[0_10px_20px_rgba(127,191,195,0.20)] disabled:cursor-not-allowed disabled:opacity-45"
         >
           {busy ? '思考中' : '发送'}
         </motion.button>

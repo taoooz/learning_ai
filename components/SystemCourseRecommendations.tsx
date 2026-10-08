@@ -15,7 +15,7 @@ export function SystemCourseRecommendations({
 }: SystemCourseRecommendationsProps) {
   return (
     <section className="pt-1">
-      <div className="rounded-[30px] border border-sky-200/65 bg-[linear-gradient(135deg,rgba(241,248,255,0.96),rgba(248,251,255,0.98)_58%,rgba(255,255,255,0.96))] px-5 py-5 shadow-[0_12px_28px_rgba(56,189,248,0.10)] sm:px-6">
+      <div className="rounded-xl border border-sky-200/65 bg-[linear-gradient(135deg,rgba(241,248,255,0.96),rgba(248,251,255,0.98)_58%,rgba(255,255,255,0.96))] px-5 py-5 shadow-[0_12px_28px_rgba(56,189,248,0.10)] sm:px-6">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="w-fit rounded-full bg-sky-500/10 px-3 py-1 text-xs font-medium text-sky-700">
@@ -42,7 +42,7 @@ export function SystemCourseRecommendations({
                 type="button"
                 onClick={() => onSelect(course.courseId)}
                 disabled={startingCourseId === course.courseId}
-                className={`group rounded-[26px] border p-5 text-left shadow-[0_8px_22px_rgba(15,23,42,0.05)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_28px_rgba(15,23,42,0.08)] disabled:opacity-60 ${palette}`}
+                className={`group rounded-lg border p-5 text-left shadow-[0_8px_22px_rgba(15,23,42,0.05)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_28px_rgba(15,23,42,0.08)] disabled:opacity-60 ${palette}`}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">

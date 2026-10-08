@@ -42,7 +42,7 @@ export function CourseCelebrationSheet({ isOpen, onClose, topic, totalChapters }
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[80vh] flex-col rounded-t-[32px] bg-white shadow-[0_-8px_32px_rgba(0,0,0,0.12)]"
+            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[80vh] flex-col rounded-t-xl bg-white shadow-[0_-8px_32px_rgba(0,0,0,0.12)]"
           >
             {/* 拖拽指示条 */}
             <div className="flex justify-center pt-3 pb-1">

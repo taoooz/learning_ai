@@ -156,7 +156,7 @@ function ConfirmPageContent() {
           <p className="text-error mb-4">{error}</p>
           <button
             onClick={handleRetry}
-            className="px-6 py-3 rounded-full bg-accent text-white"
+            className="px-6 py-3 rounded-full bg-accent text-primary"
           >
             重试
           </button>
@@ -173,7 +173,7 @@ function ConfirmPageContent() {
           <p className="text-secondary mb-4">{response.message || '让我重新思考一下...'}</p>
           <button
             onClick={handleRetry}
-            className="px-6 py-3 rounded-full bg-accent text-white"
+            className="px-6 py-3 rounded-full bg-accent text-primary"
           >
             重新生成
           </button>
@@ -230,7 +230,7 @@ function ConfirmPageContent() {
             <button
               onClick={handleAnswerSubmit}
               disabled={!currentAnswer || isSubmitting}
-              className="w-full mt-6 px-6 py-3 rounded-full bg-primary text-white font-medium disabled:opacity-50"
+              className="w-full mt-6 px-6 py-3 rounded-full bg-primary text-primary font-medium disabled:opacity-50"
             >
               {isSubmitting ? '提交中...' : '确认答案'}
             </button>

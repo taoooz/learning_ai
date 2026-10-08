@@ -38,7 +38,7 @@ export function TaskBoundaryV2({ lesson, phase, attempts, onContinue, highlightC
             <button
               type="button"
               disabled
-              className="shrink-0 cursor-not-allowed rounded-full bg-accent/50 px-5 py-2.5 text-[14px] font-semibold text-white/80"
+              className="shrink-0 cursor-not-allowed rounded-full bg-accent/40 px-5 py-2.5 text-[14px] font-semibold text-primary/60"
             >
               正在生成章节小结…
             </button>
@@ -70,7 +70,9 @@ export function TaskBoundaryV2({ lesson, phase, attempts, onContinue, highlightC
         ? '完成理解检查'
         : '完成本章';
   const progressLabel = failed
-    ? '本节生成失败，可以重试'
+    ? attempts > 1
+      ? `已重试 ${attempts} 次，仍可再试`
+      : '检查网络或服务后重试'
     : nextTask
       ? `本章还剩 ${sortedTasks.length - currentIndex - 1} 节 · 接下来：${nextTask.title}`
       : '本章内容已全部完成';
@@ -103,14 +105,16 @@ export function TaskBoundaryV2({ lesson, phase, attempts, onContinue, highlightC
         )}
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-medium text-primary">{nextTask ? '继续学习' : '完成本章'}</p>
+            <p className="truncate text-[13px] font-medium text-primary">
+              {failed ? '本节没生成成功' : nextTask ? '继续学习' : '完成本章'}
+            </p>
             <p className="mt-0.5 truncate text-[11px] text-tertiary">{progressLabel}</p>
           </div>
           <button
             type="button"
             onClick={onContinue}
             disabled={!failed && checkpointGate.blocked}
-            className={`flex h-11 shrink-0 items-center gap-2 rounded-full px-5 text-[14px] font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:shadow-none ${
+            className={`flex h-11 shrink-0 items-center gap-2 rounded-full px-5 text-[14px] font-semibold text-primary transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:shadow-none ${
               highlightContinue && !failed
                 ? 'animate-pulse bg-accent shadow-md shadow-accent/30'
                 : 'bg-accent shadow-sm shadow-accent/20'

@@ -50,7 +50,7 @@ export function CourseCard({ course, index, onContinue, onDelete }: CourseCardPr
 
   return (
     <article
-      className={`rounded-[24px] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.06)] transition-all duration-200 hover:shadow-[0_4px_20px_rgba(0,0,0,0.08)] ${palette}`}
+      className={`rounded-lg p-5 shadow-[0_2px_12px_rgba(0,0,0,0.06)] transition-all duration-200 hover:shadow-[0_4px_20px_rgba(0,0,0,0.08)] ${palette}`}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">

@@ -28,7 +28,7 @@ export function PlanPatchPrompt({ patch, onAccept, onDismiss }: PlanPatchPromptP
         <button
           type="button"
           onClick={onAccept}
-          className="rounded-full bg-accent px-4 py-1.5 text-[12px] font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
+          className="rounded-full bg-accent px-4 py-1.5 text-[12px] font-semibold text-primary transition-opacity hover:opacity-90 active:opacity-80"
         >
           按建议调整
         </button>

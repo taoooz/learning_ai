@@ -6,6 +6,16 @@
 - `design-system/MASTER.md` 与 `globals.css` 实际 token 对齐：正文色改为 #5C5C5C，圆角/阴影以 token 为准
 - 新增 WCAG 对比度约束、reduced motion、焦点可见、触控区与交付前自检；登记到 docs 索引
 
+### 可读性与可访问性定点修复（2026-09-30）
+- 错误通知改为 inline 横幅（左色条 + 浅底），提问输入框去掉径向渐变与毛玻璃，改为白底 + 边框 + 聚焦环
+- 修复学习流中带透明度的颜色类（如 `bg-error/10`、`border-accent/45`）因颜色未进 Tailwind 主题而不生效的问题：检查点选中态、评估结果、关键点/示例/对比底色、错误横幅等改为显式色值
+- 颜色注册进 Tailwind v4 `@theme`（`--color-*` 供背景/边框/渐变、`--text-color-*` 供文字），全站带透明度的颜色类恢复生效；手写实心工具类优先级不变，现有视觉零变化
+- 学习页体验修复：头部毛玻璃胶囊保留原形态、透明度 80%→95%（消除滚动鬼影，保留玻璃感）；失败态只保留一个主重试操作、错误通知内改为文字链；恢复中途时显示“从这里继续”提示；任务标题加“第 X 步 · 共 Y 步”并加大字号与间距；移动端头部进度只留圆点给标题让位
+- 错误色 `--color-error` 由 #EF476F 加深为 #C43A5B：文字与描边在白底/暖底上对比度 3.6:1 → 4.8:1
+- 橙/黄/粉蓝底上的白字统一改为近黑 `text-primary`（对比度 2.4:1 → 7:1）；删除确认与错误 Toast 改为描边/浅底样式
+- 修复键盘焦点环被全局清除的问题；新增 `MotionProvider` 全局尊重系统“减少动态效果”
+- 零散 `rounded-[Npx]` 收敛到现有 12/16/24/32/9999 圆角 token；`MASTER.md` 文字色/圆角表与代码对齐
+
 ### 学习系统分层升级（2026-09-30）
 - 新增 `CourseMission`：从 outline 派生 why / targetScenario / successCriteria / constraints / outOfScope，并贯穿 TOC、章节计划、任务内容与 Checkpoint prompt
 - 章节计划新增确定性理解闸门：最后一个任务 `evidencePolicy=checkpoint`，服务端强制写入，TS 校验兜底；测题生成同时受课程使命与证据约束

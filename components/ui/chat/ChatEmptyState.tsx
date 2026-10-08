@@ -9,7 +9,7 @@ export function ChatEmptyState() {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
-      className="mb-4 rounded-[24px] border border-black/5 bg-[linear-gradient(180deg,rgba(255,255,255,0.90),rgba(246,250,249,0.92))] px-4 py-4"
+      className="mb-4 rounded-lg border border-black/5 bg-[linear-gradient(180deg,rgba(255,255,255,0.90),rgba(246,250,249,0.92))] px-4 py-4"
     >
       <div className="flex items-start gap-3">
         <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(180deg,rgba(255,255,255,0.72),rgba(221,232,246,0.72))]">

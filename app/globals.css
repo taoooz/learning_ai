@@ -1,5 +1,49 @@
 @import "tailwindcss";
 
+/* 颜色注册进 Tailwind 主题：让 bg-accent/10、text-secondary/70、border-error/20 等
+   带透明度的工具类真正生成（此前全部静默失效）。
+   - --color-* 供背景/边框/渐变/阴影色使用
+   - --text-color-* 供文字使用（与手写 .text-* 工具类同值，避免旧橙色污染文字色）
+   手写实心工具类在未分层 CSS 中，优先级高于生成类，现状视觉不变。 */
+@theme {
+  --color-background: #F7F7F5;
+  --color-surface: #FFFFFF;
+  --color-surface-white: #FFFFFF;
+  --color-subtle: #F5F5F5;
+  --color-cta: #1A1A1A;
+  --color-cta-text: #FFFFFF;
+  --color-accent: #FF8A00;
+  --color-accent-light: #FFB380;
+  --color-available: #FF9500;
+  --color-completed: #34C759;
+  --color-locked: #BDBDBD;
+  --color-error: #C43A5B;
+  --color-error-dark: #AC3350;
+  --color-tag: #ECEEEC;
+  --color-success: #34C759;
+  --color-warning: #FF9500;
+  --color-info: #007AFF;
+  /* legacy：仅个别旧组件（confirm 选中态等）引用 */
+  --color-primary: #FF8C42;
+  --color-secondary: #FFD166;
+
+  --text-color-primary: #1F1F1F;
+  --text-color-secondary: #5C5C5C;
+  --text-color-tertiary: #707070;
+  --text-color-disabled: #999999;
+  --text-color-placeholder: #BDBDBD;
+  --text-color-cta: #FFFFFF;
+  --text-color-error: #C43A5B;
+  --text-color-success: #1E7F4F;
+  --text-color-warning: #A15C00;
+  --text-color-info: #0062CC;
+  --text-color-available: #FF9500;
+  --text-color-completed: #1E7F4F;
+  --text-color-locked: #707070;
+
+  --border-color-subtle: #EAEAEA;
+}
+
 /* ========================================
    AI Learning App - Design System v2
    Based on CapWords "Warm Minimalism" Style
@@ -32,8 +76,8 @@
   /* State Colors - 状态色 */
   --color-success: #34C759;          /* iOS 绿 - 已完成 */
   --color-warning: #FF9500;          /* iOS 橙 - 警告 */
-  --color-error: #EF476F;           /* 错误 */
-  --color-error-dark: #D93F64;      /* 错误 hover */
+  --color-error: #C43A5B;           /* 错误：白底/暖底上均 ≥4.5:1 */
+  --color-error-dark: #AC3350;      /* 错误 hover */
   --color-info: #007AFF;            /* iOS 蓝 - 可用状态 */
 
   /* Status Colors - 节点状态色 */
@@ -351,13 +395,11 @@ html {
   box-shadow: 0 0 0 2px var(--color-background), 0 0 0 4px var(--color-accent);
 }
 
-button:focus-visible,
-a:focus-visible,
+/* 输入类控件焦点环贴合边框 */
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
-  outline: none;
-  box-shadow: none;
+  box-shadow: 0 0 0 3px rgba(255, 138, 0, 0.25);
 }
 
 /* === Reduced Motion === */

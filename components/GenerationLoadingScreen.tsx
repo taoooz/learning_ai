@@ -77,9 +77,9 @@ export function GenerationLoadingScreen({
             <motion.div
               animate={{ y: [-4, 4, -4] }}
               transition={{ duration: 5.4, repeat: Infinity, ease: 'easeInOut' }}
-              className="relative h-[248px] w-full max-w-[340px] overflow-hidden rounded-[36px]"
+              className="relative h-[248px] w-full max-w-[340px] overflow-hidden rounded-xl"
             >
-              <div className="absolute inset-0 rounded-[36px] bg-[linear-gradient(135deg,rgba(255,255,255,0.94),rgba(255,248,241,0.98)_58%,rgba(255,255,255,0.95))] shadow-[0_28px_64px_rgba(15,23,42,0.10)]" />
+              <div className="absolute inset-0 rounded-xl bg-[linear-gradient(135deg,rgba(255,255,255,0.94),rgba(255,248,241,0.98)_58%,rgba(255,255,255,0.95))] shadow-[0_28px_64px_rgba(15,23,42,0.10)]" />
 
               <div
                 className="pointer-events-none absolute left-0 top-0 h-36 w-44 opacity-38"
@@ -189,7 +189,7 @@ export function GenerationLoadingScreen({
 
           <div className="mt-7 flex items-center justify-center gap-2">
             {errorMessage ? (
-              <div className="w-full max-w-lg rounded-[28px] border border-warning/25 bg-white/84 px-5 py-5 text-left shadow-[0_16px_40px_rgba(15,23,42,0.08)]">
+              <div className="w-full max-w-lg rounded-lg border border-warning/25 bg-white/84 px-5 py-5 text-left shadow-[0_16px_40px_rgba(15,23,42,0.08)]">
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning/12 text-warning">
                     <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

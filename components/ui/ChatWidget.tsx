@@ -38,12 +38,12 @@ export function ChatLauncher({ onClick, label = '问助理' }: ChatLauncherProps
       onClick={onClick}
       whileHover={{ y: -2, scale: 1.02 }}
       whileTap={{ y: 1, scale: 0.975 }}
-      className="group fixed bottom-24 right-5 z-40 flex h-[52px] w-[52px] items-center justify-center rounded-[18px] bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(245,250,251,0.96))] text-primary shadow-[0_14px_34px_rgba(15,23,42,0.12)] backdrop-blur-md transition-shadow duration-200 hover:shadow-[0_18px_38px_rgba(15,23,42,0.16)]"
+      className="group fixed bottom-24 right-5 z-40 flex h-[52px] w-[52px] items-center justify-center rounded-md bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(245,250,251,0.96))] text-primary shadow-[0_14px_34px_rgba(15,23,42,0.12)] backdrop-blur-md transition-shadow duration-200 hover:shadow-[0_18px_38px_rgba(15,23,42,0.16)]"
       aria-label={label}
     >
-      <span className="pointer-events-none absolute inset-0 rounded-[18px] bg-[radial-gradient(circle_at_32%_24%,rgba(152,184,232,0.22),rgba(152,184,232,0)_46%),radial-gradient(circle_at_74%_72%,rgba(127,191,195,0.18),rgba(127,191,195,0)_48%)]" />
+      <span className="pointer-events-none absolute inset-0 rounded-md bg-[radial-gradient(circle_at_32%_24%,rgba(152,184,232,0.22),rgba(152,184,232,0)_46%),radial-gradient(circle_at_74%_72%,rgba(127,191,195,0.18),rgba(127,191,195,0)_48%)]" />
       <motion.span
-        className="relative flex h-9 w-9 items-center justify-center rounded-[14px] bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.06))] shadow-[0_10px_20px_rgba(127,191,195,0.16)]"
+        className="relative flex h-9 w-9 items-center justify-center rounded-sm bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.06))] shadow-[0_10px_20px_rgba(127,191,195,0.16)]"
         animate={{ y: [0, -1.4, 0], scale: [1, 1.028, 1] }}
         transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
       >
@@ -184,7 +184,7 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
             exit={{ opacity: 0, y: 16, scale: 0.98 }}
             transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
             onClick={(e) => e.stopPropagation()}
-            className="relative flex h-[min(680px,80vh)] w-full max-w-[440px] flex-col overflow-hidden rounded-[30px] border border-white/55 bg-[linear-gradient(180deg,rgba(255,252,248,0.98),rgba(255,248,242,0.96))] shadow-[0_28px_80px_rgba(15,23,42,0.20)]"
+            className="relative flex h-[min(680px,80vh)] w-full max-w-[440px] flex-col overflow-hidden rounded-xl border border-white/55 bg-[linear-gradient(180deg,rgba(255,252,248,0.98),rgba(255,248,242,0.96))] shadow-[0_28px_80px_rgba(15,23,42,0.20)]"
           >
             <div className="pointer-events-none absolute left-0 top-0 h-28 w-36 opacity-35" style={{ backgroundImage: 'linear-gradient(to right, rgba(56,189,248,0.12) 1px, transparent 1px), linear-gradient(to bottom, rgba(56,189,248,0.10) 1px, transparent 1px)', backgroundSize: '18px 18px', maskImage: 'radial-gradient(circle at 24% 18%, black 0%, rgba(0,0,0,0.82) 28%, transparent 78%)', WebkitMaskImage: 'radial-gradient(circle at 24% 18%, black 0%, rgba(0,0,0,0.82) 28%, transparent 78%)' }} />
             <div className="pointer-events-none absolute right-[-32px] top-[-18px] h-28 w-28 rounded-full bg-[radial-gradient(circle,rgba(127,191,195,0.20),rgba(127,191,195,0)_72%)]" />

@@ -97,7 +97,7 @@ export function CourseNode({ node, isCurrent, offset, onClick }: CourseNodeProps
           disabled={isLocked}
           whileHover={isLocked ? undefined : { y: -2, scale: isCurrent ? 1.01 : 1.012 }}
           whileTap={isLocked ? undefined : { y: 1, scale: cardScaleWhileTap }}
-          className={`ml-[44px] mt-2 flex min-h-[78px] w-[204px] flex-col rounded-[20px] border-2 px-4 py-3 text-left transition-all duration-200 ${
+          className={`ml-[44px] mt-2 flex min-h-[78px] w-[204px] flex-col rounded-md border-2 px-4 py-3 text-left transition-all duration-200 ${
             isLocked ? 'cursor-default' : 'cursor-pointer'
           } ${
             isLocked

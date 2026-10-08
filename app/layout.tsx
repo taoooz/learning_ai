@@ -4,6 +4,7 @@ import './globals.css';
 import { CombinedProvider } from '@/contexts';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { StorageWarningToast } from '@/components/StorageWarningToast';
+import { MotionProvider } from '@/components/MotionProvider';
 
 export const metadata: Metadata = {
   title: 'AI Learning',
@@ -26,7 +27,7 @@ export default function RootLayout({
       <body>
         <ErrorBoundary>
           <CombinedProvider>
-            {children}
+            <MotionProvider>{children}</MotionProvider>
           </CombinedProvider>
           <StorageWarningToast />
         </ErrorBoundary>

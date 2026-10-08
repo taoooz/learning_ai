@@ -21,7 +21,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
       className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
     >
       <div
-        className={`max-w-[90%] px-4 py-3 rounded-[20px] ${
+        className={`max-w-[90%] px-4 py-3 rounded-md ${
           isUser
             ? 'rounded-br-md bg-[linear-gradient(135deg,#A3C0EA,#84C8C6)] text-primary shadow-[0_10px_22px_rgba(132,200,198,0.16)]'
             : 'rounded-bl-md border border-black/5 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(249,248,244,0.94))] text-primary shadow-[0_8px_20px_rgba(15,23,42,0.04)]'

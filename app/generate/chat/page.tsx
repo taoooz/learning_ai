@@ -97,7 +97,7 @@ function ChatPageContent() {
             <button
               onClick={handleAdjustOutline}
               disabled={!adjustmentInput.trim() || isWaitingResponse}
-              className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border border-[rgba(190,120,38,0.16)] bg-[linear-gradient(135deg,rgba(224,149,58,1),rgba(198,126,42,0.98))] text-white shadow-[0_10px_24px_rgba(191,123,43,0.20)] transition-all hover:shadow-[0_14px_30px_rgba(191,123,43,0.24)] active:scale-[0.95] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+              className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border border-[rgba(190,120,38,0.16)] bg-[linear-gradient(135deg,rgba(224,149,58,1),rgba(198,126,42,0.98))] text-primary shadow-[0_10px_24px_rgba(191,123,43,0.20)] transition-all hover:shadow-[0_14px_30px_rgba(191,123,43,0.24)] active:scale-[0.95] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />

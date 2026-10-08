@@ -129,7 +129,7 @@ export function RecommendationsModal({ isOpen, onClose, userProfile, existingCou
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[67vh] flex-col rounded-t-[32px] bg-white shadow-[0_-8px_32px_rgba(0,0,0,0.12)]"
+            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[67vh] flex-col rounded-t-xl bg-white shadow-[0_-8px_32px_rgba(0,0,0,0.12)]"
           >
             {/* 头部 */}
             <div className="flex items-center justify-between border-b border-black/[0.06] px-6 py-4">
@@ -152,7 +152,7 @@ export function RecommendationsModal({ isOpen, onClose, userProfile, existingCou
               {isLoading ? (
                 <div className="space-y-3">
                   {[...Array(5)].map((_, i) => (
-                    <div key={i} className="h-24 animate-pulse rounded-[20px] bg-black/[0.04]" />
+                    <div key={i} className="h-24 animate-pulse rounded-md bg-black/[0.04]" />
                   ))}
                 </div>
               ) : (
@@ -164,7 +164,7 @@ export function RecommendationsModal({ isOpen, onClose, userProfile, existingCou
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.05 }}
                       onClick={() => handleSelectCourse(course)}
-                      className="w-full rounded-[20px] border-2 border-black/[0.06] bg-white p-4 text-left transition-all duration-150 hover:border-accent/40 hover:shadow-[0_4px_16px_rgba(255,138,0,0.12)] active:scale-[0.985]"
+                      className="w-full rounded-md border-2 border-black/[0.06] bg-white p-4 text-left transition-all duration-150 hover:border-accent/40 hover:shadow-[0_4px_16px_rgba(255,138,0,0.12)] active:scale-[0.985]"
                     >
                       <div className="flex items-start gap-3">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/10">

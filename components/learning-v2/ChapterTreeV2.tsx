@@ -63,7 +63,7 @@ export function ChapterTreeV2({ courseId, treeView }: ChapterTreeV2Props) {
   };
 
   return (
-    <div className="relative overflow-hidden rounded-[34px] px-1 py-1.5">
+    <div className="relative overflow-hidden rounded-xl px-1 py-1.5">
       <div className="relative mx-auto flex w-full max-w-[360px] flex-col gap-2 pt-0">
         {layout.map((item) => (
           <motion.div

@@ -61,8 +61,8 @@ export function RichStreamingMessage({
   });
   const thinkingShellClassName =
     thinkingPresentation === 'secondary-collapsed'
-      ? 'mx-3 mb-0 mt-3 rounded-[18px] border border-black/[0.04] bg-[rgba(246,244,240,0.88)]'
-      : 'mx-3 mb-2 mt-3 rounded-[20px] border border-black/[0.04] bg-[linear-gradient(135deg,rgba(246,244,240,0.96),rgba(250,248,245,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]';
+      ? 'mx-3 mb-0 mt-3 rounded-md border border-black/[0.04] bg-[rgba(246,244,240,0.88)]'
+      : 'mx-3 mb-2 mt-3 rounded-md border border-black/[0.04] bg-[linear-gradient(135deg,rgba(246,244,240,0.96),rgba(250,248,245,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]';
   const thinkingBodyClassName =
     'text-secondary/90';
   const thinkingLabelClassName =
@@ -86,7 +86,7 @@ export function RichStreamingMessage({
       className="flex justify-start w-full"
     >
       <div ref={contentRef} className="w-full max-w-[90%]">
-        <div className="overflow-hidden rounded-[30px] border border-[rgba(0,0,0,0.06)] bg-[linear-gradient(180deg,rgba(255,252,248,0.98),rgba(255,255,255,0.98))] shadow-[0_14px_36px_rgba(15,23,42,0.05)]">
+        <div className="overflow-hidden rounded-xl border border-[rgba(0,0,0,0.06)] bg-[linear-gradient(180deg,rgba(255,252,248,0.98),rgba(255,255,255,0.98))] shadow-[0_14px_36px_rgba(15,23,42,0.05)]">
           {shouldShowThinkingSection && (
             <div className={thinkingShellClassName}>
               <button
