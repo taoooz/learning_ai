@@ -92,6 +92,7 @@ export default function ChapterLearningPage() {
   return (
     <ChapterLearningView
       key={chapterId} // 章节切换强制重建，hook 按新章节重新 boot
+      courseId={courseId}
       course={resolved.course}
       chapter={resolved.chapter}
       showTitleInBar={showTitleInBar}
@@ -102,8 +103,9 @@ export default function ChapterLearningPage() {
 function ChapterLearningView({
   course,
   chapter,
+  courseId,
   showTitleInBar,
-}: ResolvedChapter & { showTitleInBar: boolean }) {
+}: ResolvedChapter & { courseId: string; showTitleInBar: boolean }) {
   const router = useRouter();
   const {
     lesson,
@@ -290,6 +292,7 @@ function ChapterLearningView({
                   </div>
                 )}
               <LearningStreamV2
+                courseId={courseId}
                 lesson={lesson}
                 phase={phase}
                 anchorTaskId={resumeAnchorTaskId}
@@ -341,6 +344,7 @@ function ChapterLearningView({
           {phase === 'completed' && lesson && (
             <>
               <LearningStreamV2
+                courseId={courseId}
                 lesson={lesson}
                 phase={phase}
                 onRetryTutor={retryTutor}

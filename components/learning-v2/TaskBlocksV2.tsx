@@ -29,7 +29,7 @@ function BlockLabel({ label, tone = 'accent' }: { label: string; tone?: 'accent'
   );
 }
 
-export function TaskBlockView({ block, streaming = false }: { block: LearningContentBlock; streaming?: boolean }) {
+export function TaskBlockView({ block, courseId, streaming = false }: { block: LearningContentBlock; courseId?: string; streaming?: boolean }) {
   switch (block.type) {
     case 'markdown':
       return streaming ? <StreamingMarkdown content={block.markdown} streaming={streaming} /> : <MarkdownContent content={block.markdown} />;
@@ -42,7 +42,7 @@ export function TaskBlockView({ block, streaming = false }: { block: LearningCon
     case 'diagram':
       return <DiagramBlockView source={block.source} />;
     case 'interactive':
-      return <InteractiveBlockV2 block={block} />;
+      return <InteractiveBlockV2 block={block} courseId={courseId} />;
     default:
       return null;
   }

@@ -16,12 +16,15 @@ export type EngagementEventType =
   | 'tutor_answer_completed' // P2 流内答疑：回答完成终态
   | 'tutor_answer_failed' // P2 流内答疑：回答失败终态（含本地合成失败）
   | 'exited' // 离开章节学习页（卸载）
+  | 'interactive_completed' // Phase 2 交互组件完成（体验型信号，不计入掌握度）
   | 'experiment_exposed'; // P5.5 A/B 实验曝光
 
 export interface EngagementEvent {
   eventType: EngagementEventType;
   chapterId?: string;
   taskId?: string;
+  /** interactive_completed：组件名（parameter-demo / step-walkthrough / before-after） */
+  component?: string;
   /** 事件发生时间戳（ms） */
   at: number;
 }

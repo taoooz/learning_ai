@@ -16,7 +16,7 @@ import re
 
 logger = logging.getLogger("interactive_block")
 
-_ALLOWED_COMPONENTS = {"parameter-demo", "step-walkthrough", "flow-diagram"}
+_ALLOWED_COMPONENTS = {"parameter-demo", "step-walkthrough", "flow-diagram", "bar-compare", "before-after"}
 _EXPR_ALLOWED = re.compile(r"^[\dA-Za-z_\u4e00-\u9fff+\-*/().\s]+$")
 _TOKEN_RE = re.compile(r"\d+(?:\.\d+)?|[A-Za-z_\u4e00-\u9fff][\w\u4e00-\u9fff]*|[()+\-*/]")
 _KV_RE = re.compile(r"^(参数|标题|说明|列|行|步|组件)[:：]\s*(.*)$")
@@ -169,6 +169,10 @@ def parse_interactive_content(lines: list[str], block_id: str) -> dict:
         block = _build_step_walkthrough(fields, block_id, title, intro)
     elif component == "flow-diagram":
         block = _build_flow_diagram(fields, block_id, title, intro)
+    elif component == "bar-compare":
+        block = _build_bar_compare(fields, block_id, title, intro)
+    elif component == "before-after":
+        block = _build_before_after(fields, block_id, title, intro)
     else:
         block = None
         logger.warning("interactive 块降级：未知组件 %r", component)
@@ -328,6 +332,43 @@ def _build_flow_diagram(fields: dict, block_id: str, title: str, intro: str) -> 
     }
 
 
+def _build_bar_compare(fields: dict, block_id: str, title: str, intro: str) -> dict | None:
+    """数值对比条形图：可视化幅度差距（文本/多维对比仍用 comparison 表格块）"""
+    unit = ((fields.get("单位") or [""])[0]).strip()[:12]
+    items: list[dict] = []
+    for line in fields.get("条目", []):
+        parts = [p.strip() for p in line.split("|")]
+        if len(parts) != 2:
+            continue
+        value = _parse_number(parts[1])
+        if not parts[0] or value is None or value < 0:
+            continue
+        items.append({"label": parts[0][:30], "value": value})
+    if not 2 <= len(items) <= _LIMITS["rows"]:
+        return None
+    return {
+        "type": "interactive", "blockId": block_id, "component": "bar-compare",
+        "title": title or "数值对比", "intro": intro,
+        "items": items, "unit": unit,
+    }
+
+
+def _build_before_after(fields: dict, block_id: str, title: str, intro: str) -> dict | None:
+    """前后对比切换：同一事物的两个状态（非数值对比）"""
+    before_text = "".join(fields.get("前", []))[:200].strip()
+    after_text = "".join(fields.get("后", []))[:200].strip()
+    if not before_text or not after_text:
+        return None
+    before_label = ((fields.get("前标签") or ["改造前"])[0]).strip()[:12]
+    after_label = ((fields.get("后标签") or ["改造后"])[0]).strip()[:12]
+    return {
+        "type": "interactive", "blockId": block_id, "component": "before-after",
+        "title": title or "前后对比", "intro": intro,
+        "beforeText": before_text, "afterText": after_text,
+        "beforeLabel": before_label, "afterLabel": after_label,
+    }
+
+
 def _degrade(component: str, title: str, intro: str, fields: dict, block_id: str) -> dict:
     """校验失败时降级为等价 markdown 块：内容不丢，只是不再可交互。"""
     lines: list[str] = []
@@ -335,7 +376,7 @@ def _degrade(component: str, title: str, intro: str, fields: dict, block_id: str
         lines.append(f"**{title}**")
     if intro:
         lines.append(intro)
-    for key, prefix in (("参数", "参数"), ("步", None), ("节点", None), ("连线", None)):
+    for key, prefix in (("参数", "参数"), ("步", None), ("节点", None), ("连线", None), ("条目", None), ("前", "改造前"), ("后", "改造后"), ("单位", "单位"), ("前标签", "前标签"), ("后标签", "后标签")):
         for raw in fields.get(key, []):
             if prefix:
                 lines.append(f"- {prefix}：{raw}")

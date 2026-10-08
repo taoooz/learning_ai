@@ -39,6 +39,7 @@ export function LearningStreamV2({
   lesson,
   phase,
   anchorTaskId,
+  courseId,
   onRetryTask,
   onRetryTutor,
   tutorBusy = false,
@@ -62,6 +63,8 @@ export function LearningStreamV2({
   onRetryCheckpoint?: (checkpointId: string) => void;
   /** P3a：请求补救内容 + 等价新题（接 hook.requestRemediation） */
   onRequestRemediation?: (checkpointId: string) => void;
+  /** Phase 2 交互组件完成信号需要 courseId */
+  courseId?: string;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(!anchorTaskId);
@@ -174,6 +177,7 @@ export function LearningStreamV2({
         <Fragment key={item.itemId}>
         <StreamItemView
           item={item}
+          courseId={courseId}
           step={item.type === 'task_content' ? taskSteps.get(item.taskId) : undefined}
           streamingTaskId={streamingTaskId}
           onRetryTask={onRetryTask}
@@ -217,6 +221,7 @@ function ResumeCue({ show }: { show: boolean }) {
 
 function StreamItemView({
   item,
+  courseId,
   step,
   streamingTaskId,
   onRetryTask,
@@ -230,6 +235,7 @@ function StreamItemView({
   onRequestRemediation,
 }: {
   item: LearningStreamItem;
+  courseId?: string;
   step?: { index: number; total: number };
   streamingTaskId: string | null;
   onRetryTask?: (taskId: string) => void;
@@ -248,6 +254,7 @@ function StreamItemView({
         <TaskContentView
           item={item}
           step={step}
+          courseId={courseId}
           isStreaming={streamingTaskId === item.taskId}
         />
       );
@@ -316,10 +323,12 @@ function CheckpointItemView({
 function TaskContentView({
   item,
   step,
+  courseId,
   isStreaming,
 }: {
   item: TaskContentItem;
   step?: { index: number; total: number };
+  courseId?: string;
   isStreaming: boolean;
 }) {
   return (
@@ -334,7 +343,7 @@ function TaskContentView({
       </h2>
       <div className="space-y-4">
         {item.blocks.map((block) => (
-          <TaskBlockView key={block.blockId} block={block} streaming={isStreaming} />
+          <TaskBlockView key={block.blockId} block={block} courseId={courseId} streaming={isStreaming} />
         ))}
       </div>
       {isStreaming && (

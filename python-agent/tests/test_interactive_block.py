@@ -102,3 +102,38 @@ def test_flow_diagram_invalid_edge_degrades():
     ]
     block = parse_interactive_content(lines, "b8")
     assert block["type"] == "markdown"
+
+
+def test_bar_compare_parses_items_and_unit():
+    block = parse_interactive_content(
+        ["组件：bar-compare", "标题：两种方案的成本对比", "说明：数值越大成本越高",
+         "单位：小时", "条目：手动做表 | 6", "条目：公式自动算 | 0.5"],
+        "b9",
+    )
+    assert block["component"] == "bar-compare"
+    assert block["items"] == [{"label": "手动做表", "value": 6.0}, {"label": "公式自动算", "value": 0.5}]
+    assert block["unit"] == "小时"
+
+
+def test_bar_compare_negative_value_degrades():
+    block = parse_interactive_content(
+        ["组件：bar-compare", "条目：a | -3", "条目：b | 2"], "b10",
+    )
+    assert block["type"] == "markdown"
+
+
+def test_before_after_parses_states_and_labels():
+    block = parse_interactive_content(
+        ["组件：before-after", "标题：脏数据规范化前后",
+         "前：日期格式混乱，合计列全是错误", "后：日期统一，合计自动算出",
+         "前标签：规范化前", "后标签：规范化后"],
+        "b11",
+    )
+    assert block["component"] == "before-after"
+    assert block["beforeLabel"] == "规范化前" and block["afterLabel"] == "规范化后"
+    assert block["beforeText"] and block["afterText"]
+
+
+def test_before_after_missing_after_degrades():
+    block = parse_interactive_content(["组件：before-after", "标题：t", "前：只有前"], "b12")
+    assert block["type"] == "markdown"

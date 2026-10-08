@@ -71,7 +71,7 @@ export interface InteractiveStep {
 export interface InteractiveBlock {
   type: 'interactive';
   blockId: string;
-  component: 'parameter-demo' | 'step-walkthrough' | 'flow-diagram';
+  component: 'parameter-demo' | 'step-walkthrough' | 'flow-diagram' | 'bar-compare' | 'before-after';
   title: string;
   intro: string;
   /** 仅 parameter-demo：可调参数 */
@@ -88,6 +88,15 @@ export interface InteractiveBlock {
   edges?: { from: string; to: string }[];
   /** 仅 flow-diagram：回到更早节点的循环边（至多每节点一条） */
   loopBacks?: { from: string; to: string; label?: string }[];
+  /** 仅 bar-compare：数值对比条目（可视化幅度差距） */
+  items?: { label: string; value: number }[];
+  /** 仅 bar-compare：数值单位（如“元”“小时”） */
+  unit?: string;
+  /** 仅 before-after：切换对比的两个状态文本 */
+  beforeText?: string;
+  afterText?: string;
+  beforeLabel?: string;
+  afterLabel?: string;
 }
 
 export type LearningContentBlock = MarkdownBlock | KeyPointBlock | ExampleBlock | ComparisonBlock | DiagramBlock | InteractiveBlock;
