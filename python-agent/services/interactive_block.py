@@ -11,7 +11,10 @@
 
 from __future__ import annotations
 
+import logging
 import re
+
+logger = logging.getLogger("interactive_block")
 
 _ALLOWED_COMPONENTS = {"parameter-demo", "step-walkthrough", "flow-diagram"}
 _EXPR_ALLOWED = re.compile(r"^[\dA-Za-z_\u4e00-\u9fff+\-*/().\s]+$")
@@ -168,7 +171,12 @@ def parse_interactive_content(lines: list[str], block_id: str) -> dict:
         block = _build_flow_diagram(fields, block_id, title, intro)
     else:
         block = None
-    return block if block is not None else _degrade(component, title, intro, fields, block_id)
+        logger.warning("interactive 块降级：未知组件 %r", component)
+    if block is None:
+        if component in _ALLOWED_COMPONENTS:
+            logger.warning("interactive 块降级：组件 %s 校验未通过", component)
+        return _degrade(component, title, intro, fields, block_id)
+    return block
 
 
 def _build_parameter_demo(fields: dict, block_id: str, title: str, intro: str) -> dict | None:
