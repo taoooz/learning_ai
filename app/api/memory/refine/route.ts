@@ -1,7 +1,6 @@
-// app/api/memory/refine/route.ts — Memory 精炼代理
-// 前端发送最近对话和事件数据，Python Agent 调用 LLM 分析后返回结构化洞察
+// app/api/memory/refine/route.ts — V3 Memory 精炼入口（已下线）
+// Memory V4 已替换 V3；这里显式拒绝，避免旧客户端误用双轨写入。
 import { NextRequest, NextResponse } from 'next/server';
-import { PYTHON_AGENT_URL, pythonAgentHeaders } from '@/lib/agent-config';
 import { requireAuth } from '@/lib/api-response';
 
 export const runtime = 'nodejs';
@@ -9,31 +8,13 @@ export const runtime = 'nodejs';
 export async function POST(request: NextRequest) {
   const auth = requireAuth(request);
   if ('error' in auth) return auth.error;
-
-  try {
-    const body = await request.json();
-
-    if (!body.recentMessages || !Array.isArray(body.recentMessages)) {
-      return NextResponse.json({ error: 'Missing recentMessages' }, { status: 400 });
-    }
-
-    const response = await fetch(`${PYTHON_AGENT_URL}/api/agents/memory/refine`, {
-      method: 'POST',
-      headers: pythonAgentHeaders(),
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Python Agent error: ${response.status}`);
-    }
-
-    const result = await response.json();
-    return NextResponse.json(result);
-  } catch (error) {
-    console.error('[Memory Refine] Error:', error);
-    return NextResponse.json(
-      { summary: null, preferenceUpdates: [], conceptCorrections: [] },
-      { status: 500 },
-    );
-  }
+  return NextResponse.json(
+    {
+      ok: false,
+      code: 'MEMORY_V3_RETIRED',
+      message: '旧版 Memory 精炼接口已停用，请使用 Memory V4。',
+      retryable: false,
+    },
+    { status: 410 },
+  );
 }

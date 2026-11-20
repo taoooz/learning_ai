@@ -15,6 +15,7 @@ import {
   applyLearningSseEvent,
   createInitialNodeLessonV2,
 } from '../lib/learning-v2/reducers';
+import { mirrorPhase } from '../lib/learning-v2/chapter-learning-state';
 import type { ChapterPlan, LearningSseEvent, NodeLessonV2, PlannedTask } from '../types/learning-v2';
 
 const NOW = 1756700000000;
@@ -100,6 +101,10 @@ test('分支④：awaiting_user 且当前任务已完成 → 渲染边界', () =
     l.runtime.completedTaskIds = ['t1'];
   });
   assert.deepEqual(decideResumeAction(lesson), { kind: 'render_boundary', taskId: 't1' });
+  assert.equal(
+    mirrorPhase({ type: 'BOOT_READY', lesson, phase: 'boundary' }, lesson, 'planning'),
+    'boundary',
+  );
 });
 
 test('分支⑤：流式残留视为中断 → 对 currentTaskId 发新 attempt', () => {

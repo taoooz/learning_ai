@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
   try {
     const response = await fetch(`${PYTHON_AGENT_URL}/api/learning/v2/tutor/stream`, {
       method: 'POST',
-      headers: pythonAgentHeaders(),
+      headers: pythonAgentHeaders({ 'X-Account-Id': auth.inviteCode }),
       body: JSON.stringify(body),
       signal: nextRequest.signal,
     });

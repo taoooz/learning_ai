@@ -69,6 +69,9 @@ class UserDataStore:
 
     def delete_course(self, account_id: str, course_id: str) -> bool:
         """删除课程主对象、章节学习容器和参与信号，返回课程是否原本存在。"""
+        from services.memory_v4_store import MemoryV4Store
+        # Memory 先清理；失败直接向上抛，避免客户端误报删除成功。
+        MemoryV4Store(self._root).delete_course_memory(account_id, course_id)
         courses = self.load_courses(account_id)
         next_courses = [course for course in courses if course.get("courseId") != course_id]
         existed = len(next_courses) != len(courses)

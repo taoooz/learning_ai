@@ -7,6 +7,7 @@ import re
 from lib.minimax import MiniMaxClient, parse_json_response
 from lib.constants import LEVEL_DESCRIPTIONS, LEARNING_STYLE_DESCRIPTIONS, TECHNICAL_LEVEL_DESCRIPTIONS
 from prompts import build_prompt
+from services.memory_context_v4 import wrap_untrusted_context
 
 _client: MiniMaxClient | None = None
 
@@ -98,13 +99,17 @@ def build_toc_prompt(blueprint: dict, planning_payload: dict = None, user_profil
     """构建 system prompt（角色 + 指令 + 用户数据 + 格式约束）"""
     topic = blueprint.get('topic', blueprint.get('learningDirection', ''))
     learning_plan = _format_learning_plan(blueprint)
-    profile_section = _format_user_profile(user_profile) if user_profile else '暂无'
+    profile_section = wrap_untrusted_context("user_profile", user_profile) if user_profile else '暂无'
 
     recent_section = ''
+    summary_section = ''
     if planning_payload:
-        recent_text = _format_recent_courses(planning_payload)
-        if recent_text:
-            recent_section = f"\n\n{recent_text}"
+        learning_summary = planning_payload.get('learningSummary')
+        if planning_payload.get('recentRelevantCourses') or learning_summary:
+            recent_section = wrap_untrusted_context("learning_memory", {
+                "recentRelevantCourses": planning_payload.get('recentRelevantCourses') or [],
+                "learningSummary": learning_summary,
+            })
 
     mission = blueprint.get("mission") or {}
     mission_section = ""
@@ -141,7 +146,7 @@ def build_toc_prompt(blueprint: dict, planning_payload: dict = None, user_profil
         learning_plan=learning_plan,
         profile_section=profile_section,
         recent_section=recent_section,
-    ) + mission_section + evidence_section
+    ) + summary_section + mission_section + evidence_section
 
 
 async def generate_toc(blueprint: dict, planning_payload: dict = None, user_profile: dict = None) -> dict:

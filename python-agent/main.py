@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import threading
 import time
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -35,10 +36,70 @@ from services.chat_agent import stream_chat_with_tools, build_chat_system_prompt
 from services.memory_refine_service import refine_memory
 from routers.learning_v2 import router as learning_v2_router
 from routers.user_data import router as user_data_router
+from routers.memory_v4 import router as memory_v4_router
+from services.memory_v4_store import MemoryV4Store
+from services.memory_context_v4 import (
+    resolve_memory_context,
+    safe_resolve_memory_context,
+    to_chat_prompt_payload,
+    to_planning_prompt_payload,
+)
+from services.memory_candidate_service import extract_memory_candidates, should_extract_memory_candidates
+from services.memory_summary_service import rebuild_learning_summary
+from services.chat_memory_service import assistant_message_id, normalize_chat_messages
 
 session_store = get_session_store()
 
 INTERNAL_TOKEN_HEADER = "X-Internal-Token"
+
+
+async def _extract_and_consolidate_memory(
+    account_id: str,
+    course_id: str,
+    course_topic: str,
+    messages: list[dict],
+) -> None:
+    """聊天结束后的后台候选提取；任何失败都不得影响主对话。"""
+    try:
+        if not should_extract_memory_candidates(messages):
+            return
+        store = MemoryV4Store()
+        candidates = await extract_memory_candidates(
+            account_id=account_id,
+            course_id=course_id,
+            topic=course_topic,
+            messages=messages,
+            memory_store=store.load_store(account_id),
+        )
+        for candidate in candidates:
+            store.append_candidate(account_id, candidate)
+        if candidates:
+            result = store.consolidate_candidates(account_id)
+            if result.get("applied", 0) > 0:
+                await rebuild_learning_summary(store, account_id)
+    except Exception as exc:  # noqa: BLE001 后台记忆任务失败静默
+        print(f"[MemoryCandidate] background extraction failed: {exc}")
+
+
+def _dispatch_memory_extraction(
+    account_id: str,
+    course_id: str,
+    course_topic: str,
+    messages: list[dict],
+) -> None:
+    """从同步流式生成器启动后台异步任务，不能依赖当前线程有 running loop。"""
+    def run() -> None:
+        try:
+            asyncio.run(_extract_and_consolidate_memory(
+                account_id,
+                course_id,
+                course_topic,
+                messages,
+            ))
+        except Exception as exc:  # noqa: BLE001 后台任务失败不影响主对话
+            print(f"[MemoryCandidate] background dispatch failed: {exc}")
+
+    threading.Thread(target=run, daemon=True).start()
 
 # 会话过期与清理策略（可用环境变量覆盖）：
 # 持久化后会话只增不减，需定期清理过期会话，防止磁盘/内存缓慢膨胀
@@ -79,6 +140,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Agent Outline Generator", version="1.0.0", lifespan=lifespan)
 app.include_router(learning_v2_router)
 app.include_router(user_data_router)
+app.include_router(memory_v4_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -280,8 +342,21 @@ async def answer_question(req: OutlineAnswerRequest):
 
 
 @app.post("/api/agents/outline/generate_agent")
-async def generate_outline_agent(req: OutlineRequest):
+async def generate_outline_agent(req: OutlineRequest, request: Request):
     """Agent 版 outline 生成（带搜索能力，流式）"""
+    account = request.headers.get("X-Account-Id")
+    if account:
+        memory_store = MemoryV4Store()
+        context = safe_resolve_memory_context(memory_store, account, {
+            "scene": "course_planning",
+            "topic": req.topic,
+        })
+        planning = to_planning_prompt_payload(memory_store, account, context) if context else {
+            "userProfile": {},
+            "planningMemory": {},
+        }
+        req.userProfile = planning.get("userProfile") or {}
+        req.planningMemory = planning.get("planningMemory") or {}
     def event_generator():
         try:
             yield from stream_outline_with_tools(
@@ -339,14 +414,28 @@ async def generate_toc_route(request: dict):
 
 
 @app.post("/api/agents/toc/generate_agent")
-async def generate_toc_agent_route(request: dict):
+async def generate_toc_agent_route(request: Request):
     """Agent 版 TOC 生成（带搜索能力，流式）"""
+    body = await request.json()
+    account = request.headers.get("X-Account-Id")
+    blueprint = body.get('blueprint', {})
+    planning_payload = body.get('planningPayload')
+    user_profile = body.get('userProfile')
+    if account:
+        memory_store = MemoryV4Store()
+        context = safe_resolve_memory_context(memory_store, account, {
+            "scene": "course_planning",
+            "topic": blueprint.get('topic', ''),
+        })
+        planning = to_planning_prompt_payload(memory_store, account, context) if context else {
+            "userProfile": {},
+            "planningMemory": {},
+        }
+        planning_payload = planning.get("planningMemory") or {}
+        user_profile = planning.get("userProfile") or {}
+
     def event_generator():
         try:
-            blueprint = request.get('blueprint', {})
-            planning_payload = request.get('planningPayload')
-            user_profile = request.get('userProfile')
-
             yield from stream_toc_with_tools(blueprint, planning_payload, user_profile)
         except Exception as e:
             print(f"[TOC Agent API] Error: {e}")
@@ -359,22 +448,45 @@ async def generate_toc_agent_route(request: dict):
 
 
 @app.post("/api/agents/chat/generate")
-async def chat_agent_route(request: dict):
+async def chat_agent_route(request: Request):
     """Agent 版学习对话（带搜索能力，流式 SSE）"""
+    body = await request.json()
+    account = request.headers.get("X-Account-Id")
+
     def event_generator():
         try:
             # 支持两种调用方式：
             # 1. 直接传 messages（向后兼容）
             # 2. 传结构化数据（courseTopic + messages），由 Python Agent 构建 prompt
-            raw_messages = request.get('messages')
-            max_tokens = request.get('maxTokens', 1500)
-            course_topic = request.get('courseTopic')
+            raw_messages = body.get('messages')
+            max_tokens = body.get('maxTokens', 1500)
+            course_topic = body.get('courseTopic')
+            authoritative_messages: list[dict] = []
 
             if course_topic:
                 # 新模式：接收结构化数据，构建 prompt
-                chat_memory = request.get('chatMemory')
-                context_info = request.get('contextInfo')
-                conversation_summary = request.get('conversationSummary')
+                chat_memory = body.get('chatMemory')
+                context_info = body.get('contextInfo')
+                conversation_summary = body.get('conversationSummary')
+                if account:
+                    question_context = (context_info or {}).get('questionContext') or {}
+                    focus = (context_info or {}).get('currentNodeTitle') or question_context.get('question') or ''
+                    memory_store = MemoryV4Store()
+                    context = safe_resolve_memory_context(memory_store, account, {
+                        "scene": "chat",
+                        "topic": course_topic,
+                        "courseId": body.get("courseId"),
+                        "queryText": focus,
+                    })
+                    chat_memory = to_chat_prompt_payload(context) if context else None
+                    try:
+                        conversation_summary = memory_store.get_chat_summary(
+                            account,
+                            str(body.get("courseId") or ""),
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        print(f"[MemoryContext] chat summary unavailable: {exc}")
+                        conversation_summary = None
 
                 system_prompt = build_chat_system_prompt(
                     course_topic=course_topic,
@@ -384,12 +496,58 @@ async def chat_agent_route(request: dict):
                 )
                 messages = [
                     {"role": "system", "content": system_prompt},
-                    *[{"role": m.get("role", "user"), "content": m.get("content", "")} for m in (raw_messages or [])],
+                    *[],
                 ]
+                authoritative_messages = normalize_chat_messages(
+                    str(body.get("courseId") or ""),
+                    raw_messages or [],
+                    turn_id=str(body.get("turnId") or ""),
+                )
+                messages.extend([
+                    {"role": item["role"], "content": item["content"]}
+                    for item in authoritative_messages
+                ])
             else:
                 messages = raw_messages or []
 
-            yield from stream_chat_with_tools(messages=messages, max_tokens=max_tokens)
+            assistant_parts: list[str] = []
+            for chunk in stream_chat_with_tools(messages=messages, max_tokens=max_tokens):
+                yield chunk
+                if chunk.startswith("data: ") and chunk[6:].strip() != "[DONE]":
+                    try:
+                        payload = json.loads(chunk[6:].strip())
+                        content = ((payload.get("choices") or [{}])[0].get("delta") or {}).get("content")
+                        if content:
+                            assistant_parts.append(str(content))
+                    except Exception:
+                        pass
+            if account and raw_messages:
+                assistant_text = "".join(assistant_parts)
+                assistant_item = {
+                    "messageId": assistant_message_id(
+                        str(body.get("courseId") or ""),
+                        str(body.get("turnId") or ""),
+                        assistant_text,
+                    ),
+                    "role": "assistant",
+                    "content": assistant_text,
+                    "createdAt": int(time.time() * 1000),
+                }
+                refine_messages = [*authoritative_messages, assistant_item]
+                try:
+                    MemoryV4Store().append_chat_transcript(
+                        account,
+                        str(body.get("courseId") or ""),
+                        refine_messages,
+                    )
+                except Exception as exc:  # noqa: BLE001 transcript 失败不阻断对话
+                    print(f"[Chat Memory] transcript save failed: {exc}")
+                _dispatch_memory_extraction(
+                    account,
+                    str(body.get("courseId") or ""),
+                    str(course_topic or ""),
+                    refine_messages,
+                )
         except Exception as e:
             print(f"[Chat Agent API] Error: {e}")
             import traceback

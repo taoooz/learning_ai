@@ -62,8 +62,8 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
   const initialMessageSentRef = useRef(false);
   const questionContextRef = useRef<any>(null);
 
-  const persistConversationSummary = useCallback((targetCourseId: string, summary: Parameters<typeof userMemory.addConversationSummary>[1]) => {
-    userMemory.addConversationSummary(targetCourseId, summary);
+  const persistConversationSummary = useCallback((targetCourseId: string) => {
+    userMemory.addConversationSummary(targetCourseId);
   }, [userMemory]);
 
   const { isLoading, isThinking, streamingContent, handleSubmit } = useChatSubmit({
@@ -73,7 +73,6 @@ export function ChatWidget({ courseId, courseTitle, memoryTopic, isOpen, onClose
     contextInfo,
     messages,
     addMessage,
-    userMemory,
     questionContextRef,
     persistConversationSummary,
   });

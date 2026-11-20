@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     // 直接转发到 Python Agent（prompt 构建已迁移到 chat_agent.py）
     const response = await fetch(`${PYTHON_AGENT_URL}/api/agents/chat/generate`, {
       method: 'POST',
-      headers: pythonAgentHeaders(),
+      headers: pythonAgentHeaders({ 'X-Account-Id': auth.inviteCode }),
       body: JSON.stringify(body),
     });
 

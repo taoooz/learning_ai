@@ -13,8 +13,6 @@ import { parseLearningSseStream } from '@/lib/learning-v2/sse-client';
 import { completeChapterV2 } from '@/lib/learning-v2/chapter-complete';
 import { buildLocalFallbackRecap } from '@/lib/learning-v2/recap';
 import { recordEngagementEvent } from '@/lib/learning-v2/engagement';
-import { buildCheckpointMemoryEvents } from '@/lib/memory/learning-records';
-import { createMemoryRepository } from '@/lib/memory/repository';
 import type { ChapterLearningAction } from '@/lib/learning-v2/chapter-learning-state';
 
 interface UseChapterCompletionParams {
@@ -25,7 +23,7 @@ interface UseChapterCompletionParams {
   generationRef: React.MutableRefObject<number>;
   recapRegistryRef: React.MutableRefObject<IdempotencyRegistry<ChapterRecap>>;
   commit: (action: ChapterLearningAction) => void;
-  persist: (lesson: NodeLessonV2, immediate?: boolean) => void;
+  persist: (lesson: NodeLessonV2, immediate?: boolean) => Promise<void> | void;
 }
 
 async function requestChapterRecap(
@@ -103,7 +101,7 @@ async function requestChapterRecap(
 }
 
 export function useChapterCompletion(params: UseChapterCompletionParams) {
-  const { courseId, chapterId, lessonMirrorRef, generationRef, commit, persist, blueprint } = params;
+  const { courseId, chapterId, blueprint, lessonMirrorRef, generationRef, commit, persist } = params;
 
   const finishChapter = useCallback(async () => {
     const lesson = lessonMirrorRef.current;
@@ -171,24 +169,25 @@ export function useChapterCompletion(params: UseChapterCompletionParams) {
       updatedAt: recapAt,
     };
 
-    persist(completedLesson);
+    await persist(completedLesson);
 
-    // 课程层保留原始 evidence；这里只把“有评估结果的检查”投影到用户 Memory。
-    // 写失败不阻塞章节完成；覆盖不等于掌握，因此不会把普通任务完成写进记忆。
-    try {
-      const memoryRepository = createMemoryRepository();
-      for (const event of buildCheckpointMemoryEvents(completedLesson, blueprint.topic, courseId, recapAt)) {
-        memoryRepository.appendMemoryEvent(event);
-      }
-    } catch (error) {
-      console.warn('[useChapterCompletion] 学习记录投影失败:', error);
-    }
+    void fetch('/api/user/memory/chapter-episode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      keepalive: true,
+      body: JSON.stringify({
+        courseId,
+        chapterId,
+      }),
+    }).catch(() => {
+      // 章节经验入库失败不阻塞完成与解锁
+    });
 
     void completeChapterV2(courseId, chapterId);
     recordEngagementEvent(courseId, { eventType: 'recap_completed', chapterId });
     recordEngagementEvent(courseId, { eventType: 'chapter_completed', chapterId });
     commit({ type: 'COMPLETED', lesson: completedLesson });
-  }, [blueprint, chapterId, commit, courseId, generationRef, lessonMirrorRef, params, persist]);
+  }, [chapterId, commit, courseId, generationRef, lessonMirrorRef, params, persist]);
 
   return { finishChapter };
 }

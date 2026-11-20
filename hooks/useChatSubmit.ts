@@ -1,13 +1,6 @@
 // hooks/useChatSubmit.ts
 
 import { useState, useRef } from 'react';
-import {
-  analyzeChatMessageForMemory,
-  detectChatLearningPreferences,
-  detectExplicitMasteredConcept,
-  getChatMemoryPayload,
-} from '@/lib/memory';
-import { refineAndApply } from '@/lib/memory/refine';
 
 interface UseChatSubmitParams {
   courseId: string;
@@ -17,18 +10,11 @@ interface UseChatSubmitParams {
     currentNodeTitle?: string;
     currentNodeGoal?: string;
   };
-  messages: Array<{ role: string; content: string; isExpired?: boolean }>;
+  messages: Array<{ id?: string; role: string; content: string; timestamp?: number; isExpired?: boolean }>;
   addMessage: (
     msg: { role: 'user' | 'assistant'; content: string },
-    opts?: { onExpire?: (...args: any[]) => void; onCompact?: (...args: any[]) => void },
+    opts?: { id?: string; onExpire?: (...args: any[]) => void; onCompact?: (...args: any[]) => void },
   ) => void;
-  userMemory: {
-    memoryStore: any;
-    getConversationSummary: (courseId: string) => any;
-    addLearningPreference: (preference: any) => void;
-    addMasteredConcept: (concept: any) => void;
-    recordChatSignals: (signals: any) => void;
-  };
   questionContextRef: React.MutableRefObject<any>;
   persistConversationSummary: (...args: any[]) => void;
 }
@@ -50,16 +36,15 @@ export function useChatSubmit(params: UseChatSubmitParams) {
     const {
       courseId,
       courseTitle,
-      memoryTopic,
       contextInfo,
       messages,
       addMessage,
-      userMemory,
       questionContextRef,
       persistConversationSummary,
     } = paramsRef.current;
 
     const userMessage = inputText.trim();
+    const turnId = crypto.randomUUID?.() ?? `turn-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
     clearInput();
     isLoadingRef.current = true;
@@ -70,6 +55,7 @@ export function useChatSubmit(params: UseChatSubmitParams) {
     addMessage(
       { role: 'user', content: userMessage },
       {
+        id: turnId,
         onExpire: persistConversationSummary,
         onCompact: persistConversationSummary,
       },
@@ -84,7 +70,15 @@ export function useChatSubmit(params: UseChatSubmitParams) {
       const MAX_MESSAGES = 10;
       const MAX_CONTENT_LENGTH = 2000;
       const activeMessages = messages.filter((m) => !m.isExpired);
-      const allMessages = [...activeMessages, { role: 'user' as const, content: userMessage }];
+      const allMessages = [
+        ...activeMessages.map((message) => ({
+          id: message.id,
+          role: message.role,
+          content: message.content,
+          timestamp: message.timestamp,
+        })),
+        { id: turnId, role: 'user' as const, content: userMessage, timestamp: Date.now() },
+      ];
       let limitedMessages = allMessages.slice(-MAX_MESSAGES);
 
       while (limitedMessages.length > 0) {
@@ -97,19 +91,14 @@ export function useChatSubmit(params: UseChatSubmitParams) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          courseId,
+          turnId,
           courseTopic,
           messages: limitedMessages,
-          chatMemory: getChatMemoryPayload({
-            topic: courseTopic,
-            currentNodeTitle: contextInfo?.currentNodeTitle,
-            currentQuestion: questionContextRef.current?.question,
-            userMemory: userMemory.memoryStore,
-          }),
           contextInfo: {
             ...contextInfo,
             questionContext: questionContextRef.current,
           },
-          conversationSummary: userMemory.getConversationSummary(courseId),
         }),
       });
 
@@ -174,39 +163,6 @@ export function useChatSubmit(params: UseChatSubmitParams) {
       setStreamingContent('');
       setIsThinking(false);
 
-      // 对话完成后更新记忆
-      const lastUserMessage = [...messages, { role: 'user' as const, content: userMessage }]
-        .filter((m) => m.role === 'user')
-        .pop();
-      const topicForMemory = memoryTopic || courseTitle;
-
-      if (lastUserMessage) {
-        for (const preference of detectChatLearningPreferences(lastUserMessage.content)) {
-          userMemory.addLearningPreference(preference);
-        }
-
-        const masteredConcept = detectExplicitMasteredConcept(lastUserMessage.content);
-        if (masteredConcept) {
-          userMemory.addMasteredConcept({
-            ...masteredConcept,
-            topic: topicForMemory,
-          });
-        }
-
-        const memorySignal = analyzeChatMessageForMemory(lastUserMessage.content);
-        userMemory.recordChatSignals({
-          topic: topicForMemory,
-          question: lastUserMessage.content,
-          confusionConcept: memorySignal.extractedConcept,
-          confusionEvidence: memorySignal.shouldAddKnowledgeGap ? lastUserMessage.content : undefined,
-          confidence: memorySignal.confidence,
-          courseId,
-        });
-      }
-
-      // 后台触发 LLM 精炼（fire-and-forget，不阻塞）；过期消息已被摘要覆盖，不再参与精炼
-      const allMessagesForRefine = [...activeMessages, { role: 'user' as const, content: userMessage }, { role: 'assistant' as const, content: fullContent }];
-      refineAndApply(allMessagesForRefine).catch(() => {});
     } catch (error) {
       console.error('Chat error:', error);
       addMessage({ role: 'assistant', content: '抱歉，发生了错误。请稍后再试。' });

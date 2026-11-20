@@ -6,11 +6,11 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import type { SystemCourseRecommendation } from '@/lib/data/system-courses';
-import { getPlanningMemoryPayload, getUserMemoryStoreSnapshot } from '@/lib/memory';
 import { createSystemCourseV2 } from '@/lib/data/system-courses';
 import { createAndSaveStoredCourseV2 } from '@/lib/learning-v2/dispatch';
 import { deleteCourseV2, listCoursesV2, type CourseListEntry } from '@/lib/learning-v2/course-list';
 import { getSystemCourseRecommendations, getUserProfile } from '@/lib/storage';
+import { ingestProfileMemory } from '@/lib/memory-client';
 
 interface CourseContextType {
   /** 首页课程清单（V2 容器派生，按创建时间升序） */
@@ -43,6 +43,7 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
   }, [refreshCourses]);
 
   const startSystemCourse = useCallback(async (courseId: string) => {
+    await ingestProfileMemory(getUserProfile());
     const course = createSystemCourseV2(courseId);
     if (!course) {
       throw new Error('系统课程不存在');
@@ -61,14 +62,13 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
 
   const submitOutlineMessage = useCallback(async (topic: string, userMessage?: string) => {
     const sessionId = userMessage ? sessionStorage.getItem('outlineSessionId') : undefined;
+    await ingestProfileMemory(getUserProfile());
 
     const response = await fetch('/api/agents/outline', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         topic,
-        userProfile: getUserProfile(),
-        planningMemory: getPlanningMemoryPayload(topic, getUserMemoryStoreSnapshot()),
         userMessage,
         sessionId,
       }),

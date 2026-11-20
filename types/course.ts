@@ -7,3 +7,4 @@ export * from './outline';
 export * from './user-profile';
 export * from './course-core';
 export * from './memory';
+export * from './memory-v4';

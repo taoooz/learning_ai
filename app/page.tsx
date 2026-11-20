@@ -8,6 +8,7 @@ import { CourseCard } from '@/components/CourseCard';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { SystemCourseRecommendations } from '@/components/SystemCourseRecommendations';
 import { RecommendationsModal } from '@/components/RecommendationsModal';
+import { ReviewQueueCard } from '@/components/ReviewQueueCard';
 
 export default function HomePage() {
   const [topic, setTopic] = useState('');
@@ -167,6 +168,8 @@ export default function HomePage() {
             </p>
           )}
         </section>
+
+        <ReviewQueueCard />
 
         {/* 已有课程列表 */}
         {hasCourses && (

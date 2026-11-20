@@ -203,6 +203,8 @@ export function mirrorPhase(
     case 'SSE_EVENT':
     case 'LESSON_PATCH':
       return lesson ? deriveChapterPhase(lesson, prev) : prev;
+    case 'BOOT_READY':
+      return action.phase;
     default:
       return prev;
   }

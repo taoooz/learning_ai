@@ -47,8 +47,8 @@ export interface CheckpointDefinition {
   options?: Array<{ id: string; text: string }>;
   /** sequence 题的选项（按乱序展示，用户排序后提交 id 序列） */
   sequenceItems?: Array<{ id: string; text: string }>;
-  /** 正确答案：scenario_choice 为选项 id；sequence 为 id 有序数组 */
-  correctAnswer: string | string[];
+  /** 正确答案只保存在服务端 sealed definition；客户端定义中应为空。 */
+  correctAnswer?: string | string[];
   /** 补救提示（首次回答错误后展示） */
   remediationHint: string;
   estimatedSeconds: number;
@@ -103,12 +103,8 @@ export interface CheckpointItem {
 
 /** POST /api/learning/v2/checkpoints/evaluate 请求 */
 export interface CheckpointEvaluateRequest {
-  courseId: string;
-  chapterId: string;
-  taskId: string;
   checkpointId: string;
   answer: string | string[];
-  attempt: number;
   idempotencyKey: string;
 }
 
@@ -123,7 +119,5 @@ export interface CheckpointGenerateRequest {
   courseId: string;
   chapterId: string;
   taskId: string;
-  objectiveId: string;
-  taskContentSummary: string;
   idempotencyKey: string;
 }

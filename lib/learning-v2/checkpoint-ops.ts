@@ -94,13 +94,11 @@ export function applyCheckpointEvaluation(
     attempt,
     recordedAt: now,
   };
-  // 同一 checkpoint 的证据按最新覆盖（重试后以最终结果为准）
-  const existingEvidence = lesson.evidence.filter((e) => e.checkpointId !== checkpointId);
-
   return {
     ...lesson,
     streamItems: lesson.streamItems.map((s) => (s === item ? updated : s)),
-    evidence: [...existingEvidence, evidence],
+    // 证据追加保存；Projection 读取最新有效结果，不使用覆盖式写入。
+    evidence: [...lesson.evidence, evidence],
     runtime: {
       ...lesson.runtime,
       status: lesson.runtime.status === 'checking' ? 'awaiting_user' : lesson.runtime.status,

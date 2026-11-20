@@ -43,15 +43,7 @@ export function RecommendationsModal({ isOpen, onClose, userProfile, existingCou
   const generateRecommendations = useCallback(async () => {
     setIsLoading(true);
     try {
-      // 获取 memory 数据
-      const memoryStore = userMemory.memoryStore;
-
-      // 从 projections 中提取最近关注的主题
-      const topicProjections = memoryStore.projections?.topicProjections || [];
-      const recentTopics = topicProjections
-        .slice(0, 3)
-        .map(p => p.topic)
-        .filter(Boolean);
+      const recentTopics = await userMemory.getRecentTopics();
 
       // 使用用户个人信息中预生成的 insights
       const profileInsights = userProfile?.insights;

@@ -51,8 +51,15 @@ async def user_courses_delete(request: Request):
     course_id = request.query_params.get("courseId")
     if not course_id:
         return JSONResponse(status_code=422, content={"ok": False, "code": "INVALID_REQUEST", "message": "缺少 courseId", "retryable": False})
-    existed = _get_user_store().delete_course(account, course_id)
-    return {"ok": True, "existed": existed}
+    try:
+        existed = _get_user_store().delete_course(account, course_id)
+        return {"ok": True, "existed": existed}
+    except Exception as exc:  # noqa: BLE001
+        print(f"[UserDataStore] course delete failed: {exc}")
+        return JSONResponse(status_code=503, content={
+            "ok": False, "code": "DELETE_INCOMPLETE",
+            "message": "课程数据尚未完整删除，请稍后重试", "retryable": True,
+        })
 
 
 @router.get("/lessons")

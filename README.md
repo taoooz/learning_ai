@@ -42,7 +42,7 @@
 | 服务端存储 | `app/api/user`, `python-agent/routers/user_data.py`, `python-agent/services/user_data_store.py` |
 | Python 学习流 API | `python-agent/routers/learning_v2.py`, `python-agent/services` |
 | 内容生成与校验 | `python-agent/prompts`, `python-agent/services` |
-| 记忆与画像 | `lib/memory`, `app/profile` |
+| 用户 Memory / 画像 | `types/memory-v4.ts`, `python-agent/services/memory_v4_store.py`, `python-agent/services/memory_context_v4.py`, `python-agent/services/memory_candidate_service.py`, `python-agent/services/memory_summary_service.py`, `python-agent/routers/memory_v4.py`, `app/api/user/memory`, `hooks/useUserMemory.ts`, `components/profile/MemoryPanel.tsx`, `components/ReviewQueueCard.tsx`, `app/profile` |
 | 测试 | `tests`, `python-agent/tests` |
 
 ## 4. 关键不变量
@@ -54,8 +54,9 @@
 5. 删除课程必须清理课程容器、章节学习流和参与信号，并走 `LessonRepository.deleteCourse`。
 6. 任务/答疑错误通知在对应请求成功后从 UI 隐藏，但数据层保留原始 `system_notice` 用于恢复与审计。
 7. 用户可见文本使用中文；API 错误应包含可理解的中文信息和可重试标记。
-8. 每章最后一个任务必须触发 Checkpoint；只有评估结果可投影为用户 Memory 掌握状态。
+8. 每章最后一个任务必须触发 Checkpoint；服务端从蓝图/章节容器反查范围，sealed definition 判分成功后才按服务端 attempt 顺序追加 Learning Evidence；客户端不得提交正确答案、topic、planVersion 或任务摘要。
 9. 密钥只放 `.env*`，不得进入源码或文档。
+10. 用户画像输入经服务端 Memory V4 ingestion 后，课程生成与聊天只读取场景 Resolver 选中的 V4 Memory；不保留 V3 Memory 兼容层。Chat Summary 与 Chapter Episode 只由服务端 transcript、lesson、Evidence、recap snapshot 生成。
 
 ## 5. 详细文档索引
 
@@ -65,6 +66,7 @@
 - [V2 项目综述](docs/architecture/v2_项目综述.md)：V2 目标架构、阶段边界和文档阅读顺序。
 - [V2 课程生成逻辑](docs/architecture/v2_课程生成逻辑.md)：课程蓝图、章节计划和协议设计。
 - [V2 用户画像维护逻辑](docs/architecture/v2_用户画像维护逻辑.md)：学习证据、画像状态和个性化数据边界。
+- [Memory V4 架构](docs/architecture/memory-v4.md)：当前用户学习 Memory 的存储、证据、画像导入、场景披露和 API 契约。
 - [课程质量提升计划](docs/reference/课程质量提升计划-对齐竞品.md)：内容质量目标与迭代方向。
 - [开源方案调研](docs/reference/开源方案调研-课程内容丰富度.md)：内容丰富度竞品调研。
 - [历史材料](docs/history/README.md)：历史设计、评审、记忆方案和 superpowers 计划。

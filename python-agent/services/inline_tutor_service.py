@@ -100,6 +100,7 @@ async def stream_tutor_events(
     chapter_id: str,
     plan_version: int,
     client: MiniMaxClient | None = None,
+    memory_context: dict | None = None,
 ) -> AsyncGenerator[dict, None]:
     """流式生成 Tutor 回答，yield 完整事件 dict 序列
 
@@ -132,7 +133,7 @@ async def stream_tutor_events(
             "payload": payload,
         }
 
-    system_prompt = build_inline_tutor_prompt(request)
+    system_prompt = build_inline_tutor_prompt(request, memory_context=memory_context)
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": request.question.text},

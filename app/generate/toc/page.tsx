@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import { useCourse } from '@/contexts/CourseContext';
 import { CourseHeaderBar } from '@/components/CourseHeaderBar';
 import { getUserProfile } from '@/lib/storage';
-import { getPlanningMemoryPayload, getUserMemoryStoreSnapshot } from '@/lib/memory';
+import { ingestProfileMemory } from '@/lib/memory-client';
 import { parseSSEStream } from '../chat/utils/sseParser';
 import { buildCourseMissionFromOutline, mapTocToBlueprintV2 } from '@/lib/learning-v2/blueprint-map';
 import { validateCourseBlueprintV2 } from '@/lib/learning-v2/validators';
@@ -56,17 +56,12 @@ function TocPageContent() {
 
     (async () => {
       try {
+        await ingestProfileMemory(getUserProfile());
         const response = await fetch('/api/generate/toc', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             blueprint: { ...outline, mission },
-            // 个性化透传：用户画像 + 规划记忆（近期相关课程等），缺省时服务端行为与原来一致
-            userProfile: getUserProfile(),
-            planningPayload: getPlanningMemoryPayload(
-              outline.topic,
-              getUserMemoryStoreSnapshot(),
-            ),
           }),
         });
 

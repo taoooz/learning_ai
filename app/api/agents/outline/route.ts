@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { topic, userProfile, planningMemory, userMessage, sessionId } = body;
+    const { topic, userMessage, sessionId } = body;
 
     // 只有 sessionId 和 userMessage 都存在时才走 answer_agent（多轮回答）
     // 否则走 generate_agent（新课程生成），忽略可能残留的 sessionId
@@ -25,11 +25,11 @@ export async function POST(request: NextRequest) {
       : `${PYTHON_AGENT_URL}/api/agents/outline/generate_agent`;
     const agentBody = hasAnswer
       ? { sessionId, answer: userMessage }
-      : { topic, userProfile: userProfile || {}, planningMemory: planningMemory || {} };
+      : { topic };
 
     const response = await fetch(agentUrl, {
       method: 'POST',
-      headers: pythonAgentHeaders(),
+      headers: pythonAgentHeaders({ 'X-Account-Id': auth.inviteCode }),
       body: JSON.stringify(agentBody),
     });
 

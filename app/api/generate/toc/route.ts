@@ -12,13 +12,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    // userProfile/planningPayload 用于个性化目录生成（Python 侧已支持，缺省时行为与原来一致）
-    const { blueprint, userProfile, planningPayload } = body;
+    const { blueprint } = body;
 
     const response = await fetch(`${PYTHON_AGENT_URL}/api/agents/toc/generate_agent`, {
       method: 'POST',
-      headers: pythonAgentHeaders(),
-      body: JSON.stringify({ blueprint, userProfile, planningPayload }),
+      headers: pythonAgentHeaders({ 'X-Account-Id': auth.inviteCode }),
+      body: JSON.stringify({ blueprint }),
     });
 
     if (!response.ok) {

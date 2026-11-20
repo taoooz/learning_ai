@@ -9,7 +9,6 @@ import type {
   CheckpointDefinition,
   CheckpointEvaluation,
   CheckpointItem,
-  CourseBlueprintV2,
   NodeLessonV2,
 } from '@/types/learning-v2';
 import type { ChapterLearningAction } from '@/lib/learning-v2/chapter-learning-state';
@@ -18,13 +17,14 @@ import {
   needsCheckpoint,
 } from '@/lib/learning-v2/checkpoint-ops';
 import { appendSystemNotice } from '@/lib/learning-v2/reducers';
+import { getLessonStoreMode, syncLearningAuthoritySnapshot } from '@/lib/learning-v2/lesson-repository';
 
 interface UseCheckpointActionsParams {
   courseId: string;
   chapterId: string;
-  blueprint: CourseBlueprintV2;
   lessonMirrorRef: React.MutableRefObject<NodeLessonV2 | null>;
   commit: (action: ChapterLearningAction) => void;
+  persist: (lesson: NodeLessonV2) => Promise<void> | void;
 }
 
 function findCheckpoint(
@@ -41,9 +41,9 @@ function findCheckpoint(
 export function useCheckpointActions({
   courseId,
   chapterId,
-  blueprint,
   lessonMirrorRef,
   commit,
+  persist,
 }: UseCheckpointActionsParams) {
   /** 任务完成后按需生成 Checkpoint；失败静默，不阻塞主线。 */
   const maybeGenerateCheckpoint = useCallback(
@@ -52,25 +52,14 @@ export function useCheckpointActions({
       if (!lesson || !needsCheckpoint(lesson, taskId)) return;
       const planned = lesson.chapterPlan.tasks.find((task) => task.taskId === taskId);
       if (!planned) return;
-      const chapter = blueprint.chapters.find((item) => item.chapterId === chapterId);
 
       try {
-        const contentItem = lesson.streamItems.find(
-          (item) => item.type === 'task_content' && item.taskId === taskId,
-        );
-        const summary = contentItem && contentItem.type === 'task_content'
-          ? contentItem.blocks
-              .map((block) => {
-                if (block.type === 'markdown') return block.markdown;
-                if (block.type === 'key_point') return [block.title, ...block.points].filter(Boolean).join('\n');
-                if (block.type === 'example') return [block.title, block.context, block.content, block.takeaway].filter(Boolean).join('\n');
-                return '';
-              })
-              .filter(Boolean)
-              .join('\n\n')
-              .slice(0, 2000)
-          : planned.taskGoal;
-
+        // 服务端权威生成要求 completed task 与 task content 已落盘。
+        await persist(lesson);
+        if (getLessonStoreMode() === 'local') {
+          const synced = await syncLearningAuthoritySnapshot(courseId, chapterId, lesson);
+          if (!synced) throw new Error('服务端章节快照同步失败');
+        }
         const response = await fetch('/api/learning/v2/checkpoints/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -80,12 +69,6 @@ export function useCheckpointActions({
             courseId,
             chapterId,
             taskId,
-            objectiveId: planned.objectiveId,
-            courseTopic: blueprint.topic,
-            courseMission: blueprint.mission,
-            chapter: { title: chapter?.title ?? '', teachingGoal: chapter?.teachingGoal ?? '' },
-            task: { taskId: planned.taskId, title: planned.title, taskGoal: planned.taskGoal },
-            taskContentSummary: summary,
             idempotencyKey: `checkpoint-gen:${courseId}:${chapterId}:${lesson.chapterPlan.planId}:${lesson.chapterPlan.planVersion}:${taskId}`,
           }),
         });
@@ -143,7 +126,7 @@ export function useCheckpointActions({
         });
       }
     },
-    [blueprint, chapterId, commit, courseId, lessonMirrorRef],
+    [chapterId, commit, courseId, lessonMirrorRef, persist],
   );
 
   /** 用户提交答案 → 服务端程序判分。 */
@@ -160,14 +143,9 @@ export function useCheckpointActions({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            courseId,
-            chapterId,
-            taskId: item.taskId,
             checkpointId,
             answer,
-            attempt,
             idempotencyKey: `checkpoint-eval:${courseId}:${chapterId}:${lesson.chapterPlan.planId}:${lesson.chapterPlan.planVersion}:${checkpointId}:${attempt}`,
-            checkpoint: item.checkpoint,
           }),
         });
         if (!response.ok) return;
@@ -222,40 +200,13 @@ export function useCheckpointActions({
       if (!lesson) return;
       const item = findCheckpoint(lesson, checkpointId);
       if (!item || !item.evaluation) return;
-      const planned = lesson.chapterPlan.tasks.find((task) => task.taskId === item.taskId);
-      const chapter = blueprint.chapters.find((chapterItem) => chapterItem.chapterId === chapterId);
-
       try {
-        const contentItem = lesson.streamItems.find(
-          (streamItem) => streamItem.type === 'task_content' && streamItem.taskId === item.taskId,
-        );
-        const summary = contentItem && contentItem.type === 'task_content'
-          ? contentItem.blocks
-              .map((block) => (
-                block.type === 'markdown' ? block.markdown :
-                block.type === 'key_point' ? block.title : ''
-              ))
-              .filter(Boolean)
-              .join('\n')
-              .slice(0, 1500)
-          : planned?.taskGoal ?? '';
-
         const response = await fetch('/api/learning/v2/checkpoints/remediate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            courseId,
-            chapterId,
-            taskId: item.taskId,
-            taskTitle: planned?.title ?? '',
-            taskGoal: planned?.taskGoal ?? '',
-            originalPrompt: item.checkpoint.prompt,
+            checkpointId,
             userAnswer: item.submission?.answer ?? '',
-            correctAnswer: String(item.checkpoint.correctAnswer),
-            originalHint: item.checkpoint.remediationHint,
-            taskContentSummary: summary,
-            courseTopic: blueprint.topic,
-            chapterTitle: chapter?.title ?? '',
             idempotencyKey: `remediate:${courseId}:${chapterId}:${lesson.chapterPlan.planVersion}:${checkpointId}:${item.remediationAttempt + 1}`,
           }),
         });
@@ -294,7 +245,7 @@ export function useCheckpointActions({
         retryCheckpoint(checkpointId);
       }
     },
-    [blueprint, chapterId, commit, courseId, lessonMirrorRef, retryCheckpoint],
+    [chapterId, commit, courseId, lessonMirrorRef, retryCheckpoint],
   );
 
   return {

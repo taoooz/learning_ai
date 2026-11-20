@@ -15,6 +15,7 @@ from services.learning_v2_errors import (
     PlanValidationError,
 )
 from services.search_evidence import needs_search
+from services.memory_context_v4 import format_memory_context_for_prompt
 
 PROMPT_VERSION = "chapter-plan-v1"
 
@@ -138,7 +139,7 @@ def _format_completed_chapters(completed: list[dict] | None) -> str:
     return "\n".join(sections)
 
 
-def build_chapter_plan_prompt(topic: str, chapter: dict, objectives: list[dict], learner: dict, evidence: str | None = None, sources: list[dict] | None = None, mission: dict | None = None, teaching_state: dict | None = None, completed_chapters: list[dict] | None = None, intent_type: str | None = None) -> str:
+def build_chapter_plan_prompt(topic: str, chapter: dict, objectives: list[dict], learner: dict, evidence: str | None = None, sources: list[dict] | None = None, mission: dict | None = None, teaching_state: dict | None = None, completed_chapters: list[dict] | None = None, intent_type: str | None = None, memory_context: dict | None = None) -> str:
     """构建章节计划 system prompt；有证据包时约束规划来源"""
     evidence_section = ""
     if evidence:
@@ -157,7 +158,7 @@ def build_chapter_plan_prompt(topic: str, chapter: dict, objectives: list[dict],
         learner_section=_format_learner(learner),
         intent_type=intent_type or "未指定",
         completed_section=_format_completed_chapters(completed_chapters),
-    ) + _format_mission(mission) + _format_teaching_state(teaching_state or {}) + evidence_section
+    ) + _format_mission(mission) + _format_teaching_state(teaching_state or {}) + format_memory_context_for_prompt(memory_context or {}) + evidence_section
     intent_type = (chapter.get("intentType") or "") if isinstance(chapter, dict) else ""
     # intentType 在课程级，蓝图透传时挂在 chapter 上的场景做兜底读取
     if not intent_type:
@@ -332,7 +333,7 @@ def _format_repair_notes(errors: list[dict]) -> str:
     return "\n".join(lines)
 
 
-async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClient | None = None) -> dict:
+async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClient | None = None, memory_context: dict | None = None) -> dict:
     """生成章节计划；校验失败带修复提示重试一次，仍失败抛 PlanValidationError"""
     client = client or MiniMaxClient()
     blueprint = request.blueprint or {}
@@ -367,6 +368,7 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
         sources=sources,
         mission=blueprint.get("mission"),
         teaching_state=teaching_state,
+        memory_context=memory_context,
     )
 
     started = time.monotonic()

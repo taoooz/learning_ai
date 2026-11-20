@@ -7,6 +7,7 @@ import { CourseHeaderBar } from '@/components/CourseHeaderBar';
 import { useUserProfile } from '@/contexts/UserProfileContext';
 import { UserProfile, WorkExperience, Education } from '@/types/course';
 import { unwrapApiResponse } from '@/lib/api-contract';
+import { MemoryPanel } from '@/components/profile/MemoryPanel';
 
 function generateId(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -87,6 +88,7 @@ export default function ProfilePage() {
   const [education, setEducation] = useState<Education[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // 加载已有数据
   useEffect(() => {
@@ -119,9 +121,16 @@ export default function ProfilePage() {
     };
 
     setIsSaving(true);
-    updateProfile(profile);
+    setSaveError(null);
+    try {
+      await updateProfile(profile);
+      setSaveSuccess(true);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : '画像保存失败，请稍后重试');
+      setIsSaving(false);
+      return;
+    }
     setIsSaving(false);
-    setSaveSuccess(true);
 
     setTimeout(() => {
       router.push('/');
@@ -394,6 +403,8 @@ export default function ProfilePage() {
               ))}
             </div>
           </section>
+
+          <MemoryPanel />
         </div>
       </div>
 
@@ -403,6 +414,12 @@ export default function ProfilePage() {
             <p className="px-2 pb-2 text-xs leading-5 text-secondary">
               保存后，后续生成的新课程会优先参考这些信息。
             </p>
+
+            {saveError ? (
+              <p className="mx-2 mb-2 text-xs leading-5 text-error" role="alert">
+                {saveError}
+              </p>
+            ) : null}
 
             <button
               onClick={handleSave}

@@ -19,14 +19,12 @@ export async function POST(request: NextRequest) {
     return Response.json({ ok: false, code: 'INVALID_REQUEST', message: '请求体不是合法 JSON', retryable: false }, { status: 422 });
   }
 
-  const { courseId, chapterId, taskId, objectiveId, courseTopic, chapter, task, taskContentSummary, idempotencyKey } = body as {
-    courseId?: string; chapterId?: string; taskId?: string; objectiveId?: string;
-    courseTopic?: string; chapter?: unknown; task?: unknown;
-    taskContentSummary?: string; idempotencyKey?: string;
+  const { courseId, chapterId, taskId, idempotencyKey } = body as {
+    courseId?: string; chapterId?: string; taskId?: string; idempotencyKey?: string;
   };
-  if (!courseId || !chapterId || !taskId || !objectiveId || !courseTopic || !chapter || !task || !taskContentSummary || !idempotencyKey) {
+  if (!courseId || !chapterId || !taskId || !idempotencyKey) {
     return Response.json(
-      { ok: false, code: 'INVALID_REQUEST', message: '缺少必填字段（courseId/chapterId/taskId/objectiveId/courseTopic/chapter/task/taskContentSummary/idempotencyKey）', retryable: false },
+      { ok: false, code: 'INVALID_REQUEST', message: '缺少必填字段（courseId/chapterId/taskId/idempotencyKey）', retryable: false },
       { status: 422 },
     );
   }
@@ -34,7 +32,7 @@ export async function POST(request: NextRequest) {
   try {
     const response = await fetch(`${PYTHON_AGENT_URL}/api/learning/v2/checkpoints/generate`, {
       method: 'POST',
-      headers: pythonAgentHeaders(),
+      headers: pythonAgentHeaders({ 'X-Account-Id': auth.inviteCode }),
       body: JSON.stringify(body),
       // 上游挂起时快速失败，避免前端无限等待
       signal: AbortSignal.timeout(130_000),

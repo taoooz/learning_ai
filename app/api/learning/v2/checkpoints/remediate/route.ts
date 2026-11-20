@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ ok: false, code: 'INVALID_REQUEST', message: '请求体不是合法 JSON', retryable: false }, { status: 422 });
   }
 
-  const required = ['courseTopic', 'chapterTitle', 'taskId', 'taskTitle', 'taskGoal', 'originalPrompt', 'userAnswer', 'correctAnswer', 'originalHint', 'taskContentSummary', 'idempotencyKey'] as const;
+  const required = ['checkpointId', 'userAnswer', 'idempotencyKey'] as const;
   const missing = required.filter((key) => !body[key]);
   if (missing.length > 0) {
     return Response.json(
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
   try {
     const response = await fetch(`${PYTHON_AGENT_URL}/api/learning/v2/checkpoints/remediate`, {
       method: 'POST',
-      headers: pythonAgentHeaders(),
+      headers: pythonAgentHeaders({ 'X-Account-Id': auth.inviteCode }),
       body: JSON.stringify(body),
     });
     const text = await response.text();

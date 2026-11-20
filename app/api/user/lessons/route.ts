@@ -23,6 +23,20 @@ async function proxy(request: NextRequest, method: 'GET' | 'PUT'): Promise<Respo
     url += `?courseId=${encodeURIComponent(courseId)}&chapterId=${encodeURIComponent(chapterId)}`;
   } else {
     body = await request.text();
+    if (!body.trim()) {
+      return Response.json(
+        { ok: false, code: 'INVALID_REQUEST', message: '学习数据请求体不能为空', retryable: false },
+        { status: 422 },
+      );
+    }
+    try {
+      JSON.parse(body);
+    } catch {
+      return Response.json(
+        { ok: false, code: 'INVALID_REQUEST', message: '学习数据请求体不是合法 JSON', retryable: false },
+        { status: 422 },
+      );
+    }
   }
   try {
     const response = await fetch(url, {

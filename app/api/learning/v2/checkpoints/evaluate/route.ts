@@ -19,13 +19,12 @@ export async function POST(request: NextRequest) {
     return Response.json({ ok: false, code: 'INVALID_REQUEST', message: '请求体不是合法 JSON', retryable: false }, { status: 422 });
   }
 
-  const { courseId, chapterId, taskId, checkpointId, answer, attempt, idempotencyKey, checkpoint } = body as {
-    courseId?: string; chapterId?: string; taskId?: string; checkpointId?: string;
-    answer?: unknown; attempt?: number; idempotencyKey?: string; checkpoint?: unknown;
+  const { checkpointId, answer, idempotencyKey } = body as {
+    checkpointId?: string; answer?: unknown; idempotencyKey?: string;
   };
-  if (!courseId || !chapterId || !taskId || !checkpointId || answer === undefined || !idempotencyKey || !checkpoint) {
+  if (!checkpointId || answer === undefined || !idempotencyKey) {
     return Response.json(
-      { ok: false, code: 'INVALID_REQUEST', message: '缺少必填字段（courseId/chapterId/taskId/checkpointId/answer/idempotencyKey/checkpoint）', retryable: false },
+      { ok: false, code: 'INVALID_REQUEST', message: '缺少必填字段（checkpointId/answer/idempotencyKey）', retryable: false },
       { status: 422 },
     );
   }
@@ -33,7 +32,7 @@ export async function POST(request: NextRequest) {
   try {
     const response = await fetch(`${PYTHON_AGENT_URL}/api/learning/v2/checkpoints/evaluate`, {
       method: 'POST',
-      headers: pythonAgentHeaders(),
+      headers: pythonAgentHeaders({ 'X-Account-Id': auth.inviteCode }),
       body: JSON.stringify(body),
     });
     const text = await response.text();

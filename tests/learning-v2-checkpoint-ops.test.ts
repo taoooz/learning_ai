@@ -191,14 +191,14 @@ test('applyCheckpointEvaluation 同步写入 lesson.evidence', () => {
   assert.equal(result.evidence[0].objectiveId, 'obj-1');
 });
 
-test('applyCheckpointEvaluation 重试后证据覆盖（同一 checkpointId 只留最新）', () => {
+test('applyCheckpointEvaluation 重试后追加证据，聚合时由最新结果决定', () => {
   const atBoundary = { ...baseLesson, runtime: { ...baseLesson.runtime, status: 'awaiting_user' as const } };
   const withCp = upsertCheckpointItem(atBoundary, cpDefinition, 2000);
   const first = applyCheckpointEvaluation(withCp, 'cp-1', 'a', evalFail, 2001);
   const second = applyCheckpointEvaluation(first, 'cp-1', 'b', evalPass, 2002);
-  assert.equal(second.evidence.length, 1, '同一 checkpoint 重试后只保留最新证据');
-  assert.equal(second.evidence[0].outcome, 'demonstrated');
-  assert.equal(second.evidence[0].attempt, 2);
+  assert.equal(second.evidence.length, 2, '同一 checkpoint 重试应保留每次证据');
+  assert.equal(second.evidence[1].outcome, 'demonstrated');
+  assert.equal(second.evidence[1].attempt, 2);
 });
 
 test('aggregateEvidenceToObjectives: demonstrated → demonstrated 列表', () => {

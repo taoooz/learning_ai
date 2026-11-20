@@ -3,11 +3,11 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { UserProfile } from '@/types/course';
 import { getUserProfile, saveUserProfile, getRecommendations, saveRecommendations } from '@/lib/storage';
-import { createMemoryRepository } from '@/lib/memory/repository';
+import { getServerProfile, ingestProfileMemory } from '@/lib/memory-client';
 
 interface UserProfileContextType {
   userProfile: UserProfile | null;
-  updateProfile: (profile: UserProfile) => void;
+  updateProfile: (profile: UserProfile) => Promise<void>;
   isLoaded: boolean;
   error: Error | null;
 }
@@ -20,14 +20,28 @@ export function UserProfileProvider({ children }: { children: React.ReactNode })
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    try {
-      const profile = getUserProfile();
-      setUserProfile(profile);
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to load profile'));
-    } finally {
-      setIsLoaded(true);
-    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const localProfile = getUserProfile();
+        if (!cancelled && localProfile) setUserProfile(localProfile);
+        const serverProfile = await getServerProfile();
+        if (!cancelled && serverProfile) {
+          saveUserProfile(serverProfile);
+          setUserProfile(serverProfile);
+          void ingestProfileMemory(serverProfile);
+        } else if (!cancelled && localProfile) {
+          void ingestProfileMemory(localProfile);
+        }
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err : new Error('Failed to load profile'));
+      } finally {
+        if (!cancelled) setIsLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const generateRecommendationsIfNeeded = useCallback(async (profile: UserProfile) => {
@@ -66,20 +80,15 @@ export function UserProfileProvider({ children }: { children: React.ReactNode })
     }
   }, []);
 
-  const updateProfile = useCallback((profile: UserProfile) => {
+  const updateProfile = useCallback(async (profile: UserProfile): Promise<void> => {
     try {
+      await ingestProfileMemory(profile, { throwOnError: true });
       saveUserProfile(profile);
-      // 同步更新 V3 profile（stableFacts + goals）
-      try {
-        createMemoryRepository().syncProfileToV3();
-      } catch {
-        // V3 同步失败不影响主流程
-      }
       setUserProfile(profile);
-      // 如果还没有推荐课程，生成一份
-      generateRecommendationsIfNeeded(profile);
+      void generateRecommendationsIfNeeded(profile);
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to save profile'));
+      throw err;
     }
   }, [generateRecommendationsIfNeeded]);
 

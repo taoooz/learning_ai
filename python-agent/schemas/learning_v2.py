@@ -22,6 +22,7 @@ class TaskStreamTaskInfo(BaseModel):
     taskGoal: str
     teachingPattern: str
     observableOutcome: str
+    conceptKeys: list[str] = Field(default_factory=list)
 
 
 class TaskStreamChapterInfo(BaseModel):

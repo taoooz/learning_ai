@@ -8,6 +8,7 @@ from lib.minimax import MiniMaxClient, parse_json_response
 from lib.constants import LEVEL_DESCRIPTIONS, LEARNING_STYLE_DESCRIPTIONS, TECHNICAL_LEVEL_DESCRIPTIONS
 from memory.session import get_session_store
 from prompts import build_prompt
+from services.memory_context_v4 import wrap_untrusted_context
 
 
 class OutlineState(TypedDict):
@@ -180,20 +181,28 @@ def _format_planning_memory(planning_memory: dict) -> str:
         courses = [f"- {c.get('topic', '')}：{c.get('summary', '')}" for c in recent]
         sections.append("近期相关课程：\n" + '\n'.join(courses))
 
+    summary = planning_memory.get('learningSummary')
+    if summary:
+        sections.append(
+            "学习旅程摘要：\n"
+            f"- 旅程：{summary.get('journey', '')}\n"
+            f"- 当前重点：{summary.get('currentFocus', '')}\n"
+            f"- 学习者特点：{'、'.join(summary.get('learnerInsights') or []) or '暂无'}\n"
+            f"- 需关注：{'、'.join(summary.get('areasToWatch') or []) or '暂无'}"
+        )
+
     return '\n\n'.join(sections) if sections else ''
 
 
 def build_initial_prompt(topic: str, user_profile: dict, planning_memory: dict) -> str:
     """构建 system prompt（角色 + 指令 + 用户数据 + 格式约束）"""
-    # 用户画像
-    profile_section = _format_user_profile(user_profile) if user_profile else '暂无'
+    # 画像和 Memory 都可能包含用户或模型生成文本，统一按不可信数据注入。
+    profile_section = wrap_untrusted_context("user_profile", user_profile) if user_profile else '暂无'
 
     # 精简记忆上下文（无数据时不输出此模块）
     memory_section = ''
     if planning_memory:
-        memory_text = _format_planning_memory(planning_memory)
-        if memory_text:
-            memory_section = f"\n\n## 学习记忆\n{memory_text}"
+        memory_section = wrap_untrusted_context("learning_memory", planning_memory)
 
     from datetime import date
     today = date.today().isoformat()

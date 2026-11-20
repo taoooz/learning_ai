@@ -205,13 +205,13 @@ export function useChapterLearning({
     (lesson: NodeLessonV2 | null) => {
       if (!lesson) return;
       if (STORE_MODE === 'local') {
-        // 本地写入保持同步执行：章节完成动作随后会复读本地数据，不能等待微任务。
-        void getLessonRepository()
+        // 返回 Promise 供 Checkpoint 等需要服务端一致性的调用方显式等待。
+        return getLessonRepository()
           .saveLesson(courseId, chapterId, lesson, blueprint)
+          .then(() => undefined)
           .catch((error) => {
             console.warn('[useChapterLearning] 持久化失败（静默降级）:', error);
           });
-        return;
       }
       const operation = async () => {
         const repository = getLessonRepository();
@@ -238,6 +238,7 @@ export function useChapterLearning({
         }
       };
       lessonSaveQueueRef.current = lessonSaveQueueRef.current.then(operation, operation);
+      return lessonSaveQueueRef.current.then(() => undefined);
     },
     [courseId, chapterId, blueprint],
   );
@@ -350,6 +351,7 @@ export function useChapterLearning({
           taskGoal: planned?.taskGoal ?? '',
           teachingPattern: planned?.teachingPattern ?? '',
           observableOutcome: planned?.observableOutcome ?? '',
+          conceptKeys: planned?.conceptKeys ?? [],
         },
         chapter: {
           title: chapter?.title ?? '',
@@ -375,9 +377,9 @@ export function useChapterLearning({
   } = useCheckpointActions({
     courseId,
     chapterId,
-    blueprint,
     lessonMirrorRef,
     commit,
+    persist,
   });
 
   // ---- 任务流请求 ----
@@ -769,6 +771,9 @@ export function useChapterLearning({
     })();
     return () => {
       cancelled = true;
+      // React StrictMode 会执行 setup → cleanup → setup。恢复一次性 boot 标记，
+      // 否则第二次 setup 会直接跳过，server 模式永远停在 planning。
+      bootPendingRef.current = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

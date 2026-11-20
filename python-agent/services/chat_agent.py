@@ -10,6 +10,7 @@ from typing import Generator, Optional
 from lib.minimax_agent import AgentClient
 from prompts import get_prompt
 from lib.tools.search_tools import SEARCH_TOOLS, TOOL_FUNCTIONS
+from services.memory_context_v4 import wrap_untrusted_context
 
 
 def _format_content_delta(content: str) -> str:
@@ -26,51 +27,7 @@ def _build_memory_section(chat_memory: Optional[dict]) -> str:
     """将 ChatMemoryPayload 格式化为记忆重点部分"""
     if not chat_memory:
         return ''
-
-    # 学习旅程总结（LLM 精炼生成）
-    learning_summary = chat_memory.get('learningSummary')
-    summary_section = ''
-    if learning_summary:
-        journey = learning_summary.get('journey', '')
-        focus = learning_summary.get('currentFocus', '')
-        insights = learning_summary.get('learnerInsights', [])
-        watch = learning_summary.get('areasToWatch', [])
-        summary_section = f"""
-## 学习旅程洞察
-学习旅程：{journey}
-当前重点：{focus}
-学习者特点：{'、'.join(insights) if insights else '暂无'}
-需关注：{'、'.join(watch) if watch else '暂无'}"""
-
-    topic_summary = chat_memory.get('topicSummary', '暂无')
-
-    focus_states = chat_memory.get('focusConceptStates', [])
-    if focus_states:
-        focus_lines = []
-        for item in focus_states:
-            concept = item.get('concept', '')
-            status = item.get('status', '')
-            score = item.get('masteryScore', 0)
-            hints = item.get('misconceptionHints', [])
-            hint_str = f"；误区：{' / '.join(hints)}" if hints else ''
-            focus_lines.append(f"- {concept}: {status} ({score}){hint_str}")
-        focus_text = '\n'.join(focus_lines)
-    else:
-        focus_text = '暂无'
-
-    risk = chat_memory.get('riskConcepts', [])
-    recent_q = chat_memory.get('recentQuestionSummaries', [])
-    analogy = chat_memory.get('analogyHints', [])
-    styles = chat_memory.get('preferredExplanationStyles', [])
-
-    return f"""## 用户记忆重点
-主题摘要：{topic_summary}
-当前最该关注的概念：
-{focus_text}
-高风险概念：{'、'.join(risk) if risk else '暂无'}
-最近相关提问：{'；'.join(recent_q) if recent_q else '暂无'}
-可用类比：{'；'.join(analogy) if analogy else '暂无'}
-偏好解释方式：{'、'.join(styles) if styles else '暂无'}{summary_section}"""
+    return wrap_untrusted_context("learning_memory", chat_memory)
 
 
 def build_chat_system_prompt(
@@ -141,8 +98,11 @@ def build_chat_system_prompt(
             node_title=node_title, node_goal=node_goal or '')
 
     # 过期对话摘要（近期对话在 messages 数组中，不再重复嵌入）
-    expired_summary = (conversation_summary or {}).get('summary')
-    summary_section = f"## 更早的对话摘要\n{expired_summary}\n\n" if expired_summary else ''
+    summary_section = (
+        wrap_untrusted_context("conversation_summary", conversation_summary)
+        if conversation_summary and conversation_summary.get('summary')
+        else ''
+    )
 
     memory_section = _build_memory_section(chat_memory)
 

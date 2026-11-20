@@ -194,3 +194,31 @@ export function getLessonRepository(): LessonRepository {
 export function setLessonRepository(repo: LessonRepository | null): void {
   repositoryInstance = repo;
 }
+
+/** local 模式兼容：为服务端权威 Checkpoint 同步当前课程/章节影子快照。 */
+export async function syncLearningAuthoritySnapshot(
+  courseId: string,
+  chapterId: string,
+  lesson: NodeLessonV2,
+): Promise<boolean> {
+  const localCourse = getStoredCourseV2(courseId);
+  if (!localCourse) return false;
+  const coursesResponse = await fetch('/api/user/courses', { method: 'GET' });
+  const coursesBody = coursesResponse.ok
+    ? await coursesResponse.json().catch(() => null) as { courses?: StoredCourseV2[] } | null
+    : null;
+  const courses = coursesBody?.courses ?? [];
+  const nextCourses = [...courses.filter((course) => course.courseId !== courseId), localCourse];
+  const courseSave = await fetch('/api/user/courses', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ courses: nextCourses }),
+  });
+  if (!courseSave.ok) return false;
+  const lessonSave = await fetch('/api/user/lessons', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ courseId, chapterId, lesson }),
+  });
+  return lessonSave.ok;
+}

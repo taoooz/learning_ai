@@ -6,7 +6,7 @@ import {
   analyzeChatMessageForMemory,
   detectAssistantExplanationStyle,
   detectChatLearningPreferences,
-} from '@/lib/memory/aggregator';
+} from '@/lib/chat/summary-analysis';
 import { notifyStorageWriteFailure } from '@/lib/storage';
 
 const CHAT_HISTORY_PREFIX = 'chatHistory_';
@@ -169,6 +169,7 @@ export function useChatHistory(courseId: string) {
   const addMessage = useCallback((
     message: Omit<ChatMessage, 'id' | 'timestamp'>,
     options?: {
+      id?: string;
       onExpire?: (courseId: string, summary: Omit<ConversationSummary, 'courseId' | 'timestamp'>) => void;
       onCompact?: (courseId: string, summary: Omit<ConversationSummary, 'courseId' | 'timestamp'>) => void;
     }
@@ -178,7 +179,7 @@ export function useChatHistory(courseId: string) {
     const messages = getMessages();
     const newMessage: ChatMessage = {
       ...message,
-      id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+      id: options?.id ?? crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
       timestamp: Date.now(),
     };
 

@@ -21,6 +21,7 @@ from prompts.task_content import get_recipe
 from schemas.learning_v2 import TaskStreamRequest
 from services.chapter_plan_service import TEACHING_PATTERNS
 from services.learning_v2_errors import classify_llm_error
+from services.memory_context_v4 import format_memory_context_for_prompt
 
 PROMPT_VERSION = "task-content-v3"
 
@@ -84,6 +85,7 @@ def build_task_content_prompt(
     request: TaskStreamRequest,
     evidence: str | None = None,
     sources: list[dict] | None = None,
+    memory_context: dict | None = None,
 ) -> str:
     """构建任务内容 system prompt（evidence 非空时注入搜索证据包，§搜索策略）"""
     learner = request.learnerStartingPoint
@@ -126,7 +128,7 @@ def build_task_content_prompt(
         learner_section="\n".join(learner_lines),
         previous_section=previous_section,
         content_recipe=get_recipe(pattern),
-        ) + _format_course_mission(request.courseMission) + _format_teaching_state(request.teachingState) + evidence_section
+        ) + _format_course_mission(request.courseMission) + _format_teaching_state(request.teachingState) + format_memory_context_for_prompt(memory_context or {}) + evidence_section
 
 
 def extract_takeaway(markdown: str) -> str:
@@ -190,7 +192,7 @@ def _parser_event_to_sse(event: dict, make_event, started_blocks: set) -> list[d
     return results
 
 
-async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient | None = None) -> AsyncGenerator[dict, None]:
+async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient | None = None, memory_context: dict | None = None) -> AsyncGenerator[dict, None]:
     """流式生成单个任务的学习内容，yield 完整事件 dict 序列
 
     正常序列：task_started → sources_ready? → N×(content_block_started/delta/completed)
@@ -263,6 +265,7 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
         request,
         evidence=evidence_pack["evidence"] if evidence_pack else None,
         sources=evidence_pack["sources"] if evidence_pack else None,
+        memory_context=memory_context,
     )
     messages = [
         {"role": "system", "content": system_prompt},

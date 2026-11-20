@@ -5,6 +5,7 @@
 
 from prompts import build_prompt
 from schemas.tutor import InlineTutorRequest
+from services.memory_context_v4 import format_memory_context_for_prompt
 
 PROMPT = {
     "role": """<role>
@@ -78,7 +79,7 @@ PROMPT = {
 }
 
 
-def build_inline_tutor_prompt(request: InlineTutorRequest) -> str:
+def build_inline_tutor_prompt(request: InlineTutorRequest, memory_context: dict | None = None) -> str:
     """从最小请求上下文构建流内答疑 system prompt（设计文档 §3.2）"""
     if request.recentInlineQA:
         qa_lines = []
@@ -101,6 +102,8 @@ def build_inline_tutor_prompt(request: InlineTutorRequest) -> str:
         recent_qa_section=recent_qa_section,
         question_text=request.question.text,
     )
+
+    base += format_memory_context_for_prompt(memory_context or {})
 
     if request.reExplain:
         base += REEXPLAIN_INSTRUCTION
