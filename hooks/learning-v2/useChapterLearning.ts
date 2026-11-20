@@ -35,6 +35,7 @@ import {
 } from '@/lib/learning-v2/idempotency';
 import { decideResumeAction } from '@/lib/learning-v2/resume';
 import { parseLearningSseStream } from '@/lib/learning-v2/sse-client';
+import { createLatestSaveQueue, type LatestSaveQueue } from '@/lib/learning-v2/latest-save-queue';
 import { useChapterCompletion } from './useChapterCompletion';
 import { usePlanSuggestion } from './usePlanSuggestion';
 import { useCheckpointActions } from './useCheckpointActions';
@@ -172,7 +173,7 @@ export function useChapterLearning({
   /** server 模式乐观锁：下一次保存必须基于最后一次读到的服务端 revision。 */
   const serverLessonRevisionRef = useRef<number | null>(null);
   const conflictServerRevisionRef = useRef<number | null>(null);
-  const lessonSaveQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+  const serverSaveQueueRef = useRef<LatestSaveQueue<NodeLessonV2> | null>(null);
   const [saveConflict, setSaveConflict] = useState<string | null>(null);
 
   const [state, dispatch] = useReducer(reducer, undefined, (): ChapterLearningState => {
@@ -213,13 +214,13 @@ export function useChapterLearning({
             console.warn('[useChapterLearning] 持久化失败（静默降级）:', error);
           });
       }
-      const operation = async () => {
+      const writeLatest = async (snapshot: NodeLessonV2) => {
         const repository = getLessonRepository();
         try {
           const result = await repository.saveLesson(
             courseId,
             chapterId,
-            lesson,
+            snapshot,
             blueprint,
             serverLessonRevisionRef.current,
           );
@@ -237,8 +238,8 @@ export function useChapterLearning({
           console.warn('[useChapterLearning] 持久化失败（静默降级）:', error);
         }
       };
-      lessonSaveQueueRef.current = lessonSaveQueueRef.current.then(operation, operation);
-      return lessonSaveQueueRef.current.then(() => undefined);
+      serverSaveQueueRef.current ??= createLatestSaveQueue(writeLatest);
+      return serverSaveQueueRef.current.schedule(lesson);
     },
     [courseId, chapterId, blueprint],
   );

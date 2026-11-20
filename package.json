@@ -12,6 +12,8 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "npm run docs:check && node --import tsx --test tests/*.test.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install chromium",
     "typecheck": "tsc --noEmit",
     "docs:check": "node --import tsx scripts/check-docs.ts"
   },
@@ -32,6 +34,7 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "@types/node": "^25.5.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

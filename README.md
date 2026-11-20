@@ -37,13 +37,13 @@
 | 学习流 UI | `components/learning-v2`, `lib/learning-v2/stream-item-presentation.ts` |
 | 课程参考资料 | `lib/learning-v2/reference.ts`, `components/learning-v2/CourseReferencePanel.tsx` |
 | 课程教学状态 | `types/learning-v2/teaching-state.ts`, `lib/learning-v2/teaching-state.ts` |
-| 存储抽象 | `lib/learning-v2/lesson-repository.ts` |
+| 存储抽象 | `lib/learning-v2/lesson-repository.ts`, `lib/learning-v2/latest-save-queue.ts` |
 | 本地存储 | `lib/storage.ts`, `lib/learning-v2/storage.ts` |
 | 服务端存储 | `app/api/user`, `python-agent/routers/user_data.py`, `python-agent/services/user_data_store.py` |
 | Python 学习流 API | `python-agent/routers/learning_v2.py`, `python-agent/services` |
 | 内容生成与校验 | `python-agent/prompts`, `python-agent/services` |
 | 用户 Memory / 画像 | `types/memory-v4.ts`, `python-agent/services/memory_v4_store.py`, `python-agent/services/memory_context_v4.py`, `python-agent/services/memory_candidate_service.py`, `python-agent/services/memory_summary_service.py`, `python-agent/routers/memory_v4.py`, `app/api/user/memory`, `hooks/useUserMemory.ts`, `components/profile/MemoryPanel.tsx`, `components/ReviewQueueCard.tsx`, `app/profile` |
-| 测试 | `tests`, `python-agent/tests` |
+| 测试 | `tests`, `python-agent/tests`, `tests/e2e`, `playwright.config.ts` |
 
 ## 4. 关键不变量
 
@@ -57,6 +57,7 @@
 8. 每章最后一个任务必须触发 Checkpoint；服务端从蓝图/章节容器反查范围，sealed definition 判分成功后才按服务端 attempt 顺序追加 Learning Evidence；客户端不得提交正确答案、topic、planVersion 或任务摘要。
 9. 密钥只放 `.env*`，不得进入源码或文档。
 10. 用户画像输入经服务端 Memory V4 ingestion 后，课程生成与聊天只读取场景 Resolver 选中的 V4 Memory；不保留 V3 Memory 兼容层。Chat Summary 与 Chapter Episode 只由服务端 transcript、lesson、Evidence、recap snapshot 生成。
+11. server 模式 lesson 保存必须单写入器串行执行；写入在途时只合并为最新快照，不能让旧快照排队覆盖新状态。
 
 ## 5. 详细文档索引
 
@@ -85,6 +86,8 @@ npm run typecheck  # TypeScript 检查
 npm run lint       # ESLint
 npm run build      # 生产构建
 npm run docs:check # 只检查 README / CHANGELOG / 文档引用
+npm run test:e2e  # Playwright server 模式 E2E（需先安装浏览器）
+npm run test:e2e:install # 首次/CI 安装 Chromium
 cd python-agent && .venv/bin/python -m pytest tests/ -q
 ```
 
