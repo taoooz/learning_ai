@@ -19,7 +19,13 @@ def _blueprint() -> dict:
         "protocolVersion": 2,
         "topic": "提示词工程实践",
         "intentType": "skill_mastery",
-        "targetScenario": "日常写提示词",
+        "mission": {
+            "why": "能在日常工作中稳定复用提示词",
+            "targetScenario": "日常写提示词",
+            "successCriteria": ["能独立写出结构清晰的提示词"],
+            "constraints": [],
+            "outOfScope": [],
+        },
         "learnerStartingPoint": {
             "estimatedLevel": "beginner",
             "confirmedKnowledge": ["会用基础对话"],
@@ -44,7 +50,6 @@ def _blueprint() -> dict:
                 "conceptKeys": ["上下文"],
             },
         ],
-        "successCriteria": [],
         "chapters": [
             {
                 "chapterId": "ch-1",

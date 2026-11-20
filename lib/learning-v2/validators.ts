@@ -32,6 +32,20 @@ export function validateCourseBlueprint(blueprint: CourseBlueprint): BlueprintVa
   if (!blueprint.topic.trim()) {
     issues.push('蓝图缺少主题。');
   }
+
+  if (!blueprint.mission) {
+    issues.push('蓝图缺少课程使命。');
+  } else {
+    if (!blueprint.mission.why.trim()) {
+      issues.push('课程使命缺少学习动机 why。');
+    }
+    if (!blueprint.mission.targetScenario.trim()) {
+      issues.push('课程使命缺少目标场景 targetScenario。');
+    }
+    if (blueprint.mission.successCriteria.length === 0) {
+      issues.push('课程使命缺少成功标准 successCriteria。');
+    }
+  }
   if (blueprint.courseObjectives.length === 0) {
     issues.push('蓝图缺少课程目标。');
   }

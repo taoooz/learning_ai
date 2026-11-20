@@ -33,7 +33,6 @@ def _course() -> dict[str, Any]:
         "protocolVersion": 2,
         "topic": "HTTP 缓存 E2E",
         "intentType": "conceptual_understanding",
-        "targetScenario": "在真实前端项目中判断何时复用缓存",
         "mission": {
             "why": "验证 Memory V4 真实学习链路",
             "targetScenario": "前端缓存判断",
@@ -55,7 +54,6 @@ def _course() -> dict[str, Any]:
             "evidenceRequirement": "demonstration",
             "conceptKeys": ["ETag", "Last-Modified", "304"],
         }],
-        "successCriteria": ["完成章末检查"],
         "chapters": [
             {
                 "chapterId": CHAPTER_ID,

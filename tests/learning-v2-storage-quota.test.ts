@@ -137,7 +137,13 @@ function makeBlueprint(chapterIds: readonly string[]): CourseBlueprint {
     protocolVersion: 2,
     topic: '测试课程',
     intentType: 'conceptual_understanding',
-    targetScenario: '测试',
+    mission: {
+      why: '验证课程存储',
+      targetScenario: '测试',
+      successCriteria: ['完成测试目标'],
+      constraints: [],
+      outOfScope: [],
+    },
     learnerStartingPoint: {
       estimatedLevel: 'beginner',
       confirmedKnowledge: [],
@@ -154,7 +160,6 @@ function makeBlueprint(chapterIds: readonly string[]): CourseBlueprint {
         conceptKeys: ['c1'],
       },
     ],
-    successCriteria: [],
     chapters: chapterIds.map((chapterId, index) => ({
       chapterId,
       index,

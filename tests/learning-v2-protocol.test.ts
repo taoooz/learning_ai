@@ -108,7 +108,13 @@ function makeBlueprint(overrides: Partial<CourseBlueprint> = {}): CourseBlueprin
     protocolVersion: 2,
     topic: 'React 状态管理',
     intentType: 'conceptual_understanding',
-    targetScenario: '前端开发',
+    mission: {
+      why: '能在前端项目中使用 React 管理状态',
+      targetScenario: '前端开发',
+      successCriteria: ['能独立写出计数器'],
+      constraints: [],
+      outOfScope: [],
+    },
     learnerStartingPoint: {
       estimatedLevel: 'beginner',
       confirmedKnowledge: [],
@@ -125,7 +131,6 @@ function makeBlueprint(overrides: Partial<CourseBlueprint> = {}): CourseBlueprin
         conceptKeys: ['useState'],
       },
     ],
-    successCriteria: ['能独立写出计数器'],
     chapters: [
       {
         chapterId: 'ch-1',
@@ -278,6 +283,16 @@ test('valid blueprint passes validation', () => {
   const result = validateCourseBlueprint(makeBlueprint());
   assert.equal(result.passed, true);
   assert.deepEqual(result.issues, []);
+});
+
+test('blueprint without course mission fails', () => {
+  const blueprint = {
+    ...makeBlueprint(),
+    mission: undefined,
+  } as unknown as CourseBlueprint;
+  const result = validateCourseBlueprint(blueprint);
+  assert.equal(result.passed, false);
+  assert.equal(result.issues.some((issue) => issue.includes('课程使命')), true);
 });
 
 test('blueprint without core objective fails', () => {
@@ -855,10 +870,10 @@ test('mapTocToBlueprint derives a concrete course mission', () => {
     now: 1000,
   });
 
-  assert.equal(blueprint.mission?.why, '我要在项目里用 React 管理组件状态。');
-  assert.equal(blueprint.mission?.targetScenario, '前端项目开发');
-  assert.deepEqual(blueprint.mission?.successCriteria, ['能在项目中用 useState 管理组件状态。']);
-  assert.deepEqual(blueprint.mission?.outOfScope, ['HTML 基础']);
+  assert.equal(blueprint.mission.why, '我要在项目里用 React 管理组件状态。');
+  assert.equal(blueprint.mission.targetScenario, '前端项目开发');
+  assert.deepEqual(blueprint.mission.successCriteria, ['能在项目中用 useState 管理组件状态。']);
+  assert.deepEqual(blueprint.mission.outOfScope, ['HTML 基础']);
 });
 
 test('chapter plan requires the final task to trigger a checkpoint', () => {

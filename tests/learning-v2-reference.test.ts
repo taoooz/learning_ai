@@ -75,7 +75,13 @@ function makeCourse(lesson: NodeLesson): StoredCourse {
       protocolVersion: 2,
       topic: 'HTTP 缓存',
       intentType: 'skill_mastery',
-      targetScenario: '前端性能优化',
+      mission: {
+        why: '优化前端性能',
+        targetScenario: '前端性能优化',
+        successCriteria: ['掌握 HTTP 缓存策略'],
+        constraints: [],
+        outOfScope: [],
+      },
       learnerStartingPoint: {
         estimatedLevel: 'beginner',
         confirmedKnowledge: [],
@@ -83,7 +89,6 @@ function makeCourse(lesson: NodeLesson): StoredCourse {
         excludedTopics: [],
       },
       courseObjectives: [],
-      successCriteria: [],
       chapters: [{ chapterId: 'ch-1', index: 1, title: 'HTTP 缓存', objectiveIds: [], prerequisites: [], teachingGoal: '理解缓存', completionCriteria: [] }],
       createdAt: 1000,
       promptVersion: 'p',

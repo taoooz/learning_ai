@@ -66,12 +66,10 @@ export interface CourseBlueprint {
   protocolVersion: 2;
   topic: string;
   intentType: LearningIntentType;
-  targetScenario: string;
-  /** V2 课程使命。旧课程缺省时按 targetScenario/successCriteria 兼容读取。 */
-  mission?: CourseMission;
+  /** 课程使命是目标场景与成功标准的唯一来源。 */
+  mission: CourseMission;
   learnerStartingPoint: LearnerStartingPoint;
   courseObjectives: LearningObjective[];
-  successCriteria: string[];
   chapters: ChapterDefinition[];
   createdAt: number;
   promptVersion: string;

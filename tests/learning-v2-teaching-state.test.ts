@@ -22,10 +22,15 @@ function makeCourse(): StoredCourse {
       protocolVersion: 2,
       topic: 'HTTP 缓存',
       intentType: 'skill_mastery',
-      targetScenario: '性能优化',
+      mission: {
+        why: '解决缓存性能问题',
+        targetScenario: '性能优化',
+        successCriteria: ['能设计缓存策略'],
+        constraints: [],
+        outOfScope: [],
+      },
       learnerStartingPoint: { estimatedLevel: 'beginner', confirmedKnowledge: [], likelyGaps: [], excludedTopics: [] },
       courseObjectives: [],
-      successCriteria: [],
       chapters: [
         { chapterId: 'ch-1', index: 1, title: '缓存基础', objectiveIds: [], prerequisites: [], teachingGoal: '理解缓存', completionCriteria: [] },
         { chapterId: 'ch-2', index: 2, title: '缓存策略', objectiveIds: [], prerequisites: [], teachingGoal: '设计策略', completionCriteria: [] },

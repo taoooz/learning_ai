@@ -138,8 +138,6 @@ export function mapTocToBlueprint(input: MapTocToBlueprintInput): CourseBlueprin
     protocolVersion: 2,
     topic: courseName.trim() || outline.topic,
     intentType: inferIntentType(goalText),
-    targetScenario: mission.targetScenario,
-    mission,
     learnerStartingPoint: {
       estimatedLevel: normalizeEstimatedLevel(outline.learnerPositioning.estimatedLevel),
       confirmedKnowledge: [],
@@ -147,7 +145,7 @@ export function mapTocToBlueprint(input: MapTocToBlueprintInput): CourseBlueprin
       excludedTopics: outline.learnerPositioning.skipBasics ?? [],
     },
     courseObjectives,
-    successCriteria: [`完成全部 ${chapters.length} 个章节的学习任务`],
+    mission,
     chapters,
     createdAt: now,
     promptVersion: BLUEPRINT_MAP_PROMPT_VERSION,

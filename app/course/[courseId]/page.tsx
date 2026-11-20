@@ -139,7 +139,7 @@ export default function CoursePage() {
               {course.treeView.topic}
             </h1>
             <p className="text-[15px] leading-relaxed text-secondary">
-              {course.blueprint.targetScenario}
+              {course.blueprint.mission.targetScenario}
             </p>
           </div>
 
