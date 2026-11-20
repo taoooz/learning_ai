@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 
 import { LocalLessonRepository } from '../lib/learning-v2/lesson-repository';
 import { createStoredCourse } from '../lib/learning-v2/storage';
+import { mapTocToBlueprint } from '../lib/learning-v2/blueprint-map';
 import type { CourseBlueprint, StoredCourse } from '../types/learning-v2';
 
 /** 安装 window/localStorage 全局（与 protocol.test 同模式），返回还原函数 */
@@ -32,27 +33,18 @@ function installBrowserGlobals(): () => void {
   };
 }
 
-const META = { promptVersion: 'v1', modelVersion: 'test', generatedAt: 1, durationMs: 1, degraded: false };
-
 function makeBlueprint(): CourseBlueprint {
-  return {
+  return mapTocToBlueprint({
     courseId: 'repo-course-1',
-    topic: '测试课程',
-    learnerStartingPoint: '入门',
-    skipBasics: [],
-    chapters: [
-      {
-        chapterId: 'ch-1', index: 1, title: '第一章',
-        teachingGoal: '目标', objectiveIds: ['obj-1'], conceptKeys: [],
-        prerequisites: [],
-        status: 'planned', evidencePolicy: 'none',
-      },
-    ],
-    learningObjectives: [
-      { objectiveId: 'obj-1', description: '理解测试概念', mustCover: true, conceptKeys: [] },
-    ],
-    generationMeta: META,
-  } as unknown as CourseBlueprint;
+    courseName: '测试课程',
+    description: '完成课程仓库往返测试',
+    nodes: [{ index: 1, title: '第一章', description: '理解测试概念' }],
+    outline: {
+      topic: '测试课程',
+      learningGoal: '完成仓库往返测试',
+      learnerPositioning: { estimatedLevel: 'beginner' },
+    },
+  });
 }
 
 test('LocalLessonRepository: saveCourse → loadCourse roundtrip', async () => {

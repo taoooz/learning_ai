@@ -4,6 +4,7 @@ import type {
   StoredRecommendation,
   UserProfile,
 } from '../types/course';
+import type { StoredCourse } from '../types/learning-v2';
 
 export { getSystemCourseRecommendations } from '@/lib/data/system-courses';
 export type { SystemCourseRecommendation } from '@/lib/data/system-courses';
@@ -44,6 +45,34 @@ export function getCourseEngagementKey(courseId: string): string {
   return `${getUserStorageKey()}:course:${courseId}:engagement`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** 当前课程容器的最小结构守卫；旧树形课程或损坏数据不会进入渲染链路。 */
+export function isStoredCourse(value: unknown): value is StoredCourse {
+  if (!isRecord(value)) return false;
+  const blueprint = value.blueprint;
+  const treeView = value.treeView;
+  if (!isRecord(blueprint) || !isRecord(treeView)) return false;
+  if (blueprint.protocolVersion !== 2) return false;
+  if (typeof value.courseId !== 'string' || !value.courseId.trim()) return false;
+  if (typeof blueprint.topic !== 'string' || !blueprint.topic.trim()) return false;
+  if (!Array.isArray(blueprint.chapters) || !Array.isArray(blueprint.courseObjectives)) return false;
+  if (!isRecord(blueprint.mission)) return false;
+  if (typeof treeView.topic !== 'string' || !Array.isArray(treeView.chapters)) return false;
+  if (typeof treeView.totalChapters !== 'number') return false;
+  if (typeof value.createdAt !== 'number') return false;
+
+  return treeView.chapters.every((chapter) => (
+    isRecord(chapter)
+    && typeof chapter.chapterId === 'string'
+    && typeof chapter.index === 'number'
+    && typeof chapter.title === 'string'
+    && (chapter.status === 'locked' || chapter.status === 'available' || chapter.status === 'completed')
+  ));
+}
+
 const defaultStoredData: StoredData = {
   courses: [],
   userProfile: null,
@@ -58,7 +87,7 @@ export function getStoredData(): StoredData {
     if (raw) {
       const parsed = JSON.parse(raw) as StoredData;
       return {
-        courses: Array.isArray(parsed.courses) ? parsed.courses : [],
+        courses: Array.isArray(parsed.courses) ? parsed.courses.filter(isStoredCourse) : [],
         userProfile: parsed.userProfile ?? null,
         recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
       };

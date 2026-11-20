@@ -47,7 +47,7 @@
 
 ## 4. 关键不变量
 
-1. 学习数据只持久化 `courses`、`userProfile`、`recommendations`；旧 V1 独立 `courses` 容器、`currentCourseId`、`courseProgress` 已删除，当前 `courses` 是唯一课程容器。localStorage key 仍保持 `ai-learning-data-v2`。
+1. 学习数据只持久化 `courses`、`userProfile`、`recommendations`；旧 V1 独立 `courses` 容器、`currentCourseId`、`courseProgress` 已删除，当前 `courses` 是唯一课程容器。localStorage key 仍保持 `ai-learning-data-v2`；读取时校验当前课程容器结构，旧树形或损坏课程直接忽略，不进入渲染链路。
 2. `CourseBlueprint.mission` 必填且必须通过 `validateCourseBlueprint`；蓝图校验失败、空目录或保存失败时必须显示错误，不得降级为半可用课程。
 3. 章节解锁必须由章节真实完成状态派生，不能只信任课程树缓存。
 4. server 模式创建课程时，服务端保存成功后才写本地镜像；保存失败不得静默当作成功。

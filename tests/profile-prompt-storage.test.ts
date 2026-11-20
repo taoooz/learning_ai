@@ -5,6 +5,8 @@ import assert from 'node:assert/strict';
 
 import { buildProfileInsightPrompt } from '../lib/prompt';
 import { getStoredData } from '../lib/storage';
+import { mapTocToBlueprint } from '../lib/learning-v2/blueprint-map';
+import { createStoredCourse } from '../lib/learning-v2/storage';
 
 function withBrowserStorage(run: (store: Map<string, string>) => void) {
   return () => {
@@ -26,6 +28,22 @@ function withBrowserStorage(run: (store: Map<string, string>) => void) {
       if (originalLocalStorage === undefined) delete g.localStorage; else g.localStorage = originalLocalStorage;
     }
   };
+}
+
+
+function makeCurrentCourse(courseId: string) {
+  const blueprint = mapTocToBlueprint({
+    courseId,
+    courseName: '当前课程',
+    description: '验证当前课程容器',
+    nodes: [{ index: 1, title: '第一章', description: '完成第一章' }],
+    outline: {
+      topic: '当前课程',
+      learningGoal: '完成当前课程',
+      learnerPositioning: { estimatedLevel: 'beginner' },
+    },
+  });
+  return createStoredCourse(courseId, blueprint, 1000);
 }
 
 test('画像洞察 prompt 只包含当前事实提取契约', () => {
@@ -59,7 +77,7 @@ test('带邀请码时只读取 account-scoped key，不迁移旧无后缀 key', 
 test('带邀请码时仍读取当前 scoped key', withBrowserStorage((store) => {
   store.set('ai-learning-auth', JSON.stringify({ inviteCode: 'invite-123' }));
   store.set('ai-learning-data-v2:invite-123', JSON.stringify({
-    courses: [{ courseId: 'current-course' }],
+    courses: [makeCurrentCourse('current-course')],
     currentCourseId: 'v1-course',
     courseProgress: { 'v1-course': { 0: 'completed' } },
     userProfile: { name: '当前用户' },
@@ -74,4 +92,21 @@ test('带邀请码时仍读取当前 scoped key', withBrowserStorage((store) => 
   assert.equal('courses' in data, true);
   assert.equal('currentCourseId' in data, false);
   assert.equal('courseProgress' in data, false);
+}));
+
+test('存储边界会拒绝旧 treeView.nodes 课程而不是让页面崩溃', withBrowserStorage((store) => {
+  store.set('ai-learning-auth', JSON.stringify({ inviteCode: 'invite-123' }));
+  store.set('ai-learning-data-v2:invite-123', JSON.stringify({
+    courses: [{
+      courseId: 'legacy-course',
+      blueprint: { protocolVersion: 2, topic: '旧课程', chapters: [], courseObjectives: [] },
+      treeView: { courseId: 'legacy-course', topic: '旧课程', totalNodes: 1, nodes: [] },
+      createdAt: 1000,
+    }],
+    userProfile: null,
+    recommendations: [],
+  }));
+
+  const data = getStoredData();
+  assert.equal(data.courses.length, 0);
 }));
