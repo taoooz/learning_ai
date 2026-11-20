@@ -56,7 +56,7 @@
 7. 用户可见文本使用中文；API 错误应包含可理解的中文信息和可重试标记。
 8. 每章最后一个任务必须触发 Checkpoint；服务端从蓝图/章节容器反查范围，sealed definition 判分成功后才按服务端 attempt 顺序追加 Learning Evidence；客户端不得提交正确答案、topic、planVersion 或任务摘要。
 9. 密钥只放 `.env*`，不得进入源码或文档。
-10. 用户画像输入经服务端 Memory V4 ingestion 后，课程生成与聊天只读取场景 Resolver 选中的 V4 Memory；不保留 V3 Memory 兼容层。Chat Summary 与 Chapter Episode 只由服务端 transcript、lesson、Evidence、recap snapshot 生成。
+10. 用户画像输入经服务端 Memory V4 ingestion 后，课程生成与聊天只读取场景 Resolver 选中的 V4 Memory；不保留 V3 Memory 兼容层。Chat Summary 与 Chapter Episode 只由服务端 transcript、lesson、Evidence、recap snapshot 生成；旧 `/api/memory/refine` 与 `/api/agents/memory/refine` 已删除，不得恢复双轨写入。
 11. server 模式 lesson 保存必须单写入器串行执行；写入在途时只合并为最新快照，不能让旧快照排队覆盖新状态。
 
 ## 5. 详细文档索引

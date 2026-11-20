@@ -263,7 +263,7 @@ MemoryPolicy 进行价值、来源、作用域、敏感性判断
 
 同步写入只允许规则层完成，不允许 LLM 直接写长期 Store。
 
-P0 切换时必须删除旧 V3 写路径。禁止新旧 Memory 双写，也不建立灰度兼容层。
+P0 已删除旧 V3 写路径与 refine 入口。禁止新旧 Memory 双写，也不建立灰度兼容层。
 
 ### 5.2 异步提取
 
@@ -278,7 +278,7 @@ P0 切换时必须删除旧 V3 写路径。禁止新旧 Memory 双写，也不�
 对应 user message 中逐字定位的连续片段，并以该片段作为候选 content。
 `repeated_behavior` 由服务端对真实消息计数派生，`teaching_strategy` 只能在
 Remediation 的 before/after Evidence 都存在后才由规则生成。V3 `/api/memory/refine`
-返回 410，禁止双轨写入。
+与 Python `/api/agents/memory/refine` 已彻底移除并返回 404，禁止双轨写入。
 
 ### 5.3 价值门槛
 
@@ -679,7 +679,7 @@ P1 再增加 Candidate、Resolver、Consolidation 和 Markdown export。
 - Memory 实际改变教学决策的比例与收益
 - `no_relevant_memory / memory_unavailable` abstain 正确率
 - 画像系统推断被用户纠正的比例
-- V3 残留写路径数量：切换后目标 0
+- V3 残留写路径数量：当前 0
 
 ## 11. 关键不变量
 
@@ -726,7 +726,7 @@ P0/P1 必须至少有：
 
 ## 13. 实施阶段
 
-### P0：可信证据与统一来源
+### P0：可信证据与统一来源（已完成）
 
 - 落地 `types/memory-v4.ts`
 - 实现 account-scoped、带 revision/tombstone 的 `MemoryStoreV4`

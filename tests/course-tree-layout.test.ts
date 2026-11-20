@@ -8,16 +8,6 @@ let getCourseTreeLayout: typeof import('../lib/course-tree-layout').getCourseTre
 let getCourseTreeInitialScrollTop: typeof import('../lib/course-tree-layout').getCourseTreeInitialScrollTop;
 let compactChatHistoryMessages: typeof import('../hooks/useChatHistory').compactChatHistoryMessages;
 let generateConversationSummary: typeof import('../hooks/useChatHistory').generateConversationSummary;
-let createMemoryRepository: typeof import('../lib/memory/repository').createMemoryRepository;
-let CHAT_CONCEPT_ALIASES: typeof import('../lib/memory/aggregator').CHAT_CONCEPT_ALIASES;
-let detectChatLearningPreferences: typeof import('../lib/memory/aggregator').detectChatLearningPreferences;
-let detectExplicitMasteredConcept: typeof import('../lib/memory/aggregator').detectExplicitMasteredConcept;
-let normalizeConceptKeyFromAggregator: typeof import('../lib/memory/aggregator').normalizeConceptKey;
-let analyzeChatMessageForMemory: typeof import('../lib/memory/aggregator').analyzeChatMessageForMemory;
-let getChatMemoryPayload: typeof import('../lib/memory/memory-agent').getChatMemoryPayload;
-let getPlanningMemoryPayload: typeof import('../lib/memory/memory-agent').getPlanningMemoryPayload;
-let getTeachingMemoryPayload: typeof import('../lib/memory/memory-agent').getTeachingMemoryPayload;
-let normalizeConceptKey: typeof import('../lib/memory/aggregator').normalizeConceptKey;
 
 test.before(async () => {
   const layoutModule = await import('../lib/course-tree-layout');
@@ -28,23 +18,6 @@ test.before(async () => {
   compactChatHistoryMessages = chatHistoryModule.compactChatHistoryMessages;
   generateConversationSummary = chatHistoryModule.generateConversationSummary;
 
-  const repositoryModule = await import('../lib/memory/repository');
-  createMemoryRepository = repositoryModule.createMemoryRepository;
-
-  const aggregatorModule = await import('../lib/memory/aggregator');
-  CHAT_CONCEPT_ALIASES = aggregatorModule.CHAT_CONCEPT_ALIASES;
-  detectChatLearningPreferences = aggregatorModule.detectChatLearningPreferences;
-  detectExplicitMasteredConcept = aggregatorModule.detectExplicitMasteredConcept;
-  normalizeConceptKeyFromAggregator = aggregatorModule.normalizeConceptKey;
-
-  const memoryAgentModule = await import('../lib/memory/memory-agent');
-  getChatMemoryPayload = memoryAgentModule.getChatMemoryPayload;
-  getPlanningMemoryPayload = memoryAgentModule.getPlanningMemoryPayload;
-  getTeachingMemoryPayload = memoryAgentModule.getTeachingMemoryPayload;
-
-  // analyzeChatMessageForMemory 和 normalizeConceptKey 已在 aggregatorModule 中加载
-  analyzeChatMessageForMemory = aggregatorModule.analyzeChatMessageForMemory;
-  normalizeConceptKey = aggregatorModule.normalizeConceptKey;
 });
 
 test('getCourseTreeLayout returns left-biased staggered positions', () => {
@@ -205,41 +178,11 @@ test('normalizeVisualization supports legacy aliases and nested data payload', (
   assert.deepEqual(visualization?.items, ['先判断目标', '再决定是否调用工具']);
 });
 
-test('analyzeChatMessageForMemory ignores normal questions without confusion signals', () => {
-  const result = analyzeChatMessageForMemory('React 和 Vue 的状态管理思路有什么区别？');
 
-  assert.equal(result.shouldAddKnowledgeGap, false);
-  assert.equal(result.extractedConcept, null);
-});
 
-test('analyzeChatMessageForMemory extracts concept when user explicitly says they are confused', () => {
-  const result = analyzeChatMessageForMemory('我还是没懂工具调用和工作流编排的区别，能再举个例子吗？');
 
-  assert.equal(result.shouldAddKnowledgeGap, true);
-  assert.equal(result.extractedConcept, '工具调用和工作流编排的区别');
-});
 
-// V1/V2 API 相关测试已移除，新的 V3 + Memory Agent 测试在 course-blueprint-memory-v3.test.ts
 
-test('detectChatLearningPreferences extracts explanation style preferences from user wording', () => {
-  const preferences = detectChatLearningPreferences('还是有点懵，能不能一步一步讲，再举个例子对比一下？');
-
-  assert.equal(preferences.some((item) => item.value === '分步拆解'), true);
-  assert.equal(preferences.some((item) => item.value === '例子驱动'), true);
-  assert.equal(preferences.some((item) => item.value === '对比讲解'), true);
-});
-
-test('detectExplicitMasteredConcept captures explicit understanding statements', () => {
-  const mastered = detectExplicitMasteredConcept('工具调用我已经明白了，不过工作流编排还是有点混淆');
-
-  assert.equal(mastered?.concept, '工具调用');
-  assert.equal((mastered?.confidence || 0) >= 0.65, true);
-});
-
-test('normalizeConceptKey collapses close variants into one canonical concept', () => {
-  assert.equal(normalizeConceptKey('外部工具调用'), normalizeConceptKey('工具调用'));
-  assert.equal(normalizeConceptKey('工作流编排'), normalizeConceptKey('workflow 编排'));
-});
 
 test('generateConversationSummary preserves questions confusion styles and follow-up', () => {
   const summary = generateConversationSummary([
@@ -273,11 +216,3 @@ test('compactChatHistoryMessages summarizes truncated history instead of silentl
   assert.equal(result.messages[0].id, '3');
   assert.equal(result.droppedSummary?.summary.includes('工具调用和工作流编排'), true);
 });
-
-test('concept alias dictionary covers extendable variants beyond hard-coded regexes', () => {
-  assert.equal(Array.isArray(CHAT_CONCEPT_ALIASES['工具调用']), true);
-  assert.equal(CHAT_CONCEPT_ALIASES['工具调用'].includes('tool call'), true);
-  assert.equal(normalizeConceptKeyFromAggregator('Tool Call'), '工具调用');
-  assert.equal(normalizeConceptKeyFromAggregator('调用工具时机'), '工具选择时机');
-});
-

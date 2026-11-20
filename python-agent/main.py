@@ -7,7 +7,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 import hmac
 from uuid import uuid4
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -33,7 +33,6 @@ from services.toc_service import generate_toc, stream_toc_events
 from services.outline_agent import stream_outline_with_tools, stream_answer_with_tools
 from services.toc_agent import stream_toc_with_tools
 from services.chat_agent import stream_chat_with_tools, build_chat_system_prompt
-from services.memory_refine_service import refine_memory
 from routers.learning_v2 import router as learning_v2_router
 from routers.user_data import router as user_data_router
 from routers.memory_v4 import router as memory_v4_router
@@ -556,28 +555,3 @@ async def chat_agent_route(request: Request):
             yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
-
-
-@app.post("/api/agents/memory/refine")
-async def memory_refine_route(request: dict):
-    """LLM 驱动的记忆精炼 — 分析对话和事件，返回结构化洞察"""
-    try:
-        recent_messages = request.get("recentMessages", [])
-        current_summary = request.get("currentSummary")
-        concept_count = request.get("conceptCount", 0)
-        topic_count = request.get("topicCount", 0)
-        recent_events_summary = request.get("recentEventsSummary", "")
-
-        result = refine_memory(
-            recent_messages=recent_messages,
-            current_summary=current_summary,
-            concept_count=concept_count,
-            topic_count=topic_count,
-            recent_events_summary=recent_events_summary,
-        )
-        return result
-    except Exception as e:
-        print(f"[Memory Refine API] Error: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))

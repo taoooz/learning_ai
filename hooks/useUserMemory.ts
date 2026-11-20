@@ -1,5 +1,5 @@
 // hooks/useUserMemory.ts
-// Memory V4 客户端接口：服务端为权威，客户端不再读取或写入 MemoryStoreV3。
+// Memory V4 客户端接口：服务端为权威，客户端不再读取或写入旧版 V3 数据。
 
 import { useCallback } from 'react';
 import type { ConversationSummary } from '@/types/course';
