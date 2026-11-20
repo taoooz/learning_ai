@@ -1,6 +1,6 @@
 'use client';
 
-// components/learning-v2/TaskBoundaryV2.tsx
+// components/learning-v2/TaskBoundary.tsx
 // V2 任务边界卡：任务完成后停在此处等用户决策（文档 §6 边界停顿）
 // 展示可带走要点（takeaway）与下一步预告（nextHint）；按钮统一走 continueNext：
 // 失败→重新生成 / 有下一任务→继续学习 / 末任务→完成本章
@@ -11,12 +11,12 @@
 // - 回答完成后保持既有继续按钮与语义，不自动推进主线；
 // - Tutor 失败只在回答条目上局部重试，不进入本卡的失败分支（本卡只反映主线任务状态）。
 
-import type { NodeLessonV2 } from '@/types/learning-v2';
+import type { NodeLesson } from '@/types/learning-v2';
 import type { ChapterPhase } from '@/hooks/learning-v2/useChapterLearning';
 import { evaluateChapterCheckpointGate } from '@/lib/learning-v2/checkpoint-gate';
 
-interface TaskBoundaryV2Props {
-  lesson: NodeLessonV2;
+interface TaskBoundaryProps {
+  lesson: NodeLesson;
   phase: ChapterPhase;
   /** 当前任务连续失败次数（>=3 且失败态时给软提示，不锁按钮） */
   attempts: number;
@@ -25,7 +25,7 @@ interface TaskBoundaryV2Props {
   highlightContinue?: boolean;
 }
 
-export function TaskBoundaryV2({ lesson, phase, attempts, onContinue, highlightContinue = false }: TaskBoundaryV2Props) {
+export function TaskBoundary({ lesson, phase, attempts, onContinue, highlightContinue = false }: TaskBoundaryProps) {
   if (phase !== 'boundary' && phase !== 'completing') return null;
 
   // completing：本章收尾中，只保留一个禁用按钮提示进度，不展示边界内容

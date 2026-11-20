@@ -1,10 +1,10 @@
 // lib/data/system-courses.ts
-// 系统推荐课程：只保留元数据 + 章节大纲，统一走 V2 蓝图管线（mapTocToBlueprintV2）。
+// 系统推荐课程：只保留元数据 + 章节大纲，统一走 V2 蓝图管线（mapTocToBlueprint）。
 // 原先 v1 预生成的 lessons JSON 已废弃（P0：下线 V1 学习流），章节内容在用户学到时按需生成。
 
-import { mapTocToBlueprintV2 } from '@/lib/learning-v2/blueprint-map';
-import { createStoredCourseV2 } from '@/lib/learning-v2/storage';
-import type { StoredCourseV2 } from '@/types/learning-v2';
+import { mapTocToBlueprint } from '@/lib/learning-v2/blueprint-map';
+import { createStoredCourse } from '@/lib/learning-v2/storage';
+import type { StoredCourse } from '@/types/learning-v2';
 
 export interface SystemCourseRecommendation {
   courseId: string;
@@ -74,12 +74,12 @@ export function getSystemCourseRecommendations(): SystemCourseRecommendation[] {
  * 把系统课程的大纲映射为 V2 课程容器（纯函数，不落盘）。
  * courseId 不存在时返回 null，由调用方提示用户。
  */
-export function createSystemCourseV2(courseId: string, now?: number): StoredCourseV2 | null {
+export function createSystemCourse(courseId: string, now?: number): StoredCourse | null {
   const spec = SYSTEM_COURSE_SPECS.find((item) => item.recommendation.courseId === courseId);
   if (!spec) return null;
 
   const { recommendation } = spec;
-  const blueprint = mapTocToBlueprintV2({
+  const blueprint = mapTocToBlueprint({
     courseId,
     courseName: recommendation.title,
     description: spec.description,
@@ -98,5 +98,5 @@ export function createSystemCourseV2(courseId: string, now?: number): StoredCour
     now,
   });
 
-  return createStoredCourseV2(courseId, blueprint, now);
+  return createStoredCourse(courseId, blueprint, now);
 }

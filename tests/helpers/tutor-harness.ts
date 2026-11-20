@@ -16,14 +16,14 @@ import {
 import {
   appendUserQuestion,
   applyLearningSseEvent,
-  createInitialNodeLessonV2,
+  createInitialNodeLesson,
 } from '../../lib/learning-v2/reducers';
 import type { InlineTutorRequestPayload } from '../../lib/learning-v2/tutor-context';
 import type {
   ChapterPlan,
   GenerationMeta,
   LearningSseEvent,
-  NodeLessonV2,
+  NodeLesson,
 } from '../../types/learning-v2';
 
 const encoder = new TextEncoder();
@@ -173,7 +173,7 @@ export interface ChapterLearningHarnessOptions {
   /** 初始相位：streaming = 任务1流式中；boundary = 任务1完成后停在边界；默认 boundary */
   phase?: 'streaming' | 'boundary';
   /** 直接指定容器（刷新恢复夹具）；指定时忽略 phase，相位从容器推导 */
-  lesson?: NodeLessonV2;
+  lesson?: NodeLesson;
   courseId?: string;
   chapterId?: string;
   /**
@@ -193,7 +193,7 @@ export function createChapterLearningHarness(options: ChapterLearningHarnessOpti
   const chapterId = options.chapterId ?? 'ch-1';
   const tutorEventChapterId = options.tutorEventChapterId ?? chapterId;
 
-  let lesson: NodeLessonV2;
+  let lesson: NodeLesson;
   let phase: ChapterPhaseName;
   let taskAbortCount = 0;
   let tutorRequests = 0;
@@ -210,7 +210,7 @@ export function createChapterLearningHarness(options: ChapterLearningHarnessOpti
   const tutorBodies: InlineTutorRequestPayload[] = [];
   const streams: FakeTutorStream[] = [];
   const engagements: Array<{ eventType: string; taskId?: string }> = [];
-  const immediatePersists: NodeLessonV2[] = [];
+  const immediatePersists: NodeLesson[] = [];
 
   function nextSequence(): number {
     sequenceCounter += 1;
@@ -221,7 +221,7 @@ export function createChapterLearningHarness(options: ChapterLearningHarnessOpti
     lesson = options.lesson;
     phase = deriveChapterPhase(lesson, 'generating');
   } else {
-    lesson = createInitialNodeLessonV2(chapterId, makePlan(chapterId), HARNESS_NOW);
+    lesson = createInitialNodeLesson(chapterId, makePlan(chapterId), HARNESS_NOW);
     // 真实时序：task_started 先把章节推进到 learning，task_completed 才能转到 awaiting_user
     lesson = applyLearningSseEvent(lesson, {
       eventId: 'evt-h-task-started',

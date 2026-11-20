@@ -13,7 +13,7 @@ import {
   needsCheckpoint,
   upsertCheckpointItem,
 } from '../lib/learning-v2/checkpoint-ops';
-import { createInitialNodeLessonV2, appendUserQuestion } from '../lib/learning-v2/reducers';
+import { createInitialNodeLesson, appendUserQuestion } from '../lib/learning-v2/reducers';
 import type { CheckpointDefinition, CheckpointEvaluation } from '../types/learning-v2';
 import type { ChapterPlan } from '../types/learning-v2';
 
@@ -44,7 +44,7 @@ function makePlan(overrides?: Partial<ChapterPlan>): ChapterPlan {
   };
 }
 
-const baseLesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
+const baseLesson = createInitialNodeLesson('ch-1', makePlan(), 1000);
 
 const cpDefinition: CheckpointDefinition = {
   checkpointId: 'cp-1', objectiveId: 'obj-1', taskId: 'task-1', conceptKeys: ['etag'],

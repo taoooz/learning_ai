@@ -4,22 +4,22 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  completeChapterV2,
+  completeChapter,
   isSameCourseTreeView,
 } from '../lib/learning-v2/chapter-complete';
-import { createAndSaveStoredCourseV2, loadRenderableStoredCourse } from '../lib/learning-v2/dispatch';
+import { createAndSaveStoredCourse, loadRenderableStoredCourse } from '../lib/learning-v2/dispatch';
 import { setLessonRepository, ServerLessonRepository, type LessonRepository } from '../lib/learning-v2/lesson-repository';
-import { createStoredCourseV2 } from '../lib/learning-v2/storage';
+import { createStoredCourse } from '../lib/learning-v2/storage';
 import type { EngagementEvent } from '../lib/learning-v2/engagement';
 import type {
-  CourseBlueprintV2,
-  NodeLessonV2,
-  StoredCourseV2,
+  CourseBlueprint,
+  NodeLesson,
+  StoredCourse,
 } from '../types/learning-v2';
 
 const META = { promptVersion: 'v1', modelVersion: 'test', generatedAt: 1, durationMs: 1, degraded: false };
 
-function makeCourse(): StoredCourseV2 {
+function makeCourse(): StoredCourse {
   const blueprint = {
     courseId: 'server-course-1',
     topic: '服务端课程',
@@ -42,19 +42,19 @@ function makeCourse(): StoredCourseV2 {
       { objectiveId: 'obj-2', description: '理解二', mustCover: true, conceptKeys: [] },
     ],
     generationMeta: META,
-  } as unknown as CourseBlueprintV2;
-  return createStoredCourseV2('server-course-1', blueprint, 1000);
+  } as unknown as CourseBlueprint;
+  return createStoredCourse('server-course-1', blueprint, 1000);
 }
 
 class FakeLessonRepository implements LessonRepository {
-  courses = new Map<string, StoredCourseV2>();
-  lessons = new Map<string, NodeLessonV2>();
+  courses = new Map<string, StoredCourse>();
+  lessons = new Map<string, NodeLesson>();
 
-  async loadCourse(courseId: string): Promise<StoredCourseV2 | null> {
+  async loadCourse(courseId: string): Promise<StoredCourse | null> {
     return this.courses.get(courseId) ?? null;
   }
 
-  async saveCourse(course: StoredCourseV2): Promise<boolean> {
+  async saveCourse(course: StoredCourse): Promise<boolean> {
     this.courses.set(course.courseId, course);
     return true;
   }
@@ -63,14 +63,14 @@ class FakeLessonRepository implements LessonRepository {
     return this.courses.delete(courseId);
   }
 
-  async loadLesson(courseId: string, chapterId: string): Promise<NodeLessonV2 | null> {
+  async loadLesson(courseId: string, chapterId: string): Promise<NodeLesson | null> {
     return this.lessons.get(`${courseId}:${chapterId}`) ?? null;
   }
 
   async saveLesson(
     courseId: string,
     chapterId: string,
-    lesson: NodeLessonV2,
+    lesson: NodeLesson,
   ): Promise<{ saved: boolean; archivedChapterIds: string[] }> {
     this.lessons.set(`${courseId}:${chapterId}`, lesson);
     return { saved: true, archivedChapterIds: [] };
@@ -96,7 +96,7 @@ test('server 模式：课程读取时按章节事实自愈 treeView', async () =
     repository.courses.set(course.courseId, course);
     repository.lessons.set(`${course.courseId}:ch-1`, {
       runtime: { status: 'completed' },
-    } as NodeLessonV2);
+    } as NodeLesson);
     setLessonRepository(repository);
 
     const result = await loadRenderableStoredCourse(course.courseId);
@@ -114,7 +114,7 @@ test('server 模式：章节完成更新服务端课程树并解锁下一章', a
     repository.courses.set(course.courseId, course);
     setLessonRepository(repository);
 
-    const saved = await completeChapterV2(course.courseId, 'ch-1');
+    const saved = await completeChapter(course.courseId, 'ch-1');
     assert.equal(saved, true);
     const refreshed = repository.courses.get(course.courseId);
     assert.ok(refreshed);
@@ -143,14 +143,14 @@ test('server 模式：课程创建成功后才写本地缓存', async () => {
       setLessonRepository(repository);
       const course = makeCourse();
 
-      const saved = await createAndSaveStoredCourseV2(course);
+      const saved = await createAndSaveStoredCourse(course);
       assert.equal(saved, true);
       assert.equal(repository.courses.has(course.courseId), true);
       assert.equal(map.size > 0, true);
 
       repository.saveCourse = async () => false;
       const failedCourse = { ...course, courseId: 'server-course-2' };
-      const failed = await createAndSaveStoredCourseV2(failedCourse);
+      const failed = await createAndSaveStoredCourse(failedCourse);
       assert.equal(failed, false);
       assert.equal(repository.courses.has(failedCourse.courseId), false);
     } finally {
@@ -179,7 +179,7 @@ test('server 仓库：保存使用独立 expected revision，冲突返回服务�
 
   try {
     const repository = new ServerLessonRepository();
-    const lesson = { updatedAt: 999 } as unknown as NodeLessonV2;
+    const lesson = { updatedAt: 999 } as unknown as NodeLesson;
     const conflicted = await repository.saveLesson('course', 'ch-1', lesson, makeCourse().blueprint, 100);
     assert.equal(conflicted.saved, false);
     assert.equal(conflicted.conflict, true);

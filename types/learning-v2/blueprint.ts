@@ -61,7 +61,7 @@ export interface CourseMission {
   outOfScope: string[];
 }
 
-export interface CourseBlueprintV2 {
+export interface CourseBlueprint {
   blueprintId: string;
   protocolVersion: 2;
   topic: string;
@@ -89,7 +89,7 @@ export interface ChapterTreeViewItem {
   status: ChapterTreeStatus;
 }
 
-export interface CourseTreeViewV2 {
+export interface CourseTreeView {
   courseId: string;
   topic: string;
   totalChapters: number;
@@ -97,13 +97,13 @@ export interface CourseTreeViewV2 {
 }
 
 /**
- * V2 课程存储容器：挂在全局存储 StoredDataV2.v2Courses 下。
+ * V2 课程存储容器：挂在全局存储 StoredData.courses 下。
  * blueprint 不携带 courseId（协议见文档 §2.1），课程实例与蓝图的关联在存储层维护。
  */
-export interface StoredCourseV2 {
+export interface StoredCourse {
   courseId: string;
-  blueprint: CourseBlueprintV2;
-  treeView: CourseTreeViewV2;
+  blueprint: CourseBlueprint;
+  treeView: CourseTreeView;
   /** 课程参考资料；由章节完成后的学习内容确定性沉淀 */
   references?: CourseReference[];
   /** 课程统一术语表；后续任务 prompt 可复用，保证术语一致 */

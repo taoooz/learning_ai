@@ -10,11 +10,11 @@ import {
   setTeachingChapter,
   updateTeachingStateAfterChapter,
 } from '../lib/learning-v2/teaching-state';
-import type { NodeLessonV2, StoredCourseV2 } from '../types/learning-v2';
+import type { NodeLesson, StoredCourse } from '../types/learning-v2';
 
 const NOW = 2000;
 
-function makeCourse(): StoredCourseV2 {
+function makeCourse(): StoredCourse {
   return {
     courseId: 'course-1',
     blueprint: {
@@ -47,7 +47,7 @@ function makeCourse(): StoredCourseV2 {
   };
 }
 
-function makeLesson(): NodeLessonV2 {
+function makeLesson(): NodeLesson {
   return {
     protocolVersion: 2,
     chapterId: 'ch-1',

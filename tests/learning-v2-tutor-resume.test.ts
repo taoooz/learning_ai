@@ -7,7 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { appendUserQuestion, applyLearningSseEvent, createInitialNodeLessonV2 } from '../lib/learning-v2/reducers';
+import { appendUserQuestion, applyLearningSseEvent, createInitialNodeLesson } from '../lib/learning-v2/reducers';
 import { normalizeTutorRuntimeForResume } from '../lib/learning-v2/resume';
 import { prepareTutorBoot } from '../lib/learning-v2/tutor-orchestration';
 import { createChapterLearningHarness } from './helpers/tutor-harness';
@@ -17,7 +17,7 @@ import type {
   GenerationMeta,
   LearningContentBlock,
   LearningSseEvent,
-  NodeLessonV2,
+  NodeLesson,
   PlannedTask,
   TutorAnswerItem,
   UserQuestionItem,
@@ -141,8 +141,8 @@ function tutorCompletedEvent(questionId: string, markdown: string, sequence: num
 }
 
 /** 任务 1 完成、边界提问后流式回答进行中被刷新的夹具（经真实归约器构造） */
-function makeLessonWithStreamingTutor(): NodeLessonV2 {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+function makeLessonWithStreamingTutor(): NodeLesson {
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), NOW);
   // 真实时序：先 task_started（planning→learning），task_completed 才能推进到边界
   lesson = applyLearningSseEvent(
     lesson,
@@ -219,8 +219,8 @@ test('已失败回答保持失败态，不自动重试', () => {
 });
 
 /** 问题提交后回答直接失败的夹具（未开始流式） */
-function lessonWithQuestions(): NodeLessonV2 {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+function lessonWithQuestions(): NodeLesson {
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), NOW);
   lesson = appendUserQuestion(
     lesson,
     { taskId: 'task-1', questionId: 'q-1', text: '304 为什么没有正文？' },
@@ -261,7 +261,7 @@ test('死请求归一为 failed 并保留 attempt，重试请求以新 requestId
 });
 
 test('无任何 Tutor 条目的章节原样返回', () => {
-  const lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+  const lesson = createInitialNodeLesson('ch-1', makePlan(), NOW);
   const result = normalizeTutorRuntimeForResume(lesson, NOW + 10);
   assert.equal(result.shouldAutoRetry, false);
   assert.equal(result.lesson, lesson);
@@ -270,7 +270,7 @@ test('无任何 Tutor 条目的章节原样返回', () => {
 // ---- 主任务隔离 ----
 
 test('主任务请求在途时只归一 Tutor 回答，不动主任务状态', () => {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), NOW);
   lesson = applyLearningSseEvent(
     lesson,
     makeEvent({
@@ -317,7 +317,7 @@ test('主任务请求在途时只归一 Tutor 回答，不动主任务状态', (
     status: 'pending',
     blocks: [],
   };
-  const mixed: NodeLessonV2 = {
+  const mixed: NodeLesson = {
     ...lesson,
     streamItems: [...lesson.streamItems, question, streamingAnswer, pendingAnswer],
   };
@@ -345,7 +345,7 @@ test('prepareTutorBoot：归一结果需落盘，一次性自动重试标记正�
 });
 
 test('prepareTutorBoot：无可归一内容返回原引用不落盘；空容器安全', () => {
-  const lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+  const lesson = createInitialNodeLesson('ch-1', makePlan(), NOW);
   const prepared = prepareTutorBoot(lesson, NOW + 10);
   assert.equal(prepared.lesson, lesson, '原样返回');
   assert.equal(prepared.persisted, false, '跳过冗余落盘');
@@ -408,7 +408,7 @@ test('刷新恢复：自动重试再次失败进入可见失败态，第二次�
 });
 
 test('刷新恢复：无 pendingRequest 的已提交未答问题走边界兜底派发', async () => {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), NOW);
   lesson = applyLearningSseEvent(
     lesson,
     makeEvent({

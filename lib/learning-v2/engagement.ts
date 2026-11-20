@@ -2,7 +2,7 @@
 // V2 参与信号采集（计划 T8）：轻量埋点，供后续学习行为分析
 // 原则：绝不阻断教学——写失败静默；独立 key 环形 500 条，不并入课程主对象
 
-import { getV2CourseEngagementKey } from '../storage';
+import { getCourseEngagementKey } from '../storage';
 
 export type EngagementEventType =
   | 'chapter_opened' // 进入章节学习页
@@ -42,7 +42,7 @@ export function recordEngagementEvent(
     const events = readEngagementEvents(courseId);
     events.push({ ...event, at: Date.now() });
     const trimmed = events.slice(-MAX_EVENTS_PER_COURSE);
-    window.localStorage.setItem(getV2CourseEngagementKey(courseId), JSON.stringify(trimmed));
+    window.localStorage.setItem(getCourseEngagementKey(courseId), JSON.stringify(trimmed));
   } catch {
     // 存储满/隐私模式等：静默
   }
@@ -52,7 +52,7 @@ export function recordEngagementEvent(
 export function readEngagementEvents(courseId: string): EngagementEvent[] {
   try {
     if (typeof window === 'undefined') return [];
-    const raw = window.localStorage.getItem(getV2CourseEngagementKey(courseId));
+    const raw = window.localStorage.getItem(getCourseEngagementKey(courseId));
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     return Array.isArray(parsed) ? (parsed as EngagementEvent[]) : [];

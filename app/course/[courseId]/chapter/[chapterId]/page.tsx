@@ -7,18 +7,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { CourseHeaderBar } from '@/components/CourseHeaderBar';
-import { ChapterRecapSkeleton, LearningStreamV2 } from '@/components/learning-v2/LearningStreamV2';
-import { TaskBoundaryV2 } from '@/components/learning-v2/TaskBoundaryV2';
+import { ChapterRecapSkeleton, LearningStream } from '@/components/learning-v2/LearningStream';
+import { TaskBoundary } from '@/components/learning-v2/TaskBoundary';
 import { PlanPatchPrompt } from '@/components/learning-v2/PlanPatchPrompt';
 import { latestTutorActionIsProceed } from '@/lib/learning-v2/tutor-queue';
 import { ChapterCompleteCard } from '@/components/learning-v2/ChapterCompleteCard';
 import { InlineTutorInput, tutorPlaceholder } from '@/components/learning-v2/InlineTutorInput';
 import { useChapterLearning } from '@/hooks/learning-v2/useChapterLearning';
 import { loadRenderableStoredCourse } from '@/lib/learning-v2/dispatch';
-import type { ChapterDefinition, StoredCourseV2 } from '@/types/learning-v2';
+import type { ChapterDefinition, StoredCourse } from '@/types/learning-v2';
 
 interface ResolvedChapter {
-  course: StoredCourseV2;
+  course: StoredCourse;
   chapter: ChapterDefinition;
 }
 
@@ -291,7 +291,7 @@ function ChapterLearningView({
                     <div className="h-24 animate-pulse rounded-2xl bg-black/[0.03]" />
                   </div>
                 )}
-              <LearningStreamV2
+              <LearningStream
                 courseId={courseId}
                 lesson={lesson}
                 phase={phase}
@@ -316,7 +316,7 @@ function ChapterLearningView({
                 />
               )}
               {!isTutorBusy && (
-                <TaskBoundaryV2
+                <TaskBoundary
                   lesson={lesson}
                   phase={phase}
                   attempts={currentTaskAttempts}
@@ -343,7 +343,7 @@ function ChapterLearningView({
 
           {phase === 'completed' && lesson && (
             <>
-              <LearningStreamV2
+              <LearningStream
                 courseId={courseId}
                 lesson={lesson}
                 phase={phase}
@@ -379,7 +379,7 @@ function ChapterLearningView({
  * 全部完成或下一章仍锁定时返回 undefined（卡片只留「回到课程」）。
  */
 function findNextUnlockedChapter(
-  course: StoredCourseV2,
+  course: StoredCourse,
   chapterId: string,
 ): { chapterId: string; title: string } | undefined {
   const chapters = course.blueprint.chapters;

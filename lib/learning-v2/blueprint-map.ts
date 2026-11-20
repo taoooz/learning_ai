@@ -2,12 +2,12 @@
 // TOC 结果 → 当前课程蓝图映射。
 // 依据 docs/architecture/v2_课程生成逻辑.md §2.1 蓝图契约；
 // P1a 阶段不新建 V2 蓝图生成链，TOC 落库时由本模块派生蓝图（见实施计划 T1）。
-// 映射产物必须通过 validateCourseBlueprintV2；不通过则调用方直接报错，不落半成品。
+// 映射产物必须通过 validateCourseBlueprint；不通过则调用方直接报错，不落半成品。
 // 后续阶段接入真实 V2 蓝图生成链后，本模块可整体替换。
 
 import type {
   ChapterDefinition,
-  CourseBlueprintV2,
+  CourseBlueprint,
   CourseMission,
   LearningIntentType,
   LearningObjective,
@@ -102,7 +102,7 @@ export function buildCourseMissionFromOutline(
   };
 }
 
-export function mapTocToBlueprintV2(input: MapTocToBlueprintInput): CourseBlueprintV2 {
+export function mapTocToBlueprint(input: MapTocToBlueprintInput): CourseBlueprint {
   const { courseId, courseName, description, nodes, outline } = input;
   const now = input.now ?? Date.now();
   const goalText = [outline.learningGoal, outline.learningDirection].filter(Boolean).join('，');

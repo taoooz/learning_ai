@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { CourseGlossaryTerm, CourseReference } from '@/types/learning-v2';
-import { TaskBlockView } from './TaskBlocksV2';
+import { TaskBlockView } from './TaskBlocks';
 
 export function CourseReferencePanel({
   references,

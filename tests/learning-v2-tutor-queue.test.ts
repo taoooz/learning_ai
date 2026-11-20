@@ -8,7 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { appendUserQuestion, applyLearningSseEvent, createInitialNodeLessonV2 } from '../lib/learning-v2/reducers';
+import { appendUserQuestion, applyLearningSseEvent, createInitialNodeLesson } from '../lib/learning-v2/reducers';
 import {
   countUnansweredTutorQuestions,
   getPendingTutorQuestions,
@@ -21,7 +21,7 @@ import type {
   GenerationMeta,
   LearningContentBlock,
   LearningSseEvent,
-  NodeLessonV2,
+  NodeLesson,
   PlannedTask,
 } from '../types/learning-v2';
 
@@ -122,8 +122,8 @@ function tutorCompletedEvent(
 }
 
 /** 按提交顺序依次入流的纯问题夹具（无回答） */
-function lessonWithQuestions(questionIds: string[]): NodeLessonV2 {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+function lessonWithQuestions(questionIds: string[]): NodeLesson {
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), NOW);
   questionIds.forEach((questionId, index) => {
     lesson = appendUserQuestion(
       lesson,
@@ -147,7 +147,7 @@ test('Tutor 队列按提交顺序串行，自动窗口最多三题', () => {
 
 test('队列顺序以 sequence 为准，不依赖数组写入顺序', () => {
   const lesson = lessonWithQuestions(['q-1', 'q-2', 'q-3']);
-  const shuffled: NodeLessonV2 = { ...lesson, streamItems: [...lesson.streamItems].reverse() };
+  const shuffled: NodeLesson = { ...lesson, streamItems: [...lesson.streamItems].reverse() };
   assert.deepEqual(
     getPendingTutorQuestions(shuffled).map((q) => q.questionId),
     ['q-1', 'q-2', 'q-3'],
@@ -175,7 +175,7 @@ test('已回答与回答失败的问题不进入待答队列', () => {
 });
 
 test('无问题的章节队列为空', () => {
-  const lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+  const lesson = createInitialNodeLesson('ch-1', makePlan(), NOW);
   assert.deepEqual(getPendingTutorQuestions(lesson), []);
   assert.equal(takeNextTutorQuestion(lesson), undefined);
   assert.equal(countUnansweredTutorQuestions(lesson), 0);

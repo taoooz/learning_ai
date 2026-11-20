@@ -85,7 +85,7 @@ V4 借鉴以下成熟机制，但不复制具体产品目录：
 
 | 层 | 是否事实源 | 生命周期 | 持久化建议 |
 |---|---:|---|---|
-| `NodeLessonV2` / `CourseTeachingState` | 是 | 当前章节或课程 | 继续由 learning-v2 存储 |
+| `NodeLesson` / `CourseTeachingState` | 是 | 当前章节或课程 | 继续由 learning-v2 存储 |
 | `LearningEvidenceLedgerV4` | 是 | 长期追加 | 独立账本 |
 | `MemoryStoreV4.records` | 是 | 长期 | 结构化存储 |
 | `MemoryStoreV4.profileIngestions` | 是 | 长期 | 画像导入审计与幂等 |
@@ -133,7 +133,7 @@ Evidence 必须由服务端可信链路写入：
   → 返回 evaluation + evidenceId + memoryRevision
 ```
 
-客户端不能提交正确答案，也不能在章节完成时一次性补写长期 Evidence。`NodeLessonV2.evidence` 只能作为展示缓存。
+客户端不能提交正确答案，也不能在章节完成时一次性补写长期 Evidence。`NodeLesson.evidence` 只能作为展示缓存。
 
 ### 4.2 Memory Record
 

@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildChapterGlossary, buildChapterReference, mergeCourseAssets } from '../lib/learning-v2/reference';
-import type { NodeLessonV2, StoredCourseV2 } from '../types/learning-v2';
+import type { NodeLesson, StoredCourse } from '../types/learning-v2';
 
 const NOW = 2000;
 
-function makeLesson(): NodeLessonV2 {
+function makeLesson(): NodeLesson {
   return {
     protocolVersion: 2,
     chapterId: 'ch-1',
@@ -67,7 +67,7 @@ function makeLesson(): NodeLessonV2 {
   };
 }
 
-function makeCourse(lesson: NodeLessonV2): StoredCourseV2 {
+function makeCourse(lesson: NodeLesson): StoredCourse {
   return {
     courseId: 'course-1',
     blueprint: {

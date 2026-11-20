@@ -5,8 +5,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { applyPlanPatch, canApplyPatch } from '../lib/learning-v2/plan-patch';
-import { createInitialNodeLessonV2 } from '../lib/learning-v2/reducers';
-import type { ChapterPlan, ChapterPlanPatch, NodeLessonV2 } from '../types/learning-v2';
+import { createInitialNodeLesson } from '../lib/learning-v2/reducers';
+import type { ChapterPlan, ChapterPlanPatch, NodeLesson } from '../types/learning-v2';
 import { MAX_PLAN_PATCHES_PER_CHAPTER } from '../types/learning-v2';
 
 const META = { promptVersion: 'v1', modelVersion: 'test', generatedAt: 1, durationMs: 1, degraded: false };
@@ -31,8 +31,8 @@ function makePlan(): ChapterPlan {
 }
 
 /** 模拟 task-1 已完成的 lesson（awaiting_user 边界） */
-function makeLessonWithTask1Done(): NodeLessonV2 {
-  const lesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
+function makeLessonWithTask1Done(): NodeLesson {
+  const lesson = createInitialNodeLesson('ch-1', makePlan(), 1000);
   return {
     ...lesson,
     runtime: {
@@ -75,8 +75,8 @@ test('canApplyPatch: 版本匹配 + 未展示目标 → 通过', () => {
 test('canApplyPatch: 版本不匹配 → VERSION_MISMATCH（拒绝旧补丁）', () => {
   const lesson = makeLessonWithTask1Done();
   // 模拟已升级到 v2
-  const v2Lesson = { ...lesson, chapterPlan: { ...lesson.chapterPlan, planVersion: 2 } };
-  const result = canApplyPatch(v2Lesson, makePatch());
+  const patchedLesson = { ...lesson, chapterPlan: { ...lesson.chapterPlan, planVersion: 2 } };
+  const result = canApplyPatch(patchedLesson, makePatch());
   assert.equal(result.ok, false);
   assert.equal(result.reason, 'VERSION_MISMATCH');
 });

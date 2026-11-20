@@ -6,7 +6,7 @@ import type {
   CheckpointDefinition,
   CheckpointEvaluation,
   LearningSseEvent,
-  NodeLessonV2,
+  NodeLesson,
 } from '@/types/learning-v2';
 import {
   appendSystemNotice,
@@ -27,30 +27,30 @@ import {
 export type ChapterPhase = ChapterPhaseName;
 
 export interface ChapterLearningState {
-  lesson: NodeLessonV2 | null;
+  lesson: NodeLesson | null;
   phase: ChapterPhase;
   planError: string | null;
 }
 
 export type ChapterLearningAction =
   | { type: 'PLANNING' }
-  | { type: 'PLAN_READY'; lesson: NodeLessonV2 }
+  | { type: 'PLAN_READY'; lesson: NodeLesson }
   | { type: 'PLAN_FAILED'; message: string }
   | { type: 'TASK_STARTING'; taskId: string; now: number }
   | { type: 'SSE_EVENT'; event: LearningSseEvent }
   | { type: 'STREAM_FAILED_LOCAL'; message: string; code?: string; now: number }
-  | { type: 'CHAPTER_COMPLETING'; lesson: NodeLessonV2 }
-  | { type: 'COMPLETED'; lesson: NodeLessonV2 }
-  | { type: 'LESSON_PATCH'; lesson: NodeLessonV2 }
+  | { type: 'CHAPTER_COMPLETING'; lesson: NodeLesson }
+  | { type: 'COMPLETED'; lesson: NodeLesson }
+  | { type: 'LESSON_PATCH'; lesson: NodeLesson }
   | { type: 'CHECKPOINT_READY'; checkpoint: CheckpointDefinition; now: number }
   | { type: 'CHECKPOINT_EVALUATED'; checkpointId: string; answer: string | string[]; evaluation: CheckpointEvaluation; now: number }
-  | { type: 'BOOT_READY'; lesson: NodeLessonV2 | null; phase: ChapterPhase };
+  | { type: 'BOOT_READY'; lesson: NodeLesson | null; phase: ChapterPhase };
 
 /** 启动决策 → 初始容器/相位（local 同步启动与 server 异步启动共用） */
 export function bootStateFor(
-  lesson: NodeLessonV2 | null,
+  lesson: NodeLesson | null,
   action: ResumeAction,
-): { lesson: NodeLessonV2 | null; phase: ChapterPhase } {
+): { lesson: NodeLesson | null; phase: ChapterPhase } {
   switch (action.kind) {
     case 'generate_plan':
       return { lesson: null, phase: 'planning' };
@@ -63,7 +63,7 @@ export function bootStateFor(
   }
 }
 
-function lessonAfterTaskStarting(lesson: NodeLessonV2, taskId: string, now: number): NodeLessonV2 {
+function lessonAfterTaskStarting(lesson: NodeLesson, taskId: string, now: number): NodeLesson {
   const transitioned = transitionTask(lesson.runtime, 'generating', now);
   const runtime = transitioned.ok
     ? transitioned.runtime
@@ -72,11 +72,11 @@ function lessonAfterTaskStarting(lesson: NodeLessonV2, taskId: string, now: numb
 }
 
 function lessonAfterStreamFailure(
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
   message: string,
   code: string | undefined,
   now: number,
-): NodeLessonV2 {
+): NodeLesson {
   const transitioned = transitionTask(lesson.runtime, 'failed', now);
   const runtime = transitioned.ok
     ? transitioned.runtime
@@ -153,9 +153,9 @@ export function chapterLearningReducer(
  * React dispatch 批处理后，请求编排层需要立即读取最新 lesson，因此使用该镜像。
  */
 export function mirrorLesson(
-  current: NodeLessonV2 | null,
+  current: NodeLesson | null,
   action: ChapterLearningAction,
-): NodeLessonV2 | null {
+): NodeLesson | null {
   switch (action.type) {
     case 'PLAN_READY':
     case 'CHAPTER_COMPLETING':
@@ -183,7 +183,7 @@ export function mirrorLesson(
 /** 相位同步镜像：与 reducer 各分支的相位推导一致 */
 export function mirrorPhase(
   action: ChapterLearningAction,
-  lesson: NodeLessonV2 | null,
+  lesson: NodeLesson | null,
   prev: ChapterPhase,
 ): ChapterPhase {
   switch (action.type) {

@@ -7,19 +7,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  saveNodeLessonV2,
-  saveNodeLessonV2WithQuotaFallback,
-  trySaveNodeLessonV2,
+  saveNodeLesson,
+  saveNodeLessonWithQuotaFallback,
+  trySaveNodeLesson,
 } from '../lib/learning-v2/storage';
 import { archiveCompletedLesson } from '../lib/learning-v2/archive';
-import { getV2ChapterStorageKey } from '../lib/storage';
+import { getChapterStorageKey } from '../lib/storage';
 
 import type {
   ChapterPlan,
   ChapterStatus,
-  CourseBlueprintV2,
+  CourseBlueprint,
   GenerationMeta,
-  NodeLessonV2,
+  NodeLesson,
   PlannedTask,
 } from '../types/learning-v2';
 
@@ -50,9 +50,9 @@ class CapacityStorage {
   }
 }
 
-const sizeOf = (lesson: NodeLessonV2): number => JSON.stringify(lesson).length;
+const sizeOf = (lesson: NodeLesson): number => JSON.stringify(lesson).length;
 const keyOf = (courseId: string, chapterId: string): string =>
-  getV2ChapterStorageKey(courseId, chapterId);
+  getChapterStorageKey(courseId, chapterId);
 
 function makeTask(chapterId: string): PlannedTask {
   return {
@@ -92,7 +92,7 @@ function makeLesson(
   status: ChapterStatus,
   blockSize: number,
   archived = false,
-): NodeLessonV2 {
+): NodeLesson {
   const completed = status === 'completed';
   return {
     protocolVersion: 2,
@@ -131,7 +131,7 @@ function makeLesson(
   };
 }
 
-function makeBlueprint(chapterIds: readonly string[]): CourseBlueprintV2 {
+function makeBlueprint(chapterIds: readonly string[]): CourseBlueprint {
   return {
     blueprintId: 'bp-1',
     protocolVersion: 2,
@@ -170,28 +170,28 @@ function makeBlueprint(chapterIds: readonly string[]): CourseBlueprintV2 {
   };
 }
 
-// ---- trySaveNodeLessonV2：只写不提示 ----
+// ---- trySaveNodeLesson：只写不提示 ----
 
 test('trySave：写入失败返回 false 且不抛错', () => {
   const storage = new CapacityStorage(10);
   const lesson = makeLesson('ch-1', 'completed', 1000);
-  assert.equal(trySaveNodeLessonV2('course-1', lesson, storage), false);
+  assert.equal(trySaveNodeLesson('course-1', lesson, storage), false);
   assert.equal(storage.getItem(keyOf('course-1', 'ch-1')), null);
 });
 
 test('trySave：容量充足返回 true', () => {
   const lesson = makeLesson('ch-1', 'completed', 100);
   const storage = new CapacityStorage(sizeOf(lesson) + 100);
-  assert.equal(trySaveNodeLessonV2('course-1', lesson, storage), true);
+  assert.equal(trySaveNodeLesson('course-1', lesson, storage), true);
 });
 
-test('saveNodeLessonV2：失败返回 false（无 window 时通知 no-op，不抛错）', () => {
+test('saveNodeLesson：失败返回 false（无 window 时通知 no-op，不抛错）', () => {
   const storage = new CapacityStorage(10);
   const lesson = makeLesson('ch-1', 'completed', 1000);
-  assert.equal(saveNodeLessonV2('course-1', lesson, storage), false);
+  assert.equal(saveNodeLesson('course-1', lesson, storage), false);
 });
 
-// ---- saveNodeLessonV2WithQuotaFallback ----
+// ---- saveNodeLessonWithQuotaFallback ----
 
 test('容量充足：直接保存成功，不动任何历史章节', () => {
   const ch1 = makeLesson('ch-1', 'completed', 3000);
@@ -199,7 +199,7 @@ test('容量充足：直接保存成功，不动任何历史章节', () => {
   const storage = new CapacityStorage(sizeOf(ch1) + sizeOf(ch2) + 1000);
   storage.setItem(keyOf('course-1', 'ch-1'), JSON.stringify(ch1));
 
-  const result = saveNodeLessonV2WithQuotaFallback(
+  const result = saveNodeLessonWithQuotaFallback(
     'course-1',
     ch2,
     makeBlueprint(['ch-1', 'ch-2']),
@@ -220,7 +220,7 @@ test('配额不足：压缩归档最早的已完成章节腾出空间后保存�
   const storage = new CapacityStorage(archivedCh1Size + sizeOf(ch2) + 200);
   storage.setItem(keyOf('course-1', 'ch-1'), JSON.stringify(ch1));
 
-  const result = saveNodeLessonV2WithQuotaFallback(
+  const result = saveNodeLessonWithQuotaFallback(
     'course-1',
     ch2,
     makeBlueprint(['ch-1', 'ch-2']),
@@ -231,13 +231,13 @@ test('配额不足：压缩归档最早的已完成章节腾出空间后保存�
   assert.equal(result.saved, true);
   assert.deepEqual(result.archivedChapterIds, ['ch-1']);
 
-  const storedCh1 = JSON.parse(storage.getItem(keyOf('course-1', 'ch-1'))!) as NodeLessonV2;
+  const storedCh1 = JSON.parse(storage.getItem(keyOf('course-1', 'ch-1'))!) as NodeLesson;
   assert.equal(storedCh1.archived, true, 'ch-1 被标记归档');
   const task1 = storedCh1.streamItems.find((i) => i.type === 'task_content');
   assert.ok(task1 && task1.type === 'task_content');
   assert.equal(task1.blocks.length, 1, '正文压缩为单条摘要块');
 
-  const storedCh2 = JSON.parse(storage.getItem(keyOf('course-1', 'ch-2'))!) as NodeLessonV2;
+  const storedCh2 = JSON.parse(storage.getItem(keyOf('course-1', 'ch-2'))!) as NodeLesson;
   assert.equal(storedCh2.archived, undefined, '当前章节完整保留不归档');
 });
 
@@ -251,7 +251,7 @@ test('候选按 index 升序遍历：腾出一个章节即停，后面的章节�
   storage.setItem(keyOf('course-1', 'ch-1'), JSON.stringify(ch1));
   storage.setItem(keyOf('course-1', 'ch-2'), JSON.stringify(ch2));
 
-  const result = saveNodeLessonV2WithQuotaFallback(
+  const result = saveNodeLessonWithQuotaFallback(
     'course-1',
     ch3,
     makeBlueprint(['ch-1', 'ch-2', 'ch-3']),
@@ -261,7 +261,7 @@ test('候选按 index 升序遍历：腾出一个章节即停，后面的章节�
 
   assert.equal(result.saved, true);
   assert.deepEqual(result.archivedChapterIds, ['ch-1']);
-  const storedCh2 = JSON.parse(storage.getItem(keyOf('course-1', 'ch-2'))!) as NodeLessonV2;
+  const storedCh2 = JSON.parse(storage.getItem(keyOf('course-1', 'ch-2'))!) as NodeLesson;
   assert.equal(storedCh2.archived, undefined, 'ch-2 未被触碰');
 });
 
@@ -272,7 +272,7 @@ test('候选过滤：已归档与未完成章节不参与压缩', () => {
   const storage = new CapacityStorage(sizeOf(ch1) + 100); // 装不下 ch-3
   storage.setItem(keyOf('course-1', 'ch-1'), JSON.stringify(ch1));
 
-  const result = saveNodeLessonV2WithQuotaFallback(
+  const result = saveNodeLessonWithQuotaFallback(
     'course-1',
     ch3,
     makeBlueprint(['ch-1', 'ch-2', 'ch-3']),
@@ -292,7 +292,7 @@ test('当前章节自身不是候选：即使已存旧数据也不压缩', () =>
   const storage = new CapacityStorage(sizeOf(oldCh1) + 100);
   storage.setItem(keyOf('course-1', 'ch-1'), JSON.stringify(oldCh1));
 
-  const result = saveNodeLessonV2WithQuotaFallback(
+  const result = saveNodeLessonWithQuotaFallback(
     'course-1',
     newCh1,
     makeBlueprint(['ch-1']),
@@ -313,7 +313,7 @@ test('候选耗尽仍写不进：返回失败（通知在无 window 环境 no-op
   storage.setItem(keyOf('course-1', 'ch-1'), JSON.stringify(ch1));
   storage.capacity = 50;
 
-  const result = saveNodeLessonV2WithQuotaFallback(
+  const result = saveNodeLessonWithQuotaFallback(
     'course-1',
     ch2,
     makeBlueprint(['ch-1', 'ch-2']),

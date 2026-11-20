@@ -1,7 +1,7 @@
 // lib/learning-v2/checkpoint-gate.ts
 // 章末理解检查闸门：最后一个任务完成前，必须先完成 Checkpoint。
 
-import type { NodeLessonV2 } from '@/types/learning-v2';
+import type { NodeLesson } from '@/types/learning-v2';
 
 export type CheckpointGateReason =
   | 'generating'
@@ -24,7 +24,7 @@ export interface ChapterCheckpointGate {
  * - 二次错误 nextAction=continue，允许完成但保留 not_demonstrated 证据；
  * - Checkpoint 生成失败会写入 CHECKPOINT_GENERATION_FAILED 通知，此时不永久锁死章节。
  */
-export function evaluateChapterCheckpointGate(lesson: NodeLessonV2): ChapterCheckpointGate {
+export function evaluateChapterCheckpointGate(lesson: NodeLesson): ChapterCheckpointGate {
   const sortedTasks = [...lesson.chapterPlan.tasks].sort((a, b) => a.order - b.order);
   const finalTask = sortedTasks.at(-1);
   if (!finalTask || finalTask.evidencePolicy !== 'checkpoint') return { blocked: false };

@@ -62,8 +62,8 @@ export function useChatSubmit(params: UseChatSubmitParams) {
     );
 
     try {
-      const { getCourseTopicV2 } = await import('@/lib/learning-v2/course-list');
-      const courseTopic = getCourseTopicV2(courseId) ?? courseTitle;
+      const { getCourseTopic } = await import('@/lib/learning-v2/course-list');
+      const courseTopic = getCourseTopic(courseId) ?? courseTitle;
 
       // 限制历史消息：最多10条，且总长度不超过2000字符
       // 过期消息已凝结为对话摘要（conversationSummary）单独传递，不再重复发送原文

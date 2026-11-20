@@ -1,6 +1,6 @@
 // lib/storage.ts
 import type {
-  StoredDataV2,
+  StoredData,
   StoredRecommendation,
   UserProfile,
 } from '../types/course';
@@ -33,39 +33,39 @@ function getUserStorageKey(): string {
 /**
  * 章节学习流的独立存储 key（每章独立，不并入课程主对象）。
  */
-export function getV2ChapterStorageKey(courseId: string, chapterId: string): string {
+export function getChapterStorageKey(courseId: string, chapterId: string): string {
   return `${getUserStorageKey()}:course:${courseId}:chapter:${chapterId}`;
 }
 
 /**
  * 课程参与信号的独立存储 key（不并入课程主对象，写失败静默）。
  */
-export function getV2CourseEngagementKey(courseId: string): string {
+export function getCourseEngagementKey(courseId: string): string {
   return `${getUserStorageKey()}:course:${courseId}:engagement`;
 }
 
-const defaultDataV2: StoredDataV2 = {
-  v2Courses: [],
+const defaultStoredData: StoredData = {
+  courses: [],
   userProfile: null,
   recommendations: [],
 };
 
-export function getStoredDataV2(): StoredDataV2 {
-  if (typeof window === 'undefined') return defaultDataV2;
+export function getStoredData(): StoredData {
+  if (typeof window === 'undefined') return defaultStoredData;
   const userKey = getUserStorageKey();
   try {
     const raw = localStorage.getItem(userKey);
     if (raw) {
-      const parsed = JSON.parse(raw) as StoredDataV2;
+      const parsed = JSON.parse(raw) as StoredData;
       return {
-        v2Courses: Array.isArray(parsed.v2Courses) ? parsed.v2Courses : [],
+        courses: Array.isArray(parsed.courses) ? parsed.courses : [],
         userProfile: parsed.userProfile ?? null,
         recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
       };
     }
-    return defaultDataV2;
+    return defaultStoredData;
   } catch {
-    return defaultDataV2;
+    return defaultStoredData;
   }
 }
 
@@ -86,7 +86,7 @@ export function notifyStorageWriteFailure(context: string, error: unknown): void
   window.dispatchEvent(new CustomEvent(STORAGE_WRITE_FAILED_EVENT, { detail: { context } }));
 }
 
-export function saveStoredDataV2(data: StoredDataV2): boolean {
+export function saveStoredData(data: StoredData): boolean {
   if (typeof window === 'undefined') return false;
   try {
     localStorage.setItem(getUserStorageKey(), JSON.stringify(data));
@@ -98,26 +98,26 @@ export function saveStoredDataV2(data: StoredDataV2): boolean {
 }
 
 export function getUserProfile(): UserProfile | null {
-  const data = getStoredDataV2();
+  const data = getStoredData();
   return data.userProfile;
 }
 
 export function saveUserProfile(profile: UserProfile): void {
-  const data = getStoredDataV2();
+  const data = getStoredData();
   data.userProfile = profile;
-  saveStoredDataV2(data);
+  saveStoredData(data);
 }
 
 export function getRecommendations(): StoredRecommendation[] {
-  const data = getStoredDataV2();
+  const data = getStoredData();
   return data.recommendations || [];
 }
 
 export function saveRecommendations(recommendations: Omit<StoredRecommendation, 'createdAt'>[]): void {
-  const data = getStoredDataV2();
+  const data = getStoredData();
   data.recommendations = recommendations.map((r) => ({
     ...r,
     createdAt: Date.now(),
   }));
-  saveStoredDataV2(data);
+  saveStoredData(data);
 }

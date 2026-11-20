@@ -13,7 +13,7 @@ from services.learning_v2_errors import (
 
 
 def _blueprint() -> dict:
-    """构造一个最小可用的 CourseBlueprintV2"""
+    """构造一个最小可用的 CourseBlueprint"""
     return {
         "blueprintId": "bp-course-1",
         "protocolVersion": 2,

@@ -1,5 +1,5 @@
 // lib/learning-v2/reducers.ts
-// V2 学习流归约器：SSE 事件 → NodeLessonV2
+// V2 学习流归约器：SSE 事件 → NodeLesson
 // 依据 docs/architecture/v2_课程生成逻辑.md §2.5 / §5 / §6.3
 // 与 docs/history/designs/p2-流内答疑第一阶段设计.md §2.1 / §2.2
 // 幂等保证：所有 Item 以确定性 itemId upsert，重复应用同一事件不产生重复条目；
@@ -16,7 +16,7 @@ import type {
   ContentBlockStartedPayload,
   LearningSseEvent,
   LearningStreamItem,
-  NodeLessonV2,
+  NodeLesson,
   RequestCompletedPayload,
   RequestErrorPayload,
   RequestWarningPayload,
@@ -57,11 +57,11 @@ export function createInitialRuntime(now: number): ChapterRuntimeState {
  * 入参已携带 ChapterPlan，说明已进入计划阶段，故初始章节状态为 planning
  * （状态机要求 planning → learning，首个 task_started 事件据此推进到 learning）。
  */
-export function createInitialNodeLessonV2(
+export function createInitialNodeLesson(
   chapterId: string,
   plan: ChapterPlan,
   now: number,
-): NodeLessonV2 {
+): NodeLesson {
   return {
     protocolVersion: 2,
     chapterId,
@@ -124,7 +124,7 @@ function findTaskContentItem(
  * 这避免网络抖动/连续失败把“任务流不可用 / 答疑不可用 / 回答生成失败”刷成错误瀑布。
  */
 export function appendSystemNotice(
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
   notice: {
     tone: SystemNoticeItem['tone'];
     message: string;
@@ -134,7 +134,7 @@ export function appendSystemNotice(
     retryable?: boolean;
   },
   now: number,
-): NodeLessonV2 {
+): NodeLesson {
   const lastItem = lesson.streamItems[lesson.streamItems.length - 1];
   const replacingError =
     notice.tone === 'error' &&
@@ -186,10 +186,10 @@ export function appendSystemNotice(
  * 不产生重复条目也不造成 sequence 漂移。
  */
 export function applyChapterRecap(
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
   recap: ChapterRecap,
   now: number,
-): NodeLessonV2 {
+): NodeLesson {
   const itemId = chapterRecapItemId(lesson.chapterId);
   const existing = lesson.streamItems.find((item) => item.itemId === itemId);
   const sequence = existing?.sequence ?? lesson.runtime.latestSequence + 1;
@@ -223,7 +223,7 @@ export function applyChapterRecap(
   };
 }
 
-function buildPartialRecap(lesson: NodeLessonV2, takeaways: string[]): ChapterRecap {
+function buildPartialRecap(lesson: NodeLesson, takeaways: string[]): ChapterRecap {
   const aggregated = aggregateEvidenceToObjectives(lesson.evidence);
   return {
     chapterId: lesson.chapterId,
@@ -235,11 +235,11 @@ function buildPartialRecap(lesson: NodeLessonV2, takeaways: string[]): ChapterRe
 }
 
 function upsertRecapItem(
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
   recap: ChapterRecap,
   now: number,
   status: 'streaming' | 'complete',
-): NodeLessonV2 {
+): NodeLesson {
   const itemId = chapterRecapItemId(lesson.chapterId);
   const existing = lesson.streamItems.find((item) => item.itemId === itemId);
   const sequence = existing?.sequence ?? lesson.runtime.latestSequence + 1;
@@ -266,11 +266,11 @@ function upsertRecapItem(
   };
 }
 
-function applyRecapStarted(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+function applyRecapStarted(lesson: NodeLesson, event: LearningSseEvent): NodeLesson {
   return upsertRecapItem(lesson, buildPartialRecap(lesson, []), event.timestamp, 'streaming');
 }
 
-function applyRecapTakeaway(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+function applyRecapTakeaway(lesson: NodeLesson, event: LearningSseEvent): NodeLesson {
   const payload = event.payload as RecapTakeawayPayload;
   const current = lesson.recap?.keyTakeaways ?? [];
   if (payload.index > current.length) return lesson;
@@ -280,7 +280,7 @@ function applyRecapTakeaway(lesson: NodeLessonV2, event: LearningSseEvent): Node
   return upsertRecapItem(lesson, buildPartialRecap(lesson, takeaways), event.timestamp, 'streaming');
 }
 
-function applyRecapCompletedEvent(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+function applyRecapCompletedEvent(lesson: NodeLesson, event: LearningSseEvent): NodeLesson {
   const payload = event.payload as RecapCompletedPayload;
   return applyChapterRecap(lesson, payload.recap, event.timestamp);
 }
@@ -290,10 +290,10 @@ function applyRecapCompletedEvent(lesson: NodeLessonV2, event: LearningSseEvent)
  * 重复 questionId 原样返回，不产生重复条目、不漂移 sequence（设计文档 §2.1 / §8）。
  */
 export function appendUserQuestion(
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
   input: { taskId: string; questionId: string; text: string },
   now: number,
-): NodeLessonV2 {
+): NodeLesson {
   const itemId = userQuestionItemId(input.questionId);
   if (lesson.streamItems.some((item) => item.itemId === itemId)) return lesson;
   const item: UserQuestionItem = {
@@ -328,9 +328,9 @@ export function appendUserQuestion(
  * 不接受的事件（章节/版本不匹配）原样返回。
  */
 export function applyLearningSseEvent(
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
   event: LearningSseEvent,
-): NodeLessonV2 {
+): NodeLesson {
   if (event.chapterId !== lesson.chapterId) return lesson;
   if (event.planVersion !== lesson.chapterPlan.planVersion) return lesson;
 
@@ -377,7 +377,7 @@ function requireTaskId(event: LearningSseEvent): TaskEvent | null {
   return event.taskId ? (event as TaskEvent) : null;
 }
 
-function applyTaskStarted(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+function applyTaskStarted(lesson: NodeLesson, event: LearningSseEvent): NodeLesson {
   const taskEvent = requireTaskId(event);
   if (!taskEvent) return lesson;
   const payload = taskEvent.payload as TaskStartedPayload;
@@ -456,7 +456,7 @@ function applyTaskStarted(lesson: NodeLessonV2, event: LearningSseEvent): NodeLe
   };
 }
 
-function applyContentBlockStarted(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+function applyContentBlockStarted(lesson: NodeLesson, event: LearningSseEvent): NodeLesson {
   const taskEvent = requireTaskId(event);
   if (!taskEvent) return lesson;
   const payload = taskEvent.payload as ContentBlockStartedPayload;
@@ -506,7 +506,7 @@ function applyContentBlockStarted(lesson: NodeLessonV2, event: LearningSseEvent)
   };
 }
 
-function applyContentBlockDelta(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+function applyContentBlockDelta(lesson: NodeLesson, event: LearningSseEvent): NodeLesson {
   const taskEvent = requireTaskId(event);
   if (!taskEvent) return lesson;
   const payload = taskEvent.payload as ContentBlockDeltaPayload;
@@ -559,7 +559,7 @@ function applyContentBlockDelta(lesson: NodeLessonV2, event: LearningSseEvent): 
   };
 }
 
-function applyContentBlockCompleted(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+function applyContentBlockCompleted(lesson: NodeLesson, event: LearningSseEvent): NodeLesson {
   const taskEvent = requireTaskId(event);
   if (!taskEvent) return lesson;
   const payload = taskEvent.payload as ContentBlockCompletedPayload;
@@ -587,7 +587,7 @@ function applyContentBlockCompleted(lesson: NodeLessonV2, event: LearningSseEven
   };
 }
 
-function applySourcesReady(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+function applySourcesReady(lesson: NodeLesson, event: LearningSseEvent): NodeLesson {
   const taskEvent = requireTaskId(event);
   if (!taskEvent) return lesson;
   const payload = taskEvent.payload as SourcesReadyPayload;
@@ -606,7 +606,7 @@ function applySourcesReady(lesson: NodeLessonV2, event: LearningSseEvent): NodeL
   };
 }
 
-function applyTaskCompleted(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+function applyTaskCompleted(lesson: NodeLesson, event: LearningSseEvent): NodeLesson {
   const taskEvent = requireTaskId(event);
   if (!taskEvent) return lesson;
   const payload = taskEvent.payload as TaskCompletedPayload;
@@ -657,7 +657,7 @@ function applyTaskCompleted(lesson: NodeLessonV2, event: LearningSseEvent): Node
   };
 }
 
-function applyRequestWarning(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+function applyRequestWarning(lesson: NodeLesson, event: LearningSseEvent): NodeLesson {
   const payload = event.payload as RequestWarningPayload;
   return appendSystemNotice(
     {
@@ -672,7 +672,7 @@ function applyRequestWarning(lesson: NodeLessonV2, event: LearningSseEvent): Nod
   );
 }
 
-function applyRequestError(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+function applyRequestError(lesson: NodeLesson, event: LearningSseEvent): NodeLesson {
   const payload = event.payload as RequestErrorPayload;
   const { runtime } = lesson;
 
@@ -718,7 +718,7 @@ function applyRequestError(lesson: NodeLessonV2, event: LearningSseEvent): NodeL
   };
 }
 
-function applyRequestCompleted(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+function applyRequestCompleted(lesson: NodeLesson, event: LearningSseEvent): NodeLesson {
   const payload = event.payload as RequestCompletedPayload;
   const { runtime } = lesson;
   // request_completed 只表示传输完成，不等于已持久化：仅清理对应请求记录
@@ -738,7 +738,7 @@ function applyRequestCompleted(lesson: NodeLessonV2, event: LearningSseEvent): N
 }
 
 /** 只推进 sequence/活跃时间，不改变内容 */
-function touchSequence(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+function touchSequence(lesson: NodeLesson, event: LearningSseEvent): NodeLesson {
   return {
     ...lesson,
     runtime: {
@@ -776,7 +776,7 @@ function findTutorAnswerItem(
 
 /** Tutor 守卫：问题必须已入流且归属事件携带的任务（设计文档 §2.2 守卫字段） */
 function requireTutorQuestion(
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
   event: LearningSseEvent,
 ): { tutorEvent: TutorEvent; question: UserQuestionItem } | null {
   const tutorEvent = requireTutorEvent(event);
@@ -787,7 +787,7 @@ function requireTutorQuestion(
 }
 
 /** 过期请求守卫：已有进行中的 Tutor 请求且 requestId 不匹配时拒写（设计文档 §6） */
-function isStaleTutorRequest(lesson: NodeLessonV2, event: LearningSseEvent): boolean {
+function isStaleTutorRequest(lesson: NodeLesson, event: LearningSseEvent): boolean {
   const pending = lesson.runtime.pendingRequest;
   return !!pending && pending.kind === 'tutor' && pending.requestId !== event.requestId;
 }
@@ -797,7 +797,7 @@ function isStaleTutorRequest(lesson: NodeLessonV2, event: LearningSseEvent): boo
  * 守卫顺序：外壳（章节/版本）→ 任务与问题绑定 → 载荷一致性 → 进行中请求 requestId。
  * 任何一环不匹配原样返回，不污染当前章节（设计文档 §2.2 / §5）。
  */
-export function applyTutorSseEvent(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+export function applyTutorSseEvent(lesson: NodeLesson, event: LearningSseEvent): NodeLesson {
   if (event.chapterId !== lesson.chapterId) return lesson;
   if (event.planVersion !== lesson.chapterPlan.planVersion) return lesson;
 
@@ -819,7 +819,7 @@ export function applyTutorSseEvent(lesson: NodeLessonV2, event: LearningSseEvent
   }
 }
 
-function applyTutorStarted(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+function applyTutorStarted(lesson: NodeLesson, event: LearningSseEvent): NodeLesson {
   const guarded = requireTutorQuestion(lesson, event);
   if (!guarded) return lesson;
   const { tutorEvent } = guarded;
@@ -880,7 +880,7 @@ function applyTutorStarted(lesson: NodeLessonV2, event: LearningSseEvent): NodeL
   };
 }
 
-function applyTutorBlockStarted(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+function applyTutorBlockStarted(lesson: NodeLesson, event: LearningSseEvent): NodeLesson {
   const guarded = requireTutorQuestion(lesson, event);
   if (!guarded) return lesson;
   const { tutorEvent } = guarded;
@@ -908,7 +908,7 @@ function applyTutorBlockStarted(lesson: NodeLessonV2, event: LearningSseEvent): 
   };
 }
 
-function applyTutorBlockDelta(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+function applyTutorBlockDelta(lesson: NodeLesson, event: LearningSseEvent): NodeLesson {
   const guarded = requireTutorQuestion(lesson, event);
   if (!guarded) return lesson;
   const { tutorEvent } = guarded;
@@ -944,7 +944,7 @@ function applyTutorBlockDelta(lesson: NodeLessonV2, event: LearningSseEvent): No
   };
 }
 
-function applyTutorBlockCompleted(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+function applyTutorBlockCompleted(lesson: NodeLesson, event: LearningSseEvent): NodeLesson {
   const guarded = requireTutorQuestion(lesson, event);
   if (!guarded) return lesson;
   const { tutorEvent } = guarded;
@@ -974,7 +974,7 @@ function applyTutorBlockCompleted(lesson: NodeLessonV2, event: LearningSseEvent)
   };
 }
 
-function applyTutorCompleted(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+function applyTutorCompleted(lesson: NodeLesson, event: LearningSseEvent): NodeLesson {
   const guarded = requireTutorQuestion(lesson, event);
   if (!guarded) return lesson;
   const { tutorEvent, question } = guarded;
@@ -1018,7 +1018,7 @@ function applyTutorCompleted(lesson: NodeLessonV2, event: LearningSseEvent): Nod
 }
 
 /** Tutor 请求错误：回答标记失败、问题保留；错误卡片复用全局“末尾错误替换”策略 */
-function applyTutorRequestError(lesson: NodeLessonV2, event: LearningSseEvent): NodeLessonV2 {
+function applyTutorRequestError(lesson: NodeLesson, event: LearningSseEvent): NodeLesson {
   const guarded = requireTutorQuestion(lesson, event);
   if (!guarded) return lesson;
   const { tutorEvent, question } = guarded;
@@ -1045,7 +1045,7 @@ function applyTutorRequestError(lesson: NodeLessonV2, event: LearningSseEvent): 
       };
   const failedQuestion: UserQuestionItem = { ...question, status: 'failed' };
 
-  const withAnswer: NodeLessonV2 = {
+  const withAnswer: NodeLesson = {
     ...lesson,
     streamItems: upsertItem(upsertItem(lesson.streamItems, answer), failedQuestion),
     runtime: {

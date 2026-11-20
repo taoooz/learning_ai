@@ -6,7 +6,7 @@
 // 严禁发送整门课程对象、V1 聊天全量历史或模型思维过程。
 // 载荷契约与 python-agent/schemas/tutor.py InlineTutorRequest 逐字段对齐（严格模式拒收多余字段）
 
-import type { LearningContentBlock, NodeLessonV2 } from '@/types/learning-v2';
+import type { LearningContentBlock, NodeLesson } from '@/types/learning-v2';
 import { countConsecutiveConfusions, REEXPLAIN_THRESHOLD } from './confusion-signal';
 
 /** 当前任务已展示内容总字符上限（设计文档 §3.2 固定上限） */
@@ -55,7 +55,7 @@ export interface BuildInlineTutorContextArgs {
   courseTopic: string;
   chapter: InlineTutorChapterInfo;
   task: InlineTutorTaskInfo;
-  lesson: NodeLessonV2;
+  lesson: NodeLesson;
   questionId: string;
   question: string;
   idempotencyKey: string;
@@ -104,7 +104,7 @@ function contentBlockToText(block: LearningContentBlock): string {
 }
 
 /** 提取当前任务已完成展示的内容块，拼接后按上限截断（设计文档 §3.2） */
-function extractVisibleContent(lesson: NodeLessonV2, taskId: string): string {
+function extractVisibleContent(lesson: NodeLesson, taskId: string): string {
   const texts: string[] = [];
   for (const item of lesson.streamItems) {
     if (item.type !== 'task_content' || item.taskId !== taskId || item.status !== 'complete') {
@@ -124,7 +124,7 @@ function extractVisibleContent(lesson: NodeLessonV2, taskId: string): string {
  * 避免重试场景下与 question 字段自引用重复。
  */
 function extractRecentInlineQA(
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
   taskId: string,
   currentQuestionId: string,
 ): InlineTutorQA[] {

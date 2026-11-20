@@ -1,6 +1,6 @@
 // app/course/[courseId]/page.tsx
 // 课程页（V2 单一流程）：章节树 + 章节内容按需生成 + 课程对话。
-// 课程页只读取当前 StoredCourseV2；不存在旧版节点树兼容路径。
+// 课程页只读取当前 StoredCourse；不存在旧版节点树兼容路径。
 
 'use client';
 
@@ -8,12 +8,12 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useStreak } from '@/hooks/useStreak';
 import { CourseHeaderBar } from '@/components/CourseHeaderBar';
-import { ChapterTreeV2 } from '@/components/learning-v2/ChapterTreeV2';
+import { ChapterTree } from '@/components/learning-v2/ChapterTree';
 import { CourseReferencePanel } from '@/components/learning-v2/CourseReferencePanel';
 import { ChatLauncher, ChatWidget } from '@/components/ui/ChatWidget';
 import { CourseCelebrationSheet } from '@/components/CourseCelebrationSheet';
 import { loadRenderableStoredCourse } from '@/lib/learning-v2/dispatch';
-import type { StoredCourseV2 } from '@/types/learning-v2';
+import type { StoredCourse } from '@/types/learning-v2';
 
 export default function CoursePage() {
   const params = useParams();
@@ -22,8 +22,8 @@ export default function CoursePage() {
   const [showTitleInBar, setShowTitleInBar] = useState(false);
   const { streakData, studiedToday } = useStreak();
   const [showCelebration, setShowCelebration] = useState(false);
-  // undefined = 尚未判定；StoredCourseV2 = 命中的课程；null = 课程不存在
-  const [course, setCourse] = useState<StoredCourseV2 | null | undefined>(undefined);
+  // undefined = 尚未判定；StoredCourse = 命中的课程；null = 课程不存在
+  const [course, setCourse] = useState<StoredCourse | null | undefined>(undefined);
 
   const courseId = params.courseId as string;
 
@@ -143,7 +143,7 @@ export default function CoursePage() {
             </p>
           </div>
 
-          <ChapterTreeV2 courseId={courseId} treeView={course.treeView} />
+          <ChapterTree courseId={courseId} treeView={course.treeView} />
 
           <CourseReferencePanel references={course.references} glossary={course.glossary} />
         </section>

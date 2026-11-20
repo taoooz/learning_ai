@@ -9,7 +9,7 @@
 
 import type {
   ChapterPlanPatch,
-  NodeLessonV2,
+  NodeLesson,
   PlannedTask,
 } from '@/types/learning-v2';
 import {
@@ -32,7 +32,7 @@ export interface PlanPatchCheckResult {
 }
 
 /** 判定任务是否已展示（已开始生成/已完成/已跳过均算展示） */
-function isTaskShown(lesson: NodeLessonV2, taskId: string): boolean {
+function isTaskShown(lesson: NodeLesson, taskId: string): boolean {
   const { completedTaskIds, skippedTaskIds } = lesson.runtime;
   if (completedTaskIds.includes(taskId) || skippedTaskIds.includes(taskId)) return true;
   // 当前任务（含流式中/边界等待）已展示
@@ -44,7 +44,7 @@ function isTaskShown(lesson: NodeLessonV2, taskId: string): boolean {
 }
 
 /** 校验补丁是否可应用（§P4 不变量全量检查） */
-export function canApplyPatch(lesson: NodeLessonV2, patch: ChapterPlanPatch): PlanPatchCheckResult {
+export function canApplyPatch(lesson: NodeLesson, patch: ChapterPlanPatch): PlanPatchCheckResult {
   if (patch.basePlanVersion !== lesson.chapterPlan.planVersion) {
     return { ok: false, reason: 'VERSION_MISMATCH', message: '补丁基于旧版本计划，已失效' };
   }
@@ -126,10 +126,10 @@ export function canApplyPatch(lesson: NodeLessonV2, patch: ChapterPlanPatch): Pl
 
 /** 应用补丁：返回新 lesson（planVersion+1），不可应用时原样返回 */
 export function applyPlanPatch(
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
   patch: ChapterPlanPatch,
   now: number,
-): NodeLessonV2 {
+): NodeLesson {
   const check = canApplyPatch(lesson, patch);
   if (!check.ok) return lesson;
 

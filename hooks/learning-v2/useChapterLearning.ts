@@ -5,7 +5,7 @@
 // P1b 扩展：单任务预取（纯内存缓存，绑定 planId+planVersion+taskId，§6.1）；
 // 章节完成流异步化（Recap 请求 → 本地兜底 → 解锁下一章；归档只作为存储配额兜底）
 // P2 扩展：流内答疑双流编排（设计文档 §3/§4/§5）——提问提交/排队/自动派发/重试/刷新恢复
-// 状态事实来源是 NodeLessonV2.runtime（reducer 纯函数推进），hook 只负责
+// 状态事实来源是 NodeLesson.runtime（reducer 纯函数推进），hook 只负责
 // 请求编排、节流落盘与竞态守卫（代际计数 + AbortController + 幂等注册表）
 // 双流隔离（§3.1）：主任务流持有 generationRef/abortRef；Tutor 由
 // TutorStreamOrchestrator 持有独立代际与 abort。Tutor 请求不取消主任务流，
@@ -17,15 +17,15 @@ import type {
   ChapterRecap,
   CourseTeachingState,
   ChapterPlanPatch,
-  CourseBlueprintV2,
+  CourseBlueprint,
   LearningSseEvent,
-  NodeLessonV2,
+  NodeLesson,
   TutorAnswerItem,
 } from '@/types/learning-v2';
 import {
-  createInitialNodeLessonV2,
+  createInitialNodeLesson,
 } from '@/lib/learning-v2/reducers';
-import { loadNodeLessonV2 } from '@/lib/learning-v2/storage';
+import { loadNodeLesson } from '@/lib/learning-v2/storage';
 import { getLessonRepository } from '@/lib/learning-v2/lesson-repository';
 import { validateChapterPlan } from '@/lib/learning-v2/validators';
 import {
@@ -75,8 +75,8 @@ const STORE_MODE: 'local' | 'server' =
 interface UseChapterLearningArgs {
   courseId: string;
   chapterId: string;
-  blueprint: CourseBlueprintV2;
-  /** 课程级教学状态：来自 StoredCourseV2.teachingState */
+  blueprint: CourseBlueprint;
+  /** 课程级教学状态：来自 StoredCourse.teachingState */
   teachingState?: CourseTeachingState;
 }
 
@@ -93,7 +93,7 @@ export interface TutorUiState {
 }
 
 export interface UseChapterLearningResult {
-  lesson: NodeLessonV2 | null;
+  lesson: NodeLesson | null;
   phase: ChapterPhase;
   planError: string | null;
   /** 边界按钮统一入口：下一任务 / 失败重试 / 末任务完成章节 */
@@ -173,7 +173,7 @@ export function useChapterLearning({
   /** server 模式乐观锁：下一次保存必须基于最后一次读到的服务端 revision。 */
   const serverLessonRevisionRef = useRef<number | null>(null);
   const conflictServerRevisionRef = useRef<number | null>(null);
-  const serverSaveQueueRef = useRef<LatestSaveQueue<NodeLessonV2> | null>(null);
+  const serverSaveQueueRef = useRef<LatestSaveQueue<NodeLesson> | null>(null);
   const [saveConflict, setSaveConflict] = useState<string | null>(null);
 
   const [state, dispatch] = useReducer(reducer, undefined, (): ChapterLearningState => {
@@ -181,7 +181,7 @@ export function useChapterLearning({
       bootActionRef.current = null;
       return { lesson: null, phase: 'planning', planError: null };
     }
-    const lesson = loadNodeLessonV2(courseId, chapterId);
+    const lesson = loadNodeLesson(courseId, chapterId);
     // Tutor 刷新归一（§5）：只处理 Tutor，不触碰主任务状态；归一后再决策主线恢复
     const prepared = prepareTutorBoot(lesson, Date.now());
     tutorResumeRef.current = {
@@ -195,7 +195,7 @@ export function useChapterLearning({
   });
 
   // 同步镜像：初始值 = 启动容器/相位；之后只由 commit 同步更新，不被 React 渲染覆盖
-  const lessonMirrorRef = useRef<NodeLessonV2 | null>(state.lesson);
+  const lessonMirrorRef = useRef<NodeLesson | null>(state.lesson);
   const phaseMirrorRef = useRef<ChapterPhase>(state.phase);
   if (STORE_MODE === 'local') {
     serverLessonRevisionRef.current = state.lesson?.updatedAt ?? null;
@@ -203,7 +203,7 @@ export function useChapterLearning({
 
   // 落盘走仓库抽象（P5.1）：local = 配额兜底包装；server = 带 revision 的 CAS + 串行提交。
   const persist = useCallback(
-    (lesson: NodeLessonV2 | null) => {
+    (lesson: NodeLesson | null) => {
       if (!lesson) return;
       if (STORE_MODE === 'local') {
         // 返回 Promise 供 Checkpoint 等需要服务端一致性的调用方显式等待。
@@ -214,7 +214,7 @@ export function useChapterLearning({
             console.warn('[useChapterLearning] 持久化失败（静默降级）:', error);
           });
       }
-      const writeLatest = async (snapshot: NodeLessonV2) => {
+      const writeLatest = async (snapshot: NodeLesson) => {
         const repository = getLessonRepository();
         try {
           const result = await repository.saveLesson(
@@ -311,7 +311,7 @@ export function useChapterLearning({
 
   // ---- 任务流请求体构造（即时生成与预取共用） ----
   const buildTaskStreamBody = useCallback(
-    (lesson: NodeLessonV2, taskId: string, attempt: number) => {
+    (lesson: NodeLesson, taskId: string, attempt: number) => {
       const planned = lesson.chapterPlan.tasks.find((t) => t.taskId === taskId);
       const chapter = blueprint.chapters.find((c) => c.chapterId === chapterId);
       const sortedTasks = [...lesson.chapterPlan.tasks].sort((a, b) => a.order - b.order);
@@ -385,7 +385,7 @@ export function useChapterLearning({
 
   // ---- 任务流请求 ----
   const startTask = useCallback(
-    async (taskId: string, explicitAttempt?: number, lessonArg?: NodeLessonV2 | null) => {
+    async (taskId: string, explicitAttempt?: number, lessonArg?: NodeLesson | null) => {
       const lesson = lessonArg ?? lessonMirrorRef.current;
       if (!lesson) return;
       const planned = lesson.chapterPlan.tasks.find((t) => t.taskId === taskId);
@@ -478,7 +478,7 @@ export function useChapterLearning({
 
   // ---- 单任务预取：只在边界触发，事件只收进缓存、绝不 dispatch，绝不触碰 generationRef ----
   const runPrefetch = useCallback(
-    async (lesson: NodeLessonV2, taskId: string) => {
+    async (lesson: NodeLesson, taskId: string) => {
       await runTaskPrefetch({
         lesson,
         taskId,
@@ -565,7 +565,7 @@ export function useChapterLearning({
         return;
       }
 
-      const lesson = createInitialNodeLessonV2(chapterId, plan, Date.now());
+      const lesson = createInitialNodeLesson(chapterId, plan, Date.now());
       persist(lesson);
       commit({ type: 'PLAN_READY', lesson });
 

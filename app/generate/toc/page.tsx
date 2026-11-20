@@ -8,10 +8,10 @@ import { CourseHeaderBar } from '@/components/CourseHeaderBar';
 import { getUserProfile } from '@/lib/storage';
 import { ingestProfileMemory } from '@/lib/memory-client';
 import { parseSSEStream } from '../chat/utils/sseParser';
-import { buildCourseMissionFromOutline, mapTocToBlueprintV2 } from '@/lib/learning-v2/blueprint-map';
-import { validateCourseBlueprintV2 } from '@/lib/learning-v2/validators';
-import { createStoredCourseV2 } from '@/lib/learning-v2/storage';
-import { createAndSaveStoredCourseV2 } from '@/lib/learning-v2/dispatch';
+import { buildCourseMissionFromOutline, mapTocToBlueprint } from '@/lib/learning-v2/blueprint-map';
+import { validateCourseBlueprint } from '@/lib/learning-v2/validators';
+import { createStoredCourse } from '@/lib/learning-v2/storage';
+import { createAndSaveStoredCourse } from '@/lib/learning-v2/dispatch';
 import type { OutlineLearnerPositioning } from '@/types/course';
 
 interface PendingOutline {
@@ -112,7 +112,7 @@ function TocPageContent() {
 
         // TOC 结果映射为 V2 蓝图（唯一课程协议）。校验或落盘失败都视为生成失败，不再降级到 V1。
         const courseId = `course-${Date.now()}`;
-        const v2Blueprint = mapTocToBlueprintV2({
+        const blueprint = mapTocToBlueprint({
           courseId,
           courseName: finalCourseName,
           description: finalDescription || outline.learningGoal,
@@ -125,12 +125,12 @@ function TocPageContent() {
           },
         });
 
-        const validation = validateCourseBlueprintV2(v2Blueprint);
+        const validation = validateCourseBlueprint(blueprint);
         if (!validation.passed) {
           throw new Error(`课程结构校验未通过：${validation.issues.join('；')}`);
         }
 
-        const saved = await createAndSaveStoredCourseV2(createStoredCourseV2(courseId, v2Blueprint));
+        const saved = await createAndSaveStoredCourse(createStoredCourse(courseId, blueprint));
         if (!saved) {
           throw new Error('课程保存失败，请检查存储空间后重试');
         }

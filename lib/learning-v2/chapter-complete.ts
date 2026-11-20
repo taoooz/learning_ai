@@ -3,8 +3,8 @@
 // 依据 docs/architecture/v2_课程生成逻辑.md §6.1.1（treeView 只是缓存）与 §9（归档压缩）
 // P1a 运行时只在 localStorage：完成/解锁全部在前端闭环，chapters/complete 端点推迟 P5
 
-import type { CourseTreeViewV2, NodeLessonV2, StoredCourseV2 } from '@/types/learning-v2';
-import { deriveCourseTreeViewV2, getStoredCourseV2, loadNodeLessonV2, saveStoredCourseV2 } from './storage';
+import type { CourseTreeView, NodeLesson, StoredCourse } from '@/types/learning-v2';
+import { deriveCourseTreeView, getStoredCourse, loadNodeLesson, saveStoredCourse } from './storage';
 import { getLessonRepository, getLessonStoreMode } from './lesson-repository';
 import { mergeCourseAssets } from './reference';
 import { updateTeachingStateAfterChapter } from './teaching-state';
@@ -13,7 +13,7 @@ import { updateTeachingStateAfterChapter } from './teaching-state';
  * 章节是否可完成：所有章节状态停在边界，且计划任务全部完成/跳过。
  * 状态机转换（awaiting_user→completing→completed）由 hook 侧 transitionChapter 强制。
  */
-export function canCompleteChapter(lesson: NodeLessonV2): boolean {
+export function canCompleteChapter(lesson: NodeLesson): boolean {
   if (lesson.runtime.status !== 'awaiting_user') return false;
   const { completedTaskIds, skippedTaskIds } = lesson.runtime;
   return lesson.chapterPlan.tasks.every(
@@ -25,7 +25,7 @@ export function canCompleteChapter(lesson: NodeLessonV2): boolean {
  * 章节完成后刷新课程主对象：以各章 lesson 真实状态重派生 treeView（解锁下一章）。
  * 走读时自愈同一条派生路径，主对象写失败也不影响 lesson 侧事实——课程页会再次自愈。
  */
-export async function completeChapterV2(courseId: string, chapterId: string): Promise<boolean> {
+export async function completeChapter(courseId: string, chapterId: string): Promise<boolean> {
   if (getLessonStoreMode() === 'server') {
     const repository = getLessonRepository();
     const [course, lesson] = await Promise.all([
@@ -37,7 +37,7 @@ export async function completeChapterV2(courseId: string, chapterId: string): Pr
     const completedChapterIds = course.treeView.chapters
       .filter((chapter) => chapter.status === 'completed' || chapter.chapterId === chapterId)
       .map((chapter) => chapter.chapterId);
-    const treeView = deriveCourseTreeViewV2(courseId, course.blueprint, completedChapterIds);
+    const treeView = deriveCourseTreeView(courseId, course.blueprint, completedChapterIds);
     const chapter = course.blueprint.chapters.find((item) => item.chapterId === chapterId);
     const withAssets = lesson
       ? mergeCourseAssets(course, lesson, chapter?.title ?? chapterId, Date.now())
@@ -48,15 +48,15 @@ export async function completeChapterV2(courseId: string, chapterId: string): Pr
     return repository.saveCourse({ ...withAssets, treeView, teachingState });
   }
 
-  const course = getStoredCourseV2(courseId);
+  const course = getStoredCourse(courseId);
   if (!course) return false;
-  const lesson = loadNodeLessonV2(courseId, chapterId);
+  const lesson = loadNodeLesson(courseId, chapterId);
   if (!lesson || lesson.runtime.status !== 'completed') return false;
-  const treeView = refreshCourseTreeViewV2(course);
+  const treeView = refreshCourseTreeView(course);
   const chapter = course.blueprint.chapters.find((item) => item.chapterId === chapterId);
   const withAssets = mergeCourseAssets(course, lesson, chapter?.title ?? chapterId, Date.now());
   const teachingState = updateTeachingStateAfterChapter(course, lesson, Date.now());
-  return saveStoredCourseV2({ ...withAssets, treeView, teachingState });
+  return saveStoredCourse({ ...withAssets, treeView, teachingState });
 }
 
 /**
@@ -64,19 +64,19 @@ export async function completeChapterV2(courseId: string, chapterId: string): Pr
  * 主对象上的 treeView 只当缓存——若出现「写 lesson 成功、写主对象失败」，
  * 仅靠主对象会永久锁死下一章；以 lesson 实际状态为准即可恢复。
  */
-export function refreshCourseTreeViewV2(course: StoredCourseV2): CourseTreeViewV2 {
+export function refreshCourseTreeView(course: StoredCourse): CourseTreeView {
   const completedChapterIds: string[] = [];
   for (const chapter of course.blueprint.chapters) {
-    const lesson = loadNodeLessonV2(course.courseId, chapter.chapterId);
+    const lesson = loadNodeLesson(course.courseId, chapter.chapterId);
     if (lesson && lesson.runtime.status === 'completed') {
       completedChapterIds.push(chapter.chapterId);
     }
   }
-  return deriveCourseTreeViewV2(course.courseId, course.blueprint, completedChapterIds);
+  return deriveCourseTreeView(course.courseId, course.blueprint, completedChapterIds);
 }
 
 /** 比较两棵章节树是否一致（章节数 + 每章 id 与状态） */
-export function isSameCourseTreeView(a: CourseTreeViewV2, b: CourseTreeViewV2): boolean {
+export function isSameCourseTreeView(a: CourseTreeView, b: CourseTreeView): boolean {
   if (a.chapters.length !== b.chapters.length) return false;
   return a.chapters.every(
     (chapter, i) =>

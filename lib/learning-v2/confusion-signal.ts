@@ -4,7 +4,7 @@
 // 连续 ≥2 次困惑 → 前端在 Tutor 请求中携带 reExplain=true，
 // 后端 prompt 强制 switch_explanation + 换类比/换表征重讲。
 
-import type { NodeLessonV2 } from '@/types/learning-v2';
+import type { NodeLesson } from '@/types/learning-v2';
 
 /** 困惑关键词：匹配则视为一次困惑信号 */
 const CONFUSION_PATTERNS = [
@@ -35,7 +35,7 @@ export function isConfusionSignal(text: string): boolean {
  * 统计当前任务末尾连续困惑提问数。
  * 从最新问题向前扫描：遇到困惑信号 +1，遇到非困惑信号归零，遇到无回答的 pending 问题跳过。
  */
-export function countConsecutiveConfusions(lesson: NodeLessonV2, taskId: string): number {
+export function countConsecutiveConfusions(lesson: NodeLesson, taskId: string): number {
   const questions = lesson.streamItems
     .filter(
       (item): item is Extract<typeof item, { type: 'user_question' }> =>

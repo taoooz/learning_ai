@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 
 import { POST } from '../app/api/learning/v2/tutor/stream/route';
 import { tutorPlaceholder } from '../components/learning-v2/InlineTutorInput';
-import { tutorQueuedHint } from '../components/learning-v2/LearningStreamV2';
+import { tutorQueuedHint } from '../components/learning-v2/LearningStream';
 import { createChapterLearningHarness } from './helpers/tutor-harness';
 import {
   canRetryTutorQuestion,
@@ -21,7 +21,7 @@ import {
   buildTutorRequestIdempotencyKey,
 } from '../lib/learning-v2/idempotency';
 import {
-  createInitialNodeLessonV2,
+  createInitialNodeLesson,
   applyLearningSseEvent,
   applyTutorSseEvent,
   appendUserQuestion,
@@ -33,7 +33,7 @@ import type { LearningSseEvent } from '../types/learning-v2/events';
 import type {
   ChapterPlan,
   GenerationMeta,
-  NodeLessonV2,
+  NodeLesson,
   TutorAnswerItem,
   UserQuestionItem,
 } from '../types/learning-v2';
@@ -79,9 +79,9 @@ function makePlan(): ChapterPlan {
   };
 }
 
-const baseLesson: NodeLessonV2 = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
+const baseLesson: NodeLesson = createInitialNodeLesson('ch-1', makePlan(), 1000);
 
-const baseWithQuestion: NodeLessonV2 = appendUserQuestion(baseLesson, QUESTION_INPUT, 1001);
+const baseWithQuestion: NodeLesson = appendUserQuestion(baseLesson, QUESTION_INPUT, 1001);
 
 function makeTutorEvent(overrides: Partial<LearningSseEvent>): LearningSseEvent {
   return {
@@ -156,11 +156,11 @@ const tutorErrorEvent = makeTutorEvent({
   payload: { code: 'E_LLM', message: '回答生成失败，请稍后重试', retryable: true },
 });
 
-function findQuestion(lesson: NodeLessonV2): UserQuestionItem | undefined {
+function findQuestion(lesson: NodeLesson): UserQuestionItem | undefined {
   return lesson.streamItems.find((item) => item.type === 'user_question');
 }
 
-function findAnswer(lesson: NodeLessonV2): TutorAnswerItem | undefined {
+function findAnswer(lesson: NodeLesson): TutorAnswerItem | undefined {
   return lesson.streamItems.find((item) => item.type === 'tutor_answer');
 }
 
@@ -559,7 +559,7 @@ test('V2 Tutor 代理缺少必填字段返回 422 且不触达上游', async () 
 
 test('提交决策：流中入队、边界且空闲立即启动、忙碌时入队', () => {
   // 基于无问题条目的容器构造边界态，避免既有夹具问题干扰断言
-  const atBoundary: NodeLessonV2 = { ...baseLesson, runtime: { ...baseLesson.runtime, status: 'awaiting_user' as const, currentTaskId: 'task-1', currentTaskStatus: 'awaiting_user' as const } };
+  const atBoundary: NodeLesson = { ...baseLesson, runtime: { ...baseLesson.runtime, status: 'awaiting_user' as const, currentTaskId: 'task-1', currentTaskStatus: 'awaiting_user' as const } };
   const start = decideTutorSubmission({ lesson: atBoundary, phase: 'boundary', isTutorBusy: false, text: '  为什么 304 没有正文？  ', questionId: 'q-s1', now: 5000 });
   assert.ok(start);
   assert.equal(start.action, 'start');
@@ -579,7 +579,7 @@ test('提交决策：流中入队、边界且空闲立即启动、忙碌时入�
 test('提交决策：相位白名单自防御，非学习相位一律拒收', () => {
   // 容器有当前任务、文本非空——若编排层不做相位守卫，这些提交都会被受理。
   // UI 门控之外的自防御：收尾/完成/失败相位不得受理提问（最终审查修复 3）
-  const withTask: NodeLessonV2 = { ...baseLesson, runtime: { ...baseLesson.runtime, currentTaskId: 'task-1' } };
+  const withTask: NodeLesson = { ...baseLesson, runtime: { ...baseLesson.runtime, currentTaskId: 'task-1' } };
   for (const phase of ['planning', 'completing', 'completed', 'plan_failed'] as const) {
     assert.equal(
       decideTutorSubmission({ lesson: withTask, phase, isTutorBusy: false, text: '为什么 304 没有正文？', questionId: `q-p-${phase}`, now: 6000 }),

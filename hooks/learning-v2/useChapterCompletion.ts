@@ -5,12 +5,12 @@
 // 不处理任务流与检查点；完成状态机仍由 chapter-learning-state 归约。
 
 import { useCallback } from 'react';
-import type { ChapterRecap, CourseBlueprintV2, NodeLessonV2 } from '@/types/learning-v2';
+import type { ChapterRecap, CourseBlueprint, NodeLesson } from '@/types/learning-v2';
 import { applyChapterRecap } from '@/lib/learning-v2/reducers';
 import { transitionChapter } from '@/lib/learning-v2/state-machine';
 import { buildChapterCompleteIdempotencyKey, IdempotencyRegistry } from '@/lib/learning-v2/idempotency';
 import { parseLearningSseStream } from '@/lib/learning-v2/sse-client';
-import { completeChapterV2 } from '@/lib/learning-v2/chapter-complete';
+import { completeChapter } from '@/lib/learning-v2/chapter-complete';
 import { buildLocalFallbackRecap } from '@/lib/learning-v2/recap';
 import { recordEngagementEvent } from '@/lib/learning-v2/engagement';
 import type { ChapterLearningAction } from '@/lib/learning-v2/chapter-learning-state';
@@ -18,17 +18,17 @@ import type { ChapterLearningAction } from '@/lib/learning-v2/chapter-learning-s
 interface UseChapterCompletionParams {
   courseId: string;
   chapterId: string;
-  blueprint: CourseBlueprintV2;
-  lessonMirrorRef: React.MutableRefObject<NodeLessonV2 | null>;
+  blueprint: CourseBlueprint;
+  lessonMirrorRef: React.MutableRefObject<NodeLesson | null>;
   generationRef: React.MutableRefObject<number>;
   recapRegistryRef: React.MutableRefObject<IdempotencyRegistry<ChapterRecap>>;
   commit: (action: ChapterLearningAction) => void;
-  persist: (lesson: NodeLessonV2, immediate?: boolean) => Promise<void> | void;
+  persist: (lesson: NodeLesson, immediate?: boolean) => Promise<void> | void;
 }
 
 async function requestChapterRecap(
   params: UseChapterCompletionParams,
-  workingLesson: NodeLessonV2,
+  workingLesson: NodeLesson,
 ): Promise<ChapterRecap> {
   const { courseId, chapterId, blueprint, recapRegistryRef, commit } = params;
   const idempotencyKey = buildChapterCompleteIdempotencyKey(
@@ -110,7 +110,7 @@ export function useChapterCompletion(params: UseChapterCompletionParams) {
     const now = Date.now();
 
     // 进入 completing；允许从 completing 恢复重入（刷新恢复分支②-bis）。
-    let workingLesson: NodeLessonV2;
+    let workingLesson: NodeLesson;
     if (lesson.runtime.status === 'completing') {
       workingLesson = lesson;
     } else {
@@ -163,7 +163,7 @@ export function useChapterCompletion(params: UseChapterCompletionParams) {
       return;
     }
 
-    const completedLesson: NodeLessonV2 = {
+    const completedLesson: NodeLesson = {
       ...recappedLesson,
       runtime: { ...toCompleted.runtime, pendingRequest: undefined },
       updatedAt: recapAt,
@@ -183,7 +183,7 @@ export function useChapterCompletion(params: UseChapterCompletionParams) {
       // 章节经验入库失败不阻塞完成与解锁
     });
 
-    void completeChapterV2(courseId, chapterId);
+    void completeChapter(courseId, chapterId);
     recordEngagementEvent(courseId, { eventType: 'recap_completed', chapterId });
     recordEngagementEvent(courseId, { eventType: 'chapter_completed', chapterId });
     commit({ type: 'COMPLETED', lesson: completedLesson });

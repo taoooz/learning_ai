@@ -1,23 +1,23 @@
 'use client';
 
 // contexts/CourseContext.tsx
-// P0 下线 V1 学习流后的课程上下文：只维护课程清单（V2 容器派生）+ 大纲对话 + 系统课程启动。
-// V1 的节点生成、节点进度、模板课程 bundle 相关能力已随 V1 流程一并移除。
+// 课程上下文：只维护课程清单（当前课程容器派生）+ 大纲对话 + 系统课程启动。
+// 旧版节点生成、节点进度和模板课程 bundle 能力均已移除。
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import type { SystemCourseRecommendation } from '@/lib/data/system-courses';
-import { createSystemCourseV2 } from '@/lib/data/system-courses';
-import { createAndSaveStoredCourseV2 } from '@/lib/learning-v2/dispatch';
-import { deleteCourseV2, listCoursesV2, type CourseListEntry } from '@/lib/learning-v2/course-list';
+import { createSystemCourse } from '@/lib/data/system-courses';
+import { createAndSaveStoredCourse } from '@/lib/learning-v2/dispatch';
+import { deleteCourse, listCourses, type CourseListEntry } from '@/lib/learning-v2/course-list';
 import { getSystemCourseRecommendations, getUserProfile } from '@/lib/storage';
 import { ingestProfileMemory } from '@/lib/memory-client';
 
 interface CourseContextType {
-  /** 首页课程清单（V2 容器派生，按创建时间升序） */
+  /** 首页课程清单（当前课程容器派生，按创建时间升序） */
   courses: CourseListEntry[];
   isHydrated: boolean;
   systemCourseRecommendations: SystemCourseRecommendation[];
-  /** 启动系统推荐课程：映射为 V2 蓝图并落盘，失败时抛错由页面提示 */
+  /** 启动系统推荐课程：映射为当前蓝图并落盘，失败时抛错由页面提示 */
   startSystemCourse: (courseId: string) => Promise<void>;
   deleteCourse: (courseId: string) => Promise<void>;
   refreshCourses: () => void;
@@ -33,7 +33,7 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
   const [systemCourseRecommendations] = useState<SystemCourseRecommendation[]>(() => getSystemCourseRecommendations());
 
   const refreshCourses = useCallback(() => {
-    setCourses(listCoursesV2());
+    setCourses(listCourses());
   }, []);
 
   useEffect(() => {
@@ -44,11 +44,11 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
 
   const startSystemCourse = useCallback(async (courseId: string) => {
     await ingestProfileMemory(getUserProfile());
-    const course = createSystemCourseV2(courseId);
+    const course = createSystemCourse(courseId);
     if (!course) {
       throw new Error('系统课程不存在');
     }
-    const saved = await createAndSaveStoredCourseV2(course);
+    const saved = await createAndSaveStoredCourse(course);
     if (!saved) {
       throw new Error('系统课程保存失败，请稍后再试');
     }
@@ -56,7 +56,7 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
   }, [refreshCourses]);
 
   const deleteCourse = useCallback(async (courseId: string) => {
-    await deleteCourseV2(courseId);
+    await deleteCourse(courseId);
     refreshCourses();
   }, [refreshCourses]);
 

@@ -5,7 +5,7 @@
 import type {
   ChapterDefinition,
   ChapterPlan,
-  CourseBlueprintV2,
+  CourseBlueprint,
   PlanValidationIssue,
   PlanValidationResult,
 } from '@/types/learning-v2';
@@ -26,7 +26,7 @@ const VAGUE_OUTCOME_PATTERNS = [/^深入(理解|了解)/, /^充分(理解|了解
  * 核心目标至少被一章覆盖、章节依赖无环、排除项不为必学、
  * observableOutcome 是行为描述。
  */
-export function validateCourseBlueprintV2(blueprint: CourseBlueprintV2): BlueprintValidationResult {
+export function validateCourseBlueprint(blueprint: CourseBlueprint): BlueprintValidationResult {
   const issues: string[] = [];
 
   if (!blueprint.topic.trim()) {

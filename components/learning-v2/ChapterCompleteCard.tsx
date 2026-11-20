@@ -5,7 +5,7 @@
 // 纯展示组件，路由跳转由页面侧注入回调
 
 import type { ChapterRecap } from '@/types/learning-v2';
-import { ChapterRecapView } from './LearningStreamV2';
+import { ChapterRecapView } from './LearningStream';
 
 interface ChapterCompleteCardProps {
   chapterTitle: string;

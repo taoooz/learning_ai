@@ -1,16 +1,16 @@
 'use client';
 
-// components/learning-v2/TaskBlocksV2.tsx
+// components/learning-v2/TaskBlocks.tsx
 // V2 任务内容块渲染：5 种块类型（markdown / key_point / example / comparison / diagram）
 // 视觉设计原则（对齐 app 现有 Duolingo 风格）：
 // - 统一 rounded-2xl 圆角（与全局 border-radius 一致）
 // - 每种块用左侧色条 + 图标 + 标签chip 标识类型（视觉差异化，不靠底色堆砌）
-// - 块间留出 mb-5 呼吸间距（在 LearningStreamV2 中统一控制）
+// - 块间留出 mb-5 呼吸间距（在 LearningStream 中统一控制）
 // - 底色克制：accent/4 只用于类型识别，不大面积铺色
 
 import { useEffect, useRef, useState } from 'react';
 import type { LearningContentBlock, SourceRef } from '@/types/learning-v2';
-import { InteractiveBlockV2 } from './InteractiveBlockV2';
+import { InteractiveBlockView } from './InteractiveBlockView';
 import { getDisplaySourceRefs } from '@/lib/learning-v2/source-refs';
 
 /**
@@ -143,7 +143,7 @@ export function TaskBlockView({ block, courseId, sourceRefs, streaming = false }
     case 'diagram':
       return <DiagramBlockView source={block.source} />;
     case 'interactive':
-      return <InteractiveBlockV2 block={block} courseId={courseId} />;
+      return <InteractiveBlockView block={block} courseId={courseId} />;
     default:
       return null;
   }

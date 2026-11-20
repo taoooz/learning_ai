@@ -4,11 +4,11 @@
 
 ### Memory V4 上线、硬化与 V3 下线（2026-11-19 至 2026-11-20）
 - 新增 account-scoped Memory V4 Store、画像自动导入、Evidence 账本与 Concept/Topic 投影；课程生成/聊天改由服务端读取统一 Memory，旧 V3 直接写 mastery 路径下线
-- Checkpoint 改为服务端 sealed definition：教学范围由蓝图/章节容器反查，answer 独立为不可信数据，attempt 在账户锁内顺序写入；新增 tombstone、revision、场景化 D0-D3 Context Resolver、Memory 管理 UI、复习队列、来源可核验的 Candidate、服务端 Chat/Chapter Episode、Learning Summary 与投影 dirty 自愈；P1/P2 新增 Playwright server 模式确定性 E2E，lesson 保存改为单写入器 + 最新快照合并，并修复 StrictMode boot、刷新相位镜像、Checkpoint 完成事实和后台 Candidate 调度；同时彻底删除 Next/Python refine 入口、V3 Store/repository/aggregator/client、验证脚本与纯 V3 测试，聊天困惑与偏好信号继续由当前 Chat Summary 轻量规则承接，并新增双端 404 退役回归；同步收紧画像 prompt 类型边界、移除旧存储清理与无账户 key 自动迁移，并删除过期根目录验收材料与失效生成诊断脚本；P1 删除 `StoredDataV2.courses`、旧课程类型、V1 回退分发和过渡 feature flag，存储只保留 `v2Courses + userProfile + recommendations`
+- Checkpoint 改为服务端 sealed definition：教学范围由蓝图/章节容器反查，answer 独立为不可信数据，attempt 在账户锁内顺序写入；新增 tombstone、revision、场景化 D0-D3 Context Resolver、Memory 管理 UI、复习队列、来源可核验的 Candidate、服务端 Chat/Chapter Episode、Learning Summary 与投影 dirty 自愈；P1/P2 新增 Playwright server 模式确定性 E2E，lesson 保存改为单写入器 + 最新快照合并，并修复 StrictMode boot、刷新相位镜像、Checkpoint 完成事实和后台 Candidate 调度；同时彻底删除 Next/Python refine 入口、V3 Store/repository/aggregator/client、验证脚本与纯 V3 测试，聊天困惑与偏好信号继续由当前 Chat Summary 轻量规则承接，并新增双端 404 退役回归；同步收紧画像 prompt 类型边界、移除旧存储清理与无账户 key 自动迁移，并删除过期根目录验收材料与失效生成诊断脚本；P1 删除 `StoredData.courses`、旧课程类型、V1 回退分发和过渡 feature flag，存储只保留 `courses + userProfile + recommendations`；P2 统一内部类型、函数和组件命名，移除 `*V2`/`v2*` 后缀，保留 `protocolVersion: 2`、`/learning/v2` 路径与原 localStorage key
 
 ### 交互内容块 Phase 1（2026-10-08）
 - 新增 `interactive` 内容块类型与首批两个消费型组件：`parameter-demo`（改参数看结果，命名变量白名单公式求值）、`step-walkthrough`（分步演示）
-- Python 侧：流式解析器支持 interactive 块，schema 校验 + 公式试算，任一失败整块降级为等价 markdown（不阻塞生成流）；前端新增 InteractiveBlockV2 渲染器与 `lib/interactive/formula` 求值器（未知组件降级渲染）
+- Python 侧：流式解析器支持 interactive 块，schema 校验 + 公式试算，任一失败整块降级为等价 markdown（不阻塞生成流）；前端新增 InteractiveBlockView 渲染器与 `lib/interactive/formula` 求值器（未知组件降级渲染）
 - Prompt：流程/机制类任务优先用分步演示模板，含数值参数关系用参数演示模板；交互结果不计入掌握度证据（Phase 2 再打通）
 - 新增 Python 5 个 + Node 6 个单测；架构文档补充 InteractiveBlock 数据契约
 

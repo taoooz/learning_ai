@@ -1,14 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type {
-  NodeLessonV2,
+  NodeLesson,
   SystemNoticeItem,
   TaskContentItem,
   TutorAnswerItem,
 } from '../types/learning-v2';
 import { isResolvedErrorNotice } from '../lib/learning-v2/stream-item-presentation';
 
-function makeLesson(items: NodeLessonV2['streamItems']): NodeLessonV2 {
+function makeLesson(items: NodeLesson['streamItems']): NodeLesson {
   return {
     protocolVersion: 2,
     chapterId: 'ch-1',

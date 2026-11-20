@@ -10,12 +10,12 @@ import {
   transitionTask,
 } from '../lib/learning-v2/state-machine';
 import {
-  validateCourseBlueprintV2,
+  validateCourseBlueprint,
   validateChapterPlan,
   PLAN_VALIDATION_CODES,
 } from '../lib/learning-v2/validators';
 import {
-  createInitialNodeLessonV2,
+  createInitialNodeLesson,
   createInitialRuntime,
   applyLearningSseEvent,
   applyChapterRecap,
@@ -30,29 +30,29 @@ import {
   IdempotencyRegistry,
 } from '../lib/learning-v2/idempotency';
 import {
-  deriveCourseTreeViewV2,
-  createStoredCourseV2,
-  findStoredCourseV2,
-  upsertStoredCourseV2List,
-  saveNodeLessonV2,
-  loadNodeLessonV2,
-  deleteNodeLessonV2,
+  deriveCourseTreeView,
+  createStoredCourse,
+  findStoredCourse,
+  upsertStoredCourseList,
+  saveNodeLesson,
+  loadNodeLesson,
+  deleteNodeLesson,
 } from '../lib/learning-v2/storage';
 import { resolveStoredCourseFromData } from '../lib/learning-v2/dispatch';
-import { mapTocToBlueprintV2 } from '../lib/learning-v2/blueprint-map';
-import { getV2ChapterStorageKey } from '../lib/storage';
+import { mapTocToBlueprint } from '../lib/learning-v2/blueprint-map';
+import { getChapterStorageKey } from '../lib/storage';
 
-import type { StoredDataV2 } from '../types/course';
+import type { StoredData } from '../types/course';
 import type {
   ChapterDefinition,
   ChapterPlan,
   ChapterRecap,
-  CourseBlueprintV2,
+  CourseBlueprint,
   GenerationMeta,
   LearningSseEvent,
-  NodeLessonV2,
+  NodeLesson,
   PlannedTask,
-  StoredCourseV2,
+  StoredCourse,
 } from '../types/learning-v2';
 
 // ---- 测试基座 ----
@@ -102,7 +102,7 @@ function installBrowserGlobals(): () => void {
 
 const META: GenerationMeta = { promptVersion: 'p1', modelVersion: 'm1', generatedAt: 1000 };
 
-function makeBlueprint(overrides: Partial<CourseBlueprintV2> = {}): CourseBlueprintV2 {
+function makeBlueprint(overrides: Partial<CourseBlueprint> = {}): CourseBlueprint {
   return {
     blueprintId: 'bp-1',
     protocolVersion: 2,
@@ -275,7 +275,7 @@ test('task transition table exposes all eight current task statuses', () => {
 // ---- 蓝图校验 ----
 
 test('valid blueprint passes validation', () => {
-  const result = validateCourseBlueprintV2(makeBlueprint());
+  const result = validateCourseBlueprint(makeBlueprint());
   assert.equal(result.passed, true);
   assert.deepEqual(result.issues, []);
 });
@@ -293,7 +293,7 @@ test('blueprint without core objective fails', () => {
       },
     ],
   });
-  const result = validateCourseBlueprintV2(blueprint);
+  const result = validateCourseBlueprint(blueprint);
   assert.equal(result.passed, false);
   assert.ok(result.issues.some((issue) => issue.includes('core')));
 });
@@ -319,7 +319,7 @@ test('blueprint detects duplicate objective and chapter ids', () => {
       },
     ],
   });
-  const result = validateCourseBlueprintV2(blueprint);
+  const result = validateCourseBlueprint(blueprint);
   assert.ok(result.issues.some((issue) => issue.includes('课程目标 ID 重复')));
 });
 
@@ -328,7 +328,7 @@ test('blueprint detects prerequisite cycle', () => {
     { chapterId: 'a', index: 0, title: 'A', objectiveIds: ['obj-1'], prerequisites: ['b'], teachingGoal: '', completionCriteria: [] },
     { chapterId: 'b', index: 1, title: 'B', objectiveIds: ['obj-1'], prerequisites: ['a'], teachingGoal: '', completionCriteria: [] },
   ];
-  const result = validateCourseBlueprintV2(makeBlueprint({ chapters }));
+  const result = validateCourseBlueprint(makeBlueprint({ chapters }));
   assert.ok(result.issues.some((issue) => issue.includes('循环')));
 });
 
@@ -345,7 +345,7 @@ test('blueprint flags vague observableOutcome', () => {
       },
     ],
   });
-  const result = validateCourseBlueprintV2(blueprint);
+  const result = validateCourseBlueprint(blueprint);
   assert.ok(result.issues.some((issue) => issue.includes('空泛描述')));
 });
 
@@ -405,26 +405,26 @@ test('chapter plan checks objective coverage against chapter when provided', () 
 
 // ---- reducer：初始化与守卫 ----
 
-test('createInitialNodeLessonV2 creates a serializable empty shell', () => {
-  const lesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
+test('createInitialNodeLesson creates a serializable empty shell', () => {
+  const lesson = createInitialNodeLesson('ch-1', makePlan(), 1000);
   assert.equal(lesson.protocolVersion, 2);
   assert.equal(lesson.chapterId, 'ch-1');
   assert.equal(lesson.runtime.status, 'planning');
   assert.deepEqual(lesson.streamItems, []);
   assert.deepEqual(lesson.evidence, []);
   // 可序列化/反序列化无损
-  const restored = JSON.parse(JSON.stringify(lesson)) as NodeLessonV2;
+  const restored = JSON.parse(JSON.stringify(lesson)) as NodeLesson;
   assert.deepEqual(restored, lesson);
 });
 
 test('applyLearningSseEvent rejects chapterId mismatch', () => {
-  const lesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
+  const lesson = createInitialNodeLesson('ch-1', makePlan(), 1000);
   const event = makeEvent({ chapterId: 'ch-other' });
   assert.equal(applyLearningSseEvent(lesson, event), lesson);
 });
 
 test('applyLearningSseEvent rejects planVersion mismatch', () => {
-  const lesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
+  const lesson = createInitialNodeLesson('ch-1', makePlan(), 1000);
   const event = makeEvent({ planVersion: 99 });
   assert.equal(applyLearningSseEvent(lesson, event), lesson);
 });
@@ -432,7 +432,7 @@ test('applyLearningSseEvent rejects planVersion mismatch', () => {
 // ---- reducer：任务流 ----
 
 test('task_started creates a streaming task_content and transitions chapter to learning', () => {
-  const lesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
+  const lesson = createInitialNodeLesson('ch-1', makePlan(), 1000);
   const next = applyLearningSseEvent(
     lesson,
     makeEvent({ type: 'task_started', taskId: 'task-1', payload: { taskId: 'task-1', title: '认识 useState' } }),
@@ -447,7 +447,7 @@ test('task_started creates a streaming task_content and transitions chapter to l
 
 test('re-applying the same task_started is idempotent (no duplicate items)', () => {
   const event = makeEvent({ type: 'task_started', taskId: 'task-1', payload: { taskId: 'task-1', title: 'T' } });
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), 1000);
   lesson = applyLearningSseEvent(lesson, event);
   lesson = applyLearningSseEvent(lesson, event);
   assert.equal(lesson.streamItems.length, 1);
@@ -455,7 +455,7 @@ test('re-applying the same task_started is idempotent (no duplicate items)', () 
 });
 
 test('markdown content blocks accumulate deltas by blockId', () => {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), 1000);
   lesson = applyLearningSseEvent(lesson, makeEvent({ type: 'task_started', taskId: 'task-1', sequence: 1, payload: { taskId: 'task-1', title: 'T' } }));
   lesson = applyLearningSseEvent(
     lesson,
@@ -478,7 +478,7 @@ test('markdown content blocks accumulate deltas by blockId', () => {
 });
 
 test('task_completed finalizes item, records completedTaskIds, transitions to awaiting_user', () => {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), 1000);
   lesson = applyLearningSseEvent(lesson, makeEvent({ type: 'task_started', taskId: 'task-1', sequence: 1, payload: { taskId: 'task-1', title: 'T' } }));
   lesson = applyLearningSseEvent(
     lesson,
@@ -506,7 +506,7 @@ test('task_completed finalizes item, records completedTaskIds, transitions to aw
 });
 
 test('task_started after a completed task records a task_transition item', () => {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), 1000);
   lesson = applyLearningSseEvent(lesson, makeEvent({ type: 'task_started', taskId: 'task-1', sequence: 1, payload: { taskId: 'task-1', title: 'A' } }));
   lesson = applyLearningSseEvent(
     lesson,
@@ -530,7 +530,7 @@ test('task_started after a completed task records a task_transition item', () =>
 // ---- reducer：通用事件 ----
 
 test('request_error marks streaming task failed and appends an error notice', () => {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), 1000);
   lesson = applyLearningSseEvent(lesson, makeEvent({ type: 'task_started', taskId: 'task-1', sequence: 1, payload: { taskId: 'task-1', title: 'T' } }));
   lesson = applyLearningSseEvent(
     lesson,
@@ -552,7 +552,7 @@ test('request_error marks streaming task failed and appends an error notice', ()
 
 test('retrying a failed task resets half-written blocks instead of appending (§10.2, 缺陷 A)', () => {
   // 首次流式：部分内容写入固定 blockId "b1" 后流中断失败
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), 1000);
   lesson = applyLearningSseEvent(lesson, makeEvent({ type: 'task_started', taskId: 'task-1', sequence: 1, requestId: 'req-1', payload: { taskId: 'task-1', title: 'T' } }));
   lesson = applyLearningSseEvent(lesson, makeEvent({ type: 'content_block_started', taskId: 'task-1', sequence: 2, payload: { blockId: 'b1', blockType: 'markdown' } }));
   lesson = applyLearningSseEvent(lesson, makeEvent({ type: 'content_block_delta', taskId: 'task-1', sequence: 3, payload: { blockId: 'b1', delta: '半截内容' } }));
@@ -601,7 +601,7 @@ test('retrying a failed task resets half-written blocks instead of appending (§
 });
 
 test('consecutive tail errors replace the prior error card instead of stacking', () => {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), 1000);
   lesson = applyLearningSseEvent(
     lesson,
     makeEvent({
@@ -635,7 +635,7 @@ test('consecutive tail errors replace the prior error card instead of stacking',
 });
 
 test('request_warning appends a warning notice and advances sequence monotonically', () => {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), 1000);
   lesson = applyLearningSseEvent(lesson, makeEvent({ type: 'request_warning', sequence: 5, payload: { code: 'W1', message: '注意' } }));
   const afterFirst = lesson.runtime.latestSequence;
   assert.ok(afterFirst >= 5, 'latestSequence 应推进到不小于事件 sequence');
@@ -646,7 +646,7 @@ test('request_warning appends a warning notice and advances sequence monotonical
 });
 
 test('request_completed clears matching pendingRequest only', () => {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), 1000);
   lesson = applyLearningSseEvent(lesson, makeEvent({ type: 'task_started', taskId: 'task-1', sequence: 1, requestId: 'req-A', payload: { taskId: 'task-1', title: 'T' } }));
   assert.ok(lesson.runtime.pendingRequest);
   lesson = applyLearningSseEvent(lesson, makeEvent({ type: 'request_completed', sequence: 2, requestId: 'req-A', payload: { requestId: 'req-A' } }));
@@ -654,7 +654,7 @@ test('request_completed clears matching pendingRequest only', () => {
 });
 
 test('appendSystemNotice works without an SSE event and increments sequence', () => {
-  const lesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
+  const lesson = createInitialNodeLesson('ch-1', makePlan(), 1000);
   const next = appendSystemNotice(lesson, { tone: 'info', message: '本地提示' }, 1500);
   assert.equal(next.runtime.latestSequence, lesson.runtime.latestSequence + 1);
   const notice = next.streamItems.at(-1);
@@ -663,7 +663,7 @@ test('appendSystemNotice works without an SSE event and increments sequence', ()
 });
 
 test('recap SSE events build a streaming recap then finalize it', () => {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), 1000);
   lesson = applyLearningSseEvent(
     lesson,
     makeEvent({ type: 'recap_started', sequence: 1, timestamp: 1500, payload: {} }),
@@ -704,7 +704,7 @@ test('recap SSE events build a streaming recap then finalize it', () => {
 });
 
 test('applyChapterRecap is idempotent and does not drift sequence on re-apply', () => {
-  const lesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
+  const lesson = createInitialNodeLesson('ch-1', makePlan(), 1000);
   const recap: ChapterRecap = {
     chapterId: 'ch-1',
     keyTakeaways: ['要点一', '要点二'],
@@ -758,76 +758,76 @@ test('IdempotencyRegistry returns existing result for same key and calls create 
 
 // ---- 存储：课程级（纯函数 + 树视图） ----
 
-test('deriveCourseTreeViewV2 marks first chapter available and dependent locked', () => {
-  const tree = deriveCourseTreeViewV2('course-1', makeBlueprint());
+test('deriveCourseTreeView marks first chapter available and dependent locked', () => {
+  const tree = deriveCourseTreeView('course-1', makeBlueprint());
   assert.equal(tree.totalChapters, 2);
   assert.equal(tree.chapters[0].status, 'available');
   assert.equal(tree.chapters[1].status, 'locked');
 });
 
-test('deriveCourseTreeViewV2 marks completed chapters and unlocks dependents', () => {
-  const tree = deriveCourseTreeViewV2('course-1', makeBlueprint(), ['ch-1']);
+test('deriveCourseTreeView marks completed chapters and unlocks dependents', () => {
+  const tree = deriveCourseTreeView('course-1', makeBlueprint(), ['ch-1']);
   assert.equal(tree.chapters[0].status, 'completed');
   assert.equal(tree.chapters[1].status, 'available');
 });
 
-test('createStoredCourseV2 + find/upsert behave as pure functions', () => {
-  const course = createStoredCourseV2('course-1', makeBlueprint(), 1000);
+test('createStoredCourse + find/upsert behave as pure functions', () => {
+  const course = createStoredCourse('course-1', makeBlueprint(), 1000);
   assert.equal(course.courseId, 'course-1');
   assert.equal(course.createdAt, 1000);
   assert.equal(course.blueprint.protocolVersion, 2);
 
-  assert.equal(findStoredCourseV2([course], 'course-1'), course);
-  assert.equal(findStoredCourseV2([course], 'missing'), null);
+  assert.equal(findStoredCourse([course], 'course-1'), course);
+  assert.equal(findStoredCourse([course], 'missing'), null);
 
   const updated = { ...course, createdAt: 2000 };
-  const upserted = upsertStoredCourseV2List([course], updated);
+  const upserted = upsertStoredCourseList([course], updated);
   assert.equal(upserted.length, 1);
   assert.equal(upserted[0].createdAt, 2000);
 });
 
 // ---- 存储：章节级（可注入存储，真实 round-trip） ----
 
-test('saveNodeLessonV2 + loadNodeLessonV2 round-trip via injected storage', () => {
+test('saveNodeLesson + loadNodeLesson round-trip via injected storage', () => {
   const storage = createMemoryStorage();
-  const lesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
-  assert.equal(saveNodeLessonV2('course-1', lesson, storage), true);
-  const restored = loadNodeLessonV2('course-1', 'ch-1', storage);
+  const lesson = createInitialNodeLesson('ch-1', makePlan(), 1000);
+  assert.equal(saveNodeLesson('course-1', lesson, storage), true);
+  const restored = loadNodeLesson('course-1', 'ch-1', storage);
   assert.deepEqual(restored, lesson);
 });
 
-test('loadNodeLessonV2 rejects wrong chapterId, wrong protocolVersion, and corrupted JSON', () => {
+test('loadNodeLesson rejects wrong chapterId, wrong protocolVersion, and corrupted JSON', () => {
   const storage = createMemoryStorage();
-  const lesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
-  saveNodeLessonV2('course-1', lesson, storage);
+  const lesson = createInitialNodeLesson('ch-1', makePlan(), 1000);
+  saveNodeLesson('course-1', lesson, storage);
 
-  assert.equal(loadNodeLessonV2('course-1', 'ch-other', storage), null);
+  assert.equal(loadNodeLesson('course-1', 'ch-other', storage), null);
 
   // 协议版本不符
   const bad = { ...lesson, protocolVersion: 1 };
-  saveNodeLessonV2('course-1', bad as unknown as NodeLessonV2, storage);
-  assert.equal(loadNodeLessonV2('course-1', 'ch-1', storage), null);
+  saveNodeLesson('course-1', bad as unknown as NodeLesson, storage);
+  assert.equal(loadNodeLesson('course-1', 'ch-1', storage), null);
 
   // 数据损坏：向真实存储 key 写入损坏 JSON，load 应返回 null
-  saveNodeLessonV2('course-1', lesson, storage);
-  storage.setItem(getV2ChapterStorageKey('course-1', 'ch-1'), '{not json');
-  assert.equal(loadNodeLessonV2('course-1', 'ch-1', storage), null);
+  saveNodeLesson('course-1', lesson, storage);
+  storage.setItem(getChapterStorageKey('course-1', 'ch-1'), '{not json');
+  assert.equal(loadNodeLesson('course-1', 'ch-1', storage), null);
 });
 
-test('deleteNodeLessonV2 removes the stored lesson', () => {
+test('deleteNodeLesson removes the stored lesson', () => {
   const storage = createMemoryStorage();
-  const lesson = createInitialNodeLessonV2('ch-1', makePlan(), 1000);
-  saveNodeLessonV2('course-1', lesson, storage);
-  deleteNodeLessonV2('course-1', 'ch-1', storage);
-  assert.equal(loadNodeLessonV2('course-1', 'ch-1', storage), null);
+  const lesson = createInitialNodeLesson('ch-1', makePlan(), 1000);
+  saveNodeLesson('course-1', lesson, storage);
+  deleteNodeLesson('course-1', 'ch-1', storage);
+  assert.equal(loadNodeLesson('course-1', 'ch-1', storage), null);
 });
 
 // ---- 分发 ----
 
-test('resolveStoredCourseFromData 只读取当前 v2Courses 容器', () => {
-  const course = createStoredCourseV2('course-1', makeBlueprint(), 1000);
-  const data: StoredDataV2 = {
-    v2Courses: [course],
+test('resolveStoredCourseFromData 只读取当前 courses 容器', () => {
+  const course = createStoredCourse('course-1', makeBlueprint(), 1000);
+  const data: StoredData = {
+    courses: [course],
     userProfile: null,
     recommendations: [],
   };
@@ -840,8 +840,8 @@ test('resolveStoredCourseFromData 只读取当前 v2Courses 容器', () => {
 
 // ---- Mission 与章节检查闸门 ----
 
-test('mapTocToBlueprintV2 derives a concrete course mission', () => {
-  const blueprint = mapTocToBlueprintV2({
+test('mapTocToBlueprint derives a concrete course mission', () => {
+  const blueprint = mapTocToBlueprint({
     courseId: 'course-mission',
     courseName: 'React 状态管理',
     description: '能在项目中用 useState 管理组件状态。',
@@ -889,8 +889,8 @@ test('updateTeachingStateAfterChapter deterministically moves course focus and r
   const { updateTeachingStateAfterChapter } = await import('../lib/learning-v2/teaching-state');
   const course = makeBlueprint();
   const lesson = makePlan();
-  const stored = createStoredCourseV2('course-teaching', course);
-  const chapterLesson = makePlan() as unknown as NodeLessonV2;
+  const stored = createStoredCourse('course-teaching', course);
+  const chapterLesson = makePlan() as unknown as NodeLesson;
 
   const state = updateTeachingStateAfterChapter(stored, chapterLesson, 2000);
   assert.equal(state.currentChapterId, 'ch-2');

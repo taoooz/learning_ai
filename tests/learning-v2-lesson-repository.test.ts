@@ -5,8 +5,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { LocalLessonRepository } from '../lib/learning-v2/lesson-repository';
-import { createStoredCourseV2 } from '../lib/learning-v2/storage';
-import type { CourseBlueprintV2, StoredCourseV2 } from '../types/learning-v2';
+import { createStoredCourse } from '../lib/learning-v2/storage';
+import type { CourseBlueprint, StoredCourse } from '../types/learning-v2';
 
 /** 安装 window/localStorage 全局（与 protocol.test 同模式），返回还原函数 */
 function installBrowserGlobals(): () => void {
@@ -34,7 +34,7 @@ function installBrowserGlobals(): () => void {
 
 const META = { promptVersion: 'v1', modelVersion: 'test', generatedAt: 1, durationMs: 1, degraded: false };
 
-function makeBlueprint(): CourseBlueprintV2 {
+function makeBlueprint(): CourseBlueprint {
   return {
     courseId: 'repo-course-1',
     topic: '测试课程',
@@ -52,7 +52,7 @@ function makeBlueprint(): CourseBlueprintV2 {
       { objectiveId: 'obj-1', description: '理解测试概念', mustCover: true, conceptKeys: [] },
     ],
     generationMeta: META,
-  } as unknown as CourseBlueprintV2;
+  } as unknown as CourseBlueprint;
 }
 
 test('LocalLessonRepository: saveCourse → loadCourse roundtrip', async () => {
@@ -60,7 +60,7 @@ test('LocalLessonRepository: saveCourse → loadCourse roundtrip', async () => {
   try {
     const repo = new LocalLessonRepository();
     const blueprint = makeBlueprint();
-    const course: StoredCourseV2 = createStoredCourseV2('repo-course-1', blueprint);
+    const course: StoredCourse = createStoredCourse('repo-course-1', blueprint);
     const saved = await repo.saveCourse(course);
     assert.equal(saved, true, '保存课程应成功');
 

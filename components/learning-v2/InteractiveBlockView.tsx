@@ -1,6 +1,6 @@
 'use client';
 
-// components/learning-v2/InteractiveBlockV2.tsx
+// components/learning-v2/InteractiveBlockView.tsx
 // 交互组件渲染入口：注册表模式，新增组件 = 新增一个 View + 一条注册
 // Phase 1：parameter-demo / step-walkthrough / flow-diagram（消费型演示）
 // Phase 2：bar-compare / before-after（对比可视化）；完成时记录参与信号
@@ -376,7 +376,7 @@ const RENDERERS: Partial<Record<InteractiveBlock['component'], React.ComponentTy
   'before-after': BeforeAfterView,
 };
 
-export function InteractiveBlockV2({ block, courseId }: { block: InteractiveBlock; courseId?: string }) {
+export function InteractiveBlockView({ block, courseId }: { block: InteractiveBlock; courseId?: string }) {
   const Renderer = RENDERERS[block.component];
 
   if (!Renderer) {

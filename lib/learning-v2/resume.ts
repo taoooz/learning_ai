@@ -6,7 +6,7 @@
 // P2：normalizeTutorRuntimeForResume 负责 Tutor 答疑的刷新归一（设计文档 §5），
 // 不触碰主任务状态（主线恢复仍由 decideResumeAction 决策）
 
-import type { NodeLessonV2, TutorAnswerItem } from '@/types/learning-v2';
+import type { NodeLesson, TutorAnswerItem } from '@/types/learning-v2';
 
 export type ResumeAction =
   | { kind: 'generate_plan' }
@@ -19,7 +19,7 @@ export type ResumeAction =
  * 原则：进行中的任务（generating/streaming/partial_paused）一律视为中断，
  * 用新 attempt 重新生成（确定性 itemId 会 upsert 覆盖半截块），不做断点续传。
  */
-export function decideResumeAction(lesson: NodeLessonV2 | null): ResumeAction {
+export function decideResumeAction(lesson: NodeLesson | null): ResumeAction {
   // ①⑧ 无 lesson（含损坏被归一为 null）：从头生成计划
   if (!lesson) return { kind: 'generate_plan' };
 
@@ -82,14 +82,14 @@ export function decideResumeAction(lesson: NodeLessonV2 | null): ResumeAction {
  * 基线只认任务请求：边界提问的 Tutor 请求会占用 pendingRequest 而主任务仍停在
  * 失败/中断态，读 Tutor 的 attempt 会让任务重试计数跳号（最终审查修复 1）。
  */
-function nextAttempt(lesson: NodeLessonV2): number {
+function nextAttempt(lesson: NodeLesson): number {
   const pending = lesson.runtime.pendingRequest;
   const baseline = pending && pending.kind === 'task' ? pending.attempt : 1;
   return Math.max(baseline + 1, 2);
 }
 
 /** 计划中第一个未完成/未跳过的任务（按 order 升序） */
-function firstUnfinishedTask(lesson: NodeLessonV2): string | null {
+function firstUnfinishedTask(lesson: NodeLesson): string | null {
   const { runtime, chapterPlan } = lesson;
   const sorted = [...chapterPlan.tasks].sort((a, b) => a.order - b.order);
   for (const task of sorted) {
@@ -101,7 +101,7 @@ function firstUnfinishedTask(lesson: NodeLessonV2): string | null {
 }
 
 /** 最后完成的任务 id（按计划 order），用于「全部完成但未收尾」的兜底边界 */
-function lastCompletedTaskId(lesson: NodeLessonV2): string | null {
+function lastCompletedTaskId(lesson: NodeLesson): string | null {
   const { runtime, chapterPlan } = lesson;
   const sorted = [...chapterPlan.tasks].sort((a, b) => a.order - b.order);
   for (let i = sorted.length - 1; i >= 0; i--) {
@@ -113,13 +113,13 @@ function lastCompletedTaskId(lesson: NodeLessonV2): string | null {
 // ---- Tutor 刷新归一（P2 流内答疑，设计文档 §5） ----
 
 export interface TutorResumeNormalization {
-  lesson: NodeLessonV2;
+  lesson: NodeLesson;
   /** 是否需要对最早的未完成问题执行一次自动重试 */
   shouldAutoRetry: boolean;
 }
 
 function isUnfinishedTutorAnswer(
-  item: NodeLessonV2['streamItems'][number],
+  item: NodeLesson['streamItems'][number],
 ): item is TutorAnswerItem {
   return item.type === 'tutor_answer' && (item.status === 'pending' || item.status === 'streaming');
 }
@@ -138,7 +138,7 @@ function isUnfinishedTutorAnswer(
  * 无可归一内容时原样返回（引用不变），与归约器的 no-op 约定一致。
  */
 export function normalizeTutorRuntimeForResume(
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
   now: number,
 ): TutorResumeNormalization {
   const { runtime } = lesson;

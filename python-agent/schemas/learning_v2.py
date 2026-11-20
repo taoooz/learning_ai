@@ -1,6 +1,6 @@
 # V2 学习流请求模型
 # 字段与 types/learning-v2/*.ts 契约对齐：
-# - ChapterPlanRequest.blueprint 为完整 CourseBlueprintV2（blueprint.ts）
+# - ChapterPlanRequest.blueprint 为完整 CourseBlueprint（blueprint.ts）
 # - 计划输出结构见 chapter-plan.ts（ChapterPlan / PlannedTask）
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -11,7 +11,7 @@ class ChapterPlanRequest(BaseModel):
     courseId: str = Field(..., description="课程 ID")
     chapterId: str = Field(..., description="章节 ID")
     idempotencyKey: Optional[str] = Field(None, description="幂等键（P1a 仅随请求上送供日志）")
-    blueprint: dict = Field(..., description="完整 CourseBlueprintV2（含 chapters / courseObjectives / learnerStartingPoint / topic）")
+    blueprint: dict = Field(..., description="完整 CourseBlueprint（含 chapters / courseObjectives / learnerStartingPoint / topic）")
     completedChapters: Optional[list[dict]] = Field(None, description="已完成章节摘要（title + keyTakeaways），供章节计划跨章去重")
 
 

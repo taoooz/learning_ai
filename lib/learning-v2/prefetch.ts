@@ -4,7 +4,7 @@
 // 预取失败静默丢弃不打扰阅读；废弃预取不进学习流；
 // 异步结果消费前校验版本，不匹配判 live，预取事件绝不写入 streamItems（§13）
 
-import type { LearningSseEvent, NodeLessonV2 } from '@/types/learning-v2';
+import type { LearningSseEvent, NodeLesson } from '@/types/learning-v2';
 
 /** 内存预取缓存条目（hook ref 持有，不落盘；P4 计划补丁落地前不写 runtime） */
 export interface PrefetchCacheEntry {
@@ -21,7 +21,7 @@ export interface PrefetchCacheEntry {
  * + 该任务尚无缓存。
  */
 export function canStartPrefetch(
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
   phase: string,
   cacheHas: (taskId: string) => boolean,
 ): string | null {
@@ -60,7 +60,7 @@ export type PrefetchConsumption =
  * - 未命中（无缓存 / 仍在途 / 版本或任务不匹配）→ live，交给即时生成
  */
 export function resolvePrefetchConsumption(
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
   entry: PrefetchCacheEntry | null | undefined,
   expectedTaskId: string,
 ): PrefetchConsumption {

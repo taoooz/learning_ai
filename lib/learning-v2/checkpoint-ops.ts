@@ -6,12 +6,12 @@ import type {
   CheckpointEvaluation,
   CheckpointItem,
   LearningEvidence,
-  NodeLessonV2,
+  NodeLesson,
 } from '@/types/learning-v2';
 
 /** 查找当前任务已有的 checkpoint 条目 */
 export function findCheckpointForTask(
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
   taskId: string,
 ): CheckpointItem | undefined {
   return lesson.streamItems.find(
@@ -21,7 +21,7 @@ export function findCheckpointForTask(
 
 /** 当前任务是否需要 Checkpoint（evidencePolicy=checkpoint 且尚无条目） */
 export function needsCheckpoint(
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
   taskId: string,
 ): boolean {
   const task = lesson.chapterPlan.tasks.find((t) => t.taskId === taskId);
@@ -31,10 +31,10 @@ export function needsCheckpoint(
 
 /** upsert CheckpointItem 到学习流（幂等：同 checkpointId 不重复） */
 export function upsertCheckpointItem(
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
   checkpoint: CheckpointDefinition,
   now: number,
-): NodeLessonV2 {
+): NodeLesson {
   const existing = lesson.streamItems.find(
     (item): item is CheckpointItem =>
       item.type === 'checkpoint' && item.checkpoint.checkpointId === checkpoint.checkpointId,
@@ -65,12 +65,12 @@ export function upsertCheckpointItem(
 
 /** 写入评估结果到 checkpoint 条目 + 回到 awaiting_user */
 export function applyCheckpointEvaluation(
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
   checkpointId: string,
   submissionAnswer: string | string[],
   evaluation: CheckpointEvaluation,
   now: number,
-): NodeLessonV2 {
+): NodeLesson {
   const item = lesson.streamItems.find(
     (existing): existing is CheckpointItem =>
       existing.type === 'checkpoint' && existing.checkpoint.checkpointId === checkpointId,
@@ -109,7 +109,7 @@ export function applyCheckpointEvaluation(
 }
 
 /** 从已完成章节的 checkpoint 条目提取学习证据（章节完成时聚合用） */
-export function collectEvidence(lesson: NodeLessonV2): LearningEvidence[] {
+export function collectEvidence(lesson: NodeLesson): LearningEvidence[] {
   const evidence: LearningEvidence[] = [];
   for (const item of lesson.streamItems) {
     if (item.type !== 'checkpoint' || !item.evaluation) continue;
@@ -132,12 +132,12 @@ export function collectEvidence(lesson: NodeLessonV2): LearningEvidence[] {
  * 补救内容写入条目、新 checkpoint 定义替换旧题、回到 pending 状态等待用户重试。
  */
 export function applyRemediation(
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
   checkpointId: string,
   remediationContent: string,
   newCheckpoint: CheckpointDefinition,
   now: number,
-): NodeLessonV2 {
+): NodeLesson {
   const item = lesson.streamItems.find(
     (existing): existing is CheckpointItem =>
       existing.type === 'checkpoint' && existing.checkpoint.checkpointId === checkpointId,

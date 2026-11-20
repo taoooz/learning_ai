@@ -1,7 +1,7 @@
 // lib/learning-v2/task-prefetch-runtime.ts
 // 任务预取的请求执行器。纯策略：不持有 React ref，不 dispatch，不触碰主流程代际。
 
-import type { NodeLessonV2 } from '@/types/learning-v2';
+import type { NodeLesson } from '@/types/learning-v2';
 import { parseLearningSseStream } from '@/lib/learning-v2/sse-client';
 import type { PrefetchCacheEntry } from './prefetch';
 
@@ -14,12 +14,12 @@ export function prefetchCacheKey(planId: string, planVersion: number, taskId: st
 }
 
 export interface RunTaskPrefetchParams {
-  lesson: NodeLessonV2;
+  lesson: NodeLesson;
   taskId: string;
   cache: Map<string, PrefetchSlot>;
   attempts: Map<string, number>;
-  buildTaskStreamBody: (lesson: NodeLessonV2, taskId: string, attempt: number) => Record<string, unknown>;
-  getLatestLesson: () => NodeLessonV2 | null;
+  buildTaskStreamBody: (lesson: NodeLesson, taskId: string, attempt: number) => Record<string, unknown>;
+  getLatestLesson: () => NodeLesson | null;
 }
 
 export async function runTaskPrefetch({

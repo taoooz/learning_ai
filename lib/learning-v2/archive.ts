@@ -2,7 +2,7 @@
 // 已完成章节的压缩归档（文档 §6.1.1 存储治理，P1b 完成定义之一）
 // 正文块替换为单条摘要块，控制 localStorage 容量；摘要用现成 takeaway，不额外调 LLM
 
-import type { MarkdownBlock, NodeLessonV2, TaskContentItem } from '@/types/learning-v2';
+import type { MarkdownBlock, NodeLesson, TaskContentItem } from '@/types/learning-v2';
 
 /** 摘要截断长度：首个 markdown 块兜底时最多保留的字符数 */
 const SUMMARY_MAX_LENGTH = 80;
@@ -36,7 +36,7 @@ export function summarizeTaskContent(item: TaskContentItem): string {
  * 保留：标题、章节计划、Recap、evidence、transition/notice/recap 等其余条目。
  * 幂等：已归档原样返回。
  */
-export function archiveCompletedLesson(lesson: NodeLessonV2, now: number): NodeLessonV2 {
+export function archiveCompletedLesson(lesson: NodeLesson, now: number): NodeLesson {
   if (lesson.archived) return lesson;
 
   const streamItems = lesson.streamItems.map((item) => {

@@ -1,6 +1,6 @@
 'use client';
 
-// components/learning-v2/LearningStreamV2.tsx
+// components/learning-v2/LearningStream.tsx
 // V2 学习流渲染：streamItems 按显式 sequence 排序（文档 §2.5，顺序不能依赖数组写入竞态）
 // 条目类型：task_content（标题+内容块+流式光标）/ task_transition（过渡分隔）/
 // system_notice（按 tone 着色）/ chapter_recap / user_question + tutor_answer（P2 流内答疑，§2.1/§4）
@@ -11,7 +11,7 @@ import type {
   ChapterRecap,
   CheckpointItem,
   LearningStreamItem,
-  NodeLessonV2,
+  NodeLesson,
   SystemNoticeItem,
   TaskContentItem,
   TutorAnswerItem,
@@ -19,7 +19,7 @@ import type {
 } from '@/types/learning-v2';
 import type { ChapterPhase } from '@/hooks/learning-v2/useChapterLearning';
 import { getPendingTutorQuestions, TUTOR_AUTO_WINDOW_LIMIT } from '@/lib/learning-v2/tutor-queue';
-import { TaskBlockView } from './TaskBlocksV2';
+import { TaskBlockView } from './TaskBlocks';
 import { resolveAutoFollowOnTaskChange } from '@/lib/learning-v2/stream-scroll';
 import { isResolvedErrorNotice } from '@/lib/learning-v2/stream-item-presentation';
 
@@ -35,7 +35,7 @@ export function tutorQueuedHint(mainGenerating: boolean): string {
   return mainGenerating ? '本节内容会先生成完，随后回答你的问题' : '问题较多时会按顺序回答，也可继续学习';
 }
 
-export function LearningStreamV2({
+export function LearningStream({
   lesson,
   phase,
   anchorTaskId,
@@ -47,7 +47,7 @@ export function LearningStreamV2({
   onRetryCheckpoint,
   onRequestRemediation,
 }: {
-  lesson: NodeLessonV2;
+  lesson: NodeLesson;
   phase: ChapterPhase;
   /** 恢复分支④锚点：挂载时滚到该任务位置，且不自动贴底（用户上滑即视为跟随关闭） */
   anchorTaskId?: string | null;

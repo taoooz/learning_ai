@@ -9,7 +9,7 @@ import type {
   CheckpointDefinition,
   CheckpointEvaluation,
   CheckpointItem,
-  NodeLessonV2,
+  NodeLesson,
 } from '@/types/learning-v2';
 import type { ChapterLearningAction } from '@/lib/learning-v2/chapter-learning-state';
 import {
@@ -22,13 +22,13 @@ import { getLessonStoreMode, syncLearningAuthoritySnapshot } from '@/lib/learnin
 interface UseCheckpointActionsParams {
   courseId: string;
   chapterId: string;
-  lessonMirrorRef: React.MutableRefObject<NodeLessonV2 | null>;
+  lessonMirrorRef: React.MutableRefObject<NodeLesson | null>;
   commit: (action: ChapterLearningAction) => void;
-  persist: (lesson: NodeLessonV2) => Promise<void> | void;
+  persist: (lesson: NodeLesson) => Promise<void> | void;
 }
 
 function findCheckpoint(
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
   checkpointId: string,
 ): CheckpointItem | undefined {
   return lesson.streamItems.find(

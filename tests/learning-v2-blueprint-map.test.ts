@@ -5,10 +5,10 @@ import {
   BLUEPRINT_MAP_MODEL_VERSION,
   BLUEPRINT_MAP_PROMPT_VERSION,
   inferIntentType,
-  mapTocToBlueprintV2,
+  mapTocToBlueprint,
   normalizeEstimatedLevel,
 } from '../lib/learning-v2/blueprint-map';
-import { validateCourseBlueprintV2 } from '../lib/learning-v2/validators';
+import { validateCourseBlueprint } from '../lib/learning-v2/validators';
 import type { MapTocToBlueprintInput } from '../lib/learning-v2/blueprint-map';
 
 function makeInput(overrides: Partial<MapTocToBlueprintInput> = {}): MapTocToBlueprintInput {
@@ -33,7 +33,7 @@ function makeInput(overrides: Partial<MapTocToBlueprintInput> = {}): MapTocToBlu
 }
 
 test('映射产物字段完整且 ID 规则正确', () => {
-  const blueprint = mapTocToBlueprintV2(makeInput());
+  const blueprint = mapTocToBlueprint(makeInput());
 
   assert.equal(blueprint.blueprintId, 'bp-course-1756600000000');
   assert.equal(blueprint.protocolVersion, 2);
@@ -56,12 +56,12 @@ test('映射产物字段完整且 ID 规则正确', () => {
 });
 
 test('映射产物通过蓝图校验（锁定测试）', () => {
-  const result = validateCourseBlueprintV2(mapTocToBlueprintV2(makeInput()));
+  const result = validateCourseBlueprint(mapTocToBlueprint(makeInput()));
   assert.equal(result.passed, true, `校验应通过，实际问题：${result.issues.join('；')}`);
 });
 
 test('observableOutcome 是行为描述，不是空泛词', () => {
-  const blueprint = mapTocToBlueprintV2(makeInput());
+  const blueprint = mapTocToBlueprint(makeInput());
   for (const objective of blueprint.courseObjectives) {
     assert.match(objective.observableOutcome, /^能用自己的话说明/);
     assert.equal(objective.importance, 'core');
@@ -70,7 +70,7 @@ test('observableOutcome 是行为描述，不是空泛词', () => {
 });
 
 test('节点缺 index 时按位置补位且依赖链不断', () => {
-  const blueprint = mapTocToBlueprintV2(
+  const blueprint = mapTocToBlueprint(
     makeInput({
       nodes: [
         { index: undefined as unknown as number, title: '第一章', description: '一' },
@@ -83,11 +83,11 @@ test('节点缺 index 时按位置补位且依赖链不断', () => {
     ['ch-1', 'ch-2'],
   );
   assert.deepEqual(blueprint.chapters[1].prerequisites, ['ch-1']);
-  assert.equal(validateCourseBlueprintV2(blueprint).passed, true);
+  assert.equal(validateCourseBlueprint(blueprint).passed, true);
 });
 
 test('节点描述为空时回退用标题，不产生空目标', () => {
-  const blueprint = mapTocToBlueprintV2(
+  const blueprint = mapTocToBlueprint(
     makeInput({ nodes: [{ index: 1, title: '缓存入门', description: '  ' }] }),
   );
   assert.equal(blueprint.courseObjectives[0].description, '缓存入门');
@@ -119,7 +119,7 @@ test('inferIntentType 按关键词分类且优先级正确', () => {
 });
 
 test('skipBasics 映射为排除主题', () => {
-  const blueprint = mapTocToBlueprintV2(
+  const blueprint = mapTocToBlueprint(
     makeInput({
       outline: {
         topic: 'Redis 缓存',
@@ -130,10 +130,10 @@ test('skipBasics 映射为排除主题', () => {
   );
   assert.deepEqual(blueprint.learnerStartingPoint.excludedTopics, ['数据类型', '安装']);
   assert.equal(blueprint.learnerStartingPoint.estimatedLevel, 'advanced');
-  assert.equal(validateCourseBlueprintV2(blueprint).passed, true);
+  assert.equal(validateCourseBlueprint(blueprint).passed, true);
 });
 
 test('课程名为空时回退用 outline.topic', () => {
-  const blueprint = mapTocToBlueprintV2(makeInput({ courseName: '  ' }));
+  const blueprint = mapTocToBlueprint(makeInput({ courseName: '  ' }));
   assert.equal(blueprint.topic, 'Redis 缓存');
 });

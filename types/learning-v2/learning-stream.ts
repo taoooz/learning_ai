@@ -5,7 +5,7 @@
 // - 内容块仅保留文档建议的第一版 4 种（Process/Visualization/Code/Reflection 后续按需扩展）
 // - UserQuestionItem / TutorAnswerItem 随 P2 流内答疑引入（设计文档 §2.1）
 // - SupplementalItem / CheckpointItem / CheckpointResultItem 属 P3，暂未定义
-// - NodeLessonV2.evidence 用 unknown[] 占位，LearningEvidence 类型 P3 前定稿
+// - NodeLesson.evidence 用 unknown[] 占位，LearningEvidence 类型 P3 前定稿
 
 import type { ChapterPlan } from './chapter-plan';
 import type { GenerationMeta } from './generation-meta';
@@ -255,7 +255,7 @@ export interface ChapterRecapItem extends StreamItemBase {
  * V2 章节学习容器：计划 + 运行时状态 + 学习流的聚合根。
  * 按章节独立存储（文档 §9 存储治理），不并入课程主对象。
  */
-export interface NodeLessonV2 {
+export interface NodeLesson {
   protocolVersion: 2;
   chapterId: string;
   chapterPlan: ChapterPlan;

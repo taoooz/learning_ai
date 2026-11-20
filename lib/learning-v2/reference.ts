@@ -5,9 +5,9 @@ import type {
   CourseGlossaryTerm,
   CourseReference,
   LearningContentBlock,
-  NodeLessonV2,
+  NodeLesson,
   SourceRef,
-  StoredCourseV2,
+  StoredCourse,
 } from '@/types/learning-v2';
 
 const REFERENCE_BLOCK_TYPES = new Set(['key_point', 'comparison', 'diagram']);
@@ -73,7 +73,7 @@ function termIdFromTitle(title: string): string {
   return `term-${normalized || 'concept'}`;
 }
 
-export function buildChapterGlossary(lesson: NodeLessonV2, now: number): CourseGlossaryTerm[] {
+export function buildChapterGlossary(lesson: NodeLesson, now: number): CourseGlossaryTerm[] {
   const terms = new Map<string, CourseGlossaryTerm>();
 
   for (const item of lesson.streamItems) {
@@ -113,7 +113,7 @@ export function buildChapterGlossary(lesson: NodeLessonV2, now: number): CourseG
 }
 
 export function buildChapterReference(
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
   chapterTitle: string,
   now: number,
 ): CourseReference | null {
@@ -141,11 +141,11 @@ export function buildChapterReference(
 }
 
 export function mergeCourseAssets(
-  course: StoredCourseV2,
-  lesson: NodeLessonV2,
+  course: StoredCourse,
+  lesson: NodeLesson,
   chapterTitle: string,
   now: number,
-): StoredCourseV2 {
+): StoredCourse {
   const reference = buildChapterReference(lesson, chapterTitle, now);
   const glossary = buildChapterGlossary(lesson, now);
   const references = [...(course.references ?? [])].filter(

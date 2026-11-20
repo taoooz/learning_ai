@@ -8,7 +8,7 @@
 // （与主任务流 STREAM_FAILED_LOCAL 同模式），防止 pendingRequest 永久停留
 // streaming 阻塞重试。
 
-import type { LearningSseEvent, NodeLessonV2, UserQuestionItem } from '@/types/learning-v2';
+import type { LearningSseEvent, NodeLesson, UserQuestionItem } from '@/types/learning-v2';
 import { applyLearningSseEvent, appendUserQuestion } from './reducers';
 import { getPendingTutorQuestions, TUTOR_AUTO_WINDOW_LIMIT } from './tutor-queue';
 import { buildInlineTutorContext, type InlineTutorRequestPayload } from './tutor-context';
@@ -32,7 +32,7 @@ export type ChapterPhaseName =
  * 保证「回答后仍保持边界」等相位断言两侧同源。
  */
 export function deriveChapterPhase(
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
   prev: ChapterPhaseName,
 ): ChapterPhaseName {
   const { runtime } = lesson;
@@ -61,7 +61,7 @@ const TUTOR_SUBMITTABLE_PHASES: ReadonlySet<ChapterPhaseName> = new Set([
 ]);
 
 export interface TutorSubmitDecisionInput {
-  lesson: NodeLessonV2;
+  lesson: NodeLesson;
   phase: ChapterPhaseName;
   /** Tutor 是否忙碌（请求在途或回答流式中） */
   isTutorBusy: boolean;
@@ -72,7 +72,7 @@ export interface TutorSubmitDecisionInput {
 
 export interface TutorSubmitDecision {
   /** 追加问题后的新容器（确定性 itemId 幂等） */
-  lesson: NodeLessonV2;
+  lesson: NodeLesson;
   questionId: string;
   taskId: string;
   /** 边界且 Tutor 空闲 → 立即启动；否则入队（流中/忙碌/其他相位，§1/§3.3） */
@@ -107,7 +107,7 @@ export function decideTutorSubmission(
  * 否则取自动窗口内最早一题（窗口截取是消费方职责，§3.3）。
  */
 export function pickAutoTutorQuestion(
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
   isTutorBusy: boolean,
 ): UserQuestionItem | undefined {
   if (isTutorBusy) return undefined;
@@ -116,7 +116,7 @@ export function pickAutoTutorQuestion(
 
 /** 重试决策（纯函数）：只有失败的问题可重试；重试是用户显式动作，不入自动队列（§4） */
 export function canRetryTutorQuestion(
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
   questionId: string,
 ): UserQuestionItem | undefined {
   const question = lesson.streamItems.find(
@@ -136,7 +136,7 @@ export function canRetryTutorQuestion(
 // ---- 启动准备（初始化归一，供 hook 与测试共用） ----
 
 export interface TutorBootPreparation {
-  lesson: NodeLessonV2 | null;
+  lesson: NodeLesson | null;
   /** 归一是否改动了容器 → 启动时是否需要落盘（原样返回时跳过冗余落盘） */
   persisted: boolean;
   /** 是否需要对最早未完成问题执行一次自动重试 */
@@ -145,7 +145,7 @@ export interface TutorBootPreparation {
 
 /** 刷新恢复准备（纯函数）：对持久化容器做 Tutor 归一（设计文档 §5），不触碰主任务状态 */
 export function prepareTutorBoot(
-  lesson: NodeLessonV2 | null,
+  lesson: NodeLesson | null,
   now: number,
 ): TutorBootPreparation {
   if (!lesson) return { lesson: null, persisted: false, shouldAutoRetry: false };
@@ -177,11 +177,11 @@ export interface TutorBridge {
   chapterTitle: string;
   chapterTeachingGoal: string;
   /** 读取最新容器（hook：同步镜像） */
-  getLesson(): NodeLessonV2 | null;
+  getLesson(): NodeLesson | null;
   /** 读取当前章节相位（边界是唯一可回答时机） */
   getPhase(): ChapterPhaseName;
   /** 写回归约结果；persistNow → 宿主立即落盘（提问提交/终态） */
-  commitLesson(next: NodeLessonV2, opts?: { persistNow?: boolean }): void;
+  commitLesson(next: NodeLesson, opts?: { persistNow?: boolean }): void;
   /** 发起 Tutor SSE 请求（独立 AbortSignal，绝不触碰主任务流） */
   fetchTutorStream(body: InlineTutorRequestPayload, signal: AbortSignal): Promise<Response>;
   recordEngagement(eventType: TutorEngagementEventType, taskId?: string): void;
@@ -287,7 +287,7 @@ export class TutorStreamOrchestrator {
 
   private buildRequestBody(
     question: UserQuestionItem,
-    lesson: NodeLessonV2,
+    lesson: NodeLesson,
   ): InlineTutorRequestPayload {
     const planned = lesson.chapterPlan.tasks.find((task) => task.taskId === question.taskId);
     return buildInlineTutorContext({

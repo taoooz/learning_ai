@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { countConsecutiveConfusions, isConfusionSignal, REEXPLAIN_THRESHOLD } from '../lib/learning-v2/confusion-signal';
-import { createInitialNodeLessonV2, appendUserQuestion } from '../lib/learning-v2/reducers';
+import { createInitialNodeLesson, appendUserQuestion } from '../lib/learning-v2/reducers';
 import type { ChapterPlan, GenerationMeta, PlannedTask } from '../types/learning-v2';
 
 const NOW = 1756700000000;
@@ -26,7 +26,7 @@ function makePlan(): ChapterPlan {
 }
 
 function makeLesson(questions: string[]) {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), NOW);
   questions.forEach((text, i) => {
     lesson = appendUserQuestion(lesson, { taskId: 't1', questionId: `q-${i}`, text }, NOW);
   });

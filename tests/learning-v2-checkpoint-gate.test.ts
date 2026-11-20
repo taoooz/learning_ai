@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { evaluateChapterCheckpointGate } from '../lib/learning-v2/checkpoint-gate';
-import type { NodeLessonV2 } from '../types/learning-v2';
+import type { NodeLesson } from '../types/learning-v2';
 
 const META = { promptVersion: 'p', modelVersion: 'm', generatedAt: 1 };
 
-function makeLesson(overrides: Partial<NodeLessonV2> = {}): NodeLessonV2 {
+function makeLesson(overrides: Partial<NodeLesson> = {}): NodeLesson {
   const tasks = [
     { taskId: 't1', order: 1, title: '任务一', objectiveId: 'obj-1', taskGoal: '目标一', observableOutcome: '结果一', conceptKeys: [], prerequisiteTaskIds: [], teachingPattern: 'explain' as const, expectedMinutes: 3, evidencePolicy: 'none' as const, origin: 'initial' as const, status: 'planned' as const },
     { taskId: 't2', order: 2, title: '任务二', objectiveId: 'obj-1', taskGoal: '目标二', observableOutcome: '结果二', conceptKeys: [], prerequisiteTaskIds: ['t1'], teachingPattern: 'recap' as const, expectedMinutes: 3, evidencePolicy: 'checkpoint' as const, origin: 'initial' as const, status: 'planned' as const },

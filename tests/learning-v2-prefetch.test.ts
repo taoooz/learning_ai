@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createInitialNodeLessonV2, applyLearningSseEvent } from '../lib/learning-v2/reducers';
+import { createInitialNodeLesson, applyLearningSseEvent } from '../lib/learning-v2/reducers';
 import {
   canStartPrefetch,
   renumberSseEvents,
@@ -18,7 +18,7 @@ import type {
   ChapterPlan,
   GenerationMeta,
   LearningSseEvent,
-  NodeLessonV2,
+  NodeLesson,
   PlannedTask,
 } from '../types/learning-v2';
 
@@ -75,8 +75,8 @@ function makeEvent(overrides: Partial<LearningSseEvent> = {}): LearningSseEvent 
 }
 
 /** 任务 1 完成、停在边界的 lesson（awaiting_user/awaiting_user） */
-function makeBoundaryLesson(): NodeLessonV2 {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+function makeBoundaryLesson(): NodeLesson {
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), NOW);
   lesson = applyLearningSseEvent(
     lesson,
     makeEvent({ type: 'task_started', taskId: 'task-1', sequence: 1, requestId: 'req-1', payload: { taskId: 'task-1', title: '任务 0' } }),

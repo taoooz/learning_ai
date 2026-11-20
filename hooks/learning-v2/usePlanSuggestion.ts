@@ -7,8 +7,8 @@
 import { useCallback, useRef, useState } from 'react';
 import type {
   ChapterPlanPatch,
-  CourseBlueprintV2,
-  NodeLessonV2,
+  CourseBlueprint,
+  NodeLesson,
 } from '@/types/learning-v2';
 import { MAX_PLAN_PATCHES_PER_CHAPTER } from '@/types/learning-v2';
 import { collectEvidence } from '@/lib/learning-v2/checkpoint-ops';
@@ -18,8 +18,8 @@ import type { ChapterLearningAction, ChapterPhase } from '@/lib/learning-v2/chap
 interface UsePlanSuggestionParams {
   courseId: string;
   chapterId: string;
-  blueprint: CourseBlueprintV2;
-  lessonMirrorRef: React.MutableRefObject<NodeLessonV2 | null>;
+  blueprint: CourseBlueprint;
+  lessonMirrorRef: React.MutableRefObject<NodeLesson | null>;
   phaseMirrorRef: React.MutableRefObject<ChapterPhase>;
   commit: (action: ChapterLearningAction) => void;
 }

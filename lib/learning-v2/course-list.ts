@@ -1,8 +1,8 @@
 // lib/learning-v2/course-list.ts
-// 首页「最近学习」的课程清单：只读当前课程容器 v2Courses，派生进度与下一章。
+// 首页「最近学习」的课程清单：只读当前课程容器 courses，派生进度与下一章。
 
-import type { StoredCourseV2 } from '@/types/learning-v2';
-import { getStoredDataV2, getV2ChapterStorageKey, saveStoredDataV2 } from '@/lib/storage';
+import type { StoredCourse } from '@/types/learning-v2';
+import { getStoredData, getChapterStorageKey, saveStoredData } from '@/lib/storage';
 import { getLessonRepository } from './lesson-repository';
 
 export interface CourseListEntry {
@@ -18,7 +18,7 @@ export interface CourseListEntry {
 }
 
 /** 把 V2 课程容器映射为首页卡片所需字段（纯函数） */
-export function toCourseListEntry(course: StoredCourseV2): CourseListEntry {
+export function toCourseListEntry(course: StoredCourse): CourseListEntry {
   const chapters = [...course.treeView.chapters].sort((a, b) => a.index - b.index);
   const totalChapters = chapters.length;
   const completedChapters = chapters.filter((chapter) => chapter.status === 'completed').length;
@@ -36,23 +36,23 @@ export function toCourseListEntry(course: StoredCourseV2): CourseListEntry {
 }
 
 /** 读取全部 V2 课程，按创建时间升序（页面自行决定倒序展示） */
-export function listCoursesV2(): CourseListEntry[] {
+export function listCourses(): CourseListEntry[] {
   if (typeof window === 'undefined') return [];
-  const courses = getStoredDataV2().v2Courses;
+  const courses = getStoredData().courses;
   return [...courses].sort((a, b) => a.createdAt - b.createdAt).map(toCourseListEntry);
 }
 
-export function getCourseTopicV2(courseId: string): string | null {
+export function getCourseTopic(courseId: string): string | null {
   if (typeof window === 'undefined') return null;
-  const course = (getStoredDataV2().v2Courses).find((item) => item.courseId === courseId);
+  const course = (getStoredData().courses).find((item) => item.courseId === courseId);
   return course?.treeView.topic ?? null;
 }
 
 /** 纯函数：从课程列表中移除指定课程 */
 export function removeCourseFromList(
-  courses: readonly StoredCourseV2[],
+  courses: readonly StoredCourse[],
   courseId: string,
-): StoredCourseV2[] {
+): StoredCourse[] {
   return courses.filter((course) => course.courseId !== courseId);
 }
 
@@ -60,23 +60,23 @@ export function removeCourseFromList(
  * 删除课程：server 模式先删服务端数据；随后移除本地容器 + 清掉各章学习流 key。
  * 服务端删除失败时仍清本地缓存（beta 产品允许用户重新拉取/重建）。
  */
-export async function deleteCourseV2(courseId: string): Promise<void> {
+export async function deleteCourse(courseId: string): Promise<void> {
   if (typeof window === 'undefined') return;
-  const target = (getStoredDataV2().v2Courses)
+  const target = (getStoredData().courses)
     .find((course) => course.courseId === courseId) ?? null;
 
   // local 模式这里会移除本地课程容器；server 模式只删服务端数据。
   await getLessonRepository().deleteCourse(courseId);
 
-  const current = getStoredDataV2();
-  saveStoredDataV2({
+  const current = getStoredData();
+  saveStoredData({
     ...current,
-    v2Courses: removeCourseFromList(current.v2Courses, courseId),
+    courses: removeCourseFromList(current.courses, courseId),
   });
 
   for (const chapter of target?.blueprint.chapters ?? []) {
     try {
-      window.localStorage.removeItem(getV2ChapterStorageKey(courseId, chapter.chapterId));
+      window.localStorage.removeItem(getChapterStorageKey(courseId, chapter.chapterId));
     } catch {
       // 单章清理失败无副作用
     }

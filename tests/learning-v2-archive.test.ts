@@ -5,14 +5,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createInitialNodeLessonV2, applyChapterRecap, appendSystemNotice } from '../lib/learning-v2/reducers';
+import { createInitialNodeLesson, applyChapterRecap, appendSystemNotice } from '../lib/learning-v2/reducers';
 import { archiveCompletedLesson, summarizeTaskContent } from '../lib/learning-v2/archive';
 
 import type {
   ChapterPlan,
   ChapterRecap,
   GenerationMeta,
-  NodeLessonV2,
+  NodeLesson,
   PlannedTask,
   TaskContentItem,
 } from '../types/learning-v2';
@@ -71,8 +71,8 @@ function makeTaskContentItem(overrides: Partial<TaskContentItem> = {}): TaskCont
 }
 
 /** 构造含两类正文任务 + 通知 + 过渡条目的已收尾 lesson */
-function makeCompletedLesson(): NodeLessonV2 {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+function makeCompletedLesson(): NodeLesson {
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), NOW);
   lesson.streamItems = [
     // 任务 1：有 takeaway → 摘要取 takeaway
     makeTaskContentItem({

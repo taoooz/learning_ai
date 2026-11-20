@@ -12,13 +12,13 @@
 - **后端：** Next API 作为 BFF 薄代理，转发到 Python FastAPI Agent；Python Agent 负责大纲、目录、任务内容、答疑、检查点、补救、总结等 LLM 编排。
 - **LLM：** OpenAI 兼容接口，模型由 `LLM_MODEL` 控制。
 - **存储：** `NEXT_PUBLIC_LESSON_STORE=local`（默认 localStorage）或 `server`（服务端文件存储 + 本地缓存兜底）。
-- **课程协议：** V1 节点学习流已下线；新课程只允许 V2 蓝图和章节学习流。
+- **课程协议：** V1 节点学习流已下线；新课程只允许当前课程蓝图和章节学习流。
 
 ## 2. 核心用户路径
 
 1. **登录：** `/login` 输入邀请码；cookie 鉴权由 `middleware.ts` 保护页面路由。
-2. **创建课程：** `/generate/chat` 生成学习纲要与 `CourseMission` → `/generate/toc` 生成课程目录 → 前端映射为 `CourseBlueprintV2` 并落库。
-3. **系统课程：** 首页点击系统推荐课程，由内置大纲元数据派生 V2 蓝图，章节内容按需生成。
+2. **创建课程：** `/generate/chat` 生成学习纲要与 `CourseMission` → `/generate/toc` 生成课程目录 → 前端映射为 `CourseBlueprint` 并落库。
+3. **系统课程：** 首页点击系统推荐课程，由内置大纲元数据派生课程蓝图，章节内容按需生成。
 4. **课程页：** `/course/{courseId}` 展示章节树、进度、当前可学章节、课程速查卡和统一术语。
 5. **章节学习：** `/course/{courseId}/chapter/{chapterId}` 按需生成章节计划，再流式输出任务内容。
 6. **学习互动：** 任务边界、流内提问、章末检查点、补救内容、计划补丁建议和章节总结。
@@ -47,8 +47,8 @@
 
 ## 4. 关键不变量
 
-1. 学习数据只持久化 `v2Courses`、`userProfile`、`recommendations`；不存在 V1 `courses`、`currentCourseId` 或 `courseProgress` 字段。
-2. V2 蓝图校验失败、空目录或保存失败时必须显示错误，不得降级为半可用课程。
+1. 学习数据只持久化 `courses`、`userProfile`、`recommendations`；旧 V1 独立 `courses` 容器、`currentCourseId`、`courseProgress` 已删除，当前 `courses` 是唯一课程容器。localStorage key 仍保持 `ai-learning-data-v2`。
+2. 课程蓝图校验失败、空目录或保存失败时必须显示错误，不得降级为半可用课程。
 3. 章节解锁必须由章节真实完成状态派生，不能只信任课程树缓存。
 4. server 模式创建课程时，服务端保存成功后才写本地镜像；保存失败不得静默当作成功。
 5. 删除课程必须清理课程容器、章节学习流和参与信号，并走 `LessonRepository.deleteCourse`。

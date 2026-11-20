@@ -13,10 +13,10 @@ import { decideResumeAction } from '../lib/learning-v2/resume';
 import {
   appendUserQuestion,
   applyLearningSseEvent,
-  createInitialNodeLessonV2,
+  createInitialNodeLesson,
 } from '../lib/learning-v2/reducers';
 import { mirrorPhase } from '../lib/learning-v2/chapter-learning-state';
-import type { ChapterPlan, LearningSseEvent, NodeLessonV2, PlannedTask } from '../types/learning-v2';
+import type { ChapterPlan, LearningSseEvent, NodeLesson, PlannedTask } from '../types/learning-v2';
 
 const NOW = 1756700000000;
 
@@ -52,8 +52,8 @@ function makePlan(taskCount = 3): ChapterPlan {
   };
 }
 
-function makeLesson(mutate?: (lesson: NodeLessonV2) => void): NodeLessonV2 {
-  const lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+function makeLesson(mutate?: (lesson: NodeLesson) => void): NodeLesson {
+  const lesson = createInitialNodeLesson('ch-1', makePlan(), NOW);
   mutate?.(lesson);
   return lesson;
 }
@@ -63,7 +63,7 @@ test('分支①：无 lesson → 生成计划', () => {
 });
 
 test('分支⑧：损坏数据被 storage 归一为 null，走同①（此处直接验证 null 入口）', () => {
-  // storage.loadNodeLessonV2 对解析失败返回 null，决策层只见到 null
+  // storage.loadNodeLesson 对解析失败返回 null，决策层只见到 null
   assert.equal(decideResumeAction(null).kind, 'generate_plan');
 });
 
@@ -78,7 +78,7 @@ test('分支②：章节已完成 → 渲染完成卡', () => {
 });
 
 test('分支③：planning 且无进行中任务 → 最小 order 任务，attempt 1', () => {
-  const lesson = makeLesson(); // createInitialNodeLessonV2 即 planning 态
+  const lesson = makeLesson(); // createInitialNodeLesson 即 planning 态
   assert.deepEqual(decideResumeAction(lesson), {
     kind: 'start_task',
     taskId: 't1',

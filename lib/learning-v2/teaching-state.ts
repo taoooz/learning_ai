@@ -6,7 +6,7 @@ import type {
   PendingTeachingArtifact,
   TeachingInsight,
 } from '@/types/learning-v2';
-import type { NodeLessonV2, StoredCourseV2 } from '@/types/learning-v2';
+import type { NodeLesson, StoredCourse } from '@/types/learning-v2';
 
 export function createCourseTeachingState(now = Date.now()): CourseTeachingState {
   return {
@@ -111,8 +111,8 @@ export function markTeachingInsightUsed(
  * - 记录下一章继续前置的章节素材。
  */
 export function updateTeachingStateAfterChapter(
-  course: StoredCourseV2,
-  lesson: NodeLessonV2,
+  course: StoredCourse,
+  lesson: NodeLesson,
   now = Date.now(),
 ): CourseTeachingState {
   const state = course.teachingState ?? createCourseTeachingState(now);

@@ -1,6 +1,6 @@
 'use client';
 
-// components/learning-v2/ChapterTreeV2.tsx
+// components/learning-v2/ChapterTree.tsx
 // 章节树：复用课程树布局与节点视觉语言（locked/available/completed 三态）。
 // V2 章节 index 为 1 基；渲染组件使用 0 基索引，因此映射时 -1。
 // 点击 available/completed 进入章节学习页 /course/{id}/chapter/{chapterId}，locked 忽略。
@@ -8,16 +8,16 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
-import type { CourseTreeViewV2 } from '@/types/learning-v2';
+import type { CourseTreeView } from '@/types/learning-v2';
 import { CourseNode, type CourseNodeDisplayItem } from '../CourseNode';
 import { getCourseTreeInitialScrollTop, getCourseTreeLayout } from '@/lib/course-tree-layout';
 
-interface ChapterTreeV2Props {
+interface ChapterTreeProps {
   courseId: string;
-  treeView: CourseTreeViewV2;
+  treeView: CourseTreeView;
 }
 
-export function ChapterTreeV2({ courseId, treeView }: ChapterTreeV2Props) {
+export function ChapterTree({ courseId, treeView }: ChapterTreeProps) {
   const router = useRouter();
   const [animateIn, setAnimateIn] = useState(false);
 

@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import {
   appendUserQuestion,
   applyLearningSseEvent,
-  createInitialNodeLessonV2,
+  createInitialNodeLesson,
 } from '../lib/learning-v2/reducers';
 import {
   buildInlineTutorContext,
@@ -24,7 +24,7 @@ import type {
   GenerationMeta,
   LearningContentBlock,
   LearningSseEvent,
-  NodeLessonV2,
+  NodeLesson,
   PlannedTask,
 } from '../types/learning-v2';
 
@@ -125,8 +125,8 @@ function tutorCompletedEvent(
 }
 
 /** 任务 1 内容超长（>6000 字符）且任务 2 也有内容（应被排除）的夹具 */
-function makeLessonWithLongBlocks(): NodeLessonV2 {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+function makeLessonWithLongBlocks(): NodeLesson {
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), NOW);
   lesson = applyLearningSseEvent(
     lesson,
     taskCompletedEvent(
@@ -154,8 +154,8 @@ function makeLessonWithLongBlocks(): NodeLessonV2 {
 const lessonWithLongBlocks = makeLessonWithLongBlocks();
 
 /** 含 4 组已完成问答的夹具（只应保留最近 3 组） */
-function makeLessonWithFourQAPairs(): NodeLessonV2 {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+function makeLessonWithFourQAPairs(): NodeLesson {
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), NOW);
   lesson = applyLearningSseEvent(
     lesson,
     taskCompletedEvent(
@@ -217,7 +217,7 @@ test('visibleContent 恰好截断到上限，且不含其他任务内容', () =>
 });
 
 test('key_point / example 块文本也计入 visibleContent', () => {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), NOW);
   lesson = applyLearningSseEvent(
     lesson,
     taskCompletedEvent(
@@ -243,7 +243,7 @@ test('key_point / example 块文本也计入 visibleContent', () => {
 });
 
 test('仍在流式生成（未完成）的任务内容不进入 visibleContent', () => {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), NOW);
   lesson = applyLearningSseEvent(
     lesson,
     makeEvent({
@@ -275,7 +275,7 @@ test('recentInlineQA 只保留当前任务最近 3 组问答，按时间排列',
 });
 
 test('问答按字符上限截断：问题 300、回答 1200', () => {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), NOW);
   lesson = appendUserQuestion(
     lesson,
     { taskId: 'task-1', questionId: 'q-long', text: '问'.repeat(500) },
@@ -292,7 +292,7 @@ test('问答按字符上限截断：问题 300、回答 1200', () => {
 });
 
 test('未回答与回答失败的问题不进入 recentInlineQA', () => {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), NOW);
   lesson = appendUserQuestion(
     lesson,
     { taskId: 'task-1', questionId: 'q-pending', text: '还没回答的问题' },
@@ -319,7 +319,7 @@ test('未回答与回答失败的问题不进入 recentInlineQA', () => {
 });
 
 test('其他任务的问答不进入 recentInlineQA', () => {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), NOW);
   lesson = appendUserQuestion(
     lesson,
     { taskId: 'task-2', questionId: 'q-other', text: '其他任务的问题' },
@@ -334,7 +334,7 @@ test('其他任务的问答不进入 recentInlineQA', () => {
 });
 
 test('当前问题即便已有完成回答，也不混入历史问答（避免与 question 字段自引用重复）', () => {
-  let lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+  let lesson = createInitialNodeLesson('ch-1', makePlan(), NOW);
   lesson = appendUserQuestion(
     lesson,
     { taskId: 'task-1', questionId: 'q-1', text: '之前问过的问题' },
@@ -348,7 +348,7 @@ test('当前问题即便已有完成回答，也不混入历史问答（避免�
 // ---- 载荷形状与当前问题 ----
 
 test('当前问题文本同样按问题字符上限截断', () => {
-  const lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+  const lesson = createInitialNodeLesson('ch-1', makePlan(), NOW);
   const request = buildInlineTutorContext({
     ...BASE_ARGS,
     question: '问'.repeat(500),
@@ -382,7 +382,7 @@ test('courseId 作为普通请求字段原样透传', () => {
 });
 
 test('空 lesson → 空上下文', () => {
-  const lesson = createInitialNodeLessonV2('ch-1', makePlan(), NOW);
+  const lesson = createInitialNodeLesson('ch-1', makePlan(), NOW);
   const request = buildInlineTutorContext({ ...BASE_ARGS, lesson });
   assert.equal(request.visibleContent, '');
   assert.deepEqual(request.recentInlineQA, []);

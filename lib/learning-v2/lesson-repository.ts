@@ -3,25 +3,25 @@
 // 后端无关：hook/业务层只依赖本接口，Server 实现按 p5-服务端持久化迁移设计.md §3 插入
 // 切换由 NEXT_PUBLIC_LESSON_STORE 控制，默认 local（零行为变化）
 
-import type { CourseBlueprintV2, NodeLessonV2, StoredCourseV2 } from '@/types/learning-v2';
+import type { CourseBlueprint, NodeLesson, StoredCourse } from '@/types/learning-v2';
 import type { EngagementEvent } from './engagement';
 import {
-  getStoredDataV2,
-  saveStoredDataV2,
+  getStoredData,
+  saveStoredData,
 } from '@/lib/storage';
 import {
-  getStoredCourseV2,
-  loadNodeLessonV2,
-  saveNodeLessonV2WithQuotaFallback,
-  saveStoredCourseV2,
+  getStoredCourse,
+  loadNodeLesson,
+  saveNodeLessonWithQuotaFallback,
+  saveStoredCourse,
   type QuotaFallbackResult,
 } from './storage';
 
 export interface LessonRepository {
-  loadCourse(courseId: string): Promise<StoredCourseV2 | null>;
-  saveCourse(course: StoredCourseV2): Promise<boolean>;
+  loadCourse(courseId: string): Promise<StoredCourse | null>;
+  saveCourse(course: StoredCourse): Promise<boolean>;
   deleteCourse(courseId: string): Promise<boolean>;
-  loadLesson(courseId: string, chapterId: string): Promise<NodeLessonV2 | null>;
+  loadLesson(courseId: string, chapterId: string): Promise<NodeLesson | null>;
   /**
    * expectedUpdatedAt 必须是「最后一次读到的服务端 revision」；server 模式用于乐观锁。
    * 返回 saved=false = 配额失败/冲突且归档后仍失败（调用方走用户可见恢复路径）。
@@ -29,8 +29,8 @@ export interface LessonRepository {
   saveLesson(
     courseId: string,
     chapterId: string,
-    lesson: NodeLessonV2,
-    blueprint: CourseBlueprintV2,
+    lesson: NodeLesson,
+    blueprint: CourseBlueprint,
     expectedUpdatedAt?: number | null,
   ): Promise<QuotaFallbackResult>;
   appendEngagement(courseId: string, events: EngagementEvent[]): Promise<void>;
@@ -45,35 +45,35 @@ export function getLessonStoreMode(): LessonStoreMode {
 
 /** localStorage 实现：现有函数的薄 Promise 包装（保持现有行为与 SSR 安全） */
 export class LocalLessonRepository implements LessonRepository {
-  async loadCourse(courseId: string): Promise<StoredCourseV2 | null> {
-    return getStoredCourseV2(courseId);
+  async loadCourse(courseId: string): Promise<StoredCourse | null> {
+    return getStoredCourse(courseId);
   }
 
-  async saveCourse(course: StoredCourseV2): Promise<boolean> {
-    return saveStoredCourseV2(course);
+  async saveCourse(course: StoredCourse): Promise<boolean> {
+    return saveStoredCourse(course);
   }
 
   async deleteCourse(courseId: string): Promise<boolean> {
-    const data = getStoredDataV2();
-    const courses = data.v2Courses;
+    const data = getStoredData();
+    const courses = data.courses;
     if (!courses.some((course) => course.courseId === courseId)) return false;
-    return saveStoredDataV2({
+    return saveStoredData({
       ...data,
-      v2Courses: courses.filter((course) => course.courseId !== courseId),
+      courses: courses.filter((course) => course.courseId !== courseId),
     });
   }
 
-  async loadLesson(courseId: string, chapterId: string): Promise<NodeLessonV2 | null> {
-    return loadNodeLessonV2(courseId, chapterId);
+  async loadLesson(courseId: string, chapterId: string): Promise<NodeLesson | null> {
+    return loadNodeLesson(courseId, chapterId);
   }
 
   async saveLesson(
     courseId: string,
     _chapterId: string,
-    lesson: NodeLessonV2,
-    blueprint: CourseBlueprintV2,
+    lesson: NodeLesson,
+    blueprint: CourseBlueprint,
   ): Promise<QuotaFallbackResult> {
-    return saveNodeLessonV2WithQuotaFallback(courseId, lesson, blueprint);
+    return saveNodeLessonWithQuotaFallback(courseId, lesson, blueprint);
   }
 
   async appendEngagement(): Promise<void> {
@@ -88,20 +88,20 @@ export class LocalLessonRepository implements LessonRepository {
 export class ServerLessonRepository implements LessonRepository {
   private courseSaveQueue: Promise<unknown> = Promise.resolve();
 
-  async loadCourse(courseId: string): Promise<StoredCourseV2 | null> {
+  async loadCourse(courseId: string): Promise<StoredCourse | null> {
     const response = await fetch('/api/user/courses', { method: 'GET' });
     if (!response.ok) return null;
     const body = await response.json();
     if (!body.ok) return null;
-    const courses = body.courses as StoredCourseV2[];
+    const courses = body.courses as StoredCourse[];
     return courses.find((c) => c.courseId === courseId) ?? null;
   }
 
-  saveCourse(course: StoredCourseV2): Promise<boolean> {
+  saveCourse(course: StoredCourse): Promise<boolean> {
     // 同一客户端内串行 read-modify-write，避免课程自愈与章节完成互相覆盖。
     const operation = async (): Promise<boolean> => {
       const listResponse = await fetch('/api/user/courses', { method: 'GET' });
-      const courses: StoredCourseV2[] = listResponse.ok
+      const courses: StoredCourse[] = listResponse.ok
         ? (await listResponse.json()).courses ?? []
         : [];
       const next = [...courses.filter((c) => c.courseId !== course.courseId), course];
@@ -126,20 +126,20 @@ export class ServerLessonRepository implements LessonRepository {
     return Boolean(body?.ok) && body?.existed === true;
   }
 
-  async loadLesson(courseId: string, chapterId: string): Promise<NodeLessonV2 | null> {
+  async loadLesson(courseId: string, chapterId: string): Promise<NodeLesson | null> {
     const response = await fetch(
       `/api/user/lessons?courseId=${encodeURIComponent(courseId)}&chapterId=${encodeURIComponent(chapterId)}`,
     );
     if (!response.ok) return null;
     const body = await response.json();
-    return body.ok ? (body.lesson as NodeLessonV2 | null) : null;
+    return body.ok ? (body.lesson as NodeLesson | null) : null;
   }
 
   async saveLesson(
     courseId: string,
     chapterId: string,
-    lesson: NodeLessonV2,
-    _blueprint: CourseBlueprintV2,
+    lesson: NodeLesson,
+    _blueprint: CourseBlueprint,
     expectedUpdatedAt?: number | null,
   ): Promise<QuotaFallbackResult> {
     const response = await fetch('/api/user/lessons', {
@@ -199,13 +199,13 @@ export function setLessonRepository(repo: LessonRepository | null): void {
 export async function syncLearningAuthoritySnapshot(
   courseId: string,
   chapterId: string,
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
 ): Promise<boolean> {
-  const localCourse = getStoredCourseV2(courseId);
+  const localCourse = getStoredCourse(courseId);
   if (!localCourse) return false;
   const coursesResponse = await fetch('/api/user/courses', { method: 'GET' });
   const coursesBody = coursesResponse.ok
-    ? await coursesResponse.json().catch(() => null) as { courses?: StoredCourseV2[] } | null
+    ? await coursesResponse.json().catch(() => null) as { courses?: StoredCourse[] } | null
     : null;
   const courses = coursesBody?.courses ?? [];
   const nextCourses = [...courses.filter((course) => course.courseId !== courseId), localCourse];

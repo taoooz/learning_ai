@@ -7,7 +7,7 @@
 //   纯函数层只暴露计数与排序，不删除超出窗口的问题
 // 所有函数均为纯函数：不修改入参，输出完全由输入决定
 
-import type { NodeLessonV2, TutorAnswerItem, UserQuestionItem } from '@/types/learning-v2';
+import type { NodeLesson, TutorAnswerItem, UserQuestionItem } from '@/types/learning-v2';
 
 /** 自动处理窗口上限：最多 3 个未回答问题进入自动处理，超出部分排队等待（§3.3） */
 export const TUTOR_AUTO_WINDOW_LIMIT = 3;
@@ -17,7 +17,7 @@ export const TUTOR_AUTO_WINDOW_LIMIT = 3;
  * 判定以配对回答条目的状态为准：无回答条目，或回答状态为 pending/streaming，
  * 均视为未回答；complete/failed 为终态，移出自动队列。
  */
-export function getPendingTutorQuestions(lesson: NodeLessonV2): UserQuestionItem[] {
+export function getPendingTutorQuestions(lesson: NodeLesson): UserQuestionItem[] {
   const answers = new Map<string, TutorAnswerItem>();
   for (const item of lesson.streamItems) {
     if (item.type === 'tutor_answer') answers.set(item.questionId, item);
@@ -32,12 +32,12 @@ export function getPendingTutorQuestions(lesson: NodeLessonV2): UserQuestionItem
 }
 
 /** 队列中最早一题（无待答问题时返回 undefined）。纯函数，不修改输入 */
-export function takeNextTutorQuestion(lesson: NodeLessonV2): UserQuestionItem | undefined {
+export function takeNextTutorQuestion(lesson: NodeLesson): UserQuestionItem | undefined {
   return getPendingTutorQuestions(lesson)[0];
 }
 
 /** 未回答问题总数（含超出自动窗口的部分） */
-export function countUnansweredTutorQuestions(lesson: NodeLessonV2): number {
+export function countUnansweredTutorQuestions(lesson: NodeLesson): number {
   return getPendingTutorQuestions(lesson).length;
 }
 
@@ -45,7 +45,7 @@ export function countUnansweredTutorQuestions(lesson: NodeLessonV2): number {
  * 判断当前任务最近一条完成的 Tutor 回答是否为 proceed 动作（§2.6.2）。
  * 用于边界卡高亮「继续学习」按钮：用户表达继续意图后给予视觉引导。
  */
-export function latestTutorActionIsProceed(lesson: NodeLessonV2): boolean {
+export function latestTutorActionIsProceed(lesson: NodeLesson): boolean {
   const currentTaskId = lesson.runtime.currentTaskId;
   if (!currentTaskId) return false;
   let latest: TutorAnswerItem | undefined;

@@ -4,13 +4,13 @@
 
 import type {
   LearningStreamItem,
-  NodeLessonV2,
+  NodeLesson,
   SystemNoticeItem,
   TaskContentItem,
   TutorAnswerItem,
 } from '@/types/learning-v2';
 
-function isTaskNoticeResolved(item: SystemNoticeItem, lesson: NodeLessonV2): boolean {
+function isTaskNoticeResolved(item: SystemNoticeItem, lesson: NodeLesson): boolean {
   if (!item.taskId) return false;
   return lesson.streamItems.some(
     (streamItem): streamItem is TaskContentItem =>
@@ -20,7 +20,7 @@ function isTaskNoticeResolved(item: SystemNoticeItem, lesson: NodeLessonV2): boo
   );
 }
 
-function isTutorNoticeResolved(item: SystemNoticeItem, lesson: NodeLessonV2): boolean {
+function isTutorNoticeResolved(item: SystemNoticeItem, lesson: NodeLesson): boolean {
   if (!item.questionId) return false;
   return lesson.streamItems.some(
     (streamItem): streamItem is TutorAnswerItem =>
@@ -33,7 +33,7 @@ function isTutorNoticeResolved(item: SystemNoticeItem, lesson: NodeLessonV2): bo
 /** 错误通知对应的请求已成功完成时，UI 应隐藏该通知。 */
 export function isResolvedErrorNotice(
   item: LearningStreamItem,
-  lesson: NodeLessonV2,
+  lesson: NodeLesson,
 ): boolean {
   if (item.type !== 'system_notice' || item.tone !== 'error') return false;
   return isTaskNoticeResolved(item, lesson) || isTutorNoticeResolved(item, lesson);
