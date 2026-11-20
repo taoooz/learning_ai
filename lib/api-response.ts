@@ -18,6 +18,6 @@ export function apiError(error: string, status = 400): NextResponse<ApiErrorResp
 /**
  * 检查请求是否已认证（cookie 中有有效的邀请码）
  * 返回 inviteCode 或 null（未认证时附带 401 响应）
- * 实现统一在 lib/auth.ts，此处保留导出以兼容现有调用方
+ * 实现统一在 lib/auth.ts；API 路由统一从本模块导入鉴权函数
  */
 export { requireAuth } from './auth';

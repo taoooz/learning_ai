@@ -48,3 +48,13 @@ def test_delete_course_requires_course_id(monkeypatch):
     )
     assert response.status_code == 422
     assert response.json()["message"] == "缺少 courseId"
+
+
+def test_chat_generate_rejects_legacy_messages_only(monkeypatch):
+    monkeypatch.setenv("PYTHON_INTERNAL_TOKEN", "secret")
+    response = client.post(
+        "/api/agents/chat/generate",
+        json={"messages": [{"role": "user", "content": "旧调用"}]},
+        headers={"X-Internal-Token": "secret"},
+    )
+    assert response.status_code == 422

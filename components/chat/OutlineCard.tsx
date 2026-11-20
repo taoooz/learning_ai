@@ -12,7 +12,7 @@ type OutlineCardProps = {
   streaming?: boolean;
 };
 
-// 后端已归一化为英文键；中文别名兼容修复前生成的旧会话数据
+// 后端可能返回英文键或中文水平值，两种展示值都在当前契约内
 const LEVEL_LABELS: Record<string, string> = {
   novice: '入门',
   beginner: '初级',

@@ -219,7 +219,7 @@ async def stream_llm_and_parse(messages: list[dict] | str, max_tokens: int = 100
     """流式调用 LLM，yield thinking + content_delta 事件
     messages: messages 数组，或 system prompt 字符串（自动包装）
     """
-    # 向后兼容：如果传入字符串，自动包装为 messages
+    # 当前内部调用既可能传完整 messages，也可能直接传 system prompt
     if isinstance(messages, str):
         messages = [{"role": "system", "content": messages}, {"role": "user", "content": "请开始。"}]
 

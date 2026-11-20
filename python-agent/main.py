@@ -7,7 +7,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 import hmac
 from uuid import uuid4
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -450,64 +450,59 @@ async def generate_toc_agent_route(request: Request):
 async def chat_agent_route(request: Request):
     """Agent 版学习对话（带搜索能力，流式 SSE）"""
     body = await request.json()
+    if (
+        not isinstance(body, dict)
+        or not str(body.get("courseTopic") or "").strip()
+        or not isinstance(body.get("messages"), list)
+        or not body.get("messages")
+    ):
+        raise HTTPException(status_code=422, detail="chat/generate 需要 courseTopic 与非空 messages")
     account = request.headers.get("X-Account-Id")
 
     def event_generator():
         try:
-            # 支持两种调用方式：
-            # 1. 直接传 messages（向后兼容）
-            # 2. 传结构化数据（courseTopic + messages），由 Python Agent 构建 prompt
-            raw_messages = body.get('messages')
+            raw_messages = body["messages"]
             max_tokens = body.get('maxTokens', 1500)
-            course_topic = body.get('courseTopic')
-            authoritative_messages: list[dict] = []
+            course_topic = str(body["courseTopic"]).strip()
+            chat_memory = body.get('chatMemory')
+            context_info = body.get('contextInfo')
+            conversation_summary = body.get('conversationSummary')
+            if account:
+                question_context = (context_info or {}).get('questionContext') or {}
+                focus = (context_info or {}).get('currentNodeTitle') or question_context.get('question') or ''
+                memory_store = MemoryV4Store()
+                context = safe_resolve_memory_context(memory_store, account, {
+                    "scene": "chat",
+                    "topic": course_topic,
+                    "courseId": body.get("courseId"),
+                    "queryText": focus,
+                })
+                chat_memory = to_chat_prompt_payload(context) if context else None
+                try:
+                    conversation_summary = memory_store.get_chat_summary(
+                        account,
+                        str(body.get("courseId") or ""),
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    print(f"[MemoryContext] chat summary unavailable: {exc}")
+                    conversation_summary = None
 
-            if course_topic:
-                # 新模式：接收结构化数据，构建 prompt
-                chat_memory = body.get('chatMemory')
-                context_info = body.get('contextInfo')
-                conversation_summary = body.get('conversationSummary')
-                if account:
-                    question_context = (context_info or {}).get('questionContext') or {}
-                    focus = (context_info or {}).get('currentNodeTitle') or question_context.get('question') or ''
-                    memory_store = MemoryV4Store()
-                    context = safe_resolve_memory_context(memory_store, account, {
-                        "scene": "chat",
-                        "topic": course_topic,
-                        "courseId": body.get("courseId"),
-                        "queryText": focus,
-                    })
-                    chat_memory = to_chat_prompt_payload(context) if context else None
-                    try:
-                        conversation_summary = memory_store.get_chat_summary(
-                            account,
-                            str(body.get("courseId") or ""),
-                        )
-                    except Exception as exc:  # noqa: BLE001
-                        print(f"[MemoryContext] chat summary unavailable: {exc}")
-                        conversation_summary = None
-
-                system_prompt = build_chat_system_prompt(
-                    course_topic=course_topic,
-                    context_info=context_info,
-                    conversation_summary=conversation_summary,
-                    chat_memory=chat_memory,
-                )
-                messages = [
-                    {"role": "system", "content": system_prompt},
-                    *[],
-                ]
-                authoritative_messages = normalize_chat_messages(
-                    str(body.get("courseId") or ""),
-                    raw_messages or [],
-                    turn_id=str(body.get("turnId") or ""),
-                )
-                messages.extend([
-                    {"role": item["role"], "content": item["content"]}
-                    for item in authoritative_messages
-                ])
-            else:
-                messages = raw_messages or []
+            system_prompt = build_chat_system_prompt(
+                course_topic=course_topic,
+                context_info=context_info,
+                conversation_summary=conversation_summary,
+                chat_memory=chat_memory,
+            )
+            messages = [{"role": "system", "content": system_prompt}]
+            authoritative_messages = normalize_chat_messages(
+                str(body.get("courseId") or ""),
+                raw_messages,
+                turn_id=str(body.get("turnId") or ""),
+            )
+            messages.extend([
+                {"role": item["role"], "content": item["content"]}
+                for item in authoritative_messages
+            ])
 
             assistant_parts: list[str] = []
             for chunk in stream_chat_with_tools(messages=messages, max_tokens=max_tokens):

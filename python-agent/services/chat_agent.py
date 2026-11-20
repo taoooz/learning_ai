@@ -3,7 +3,7 @@ Chat Agent 服务 — 带搜索能力的学习对话
 Python Agent 端构建 system prompt，叠加搜索能力
 AI 自主判断是否需要搜索（不确定时才搜，简单问题直接回答）
 
-输出格式与 MiniMax 原始 SSE 格式兼容，前端无需改动
+输出格式遵循课程聊天前端 SSE 契约
 """
 import json
 from typing import Generator, Optional
@@ -14,12 +14,12 @@ from services.memory_context_v4 import wrap_untrusted_context
 
 
 def _format_content_delta(content: str) -> str:
-    """将内容包装为 MiniMax SSE 格式"""
+    """将内容包装为课程聊天 SSE data 事件"""
     return f"data: {json.dumps({'choices': [{'delta': {'content': content}}]}, ensure_ascii=False)}\n\n"
 
 
 def _format_reasoning_delta(text: str) -> str:
-    """将思考内容包装为 MiniMax SSE 格式（reasoning_split=true）"""
+    """将思考内容包装为课程聊天 SSE reasoning 事件"""
     return f"data: {json.dumps({'choices': [{'delta': {'reasoning_details': [{'text': text}]}}]}, ensure_ascii=False)}\n\n"
 
 
@@ -131,7 +131,7 @@ def stream_chat_with_tools(
     - 不确定或时效性强的问题 → 先搜索再回答
     - max_iterations=2 限制最多 2 次工具调用，控制延迟
 
-    输出 MiniMax 兼容 SSE 格式，前端解析无需改动：
+    输出课程聊天 SSE 格式：
     - 思考过程: data: {"choices":[{"delta":{"reasoning_details":[{"text":"..."}]}}]}
     - 实际回答: data: {"choices":[{"delta":{"content":"..."}}]}
     - 结束标记: data: [DONE]

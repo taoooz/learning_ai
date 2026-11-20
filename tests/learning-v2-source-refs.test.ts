@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   getDisplaySourceRefs,
+  resolveEvidenceDisplayRefs,
   getSourceDisplayTitle,
   getSourceDomain,
   isSafeHttpUrl,
@@ -52,4 +53,16 @@ test('来源清洗保留主推来源标记', () => {
     isPrimary: true,
   }]);
   assert.equal(refs[0]?.isPrimary, true);
+});
+
+
+test('证据角标只接受 evidenceId 精确匹配，不再按 ev-N 序号猜测', () => {
+  const sources = [
+    { title: '来源一', url: 'https://example.com/a' },
+    { title: '来源二', url: 'https://example.com/b', evidenceId: 'ev-02' },
+  ];
+
+  assert.deepEqual(resolveEvidenceDisplayRefs(['ev-01', 'ev-02'], sources), [
+    { displayIndex: 2, refId: 'ev-02' },
+  ]);
 });

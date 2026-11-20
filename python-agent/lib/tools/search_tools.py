@@ -1,6 +1,6 @@
 """
 搜索工具 — 免预算路径：DDGS(Google backend) + Jina Reader。
-提供结构化 web_search 和兼容旧链路的字符串接口。
+提供结构化搜索和供 LLM 工具调用消费的文本搜索接口。
 """
 import os
 import time
@@ -135,7 +135,7 @@ def search_web_structured(
 
 
 def web_search(query: str, max_results: int = 5, preferred_domains: list[str] | None = None) -> str:
-    """兼容旧链路的字符串搜索接口。"""
+    """供 LLM 工具调用消费的文本搜索接口。"""
     try:
         results = search_web_structured(query, max_results=max_results, preferred_domains=preferred_domains)
     except Exception as e:  # noqa: BLE001

@@ -29,6 +29,7 @@ export interface KeyPointBlock {
   blockId: string;
   title?: string;
   points: string[];
+  evidenceRefs?: string[];
 }
 
 export interface ExampleBlock {
@@ -38,6 +39,7 @@ export interface ExampleBlock {
   context: string;
   content: string;
   takeaway: string;
+  evidenceRefs?: string[];
 }
 
 export interface ComparisonBlock {
@@ -45,6 +47,7 @@ export interface ComparisonBlock {
   blockId: string;
   columns: string[];
   rows: string[][];
+  evidenceRefs?: string[];
 }
 
 export interface DiagramBlock {
@@ -52,6 +55,7 @@ export interface DiagramBlock {
   blockId: string;
   language: 'mermaid';
   source: string;
+  evidenceRefs?: string[];
 }
 
 /** 交互组件块（Phase 1：消费型演示，不计入掌握度证据） */

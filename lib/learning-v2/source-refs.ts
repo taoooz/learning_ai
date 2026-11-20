@@ -60,3 +60,21 @@ export function getDisplaySourceRefs(sources: SourceRef[] | undefined): SourceRe
 
   return result;
 }
+
+export interface EvidenceDisplayRef {
+  displayIndex: number;
+  refId: string;
+}
+
+/** 只按 evidenceId 精确匹配角标；不再按 ev-N 序号猜测旧来源。 */
+export function resolveEvidenceDisplayRefs(
+  evidenceRefs: string[] | undefined,
+  sources: SourceRef[] | undefined,
+): EvidenceDisplayRef[] {
+  if (!evidenceRefs?.length || !sources?.length) return [];
+  const display = getDisplaySourceRefs(sources);
+  return evidenceRefs.flatMap((refId) => {
+    const index = display.findIndex((source) => source.evidenceId === refId);
+    return index >= 0 ? [{ displayIndex: index + 1, refId }] : [];
+  });
+}

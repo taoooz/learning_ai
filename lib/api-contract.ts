@@ -24,6 +24,5 @@ export function unwrapApiResponse<T>(raw: { success?: boolean; data?: T; error?:
   if (raw.success === false && raw.error) {
     throw new Error(raw.error);
   }
-  // 兼容未包装的旧格式
-  return raw as unknown as T;
+  throw new Error('Invalid API response envelope');
 }

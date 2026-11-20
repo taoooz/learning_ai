@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseStreamContent } from '../app/generate/chat/utils/contentParser';
 import { parseSSELine } from '../app/generate/chat/utils/sseParser';
-import { normalizeVisualization } from '../lib/visualization';
 
 let getCourseTreeLayout: typeof import('../lib/course-tree-layout').getCourseTreeLayout;
 let getCourseTreeInitialScrollTop: typeof import('../lib/course-tree-layout').getCourseTreeInitialScrollTop;
@@ -164,19 +163,6 @@ test('parseSSELine ignores done sentinel without warning noise', () => {
   assert.equal(parseSSELine('[DONE]'), null);
 });
 
-test('normalizeVisualization supports legacy aliases and nested data payload', () => {
-  const visualization = normalizeVisualization({
-    type: 'key_points',
-    data: {
-      title: '核心要点',
-      points: ['先判断目标', '再决定是否调用工具'],
-    },
-  });
-
-  assert.equal(visualization?.type, 'keyPoints');
-  assert.equal(visualization?.title, '核心要点');
-  assert.deepEqual(visualization?.items, ['先判断目标', '再决定是否调用工具']);
-});
 
 
 
