@@ -350,12 +350,6 @@ class MemoryV4Store:
                 source_type="user_profile_input", derivation="user_input",
                 tags=["profile", "goal", "targetJob"], importance=0.92, confidence=0.95,
             )
-            add_record(
-                kind="fact", scope={"type": "user"}, field_path="targetJob:background",
-                title="目标岗位背景", text=f"目标岗位：{target_job}",
-                source_type="user_profile_input", derivation="user_input",
-                tags=["profile", "background", "targetJob"], importance=0.72, confidence=0.92,
-            )
 
         for index, item in enumerate(profile.get("workExperience") or []):
             text = _as_text(item)
@@ -665,6 +659,44 @@ class MemoryV4Store:
             "conflictsWith": [],
         }
 
+    def _merge_candidate_into_record(
+        self,
+        record: dict[str, Any],
+        candidate: dict[str, Any],
+        at: int,
+    ) -> None:
+        def merge_list(existing_values: Any, next_values: Any) -> list:
+            merged = list(existing_values or [])
+            for value in (next_values or []):
+                if value not in merged:
+                    merged.append(value)
+            return merged
+
+        def source_key(ref: Any) -> str:
+            return json.dumps(ref, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+        existing_refs = list(record.get("sourceRefs") or [])
+        seen_refs = {source_key(ref) for ref in existing_refs}
+        for ref in (candidate.get("sourceRefs") or []):
+            if source_key(ref) not in seen_refs:
+                existing_refs.append(ref)
+                seen_refs.add(source_key(ref))
+        record["sourceRefs"] = existing_refs
+        record["evidenceIds"] = merge_list(record.get("evidenceIds"), candidate.get("evidenceIds"))
+        record["tags"] = merge_list(record.get("tags"), candidate.get("tags"))
+        record["conceptKeys"] = merge_list(record.get("conceptKeys"), candidate.get("conceptKeys"))
+        record["confidence"] = max(float(record.get("confidence", 0)), float(candidate.get("confidence", 0)))
+        record["importance"] = max(float(record.get("importance", 0)), float(candidate.get("importance", 0)))
+        record["updatedAt"] = at
+        record["version"] = int(record.get("version", 1)) + 1
+        if (
+            candidate.get("sourceType") == "explicit_user_statement"
+            or candidate.get("kind") == "teaching_strategy"
+        ):
+            for field in ("title", "summary", "content"):
+                if candidate.get(field):
+                    record[field] = candidate[field]
+
     @_account_locked
     def consolidate_candidates(self, account_id: str) -> dict[str, Any]:
         at = _now_ms()
@@ -674,23 +706,48 @@ class MemoryV4Store:
         evidence_by_id = {row.get("evidenceId"): row for row in self.load_evidence(account_id)}
         existing_candidate_ids = {row.get("candidateId") for row in candidates}
         # teaching_strategy 只能由服务端在 Remediation 前后 Evidence 都存在时派生。
+        validated_remediations = []
         for remediation_row in remediation:
             before_id = remediation_row.get("beforeEvidenceId")
             after_id = remediation_row.get("afterEvidenceId")
             if not before_id or not after_id or remediation_row.get("outcome") not in ("helped", "partially_helped"):
                 continue
-            candidate_id = _stable_id("candidate", f"strategy:{remediation_row.get('remediationId')}")
+            validated_remediations.append(remediation_row)
+
+        strategy_groups: dict[str, list[dict[str, Any]]] = {}
+        for remediation_row in validated_remediations:
+            strategy_key = str(remediation_row.get("strategyKey") or remediation_row.get("remediationId") or "").strip()
+            if not strategy_key:
+                continue
+            strategy_groups.setdefault(strategy_key, []).append(remediation_row)
+
+        for strategy_key, group in strategy_groups.items():
+            concept_keys: list[str] = []
+            evidence_ids: list[str] = []
+            source_refs: list[dict[str, Any]] = []
+            outcomes: list[str] = []
+            for remediation_row in group:
+                before_id = str(remediation_row["beforeEvidenceId"])
+                after_id = str(remediation_row["afterEvidenceId"])
+                before = evidence_by_id.get(before_id) or {}
+                after = evidence_by_id.get(after_id) or {}
+                for concept_key in [*(before.get("conceptKeys") or []), *(after.get("conceptKeys") or [])]:
+                    if concept_key not in concept_keys:
+                        concept_keys.append(concept_key)
+                for evidence_id in (before_id, after_id):
+                    if evidence_id not in evidence_ids:
+                        evidence_ids.append(evidence_id)
+                        source_refs.append({"type": "learning_evidence", "evidenceId": evidence_id})
+                outcomes.append(str(remediation_row.get("outcome")))
+            candidate_id = _stable_id(
+                "candidate",
+                f"strategy:{strategy_key}:{json.dumps(source_refs, ensure_ascii=False, sort_keys=True)}",
+            )
             if candidate_id in existing_candidate_ids:
                 continue
-            before = evidence_by_id.get(before_id) or {}
-            after = evidence_by_id.get(after_id) or {}
-            concept_keys = list(dict.fromkeys([
-                *(before.get("conceptKeys") or []),
-                *(after.get("conceptKeys") or []),
-            ]))
             scope = {"type": "user"}
             content = (
-                f"补救策略「{remediation_row.get('strategyKey')}」在概念"
+                f"补救策略「{strategy_key}」在概念"
                 f"「{'、'.join(concept_keys) or '当前目标'}」上已验证有效。"
             )
             candidate = {
@@ -704,17 +761,14 @@ class MemoryV4Store:
                 "tags": ["remediation", "teaching_strategy"],
                 "conceptKeys": concept_keys,
                 "sourceType": "learning_evidence",
-                "sourceRefs": [
-                    {"type": "learning_evidence", "evidenceId": before_id},
-                    {"type": "learning_evidence", "evidenceId": after_id},
-                ],
-                "evidenceIds": [before_id, after_id],
-                "confidence": 0.88 if remediation_row.get("outcome") == "helped" else 0.75,
+                "sourceRefs": source_refs,
+                "evidenceIds": evidence_ids,
+                "confidence": 0.88 if "helped" in outcomes else 0.75,
                 "importance": 0.7,
                 "durability": "long_term",
                 "sensitivity": "normal",
                 "suggestedAction": "add",
-                "dedupeKey": _stable_id("strategy-key", str(remediation_row.get("remediationId"))),
+                "dedupeKey": _stable_id("strategy-key", strategy_key),
                 "extractionVersion": "remediation-evidence-v1",
                 "createdAt": at,
                 "status": "pending",
@@ -789,9 +843,19 @@ class MemoryV4Store:
                     None,
                 )
             if existing and existing.get("status") == "active" and candidate.get("suggestedAction") == "add":
+                self._merge_candidate_into_record(existing, candidate, at)
                 candidate["status"] = "applied"
                 candidate["targetMemoryId"] = existing.get("memoryId")
                 applied += 1
+                self._audit(
+                    account_id,
+                    action="record_merged",
+                    actor="rule",
+                    reason="candidate_merged_by_semantic_key",
+                    memory_id=existing.get("memoryId"),
+                    candidate_id=candidate.get("candidateId"),
+                    at=at,
+                )
                 continue
             if existing and candidate.get("suggestedAction") in ("update", "supersede"):
                 existing["status"] = "superseded"

@@ -58,7 +58,8 @@
 9. 密钥只放 `.env*`，不得进入源码或文档。
 10. 用户画像输入经服务端 Memory V4 ingestion 后，课程生成与聊天只读取场景 Resolver 选中的 V4 Memory；不保留 V3 Memory 兼容层。Chat Summary 与 Chapter Episode 只由服务端 transcript、lesson、Evidence、recap snapshot 生成；旧 `/api/memory/refine` 与 `/api/agents/memory/refine` 已删除，不得恢复双轨写入；localStorage 不迁移无账户后缀的旧 key。
 11. server 模式 lesson 保存必须单写入器串行执行；写入在途时只合并为最新快照，不能让旧快照排队覆盖新状态。
-12. Chat Agent API 只接受 `{ courseTopic, messages }` 结构化输入；不支持仅传 `messages` 的旧直连模式。
+12. Profile Memory 使用固定五维派生视图（方向、背景、偏好、教学策略、学习轨迹）；摘要通过 `sourceRecordIds` 与 `sourceRevision` 指向原子记录，不形成第二事实层。
+13. Chat Agent API 只接受 `{ courseTopic, messages }` 结构化输入；不支持仅传 `messages` 的旧直连模式。
 
 ## 5. 详细文档索引
 

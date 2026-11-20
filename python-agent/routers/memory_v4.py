@@ -4,6 +4,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from services.memory_v4_store import MemoryV4Store
+from services.memory_dimension_view import build_memory_dimension_view
 from services.memory_context_v4 import resolve_memory_context
 from services.memory_summary_service import rebuild_learning_summary
 from services.chat_memory_service import build_server_chat_summary
@@ -32,7 +33,11 @@ async def memory_get(request: Request):
     if not account:
         return _unauthorized()
     store = _store().load_store(account)
-    return {"ok": True, "store": store}
+    return {
+        "ok": True,
+        "store": store,
+        "dimensions": build_memory_dimension_view(store),
+    }
 
 
 @router.post("/profile-ingest")

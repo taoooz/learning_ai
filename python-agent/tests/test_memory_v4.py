@@ -66,6 +66,7 @@ def test_profile_ingestion_auto_activates_facts_and_inferences(tmp_path):
     assert result["changed"] is True
     records = result["store"]["records"]
     assert any(r["kind"] == "goal" and "AI 产品经理" in r["content"] for r in records)
+    assert all(r.get("dedupeKey") != "profile:targetJob:background" for r in records)
     inference = [r for r in records if r["sourceType"] == "user_profile_inference"]
     assert inference
     assert all(r["status"] == "active" for r in inference)
@@ -236,6 +237,25 @@ def test_memory_api_account_isolation(monkeypatch, tmp_path):
     response = client.get("/api/user/memory", headers={"X-Account-Id": "account-b"})
     assert response.status_code == 200
     assert response.json()["store"]["records"] == []
+
+
+def test_memory_api_returns_fixed_dimension_projection(monkeypatch, tmp_path):
+    import services.memory_v4_store as memory_module
+    memory_module._DATA_ROOT = tmp_path
+    client = _client()
+    headers = {"X-Account-Id": "account-a"}
+    client.post("/api/user/memory/profile-ingest", json={"profile": _profile()}, headers=headers)
+
+    response = client.get("/api/user/memory", headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    dimensions = body["dimensions"]
+    assert {item["id"] for item in dimensions} == {
+        "direction", "background", "preferences", "teaching", "history",
+    }
+    direction = next(item for item in dimensions if item["id"] == "direction")
+    assert direction["summary"] == "AI 产品经理"
+    assert direction["sourceRevision"] == body["store"]["revision"]
 
 
 def test_memory_delete_endpoint_tombstones_record(monkeypatch, tmp_path):
@@ -546,3 +566,58 @@ def test_deleted_episode_and_chat_summary_are_not_recreated(tmp_path):
     store.tombstone_record("account-a", summary_record["memoryId"], "user_forget")
     third = store.upsert_chat_summary("account-a", "course-1", {"summary": "新摘要"}, now=2000)
     assert third["summary"] is None
+
+
+def test_teaching_strategy_is_aggregated_by_strategy_key(tmp_path):
+    store = MemoryV4Store(tmp_path)
+    for index, concept in enumerate(("304", "ETag"), start=1):
+        store.append_evidence(
+            "account-a",
+            _evidence(
+                "account-a",
+                evidence_id=f"ev-before-{index}",
+                idem=f"idem-before-{index}",
+                concept=concept,
+                outcome="not_demonstrated",
+                created_at=index * 1000,
+                checkpoint_id=f"cp-{index}",
+            ),
+        )
+        store.append_evidence(
+            "account-a",
+            _evidence(
+                "account-a",
+                evidence_id=f"ev-after-{index}",
+                idem=f"idem-after-{index}",
+                concept=concept,
+                outcome="demonstrated",
+                created_at=index * 1000 + 100,
+                attempt=2,
+                checkpoint_id=f"cp-{index}",
+            ),
+        )
+        store.append_remediation("account-a", {
+            "remediationId": f"rem-{index}",
+            "accountId": "account-a",
+            "conceptKeys": [concept],
+            "triggerEvidenceId": f"ev-before-{index}",
+            "beforeEvidenceId": f"ev-before-{index}",
+            "afterEvidenceId": f"ev-after-{index}",
+            "strategyKey": "llm-remediation-v1",
+            "strategyVersion": "1",
+            "round": 1,
+            "outcome": "helped",
+            "createdAt": index * 1000 + 200,
+        })
+
+    result = store.consolidate_candidates("account-a")
+    strategies = [
+        record for record in result["store"]["records"]
+        if record["kind"] == "teaching_strategy" and record["status"] == "active"
+    ]
+
+    assert len(strategies) == 1
+    assert set(strategies[0]["conceptKeys"]) == {"304", "ETag"}
+    assert set(strategies[0]["evidenceIds"]) == {
+        "ev-before-1", "ev-after-1", "ev-before-2", "ev-after-2",
+    }

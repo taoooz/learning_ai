@@ -291,7 +291,7 @@ def seed_memory() -> dict[str, Any]:
     consolidated = store.consolidate_candidates(ACCOUNT)
     records = consolidated["store"]["records"]
     explicit_record = next(r for r in records if r.get("title") == "E2E 分步骤偏好" and r.get("status") == "active")
-    repeated_record = next(r for r in records if r.get("sourceType") == "repeated_behavior" and r.get("status") == "active")
+    assert "repeated_behavior" in explicit_record.get("tags", [])
     teaching_record = next(r for r in records if r.get("kind") == "teaching_strategy" and r.get("status") == "active")
     delete_record = next(r for r in records if r.get("title") == "E2E 临时删除记忆" and r.get("status") == "active")
 
@@ -312,7 +312,7 @@ def seed_memory() -> dict[str, Any]:
     })
     return {
         "explicitMemoryId": explicit_record["memoryId"],
-        "repeatedMemoryId": repeated_record["memoryId"],
+        "repeatedMemoryId": explicit_record["memoryId"],
         "teachingMemoryId": teaching_record["memoryId"],
         "deleteMemoryId": delete_record["memoryId"],
     }

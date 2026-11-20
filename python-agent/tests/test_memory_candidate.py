@@ -208,3 +208,44 @@ def test_repeated_behavior_is_derived_from_server_messages():
     assert len(candidates) == 1
     assert candidates[0]["sourceType"] == "repeated_behavior"
     assert {ref["messageId"] for ref in candidates[0]["sourceRefs"]} == {"u1", "u2"}
+
+
+def test_explicit_and_repeated_preferences_share_semantic_key_and_merge(tmp_path):
+    explicit_messages = [
+        {"messageId": "u1", "role": "user", "content": "以后请分步骤讲"},
+        {"messageId": "a1", "role": "assistant", "content": "好"},
+    ]
+    raw = _raw_candidate(content="以后请分步骤讲")
+    raw["sourceMessageId"] = "u1"
+    explicit = validate_candidates(
+        [raw],
+        account_id="account-a",
+        course_id="course-1",
+        topic="Agent",
+        messages=explicit_messages,
+        now=1000,
+    )[0]
+    repeated_messages = [
+        {"messageId": "u1", "role": "user", "content": "以后请分步骤讲"},
+        {"messageId": "a1", "role": "assistant", "content": "好"},
+        {"messageId": "u2", "role": "user", "content": "还是分步说明比较好"},
+    ]
+    repeated = derive_repeated_behavior_candidates(
+        account_id="account-a",
+        course_id="course-1",
+        messages=repeated_messages,
+        now=2000,
+    )[0]
+
+    assert explicit["dedupeKey"] == repeated["dedupeKey"]
+
+    store = MemoryV4Store(tmp_path)
+    store.append_candidate("account-a", explicit)
+    store.consolidate_candidates("account-a")
+    store.append_candidate("account-a", repeated)
+    result = store.consolidate_candidates("account-a")
+    active = [record for record in result["store"]["records"] if record["status"] == "active"]
+
+    assert len(active) == 1
+    assert active[0]["kind"] == "preference"
+    assert {ref["messageId"] for ref in active[0]["sourceRefs"]} == {"u1", "u2"}

@@ -444,6 +444,25 @@ export interface MemoryStoreV4 {
   updatedAt: MemoryTimestamp;
 }
 
+export type MemoryDimensionIdV4 =
+  | 'direction'
+  | 'background'
+  | 'preferences'
+  | 'teaching'
+  | 'history';
+
+/** Profile Memory 的固定维度读取模型；它由 MemoryRecord 派生，不是第二事实层。 */
+export interface MemoryDimensionViewV4 {
+  id: MemoryDimensionIdV4;
+  title: string;
+  summary: string;
+  highlights: string[];
+  recordIds: string[];
+  sourceCount: number;
+  updatedAt: MemoryTimestamp;
+  sourceRevision: number;
+}
+
 export interface MemoryIndexEntryV4 {
   memoryId: string;
   accountId: string;

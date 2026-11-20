@@ -643,7 +643,33 @@ DELETE /api/user/memory/records/:id
 
 Candidate、consolidation 和通用 Memory 提取延后到 P1；P0 不开放开放式记忆池。
 
-### 9.3 模块边界
+### 9.3 Profile Memory 固定维度视图
+
+`GET /api/user/memory` 返回：
+
+- `store`：原子 `MemoryRecordV4` 事实层，是唯一权威真相
+- `dimensions`：由记录确定性派生的五维 Profile 读取模型
+
+固定维度：
+
+1. `direction`：goal、constraint
+2. `background`：fact（工作、教育、类比经历、背景总结）
+3. `preferences`：preference
+4. `teaching`：teaching_strategy
+5. `history`：episode
+
+每个维度包含 `summary`、`highlights`、`recordIds`、`sourceCount`、`updatedAt` 和
+`sourceRevision`。视图不持久化为第二事实层；用户编辑、删除仍直接作用于原子记录，
+视图随 Store revision 重建。
+
+确定性聚合规则：
+
+- `targetJob` 只保留 goal，不再派生重复 background fact。
+- 偏好按语义值（如“分步骤解释”“生活例子”）使用稳定 dedupeKey，重复行为证据合并到同一记录。
+- Teaching Strategy 按 `strategyKey` 聚合，同一策略合并所有概念和 remediation Evidence。
+- Profile UI 默认显示维度摘要，按需展开原始事实。
+
+### 9.4 模块边界
 
 ```text
 lib/memory/v4/

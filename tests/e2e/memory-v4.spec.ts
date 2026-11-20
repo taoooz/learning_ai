@@ -138,18 +138,27 @@ test.describe('Memory V4 server-mode E2E', () => {
     await page.goto('/profile');
     await expect(page.getByText('ETag 与 Last-Modified 优先级')).toBeVisible();
 
-    const viewAll = page.getByRole('button', { name: /查看全部/ });
-    await expect(viewAll).toBeVisible();
-    await viewAll.click();
+    const preferences = page.locator('[data-memory-dimension="preferences"]');
+    await expect(preferences).toBeVisible();
+    await preferences.getByRole('button', { name: /查看 \d+ 条原始事实/ }).click();
 
     const explicit = page.locator('article').filter({ hasText: 'E2E 分步骤偏好' }).first();
     await expect(explicit.getByText('你的明确表达', { exact: true })).toBeVisible();
-    await expect(page.locator('article').filter({ hasText: '重复行为' }).first()).toBeVisible();
-    await expect(page.locator('article').filter({ hasText: '验证的补救策略' }).filter({ hasText: '学习证据' }).first()).toBeVisible();
-    await expect(page.locator('article').filter({ hasText: '课程对话摘要' }).first()).toContainText('讨论了：');
+    await expect(explicit.getByText(/包含重复行为证据/)).toBeVisible();
 
-    await explicit.getByRole('button', { name: '编辑' }).click();
-    const editBox = page.getByLabel('修改记忆内容');
+    const teaching = page.locator('[data-memory-dimension="teaching"]');
+    await teaching.getByRole('button', { name: /查看 \d+ 条原始事实/ }).click();
+    await expect(teaching.locator('article').filter({ hasText: 'llm-remediation-v1' }).first()).toBeVisible();
+
+    const history = page.locator('[data-memory-dimension="history"]');
+    await history.getByRole('button', { name: /查看 \d+ 条原始事实/ }).click();
+    await expect(history.locator('article').filter({ hasText: '课程对话摘要' }).first()).toContainText('讨论了：');
+
+    await preferences.getByRole('button', { name: /查看 \d+ 条原始事实/ }).click();
+    const explicitForEdit = page.locator('article').filter({ hasText: 'E2E 分步骤偏好' }).first();
+    await expect(explicitForEdit.getByText(/包含重复行为证据/)).toBeVisible();
+    await explicitForEdit.getByRole('button', { name: '编辑' }).click();
+    const editBox = page.getByLabel('修改原始事实');
     await editBox.fill('E2E 分步骤偏好已修正');
     const saveResponse = page.waitForResponse((response) =>
       response.url().includes(`/api/user/memory/records/${seed.explicitMemoryId}`)
@@ -160,15 +169,14 @@ test.describe('Memory V4 server-mode E2E', () => {
     await expect(page.locator('article').filter({ hasText: 'E2E 分步骤偏好已修正' }).first()).toBeVisible();
 
     await page.reload();
-    const viewAllAfterReload = page.getByRole('button', { name: /查看全部/ });
-    await expect(viewAllAfterReload).toBeVisible();
-    await viewAllAfterReload.click();
+    const preferencesAfterReload = page.locator('[data-memory-dimension="preferences"]');
+    await preferencesAfterReload.getByRole('button', { name: /查看 \d+ 条原始事实/ }).click();
     await expect(page.locator('article').filter({ hasText: 'E2E 分步骤偏好已修正' }).first()).toBeVisible();
 
     page.once('dialog', async (dialog) => dialog.accept());
-    const deletable = page.locator('article').filter({ hasText: 'E2E 临时删除记忆' }).first();
+    const deletable = preferencesAfterReload.locator('article').filter({ hasText: 'E2E 临时删除记忆' }).first();
     await deletable.getByRole('button', { name: '删除' }).click();
-    await expect(page.locator('article').filter({ hasText: 'E2E 临时删除记忆' })).toHaveCount(0);
+    await expect(preferencesAfterReload.locator('article').filter({ hasText: 'E2E 临时删除记忆' })).toHaveCount(0);
 
     const storeResponse = await page.request.get('/api/user/memory');
     expect(storeResponse.ok()).toBeTruthy();

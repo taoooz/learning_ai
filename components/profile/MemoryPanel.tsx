@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { MemoryRecordV4, MemoryStoreV4 } from '@/types/course';
+import type {
+  MemoryDimensionViewV4,
+  MemoryRecordV4,
+  MemoryStoreV4,
+} from '@/types/course';
 
 const KIND_LABELS: Record<MemoryRecordV4['kind'], string> = {
   fact: '背景事实',
@@ -23,20 +27,129 @@ const SOURCE_LABELS: Partial<Record<MemoryRecordV4['sourceType'], string>> = {
 };
 
 function formatDate(timestamp: number): string {
+  if (!timestamp) return '';
   return new Intl.DateTimeFormat('zh-CN', {
     month: 'short',
     day: 'numeric',
   }).format(new Date(timestamp));
 }
 
+function MemoryRecordCard({
+  record,
+  editing,
+  draft,
+  busy,
+  onDraftChange,
+  onStartEdit,
+  onCancelEdit,
+  onSave,
+  onDelete,
+}: {
+  record: MemoryRecordV4;
+  editing: boolean;
+  draft: string;
+  busy: boolean;
+  onDraftChange: (value: string) => void;
+  onStartEdit: () => void;
+  onCancelEdit: () => void;
+  onSave: () => void;
+  onDelete: () => void;
+}) {
+  const inferred = record.sourceType === 'user_profile_inference';
+  const sourceRefCount = record.sourceRefs.length;
+  const hasRepeatedBehavior = record.tags.includes('repeated_behavior');
+  const provenanceNote = [
+    inferred ? '这是系统根据画像整理的内容，你可以直接修正原始事实。' : '',
+    hasRepeatedBehavior ? '包含重复行为证据' : '',
+    sourceRefCount > 1 ? `共 ${sourceRefCount} 个来源片段` : '',
+  ].filter(Boolean).join('；');
+
+  return (
+    <article className="rounded-lg border border-black/6 bg-white/88 px-4 py-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded-full bg-tag px-3 py-1 text-xs font-medium text-secondary">
+          {KIND_LABELS[record.kind]}
+        </span>
+        <span className={`rounded-full px-3 py-1 text-xs font-medium ${inferred ? 'bg-warning/10 text-warning' : 'bg-success/10 text-success'}`}>
+          {SOURCE_LABELS[record.sourceType] ?? '其他来源'}
+        </span>
+        <span className="ml-auto text-xs text-tertiary">{formatDate(record.updatedAt)}</span>
+      </div>
+
+      <h4 className="mt-3 text-[15px] font-semibold text-primary">{record.title}</h4>
+
+      {editing ? (
+        <div className="mt-3">
+          <label htmlFor={`memory-edit-${record.memoryId}`} className="mb-2 block text-sm font-medium text-primary">
+            修改原始事实
+          </label>
+          <textarea
+            id={`memory-edit-${record.memoryId}`}
+            value={draft}
+            onChange={(event) => onDraftChange(event.target.value)}
+            rows={4}
+            className="w-full resize-none rounded-md border border-black/8 bg-white px-4 py-3 text-[15px] leading-7 text-primary outline-none focus:border-accent/25"
+          />
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              disabled={busy || !draft.trim()}
+              onClick={onSave}
+              className="inline-flex min-h-11 items-center justify-center rounded-full bg-cta px-5 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {busy ? '保存中…' : '保存修改'}
+            </button>
+            <button
+              type="button"
+              onClick={onCancelEdit}
+              className="inline-flex min-h-11 items-center justify-center rounded-full border border-black/8 px-5 text-sm font-medium text-secondary"
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-secondary">{record.content}</p>
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <p className="text-xs leading-5 text-tertiary">
+              {inferred
+                ? provenanceNote
+                : `来源：${SOURCE_LABELS[record.sourceType] ?? '学习系统'}${provenanceNote ? `；${provenanceNote}` : ''}`}
+            </p>
+            <div className="flex shrink-0 gap-1">
+              <button
+                type="button"
+                onClick={onStartEdit}
+                className="inline-flex min-h-11 items-center justify-center rounded-full px-3 text-sm font-medium text-secondary transition-colors hover:bg-black/[0.04] hover:text-primary"
+              >
+                编辑
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={onDelete}
+                className="inline-flex min-h-11 items-center justify-center rounded-full px-3 text-sm font-medium text-secondary transition-colors hover:bg-error/[0.05] hover:text-error disabled:opacity-50"
+              >
+                删除
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </article>
+  );
+}
+
 export function MemoryPanel() {
   const router = useRouter();
   const [store, setStore] = useState<MemoryStoreV4 | null>(null);
+  const [dimensions, setDimensions] = useState<MemoryDimensionViewV4[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedDimensionId, setExpandedDimensionId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
-  const [showAll, setShowAll] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const loadMemory = useCallback(async () => {
@@ -45,9 +158,14 @@ export function MemoryPanel() {
     try {
       const response = await fetch('/api/user/memory', { cache: 'no-store' });
       if (!response.ok) throw new Error('记忆加载失败');
-      const data = await response.json() as { ok?: boolean; store?: MemoryStoreV4 };
-      if (!data.store) throw new Error('记忆数据为空');
+      const data = await response.json() as {
+        ok?: boolean;
+        store?: MemoryStoreV4;
+        dimensions?: MemoryDimensionViewV4[];
+      };
+      if (!data.store || !Array.isArray(data.dimensions)) throw new Error('记忆数据为空');
       setStore(data.store);
+      setDimensions(data.dimensions);
     } catch {
       setError('暂时无法读取学习记忆，请稍后重试。');
     } finally {
@@ -60,7 +178,8 @@ export function MemoryPanel() {
   }, [loadMemory]);
 
   const records = (store?.records ?? []).filter((record) => record.status === 'active');
-  const visibleRecords = showAll ? records : records.slice(0, 6);
+  const recordById = new Map(records.map((record) => [record.memoryId, record]));
+  const activeDimensions = dimensions.filter((dimension) => dimension.sourceCount > 0);
   const summary = store?.learningSummary;
 
   const startEdit = (record: MemoryRecordV4) => {
@@ -114,7 +233,7 @@ export function MemoryPanel() {
             系统记住了什么
           </h2>
           <p className="mt-2 text-sm leading-6 text-secondary">
-            这里只展示会用于课程和答疑的长期记忆。你可以随时修正或删除。
+            按固定维度汇总长期记忆；展开后可以查看、修正或删除对应的原始事实。
           </p>
         </div>
         <button
@@ -152,7 +271,7 @@ export function MemoryPanel() {
           </div>
           <p className="mt-4 text-base font-semibold text-primary">还没有可管理的长期记忆</p>
           <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-secondary">
-            完善画像或完成章节检查后，与学习相关的记忆会出现在这里。
+            完善画像或完成章节检查后，学习方向、背景、偏好、教学策略和学习轨迹会逐步形成。
           </p>
           <button
             type="button"
@@ -178,98 +297,74 @@ export function MemoryPanel() {
         </div>
       ) : null}
 
-      {records.length > 0 ? (
+      {activeDimensions.length > 0 ? (
         <div className="mt-5 space-y-3">
-          {visibleRecords.map((record) => {
-            const inferred = record.sourceType === 'user_profile_inference';
-            const editing = editingId === record.memoryId;
+          {activeDimensions.map((dimension) => {
+            const expanded = expandedDimensionId === dimension.id;
+            const dimensionRecords = dimension.recordIds
+              .map((id) => recordById.get(id))
+              .filter((record): record is MemoryRecordV4 => Boolean(record));
+
             return (
-              <article key={record.memoryId} className="rounded-lg border border-black/6 bg-white/84 px-5 py-4 shadow-[0_8px_20px_rgba(15,23,42,0.04)]">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full bg-tag px-3 py-1 text-xs font-medium text-secondary">
-                    {KIND_LABELS[record.kind]}
+              <section key={dimension.id} data-memory-dimension={dimension.id} className="rounded-lg border border-black/6 bg-white/84 px-5 py-4 shadow-[0_8px_20px_rgba(15,23,42,0.04)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-tertiary">
+                      {dimension.title}
+                    </p>
+                    <h3 className="mt-1.5 text-base font-semibold text-primary">{dimension.summary}</h3>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-tag px-2.5 py-1 text-xs text-secondary">
+                    {dimension.sourceCount} 条事实
                   </span>
-                  <span className={`rounded-full px-3 py-1 text-xs font-medium ${inferred ? 'bg-warning/10 text-warning' : 'bg-success/10 text-success'}`}>
-                    {SOURCE_LABELS[record.sourceType] ?? '其他来源'}
-                  </span>
-                  <span className="ml-auto text-xs text-tertiary">{formatDate(record.updatedAt)}</span>
                 </div>
 
-                <h3 className="mt-3 text-base font-semibold text-primary">{record.title}</h3>
+                {dimension.highlights.length > 0 ? (
+                  <ul className="mt-3 space-y-1.5">
+                    {dimension.highlights.slice(0, expanded ? undefined : 2).map((highlight, index) => (
+                      <li key={`${dimension.id}-${index}`} className="flex gap-2 text-sm leading-6 text-secondary">
+                        <span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent/70" aria-hidden />
+                        <span>{highlight}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
 
-                {editing ? (
-                  <div className="mt-3">
-                    <label htmlFor={`memory-edit-${record.memoryId}`} className="mb-2 block text-sm font-medium text-primary">
-                      修改记忆内容
-                    </label>
-                    <textarea
-                      id={`memory-edit-${record.memoryId}`}
-                      value={draft}
-                      onChange={(event) => setDraft(event.target.value)}
-                      rows={4}
-                      className="w-full resize-none rounded-md border border-black/8 bg-white px-4 py-3 text-[15px] leading-7 text-primary outline-none focus:border-accent/25"
-                    />
-                    <div className="mt-3 flex gap-2">
-                      <button
-                        type="button"
-                        disabled={busyId === record.memoryId || !draft.trim()}
-                        onClick={() => void saveEdit(record.memoryId)}
-                        className="inline-flex min-h-11 items-center justify-center rounded-full bg-cta px-5 text-sm font-semibold text-white disabled:opacity-50"
-                      >
-                        {busyId === record.memoryId ? '保存中…' : '保存修改'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
+                {dimension.sourceCount > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setExpandedDimensionId(expanded ? null : dimension.id)}
+                    className="mt-3 inline-flex min-h-11 items-center gap-1 rounded-full px-2 text-sm font-medium text-secondary transition-colors hover:text-primary"
+                  >
+                    {expanded ? '收起原始事实' : `查看 ${dimension.sourceCount} 条原始事实`}
+                    <span aria-hidden>{expanded ? '↑' : '↓'}</span>
+                  </button>
+                ) : null}
+
+                {expanded ? (
+                  <div className="mt-3 space-y-2 border-t border-black/6 pt-3">
+                    {dimensionRecords.map((record) => (
+                      <MemoryRecordCard
+                        key={record.memoryId}
+                        record={record}
+                        editing={editingId === record.memoryId}
+                        draft={draft}
+                        busy={busyId === record.memoryId}
+                        onDraftChange={setDraft}
+                        onStartEdit={() => startEdit(record)}
+                        onCancelEdit={() => {
                           setEditingId(null);
                           setDraft('');
                         }}
-                        className="inline-flex min-h-11 items-center justify-center rounded-full border border-black/8 px-5 text-sm font-medium text-secondary"
-                      >
-                        取消
-                      </button>
-                    </div>
+                        onSave={() => void saveEdit(record.memoryId)}
+                        onDelete={() => void removeRecord(record)}
+                      />
+                    ))}
                   </div>
-                ) : (
-                  <>
-                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-secondary">{record.content}</p>
-                    <div className="mt-3 flex items-center justify-between gap-3">
-                      <p className="text-xs leading-5 text-tertiary">
-                        {inferred ? '这是系统根据画像自动整理的内容，你可以直接修正。' : `来源：${SOURCE_LABELS[record.sourceType] ?? '学习系统'}`}
-                      </p>
-                      <div className="flex shrink-0 gap-1">
-                        <button
-                          type="button"
-                          onClick={() => startEdit(record)}
-                          className="inline-flex min-h-11 items-center justify-center rounded-full px-3 text-sm font-medium text-secondary transition-colors hover:bg-black/[0.04] hover:text-primary"
-                        >
-                          编辑
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busyId === record.memoryId}
-                          onClick={() => void removeRecord(record)}
-                          className="inline-flex min-h-11 items-center justify-center rounded-full px-3 text-sm font-medium text-secondary transition-colors hover:bg-error/[0.05] hover:text-error disabled:opacity-50"
-                        >
-                          删除
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </article>
+                ) : null}
+              </section>
             );
           })}
-
-          {records.length > 6 ? (
-            <button
-              type="button"
-              onClick={() => setShowAll((value) => !value)}
-              className="inline-flex min-h-11 w-full items-center justify-center rounded-full border border-black/8 bg-white/72 text-sm font-medium text-secondary transition-colors hover:text-primary"
-            >
-              {showAll ? '收起' : `查看全部 ${records.length} 条记忆`}
-            </button>
-          ) : null}
         </div>
       ) : null}
     </section>

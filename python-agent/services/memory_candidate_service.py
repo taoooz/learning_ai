@@ -54,6 +54,46 @@ def _dedupe_key(account_id: str, candidate: dict[str, Any]) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+_STYLE_PREFERENCE_RULES = (
+    ("分步骤解释", ("分步骤", "分步", "一步一步")),
+    ("生活例子", ("例子", "举例", "比如")),
+    ("类比解释", ("类比", "比喻", "打比方")),
+    ("通俗解释", ("通俗", "简单点", "白话")),
+    ("对比讲解", ("对比", "区别")),
+)
+
+
+def _canonical_preference_value(candidate: dict[str, Any]) -> str:
+    text = f"{candidate.get('content') or ''} {' '.join(candidate.get('tags') or [])}"
+    for label, cues in _STYLE_PREFERENCE_RULES:
+        if any(cue in text for cue in cues):
+            return label
+    return re.sub(r"^(用户多次表达偏好[:：]|重复表达的学习偏好[:：]?)", "", _normalize_text(candidate.get("content"), 160)).strip()
+
+
+def _semantic_preference_key(account_id: str, candidate: dict[str, Any]) -> str:
+    payload = json.dumps(
+        {"account": account_id, "kind": "preference", "value": _canonical_preference_value(candidate)},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _candidate_id(candidate: dict[str, Any]) -> str:
+    payload = {
+        "dedupeKey": candidate.get("dedupeKey"),
+        "sourceType": candidate.get("sourceType"),
+        "sourceRefs": candidate.get("sourceRefs") or [],
+        "evidenceIds": candidate.get("evidenceIds") or [],
+        "content": candidate.get("content"),
+        "extractionVersion": candidate.get("extractionVersion"),
+    }
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return f"candidate-{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:16]}"
+
+
 def _existing_memory(memory_store: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         {
@@ -153,8 +193,12 @@ def validate_candidates(
         }
         if raw.get("targetMemoryId"):
             candidate["targetMemoryId"] = str(raw["targetMemoryId"])
-        candidate["dedupeKey"] = _dedupe_key(account_id, candidate)
-        candidate["candidateId"] = f"candidate-{candidate['dedupeKey'][:16]}"
+        candidate["dedupeKey"] = (
+            _semantic_preference_key(account_id, candidate)
+            if kind == "preference"
+            else _dedupe_key(account_id, candidate)
+        )
+        candidate["candidateId"] = _candidate_id(candidate)
         validated.append(candidate)
     return validated
 
@@ -212,8 +256,8 @@ def derive_repeated_behavior_candidates(
             "createdAt": at,
             "status": "pending",
         }
-        candidate["dedupeKey"] = _dedupe_key(account_id, candidate)
-        candidate["candidateId"] = f"candidate-{candidate['dedupeKey'][:16]}"
+        candidate["dedupeKey"] = _semantic_preference_key(account_id, candidate)
+        candidate["candidateId"] = _candidate_id(candidate)
         derived.append(candidate)
     return derived
 
