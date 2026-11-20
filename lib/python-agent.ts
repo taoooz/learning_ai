@@ -15,7 +15,7 @@ export class PythonAgentError extends Error {
 
 /**
  * 调用 Python Agent 服务
- * @param path - API 路径，如 '/api/agents/cards/generate_agent'
+ * @param path - Python Agent API 路径，如 '/api/learning/v2/chapters/plan'
  * @param body - 请求体
  * @returns 解析后的 JSON 响应
  */

@@ -2,7 +2,6 @@
 // Memory V4 客户端接口：服务端为权威，客户端不再读取或写入旧版 V3 数据。
 
 import { useCallback } from 'react';
-import type { ConversationSummary } from '@/types/course';
 
 async function parseJson<T>(response: Response): Promise<T | null> {
   if (!response.ok) return null;

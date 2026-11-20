@@ -6,5 +6,5 @@ export * from './learning-content';
 export * from './outline';
 export * from './user-profile';
 export * from './course-core';
-export * from './memory';
+export * from './chat';
 export * from './memory-v4';

@@ -7,3 +7,15 @@ export interface ChatMessage {
   timestamp: number;
   isExpired?: boolean;
 }
+
+export interface ConversationSummary {
+  courseId: string;
+  summary: string;
+  timestamp: number;
+  mainQuestions?: string[];
+  unresolvedConcepts?: string[];
+  preferredExplanationStyles?: string[];
+  explanationPath?: string;
+  resolutionStatus?: 'resolved' | 'partial' | 'open';
+  followUp?: string;
+}

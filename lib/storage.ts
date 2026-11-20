@@ -8,8 +8,7 @@ import type {
 export { getSystemCourseRecommendations } from '@/lib/data/system-courses';
 export type { SystemCourseRecommendation } from '@/lib/data/system-courses';
 
-const STORAGE_KEY_PREFIX = 'ai-learning-data-v2';
-const LEGACY_STORAGE_KEYS = ['ai-learning-data', 'userMemory', 'userMemoryV2'] as const;
+const USER_DATA_STORAGE_PREFIX = 'ai-learning-data-v2';
 const AUTH_STORAGE_KEY = 'ai-learning-auth';
 
 // 获取当前用户邀请码（从 localStorage）
@@ -28,19 +27,18 @@ export function getCurrentUserInviteCode(): string | null {
 // 获取当前用户的存储 key
 function getUserStorageKey(): string {
   const inviteCode = getCurrentUserInviteCode();
-  return inviteCode ? `${STORAGE_KEY_PREFIX}:${inviteCode}` : STORAGE_KEY_PREFIX;
+  return inviteCode ? `${USER_DATA_STORAGE_PREFIX}:${inviteCode}` : USER_DATA_STORAGE_PREFIX;
 }
 
 /**
- * V2 章节学习流的独立存储 key（§6.1.1：每章独立，不并入课程主对象）。
- * 注意：前缀 ai-learning-data-v2 是历史命名，与 protocolVersion: 2 无关。
+ * 章节学习流的独立存储 key（每章独立，不并入课程主对象）。
  */
 export function getV2ChapterStorageKey(courseId: string, chapterId: string): string {
   return `${getUserStorageKey()}:course:${courseId}:chapter:${chapterId}`;
 }
 
 /**
- * V2 课程参与信号的独立存储 key（计划 T8：不并入课程主对象，写失败静默）。
+ * 课程参与信号的独立存储 key（不并入课程主对象，写失败静默）。
  */
 export function getV2CourseEngagementKey(courseId: string): string {
   return `${getUserStorageKey()}:course:${courseId}:engagement`;
@@ -53,16 +51,6 @@ const defaultDataV2: StoredDataV2 = {
   userProfile: null,
   recommendations: [],
 };
-
-type StorageCleaner = Pick<Storage, 'removeItem'>;
-
-export function clearLegacyLearningData(storage?: StorageCleaner | null): void {
-  const target = storage || (typeof window !== 'undefined' ? window.localStorage : null);
-  if (!target) return;
-  for (const key of LEGACY_STORAGE_KEYS) {
-    target.removeItem(key);
-  }
-}
 
 export function getStoredDataV2(): StoredDataV2 {
   if (typeof window === 'undefined') return defaultDataV2;
@@ -78,22 +66,6 @@ export function getStoredDataV2(): StoredDataV2 {
         courseProgress: parsed.courseProgress || {},
         v2Courses: Array.isArray(parsed.v2Courses) ? parsed.v2Courses : [],
       };
-    }
-    const inviteCode = getCurrentUserInviteCode();
-    if (inviteCode) {
-      const legacyRaw = localStorage.getItem(STORAGE_KEY_PREFIX);
-      if (legacyRaw) {
-        const parsed = JSON.parse(legacyRaw) as StoredDataV2;
-        const migrated: StoredDataV2 = {
-          ...defaultDataV2,
-          ...parsed,
-          courses: Array.isArray(parsed.courses) ? parsed.courses : [],
-          courseProgress: parsed.courseProgress || {},
-          v2Courses: Array.isArray(parsed.v2Courses) ? parsed.v2Courses : [],
-        };
-        localStorage.setItem(userKey, JSON.stringify(migrated));
-        return migrated;
-      }
     }
     return defaultDataV2;
   } catch {

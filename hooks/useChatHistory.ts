@@ -1,7 +1,6 @@
 // hooks/useChatHistory.ts
 import { useCallback } from 'react';
-import type { ChatMessage } from '@/types/chat';
-import type { ConversationSummary } from '@/types/course';
+import type { ChatMessage, ConversationSummary } from '@/types/chat';
 import {
   analyzeChatMessageForMemory,
   detectAssistantExplanationStyle,
