@@ -64,8 +64,8 @@ test('系统课程启动后出现在首页列表并可被课程页读取', withM
   assert.equal(list[0].nextChapterTitle, '资产配置与再平衡');
 
   const resolved = await loadRenderableStoredCourse('system-personal-finance');
-  assert.equal(resolved?.protocol, 2);
-  assert.equal(resolved?.course.treeView.chapters[0].status, 'available');
+  assert.ok(resolved);
+  assert.equal(resolved?.treeView.chapters[0].status, 'available');
   assert.equal(getCourseTopicV2('system-personal-finance'), '实战投资进阶课');
 }));
 
@@ -78,7 +78,7 @@ test('重复启动同一门系统课程不会产生重复条目', withMemoryStor
   assert.equal(listCoursesV2().length, 1);
 }));
 
-test('TOC 生成结果直接落为 V2 课程（不再双写 V1）', withMemoryStorage(async (store) => {
+test('TOC 生成结果只落入当前 V2 课程容器', withMemoryStorage(async (store) => {
   const courseId = 'course-toc-1';
   const blueprint = mapTocToBlueprintV2({
     courseId,
@@ -98,8 +98,10 @@ test('TOC 生成结果直接落为 V2 课程（不再双写 V1）', withMemorySt
   assert.equal(await createAndSaveStoredCourseV2(createStoredCourseV2(courseId, blueprint)), true);
 
   const [raw] = [...store.values()];
-  const persisted = JSON.parse(raw) as { courses: unknown[]; v2Courses: unknown[] };
-  assert.equal(persisted.courses.length, 0, 'V1 courses 容器不应被写入');
+  const persisted = JSON.parse(raw) as Record<string, unknown> & { v2Courses: unknown[] };
+  assert.equal('courses' in persisted, false, '不得保留 V1 courses 字段');
+  assert.equal('currentCourseId' in persisted, false, '不得保留 V1 当前课程字段');
+  assert.equal('courseProgress' in persisted, false, '不得保留 V1 节点进度字段');
   assert.equal(persisted.v2Courses.length, 1);
 }));
 

@@ -45,9 +45,7 @@ export function getV2CourseEngagementKey(courseId: string): string {
 }
 
 const defaultDataV2: StoredDataV2 = {
-  courses: [],
-  currentCourseId: null,
-  courseProgress: {},
+  v2Courses: [],
   userProfile: null,
   recommendations: [],
 };
@@ -60,11 +58,9 @@ export function getStoredDataV2(): StoredDataV2 {
     if (raw) {
       const parsed = JSON.parse(raw) as StoredDataV2;
       return {
-        ...defaultDataV2,
-        ...parsed,
-        courses: Array.isArray(parsed.courses) ? parsed.courses : [],
-        courseProgress: parsed.courseProgress || {},
         v2Courses: Array.isArray(parsed.v2Courses) ? parsed.v2Courses : [],
+        userProfile: parsed.userProfile ?? null,
+        recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
       };
     }
     return defaultDataV2;

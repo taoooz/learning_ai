@@ -87,13 +87,13 @@ export function upsertStoredCourseV2List(
 
 export function getStoredCourseV2(courseId: string): StoredCourseV2 | null {
   if (typeof window === 'undefined') return null;
-  return findStoredCourseV2(getStoredDataV2().v2Courses ?? [], courseId);
+  return findStoredCourseV2(getStoredDataV2().v2Courses, courseId);
 }
 
 export function saveStoredCourseV2(course: StoredCourseV2): boolean {
   if (typeof window === 'undefined') return false;
   const data = getStoredDataV2();
-  const next = { ...data, v2Courses: upsertStoredCourseV2List(data.v2Courses ?? [], course) };
+  const next = { ...data, v2Courses: upsertStoredCourseV2List(data.v2Courses, course) };
   return saveStoredDataV2(next);
 }
 

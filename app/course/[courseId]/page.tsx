@@ -1,6 +1,6 @@
 // app/course/[courseId]/page.tsx
 // 课程页（V2 单一流程）：章节树 + 章节内容按需生成 + 课程对话。
-// P0 下线 V1 学习流：V1 节点树、节点预热与节点完成页均已移除；旧版课程不再兼容（beta）。
+// 课程页只读取当前 StoredCourseV2；不存在旧版节点树兼容路径。
 
 'use client';
 
@@ -32,7 +32,7 @@ export default function CoursePage() {
     void (async () => {
       const resolved = await loadRenderableStoredCourse(courseId);
       if (cancelled) return;
-      setCourse(resolved?.protocol === 2 ? resolved.course : null);
+      setCourse(resolved);
     })();
     return () => {
       cancelled = true;

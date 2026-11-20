@@ -100,9 +100,9 @@ test('server 模式：课程读取时按章节事实自愈 treeView', async () =
     setLessonRepository(repository);
 
     const result = await loadRenderableStoredCourse(course.courseId);
-    assert.ok(result?.protocol === 2);
-    assert.equal(result.course.treeView.chapters[0].status, 'completed');
-    assert.equal(result.course.treeView.chapters[1].status, 'available');
+    assert.ok(result);
+    assert.equal(result.treeView.chapters[0].status, 'completed');
+    assert.equal(result.treeView.chapters[1].status, 'available');
     assert.equal(repository.courses.get(course.courseId)?.treeView.chapters[0].status, 'completed');
   });
 });

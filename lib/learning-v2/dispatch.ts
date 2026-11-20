@@ -1,55 +1,23 @@
 // lib/learning-v2/dispatch.ts
-// V1/V2 协议检测与课程存储分发
-// 依据 docs/architecture/v2_课程生成逻辑.md §11 P0「建立 Feature Flag 和 V1/V2 渲染分发」
-// §12 兼容要求：旧课程无 protocolVersion 时按 V1 处理；
-// §13 禁止捷径：V1/V2 不混入同一个无版本对象，分发层返回判别联合。
+// 当前课程容器读取与读时自愈：只识别 StoredCourseV2，不再做 V1/V2 协议分发。
 
-import type { StoredCourseBundle, StoredDataV2 } from '@/types/course';
+import type { StoredDataV2 } from '@/types/course';
 import type { StoredCourseV2 } from '@/types/learning-v2';
 import { getStoredDataV2 } from '@/lib/storage';
 import { deriveCourseTreeViewV2 } from '@/lib/learning-v2/storage';
 import { getLessonRepository, getLessonStoreMode } from '@/lib/learning-v2/lesson-repository';
 import { isSameCourseTreeView, refreshCourseTreeViewV2 } from '@/lib/learning-v2/chapter-complete';
 
-export type ProtocolVersion = 1 | 2;
-
-/**
- * 检测课程/蓝图对象的协议版本。
- * 无 protocolVersion 字段、或值不为 2 的，一律按 V1（§12）。
- */
-export function detectProtocolVersion(value: unknown): ProtocolVersion {
-  if (
-    typeof value === 'object' &&
-    value !== null &&
-    (value as { protocolVersion?: unknown }).protocolVersion === 2
-  ) {
-    return 2;
-  }
-  return 1;
-}
-
-/** 分发结果：判别联合，V1/V2 各走各的类型（§13） */
-export type ResolvedStoredCourse =
-  | { protocol: 1; course: StoredCourseBundle }
-  | { protocol: 2; course: StoredCourseV2 };
-
-/**
- * 按 courseId 查找课程存储容器（纯函数，便于测试）。
- * 优先查 v2Courses，命中返回 V2；否则回退 V1 courses；都未命中返回 null。
- */
+/** 按 courseId 查找当前课程容器（纯函数，便于测试）。 */
 export function resolveStoredCourseFromData(
   data: StoredDataV2,
   courseId: string,
-): ResolvedStoredCourse | null {
-  const v2 = (data.v2Courses ?? []).find((course) => course.courseId === courseId);
-  if (v2) return { protocol: 2, course: v2 };
-  const v1 = data.courses.find((course) => course.blueprint.courseId === courseId);
-  if (v1) return { protocol: 1, course: v1 };
-  return null;
+): StoredCourseV2 | null {
+  return data.v2Courses.find((course) => course.courseId === courseId) ?? null;
 }
 
-/** 按 courseId 查找课程存储容器（读取全局存储，SSR 无 window 时返回 null） */
-export function resolveStoredCourse(courseId: string): ResolvedStoredCourse | null {
+/** 按 courseId 查找课程容器（SSR 无 window 时返回 null）。 */
+export function resolveStoredCourse(courseId: string): StoredCourseV2 | null {
   if (typeof window === 'undefined') return null;
   return resolveStoredCourseFromData(getStoredDataV2(), courseId);
 }
@@ -61,23 +29,23 @@ export function resolveStoredCourse(courseId: string): ResolvedStoredCourse | nu
  */
 export async function loadRenderableStoredCourse(
   courseId: string,
-): Promise<ResolvedStoredCourse | null> {
+): Promise<StoredCourseV2 | null> {
   if (getLessonStoreMode() !== 'server') {
-    const resolved = resolveStoredCourse(courseId);
-    if (resolved?.protocol !== 2) return resolved;
-    const refreshed = refreshCourseTreeViewV2(resolved.course);
-    if (!isSameCourseTreeView(refreshed, resolved.course.treeView)) {
+    const course = resolveStoredCourse(courseId);
+    if (!course) return null;
+    const refreshed = refreshCourseTreeViewV2(course);
+    if (!isSameCourseTreeView(refreshed, course.treeView)) {
       const { saveStoredCourseV2 } = await import('./storage');
-      saveStoredCourseV2({ ...resolved.course, treeView: refreshed });
+      saveStoredCourseV2({ ...course, treeView: refreshed });
     }
-    return { protocol: 2, course: { ...resolved.course, treeView: refreshed } };
+    return { ...course, treeView: refreshed };
   }
 
   const repository = getLessonRepository();
   const course = await repository.loadCourse(courseId);
   if (!course) return resolveStoredCourse(courseId);
 
-  // 先保证服务端 treeView 与章节事实一致；章节数量小，这里以正确性优先，后续可加批量端点。
+  // 章节数量小，以正确性优先；必要时再增加批量端点。
   const completedChapterIds = await Promise.all(
     course.blueprint.chapters.map(async (chapter) => {
       const lesson = await repository.loadLesson(courseId, chapter.chapterId);
@@ -93,10 +61,10 @@ export async function loadRenderableStoredCourse(
   if (!isSameCourseTreeView(refreshed, course.treeView)) {
     await repository.saveCourse(nextCourse);
   }
-  return { protocol: 2, course: nextCourse };
+  return nextCourse;
 }
 
-/** 创建 V2 课程：server 模式先写服务端，成功后写入本地缓存；失败不降级成半 V2。 */
+/** 创建课程：server 模式先写服务端，成功后写入本地缓存；失败不落半成品。 */
 export async function createAndSaveStoredCourseV2(course: StoredCourseV2): Promise<boolean> {
   if (getLessonStoreMode() !== 'server') {
     const { saveStoredCourseV2 } = await import('./storage');

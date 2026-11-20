@@ -1,16 +1,15 @@
 'use client';
 
 // components/learning-v2/ChapterTreeV2.tsx
-// V2 章节树：复用 CourseTree 的布局与节点视觉语言（locked/available/completed 三态）。
-// 适配点：V2 章节 index 为 1 基，V1 CourseNode 按 0 基显示（按钮数字 = index + 1），映射时 -1；
+// 章节树：复用课程树布局与节点视觉语言（locked/available/completed 三态）。
+// V2 章节 index 为 1 基；渲染组件使用 0 基索引，因此映射时 -1。
 // 点击 available/completed 进入章节学习页 /course/{id}/chapter/{chapterId}，locked 忽略。
 
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import type { CourseTreeViewV2 } from '@/types/learning-v2';
-import type { CourseNode as CourseNodeType } from '@/types/course';
-import { CourseNode } from '../CourseNode';
+import { CourseNode, type CourseNodeDisplayItem } from '../CourseNode';
 import { getCourseTreeInitialScrollTop, getCourseTreeLayout } from '@/lib/course-tree-layout';
 
 interface ChapterTreeV2Props {
@@ -28,9 +27,9 @@ export function ChapterTreeV2({ courseId, treeView }: ChapterTreeV2Props) {
   );
   const nextChapterId = chapters.find((c) => c.status === 'available')?.chapterId;
 
-  // V2 章节 → V1 CourseNode 薄适配：只消费 index/title/status，cards/questions 不参与树渲染
+  // 章节 → 树节点适配：只消费 index/title/status。
   const layout = useMemo(() => {
-    const nodes: CourseNodeType[] = chapters.map((c) => ({
+    const nodes: CourseNodeDisplayItem[] = chapters.map((c) => ({
       index: c.index - 1,
       title: c.title,
       status: c.status,

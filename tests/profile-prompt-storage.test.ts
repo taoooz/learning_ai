@@ -59,13 +59,20 @@ test('带邀请码时只读取 account-scoped key，不迁移旧无后缀 key', 
 test('带邀请码时仍读取当前 scoped key', withBrowserStorage((store) => {
   store.set('ai-learning-auth', JSON.stringify({ inviteCode: 'invite-123' }));
   store.set('ai-learning-data-v2:invite-123', JSON.stringify({
+    courses: [{ courseId: 'v1-course' }],
+    currentCourseId: 'v1-course',
+    courseProgress: { 'v1-course': { 0: 'completed' } },
     v2Courses: [{ courseId: 'current-course' }],
     userProfile: { name: '当前用户' },
+    recommendations: [],
   }));
 
   const data = getStoredDataV2();
 
-  assert.equal(data.v2Courses?.length, 1);
-  assert.equal(data.v2Courses?.[0].courseId, 'current-course');
+  assert.equal(data.v2Courses.length, 1);
+  assert.equal(data.v2Courses[0].courseId, 'current-course');
   assert.equal(data.userProfile?.name, '当前用户');
+  assert.equal('courses' in data, false);
+  assert.equal('currentCourseId' in data, false);
+  assert.equal('courseProgress' in data, false);
 }));

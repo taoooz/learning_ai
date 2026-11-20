@@ -47,7 +47,7 @@
 
 ## 4. 关键不变量
 
-1. 新课程不得写入 V1 `courses` 容器；首页和课程页只消费 `StoredDataV2.v2Courses`。
+1. 学习数据只持久化 `v2Courses`、`userProfile`、`recommendations`；不存在 V1 `courses`、`currentCourseId` 或 `courseProgress` 字段。
 2. V2 蓝图校验失败、空目录或保存失败时必须显示错误，不得降级为半可用课程。
 3. 章节解锁必须由章节真实完成状态派生，不能只信任课程树缓存。
 4. server 模式创建课程时，服务端保存成功后才写本地镜像；保存失败不得静默当作成功。

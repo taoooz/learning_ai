@@ -1,10 +1,14 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { CourseNode as CourseNodeType } from '@/types/course';
+export interface CourseNodeDisplayItem {
+  index: number;
+  title: string;
+  status: 'locked' | 'available' | 'completed';
+}
 
 interface CourseNodeProps {
-  node: CourseNodeType;
+  node: CourseNodeDisplayItem;
   isCurrent: boolean;
   offset: number;
   onClick: () => void;

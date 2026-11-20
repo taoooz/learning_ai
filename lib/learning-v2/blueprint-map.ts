@@ -1,8 +1,8 @@
 // lib/learning-v2/blueprint-map.ts
-// V1 TOC 结果 → V2 课程蓝图映射（过渡层）
+// TOC 结果 → 当前课程蓝图映射。
 // 依据 docs/architecture/v2_课程生成逻辑.md §2.1 蓝图契约；
 // P1a 阶段不新建 V2 蓝图生成链，TOC 落库时由本模块派生蓝图（见实施计划 T1）。
-// 映射产物必须通过 validateCourseBlueprintV2；不通过则调用方降级纯 V1，绝不半写。
+// 映射产物必须通过 validateCourseBlueprintV2；不通过则调用方直接报错，不落半成品。
 // 后续阶段接入真实 V2 蓝图生成链后，本模块可整体替换。
 
 import type {
@@ -47,8 +47,7 @@ export interface MapTocToBlueprintInput {
 }
 
 /**
- * 归一化 V1 水平值到 V2 枚举。
- * V1 存在中英文混合枚举（'初级'/'beginner' 等，见 types/outline.ts），未知值按 beginner。
+ * 归一化 outline 的中英文水平值，未知值按 beginner。
  */
 export function normalizeEstimatedLevel(value: string | undefined): LearnerEstimatedLevel {
   switch ((value ?? '').trim()) {
@@ -76,7 +75,7 @@ export function inferIntentType(text: string): LearningIntentType {
 }
 
 /**
- * 将 V1 TOC 结果映射为 V2 蓝图（纯函数）。
+ * 将 TOC 结果映射为当前课程蓝图（纯函数）。
  * 每章派生一个 core 目标，章节依赖为线性链；
  * observableOutcome/completionCriteria 用行为化模板句，保证通过蓝图校验。
  */

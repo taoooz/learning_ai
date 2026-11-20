@@ -1,6 +1,6 @@
 // app/course/[courseId]/chapter/[chapterId]/page.tsx
 // V2 章节学习页：核心循环的宿主页面
-// 分发与守卫：非 V2 课程回课程页（V1 没有章节学习页）；章节不存在回课程页；
+// 守卫：课程或章节不存在、章节锁定、章节协议不匹配时回课程页；
 // 章节 locked 回课程页（恢复分支⑨，以读时自愈后的章节树判定）
 'use client';
 
@@ -37,22 +37,22 @@ export default function ChapterLearningPage() {
     void (async () => {
       const result = await loadRenderableStoredCourse(courseId);
       if (cancelled) return;
-      if (!result || result.protocol !== 2) {
+      if (!result) {
         router.replace(`/course/${courseId}`);
         return;
       }
-      const chapter = result.course.blueprint.chapters.find((c) => c.chapterId === chapterId);
+      const chapter = result.blueprint.chapters.find((c) => c.chapterId === chapterId);
       if (!chapter) {
         router.replace(`/course/${courseId}`);
         return;
       }
       // loadRenderableStoredCourse 已与课程页共用读时自愈路径
-      const entry = result.course.treeView.chapters.find((c) => c.chapterId === chapterId);
+      const entry = result.treeView.chapters.find((c) => c.chapterId === chapterId);
       if (entry?.status === 'locked') {
         router.replace(`/course/${courseId}`);
         return;
       }
-      setResolved({ course: result.course, chapter });
+      setResolved({ course: result, chapter });
     })();
     return () => {
       cancelled = true;

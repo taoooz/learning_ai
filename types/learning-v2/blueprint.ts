@@ -78,7 +78,7 @@ export interface CourseBlueprintV2 {
   modelVersion: string;
 }
 
-// ---- 课程级存储与目录视图（V1/V2 分发、章节列表渲染消费） ----
+// ---- 课程级存储与目录视图（章节列表渲染消费） ----
 
 export type ChapterTreeStatus = 'locked' | 'available' | 'completed';
 

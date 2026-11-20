@@ -38,12 +38,11 @@ import {
   loadNodeLessonV2,
   deleteNodeLessonV2,
 } from '../lib/learning-v2/storage';
-import { detectProtocolVersion, resolveStoredCourseFromData } from '../lib/learning-v2/dispatch';
-import { isV2LearningEnabled, setV2LearningEnabled } from '../lib/learning-v2/feature-flag';
+import { resolveStoredCourseFromData } from '../lib/learning-v2/dispatch';
 import { mapTocToBlueprintV2 } from '../lib/learning-v2/blueprint-map';
 import { getV2ChapterStorageKey } from '../lib/storage';
 
-import type { StoredCourseBundle, StoredDataV2 } from '../types/course';
+import type { StoredDataV2 } from '../types/course';
 import type {
   ChapterDefinition,
   ChapterPlan,
@@ -825,55 +824,17 @@ test('deleteNodeLessonV2 removes the stored lesson', () => {
 
 // ---- 分发 ----
 
-test('detectProtocolVersion treats only explicit protocolVersion 2 as V2', () => {
-  assert.equal(detectProtocolVersion({ protocolVersion: 2 }), 2);
-  assert.equal(detectProtocolVersion({ protocolVersion: 1 }), 1);
-  assert.equal(detectProtocolVersion({}), 1);
-  assert.equal(detectProtocolVersion(null), 1);
-  assert.equal(detectProtocolVersion('str'), 1);
-  assert.equal(detectProtocolVersion(undefined), 1);
-});
-
-test('resolveStoredCourseFromData prefers V2, falls back to V1, returns null when absent', () => {
-  const v2Course: StoredCourseV2 = createStoredCourseV2('course-1', makeBlueprint(), 1000);
-  const v1Course: StoredCourseBundle = {
-    blueprint: { courseId: 'course-legacy', topic: 'Old', learnerPositioning: { estimatedLevel: 'beginner' }, courseGoal: '', globalConcepts: [], nodes: [] },
-    treeView: { courseId: 'course-legacy', topic: 'Old', courseGoal: '', totalNodes: 0, nodes: [] },
-    lessons: {},
-  };
+test('resolveStoredCourseFromData 只读取当前 v2Courses 容器', () => {
+  const course = createStoredCourseV2('course-1', makeBlueprint(), 1000);
   const data: StoredDataV2 = {
-    courses: [v1Course],
-    currentCourseId: null,
-    courseProgress: {},
+    v2Courses: [course],
     userProfile: null,
     recommendations: [],
-    v2Courses: [v2Course],
   };
 
-  const v2 = resolveStoredCourseFromData(data, 'course-1');
-  assert.ok(v2 && v2.protocol === 2);
-  const v1 = resolveStoredCourseFromData(data, 'course-legacy');
-  assert.ok(v1 && v1.protocol === 1);
+  const resolved = resolveStoredCourseFromData(data, 'course-1');
+  assert.equal(resolved?.courseId, 'course-1');
   assert.equal(resolveStoredCourseFromData(data, 'missing'), null);
-});
-
-// ---- Feature Flag ----
-
-test('feature flag defaults to disabled without browser globals', () => {
-  assert.equal(isV2LearningEnabled(), false);
-});
-
-test('feature flag round-trips when browser globals are present', () => {
-  const restore = installBrowserGlobals();
-  try {
-    assert.equal(isV2LearningEnabled(), false);
-    setV2LearningEnabled(true);
-    assert.equal(isV2LearningEnabled(), true);
-    setV2LearningEnabled(false);
-    assert.equal(isV2LearningEnabled(), false);
-  } finally {
-    restore();
-  }
 });
 
 

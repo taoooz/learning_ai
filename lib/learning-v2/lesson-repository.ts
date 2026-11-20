@@ -55,7 +55,7 @@ export class LocalLessonRepository implements LessonRepository {
 
   async deleteCourse(courseId: string): Promise<boolean> {
     const data = getStoredDataV2();
-    const courses = data.v2Courses ?? [];
+    const courses = data.v2Courses;
     if (!courses.some((course) => course.courseId === courseId)) return false;
     return saveStoredDataV2({
       ...data,
