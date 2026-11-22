@@ -2,8 +2,11 @@
 import json
 from typing import Generator
 
-from services.course_architect_service import generate_course_architecture_sync
-from services.evidence_store import get_topic_evidence, evidence_to_prompt
+from services.course_architect_service import (
+    architecture_chapter_to_node,
+    stream_course_architecture,
+)
+from services.evidence_store import get_topic_evidence, evidence_to_prompt, task_evidence_coverage
 
 
 def _learner_from_blueprint(blueprint: dict, planning_payload: dict | None) -> dict:
@@ -25,12 +28,7 @@ def _learner_from_blueprint(blueprint: dict, planning_payload: dict | None) -> d
 def _toc_result(architecture: dict) -> dict:
     nodes = []
     for index, chapter in enumerate(architecture["chapters"], start=1):
-        nodes.append({
-            "index": index,
-            "title": chapter["title"],
-            "description": f"{chapter['roleInCourse']}。本章交付：{chapter['deliverable']}",
-            "frame": "total_split_total",
-        })
+        nodes.append(architecture_chapter_to_node(chapter, index))
     return {
         "courseName": architecture["courseTopic"],
         "courseDescription": architecture["thesis"]["targetCapability"],
@@ -51,6 +49,11 @@ def stream_toc_with_tools(
     learner = _learner_from_blueprint(blueprint, planning_payload)
     evidence_pack = get_topic_evidence(topic)
     evidence, sources = evidence_to_prompt(evidence_pack)
+    coverage = task_evidence_coverage(
+        evidence_pack,
+        topic,
+        blueprint.get("learningGoal", "") or blueprint.get("learningDirection", ""),
+    )
     memory_context = {
         "scene": "course_architecture",
         "planningMemory": planning_payload or {},
@@ -60,14 +63,26 @@ def stream_toc_with_tools(
     yield f"data: {json.dumps({'type': 'thinking', 'message': '正在设计并审查课程架构'}, ensure_ascii=False)}\n\n"
 
     try:
-        architecture_result = generate_course_architecture_sync(
+        architecture_result = None
+        for event in stream_course_architecture(
             topic=topic,
             outline=blueprint,
             learner=learner,
             memory_context=memory_context,
             evidence=evidence,
             sources=sources,
-        )
+            allow_search=not coverage["covered"],
+        ):
+            event_type = event.get("type")
+            if event_type == "node":
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+            elif event_type in {"course_name", "course_description"}:
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+            elif event_type == "result":
+                architecture_result = event.get("result")
+
+        if not architecture_result:
+            raise ValueError("课程架构未返回结果")
     except Exception as exc:  # noqa: BLE001 架构失败时不生成低质量目录
         print(f"[TOC Agent] 课程架构生成失败: {exc}")
         yield f"data: {json.dumps({'type': 'error', 'message': '课程架构生成失败，请重试'}, ensure_ascii=False)}\n\n"

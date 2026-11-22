@@ -4,6 +4,7 @@ V2 章节计划生成服务
 """
 import asyncio
 import json
+import os
 import time
 from uuid import uuid4
 
@@ -12,7 +13,7 @@ from lib.minimax import MiniMaxClient, extract_usage, parse_json_response
 from lib.tools.search_tools import SEARCH_TOOLS
 from prompts import build_prompt
 from schemas.learning_v2 import ChapterPlanRequest
-from services.evidence_store import evidence_to_prompt, get_chapter_evidence
+from services.evidence_store import evidence_to_prompt, get_chapter_evidence, task_evidence_coverage
 from services.learning_v2_errors import (
     BlueprintDataError,
     ChapterNotFoundError,
@@ -22,6 +23,7 @@ from services.search_evidence import ChapterEvidenceCollector, format_search_dec
 from services.memory_context_v4 import format_memory_context_for_prompt
 
 PROMPT_VERSION = "chapter-plan-v3"
+PLAN_REASONING_EFFORT = os.getenv("PLAN_REASONING_EFFORT", "low").strip() or None
 
 # 教学模式枚举（对齐 chapter-plan.ts TaskTeachingPattern），值为中文释义
 TEACHING_PATTERNS = {
@@ -365,6 +367,29 @@ def _format_repair_notes(errors: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def should_review_chapter_plan(
+    tasks: list[dict],
+    warnings: list[dict],
+    learner: dict | None = None,
+    review_mode: str | None = None,
+) -> bool:
+    """质量审查只在高风险计划上触发；普通结构合法计划直接进入内容生成。"""
+    mode = (review_mode or os.getenv("PLAN_REVIEW_MODE", "auto")).strip().lower()
+    if mode == "off":
+        return False
+    if mode == "always":
+        return True
+    if warnings:
+        return True
+    confidence = (learner or {}).get("levelConfidence")
+    if isinstance(confidence, (int, float)) and confidence < 0.55:
+        return True
+    # 没有 conceptKeys 的计划无法判断认知增量，交给独立审查补一层风险信号。
+    if any(not task.get("conceptKeys") for task in tasks):
+        return True
+    return False
+
+
 async def _review_chapter_plan(
     client: MiniMaxClient,
     *,
@@ -447,6 +472,15 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
     for _round in range(3):
         evidence_pack = collector.pack
         evidence, sources = evidence_to_prompt(evidence_pack)
+        coverage = task_evidence_coverage(
+            evidence_pack,
+            f"{chapter.get('title', '')} {chapter.get('teachingGoal', '')}",
+            " ".join(
+                f"{objective.get('description', '')} {objective.get('observableOutcome', '')}"
+                for objective in objectives
+            ),
+        )
+        allow_search = not coverage["covered"]
         system_prompt = build_chapter_plan_prompt(
             topic=blueprint.get("topic", ""),
             chapter=chapter,
@@ -459,7 +493,7 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
             mission=blueprint.get("mission"),
             teaching_state=teaching_state,
             memory_context=memory_context,
-            allow_search=True,
+            allow_search=allow_search,
         )
         user_message = "请为这个章节生成任务计划。"
         if repair_notes:
@@ -473,12 +507,13 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
             response = await asyncio.to_thread(
                 client.chat_with_tools,
                 messages=messages,
-                tools=SEARCH_TOOLS,
+                tools=SEARCH_TOOLS if allow_search else [],
                 tool_functions=collector.tool_functions,
                 max_tokens=16000,
                 reasoning_split=True,
-                max_iterations=3,
-                max_searches=2,
+                max_iterations=2 if allow_search else 1,
+                max_searches=1,
+                reasoning_effort=PLAN_REASONING_EFFORT,
             )
         else:
             response = await client.chat(messages=messages, max_tokens=16000)
@@ -524,6 +559,14 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
                     **({"tokenUsage": usage} if (usage := extract_usage(response)) else {}),
                 },
             }
+            if not should_review_chapter_plan(
+                tasks,
+                warnings,
+                blueprint.get("learnerStartingPoint", {}),
+            ):
+                plan["generationMeta"]["reviewSkipped"] = True
+                return plan
+
             review = await _review_chapter_plan(
                 client,
                 chapter=chapter,

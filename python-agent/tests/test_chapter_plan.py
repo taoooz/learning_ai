@@ -4,7 +4,11 @@ import json
 import pytest
 
 from schemas.learning_v2 import ChapterPlanRequest, TaskStreamRequest
-from services.chapter_plan_service import generate_chapter_plan, validate_plan_tasks
+from services.chapter_plan_service import (
+    generate_chapter_plan,
+    should_review_chapter_plan,
+    validate_plan_tasks,
+)
 from services.learning_v2_errors import (
     BlueprintDataError,
     ChapterNotFoundError,
@@ -92,6 +96,26 @@ def _valid_tasks() -> list[dict]:
     ]
 
 
+def test_plan_review_is_risk_gated(monkeypatch):
+    clean = _valid_tasks()
+    assert should_review_chapter_plan(clean, [], {"levelConfidence": 0.8}) is False
+    assert should_review_chapter_plan(
+        clean,
+        [{"code": "SINGLE_TEACHING_PATTERN", "message": "单一模式"}],
+        {"levelConfidence": 0.8},
+    ) is True
+    assert should_review_chapter_plan(clean, [], {"levelConfidence": 0.4}) is True
+    assert should_review_chapter_plan(
+        [{**clean[0], "conceptKeys": []}, *clean[1:]],
+        [],
+        {"levelConfidence": 0.8},
+    ) is True
+    monkeypatch.setenv("PLAN_REVIEW_MODE", "off")
+    assert should_review_chapter_plan(clean, [{"code": "RISK"}]) is False
+    monkeypatch.setenv("PLAN_REVIEW_MODE", "always")
+    assert should_review_chapter_plan(clean, []) is True
+
+
 class FakeChatClient:
     """假 LLM 客户端：chat 依次返回预置任务列表包装成的 OpenAI 格式响应"""
     model = "fake-model"
@@ -161,7 +185,8 @@ def test_generate_plan_success_fills_fields():
     assert tasks[0]["prerequisiteTaskIds"] == []
     assert tasks[1]["prerequisiteTaskIds"] == ["t1"]
     assert tasks[2]["prerequisiteTaskIds"] == ["t2"]
-    assert len(client.calls) == 2  # 一次规划 + 一次质量审查
+    assert len(client.calls) == 1  # 无风险信号时跳过独立质量审查
+    assert meta["reviewSkipped"] is True
 
 
 def test_task_id_filled_from_order():
@@ -218,7 +243,7 @@ def test_retry_once_then_success():
     client = FakeChatClient([bad, _valid_tasks()])
 
     plan = asyncio.run(generate_chapter_plan(_plan_request(), client=client))
-    assert len(client.calls) == 3  # 两次规划 + 一次质量审查
+    assert len(client.calls) == 2  # 两次规划；第二版无需再审查
     assert [t["taskId"] for t in plan["tasks"]] == ["t1", "t2", "t3"]
 
     # 第二次调用的 user message 应带修复提示
@@ -266,7 +291,7 @@ def test_two_tasks_passes_with_warning_only():
     client = FakeChatClient([_valid_tasks()[:2]])
     plan = asyncio.run(generate_chapter_plan(_plan_request(), client=client))
     assert len(plan["tasks"]) == 2
-    assert len(client.calls) == 2
+    assert len(client.calls) == 1  # 两任务本身合法，无需额外审查
 
 
 def test_semantic_overlap_between_adjacent_tasks_is_blocked():
@@ -277,7 +302,8 @@ def test_semantic_overlap_between_adjacent_tasks_is_blocked():
     assert any(error["code"] == "SEMANTIC_CONCEPT_OVERLAP" for error in errors)
 
 
-def test_plan_quality_review_can_trigger_one_revision():
+def test_plan_quality_review_can_trigger_one_revision(monkeypatch):
+    monkeypatch.setenv("PLAN_REVIEW_MODE", "always")
     client = FakeChatClient([_valid_tasks(), _valid_tasks()])
     review_fail = {
         "choices": [{"message": {"content": json.dumps({

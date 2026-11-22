@@ -173,14 +173,18 @@ class AgentClient(MiniMaxClient):
                         model=None, max_tokens=2000,
                         reasoning_split=True, max_iterations=3,
                         max_searches: int = 3,
-                        max_tool_result_chars: int = 3000) -> dict:
+                        max_tool_result_chars: int = 3000,
+                        reasoning_effort: str | None = None) -> dict:
         """同步调用 chat API，自动处理 tool_calls 循环"""
         model = model or self.model
         iteration = 0
         search_count = 0
         while iteration < max_iterations:
             effective_tools = tools if search_count < max_searches else None
-            response = self._call_llm(messages, effective_tools, model, max_tokens, reasoning_split)
+            response = self._call_llm(
+                messages, effective_tools, model, max_tokens, reasoning_split,
+                reasoning_effort=reasoning_effort,
+            )
             choice = response.get("choices", [{}])[0]
             message = choice.get("message", {})
 
@@ -208,13 +212,17 @@ class AgentClient(MiniMaxClient):
 
             iteration += 1
 
-        return self._call_llm(messages, [], model, max_tokens, reasoning_split)
+        return self._call_llm(
+            messages, [], model, max_tokens, reasoning_split,
+            reasoning_effort=reasoning_effort,
+        )
 
     def prepare_search_context(self, messages, tools, tool_functions,
                                model=None, max_tokens=4000,
                                reasoning_split=True, max_iterations=2,
                                max_searches: int = 2,
-                               max_tool_result_chars: int = 3000) -> dict:
+                               max_tool_result_chars: int = 3000,
+                               reasoning_effort: str | None = None) -> dict:
         """让模型先决定并执行补充搜索，返回最后一次决策响应。
 
         该阶段只准备检索上下文，不生成最终正文。调用方随后应追加新的 user
@@ -226,7 +234,10 @@ class AgentClient(MiniMaxClient):
         search_count = 0
         while iteration < max_iterations:
             effective_tools = tools if search_count < max_searches else None
-            response = self._call_llm(messages, effective_tools, model, max_tokens, reasoning_split)
+            response = self._call_llm(
+                messages, effective_tools, model, max_tokens, reasoning_split,
+                reasoning_effort=reasoning_effort,
+            )
             choice = response.get("choices", [{}])[0]
             message = choice.get("message", {})
             if not self._has_tool_calls(response):
@@ -262,6 +273,7 @@ class AgentClient(MiniMaxClient):
         reasoning_split: bool = True,
         max_iterations: int = 3,
         max_searches: int = 3,
+        reasoning_effort: str | None = None,
     ) -> Iterator[dict]:
         """流式 Agent 调用 — thinking 逐 token 实时推送到前端
 
@@ -295,6 +307,8 @@ class AgentClient(MiniMaxClient):
                 "stream": True,
                 "reasoning_split": reasoning_split,
             }
+            if reasoning_effort:
+                payload["reasoning_effort"] = reasoning_effort
             if effective_tools:
                 payload["tools"] = effective_tools
 
@@ -405,6 +419,8 @@ class AgentClient(MiniMaxClient):
             "stream": True,
             "reasoning_split": reasoning_split,
         }
+        if reasoning_effort:
+            final_payload["reasoning_effort"] = reasoning_effort
         for event in _do_streaming_call(self, final_payload):
             if event["type"] in ("thinking", "content_delta"):
                 yield event
@@ -416,7 +432,8 @@ class AgentClient(MiniMaxClient):
 
     # ---- 以下为内部方法 ----
 
-    def _call_llm(self, messages, tools, model, max_tokens, reasoning_split, max_retries=3):
+    def _call_llm(self, messages, tools, model, max_tokens, reasoning_split, max_retries=3,
+                  reasoning_effort: str | None = None):
         """非流式 LLM 调用（自动重试），仅供 chat_with_tools 使用"""
         import concurrent.futures
         import time
@@ -425,6 +442,8 @@ class AgentClient(MiniMaxClient):
             "model": model, "messages": messages,
             "max_tokens": max_tokens, "reasoning_split": reasoning_split,
         }
+        if reasoning_effort:
+            payload["reasoning_effort"] = reasoning_effort
         if tools:
             payload["tools"] = tools
 

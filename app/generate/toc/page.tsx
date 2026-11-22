@@ -84,11 +84,18 @@ function TocPageContent() {
               break;
 
             case 'node':
-              setStreamNodes(prev => [...prev, event.node]);
+              setStreamNodes(prev => {
+                const existingIndex = prev.findIndex((node) => node.index === event.node.index);
+                if (existingIndex < 0) return [...prev, event.node];
+                return prev.map((node, index) => (index === existingIndex ? event.node : node));
+              });
               break;
 
             case 'complete':
               completeResult = event.result;
+              if (Array.isArray(event.result?.nodes) && event.result.nodes.length > 0) {
+                setStreamNodes(event.result.nodes);
+              }
               break;
 
             case 'error':

@@ -5,7 +5,7 @@ import asyncio
 import json
 import os
 import re
-from typing import Any
+from typing import Any, Generator
 
 from lib.minimax import MiniMaxClient, parse_json_response
 from lib.minimax_agent import AgentClient
@@ -16,6 +16,7 @@ from services.memory_context_v4 import wrap_untrusted_context
 from services.search_evidence import format_search_decision_policy
 
 PROMPT_VERSION = "course-architect-v1"
+ARCHITECT_REASONING_EFFORT = os.getenv("ARCHITECT_REASONING_EFFORT", "none").strip() or None
 
 
 def build_course_architect_prompt(
@@ -25,6 +26,7 @@ def build_course_architect_prompt(
     memory_context: dict[str, Any] | None = None,
     evidence: str | None = None,
     sources: list[dict[str, Any]] | None = None,
+    allow_search: bool = True,
 ) -> str:
     memory_payload = {
         "learner": learner,
@@ -44,7 +46,11 @@ def build_course_architect_prompt(
         outline_section=wrap_untrusted_context("outline", outline),
         memory_section=wrap_untrusted_context("learner_memory", memory_payload),
         evidence_section=evidence_section,
-        search_policy=format_search_decision_policy(max_searches=2),
+        search_policy=(
+            format_search_decision_policy(max_searches=1)
+            if allow_search
+            else "本阶段已有上下文足够，不提供联网搜索工具，也不要引用未提供的来源。"
+        ),
     )
 
 
@@ -190,6 +196,78 @@ def _parse_architecture(content: str) -> CourseArchitecture:
     return CourseArchitecture.model_validate(candidate or parsed)
 
 
+_JSON_STRING_FIELD_TEMPLATE = r'"{field}"\s*:\s*"((?:\\.|[^"\\])*)"'
+
+
+def _extract_json_string_field(content: str, field: str) -> str | None:
+    """从仍在增长的 JSON 文本里提取一个已闭合的字符串字段。"""
+    match = re.search(_JSON_STRING_FIELD_TEMPLATE.format(field=re.escape(field)), content)
+    if not match:
+        return None
+    try:
+        return json.loads(f'"{match.group(1)}"')
+    except json.JSONDecodeError:
+        return None
+
+
+def _complete_chapter_objects(content: str) -> list[dict[str, Any]]:
+    """提取 chapters 数组中已经闭合的章节对象，不要求整个 JSON 已闭合。"""
+    key_index = content.find('"chapters"')
+    if key_index < 0:
+        return []
+    array_start = content.find("[", key_index)
+    if array_start < 0:
+        return []
+
+    objects: list[dict[str, Any]] = []
+    in_string = False
+    escaped = False
+    depth = 0
+    start = -1
+    for index in range(array_start + 1, len(content)):
+        char = content[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            if depth == 0:
+                start = index
+            depth += 1
+        elif char == "}":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start >= 0:
+                    raw = content[start:index + 1]
+                    try:
+                        parsed = json.loads(raw)
+                    except json.JSONDecodeError:
+                        pass
+                    else:
+                        if isinstance(parsed, dict):
+                            objects.append(parsed)
+                    start = -1
+        elif char == "]" and depth == 0:
+            break
+    return objects
+
+
+def architecture_chapter_to_node(chapter: dict[str, Any], index: int) -> dict[str, Any]:
+    """把已闭合的章节对象转换成前端 TOC node。"""
+    return {
+        "index": index,
+        "title": str(chapter.get("title") or ""),
+        "description": f"{chapter.get('roleInCourse', '')}。本章交付：{chapter.get('deliverable', '')}",
+        "frame": "total_split_total",
+    }
+
+
 async def generate_course_architecture(
     topic: str,
     outline: dict[str, Any],
@@ -231,6 +309,7 @@ async def generate_course_architecture(
                 reasoning_split=True,
                 max_iterations=3,
                 max_searches=2,
+                reasoning_effort=ARCHITECT_REASONING_EFFORT,
             )
         else:
             response = await client.chat(messages=messages, max_tokens=12000)
@@ -279,6 +358,155 @@ async def generate_course_architecture(
         "promptVersion": PROMPT_VERSION,
         "modelVersion": getattr(client, "model", "unknown"),
     }
+
+
+def _fallback_architecture_result(
+    topic: str,
+    outline: dict[str, Any],
+    learner: dict[str, Any],
+    memory_context: dict[str, Any] | None,
+    evidence: str | None,
+    sources: list[dict[str, Any]] | None,
+    client: MiniMaxClient,
+    review_mode: str | None,
+) -> dict[str, Any]:
+    """流式解析失败时复用已有的修复/审查链路。"""
+    return asyncio.run(generate_course_architecture(
+        topic=topic,
+        outline=outline,
+        learner=learner,
+        memory_context=memory_context,
+        evidence=evidence,
+        sources=sources,
+        client=client,
+        review_mode=review_mode,
+    ))
+
+
+def stream_course_architecture(
+    topic: str,
+    outline: dict[str, Any],
+    learner: dict[str, Any],
+    memory_context: dict[str, Any] | None = None,
+    evidence: str | None = None,
+    sources: list[dict[str, Any]] | None = None,
+    client: MiniMaxClient | None = None,
+    review_mode: str | None = None,
+    allow_search: bool = True,
+) -> Generator[dict[str, Any], None, None]:
+    """流式生成架构：章节对象一闭合就发 node 事件，最终再做结构校验。"""
+    client = client or AgentClient()
+    system_prompt = build_course_architect_prompt(
+        topic,
+        outline,
+        learner,
+        memory_context,
+        evidence,
+        sources,
+        allow_search=allow_search,
+    )
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": "请完成这门课的架构设计。"},
+    ]
+    raw_content = ""
+    emitted_chapters = 0
+    emitted_course_name = False
+    emitted_course_description = False
+
+    if hasattr(client, "stream_chat_with_tools"):
+        try:
+            for event in client.stream_chat_with_tools(
+                messages=messages,
+                tools=SEARCH_TOOLS if allow_search else [],
+                tool_functions=TOOL_FUNCTIONS,
+                max_tokens=12000,
+                reasoning_split=True,
+                max_iterations=2 if allow_search else 1,
+                max_searches=1,
+                reasoning_effort=ARCHITECT_REASONING_EFFORT,
+            ):
+                event_type = event.get("type")
+                if event_type == "tool_call":
+                    raw_content = ""
+                    emitted_chapters = 0
+                    emitted_course_name = False
+                    emitted_course_description = False
+                    print(f"[Course Architect] 补充搜索：{event.get('tool')}")
+                    continue
+                if event_type != "content_delta":
+                    continue
+
+                raw_content += str(event.get("content") or "")
+                if not emitted_course_name:
+                    course_name = _extract_json_string_field(raw_content, "courseTopic")
+                    if course_name:
+                        emitted_course_name = True
+                        yield {"type": "course_name", "value": course_name}
+                if not emitted_course_description:
+                    description = _extract_json_string_field(raw_content, "targetCapability")
+                    if description:
+                        emitted_course_description = True
+                        yield {"type": "course_description", "value": description}
+
+                chapters = _complete_chapter_objects(raw_content)
+                for chapter in chapters[emitted_chapters:]:
+                    emitted_chapters += 1
+                    node = architecture_chapter_to_node(chapter, emitted_chapters)
+                    if node["title"]:
+                        yield {"type": "node", "node": node}
+        except Exception as exc:  # noqa: BLE001
+            print(f"[Course Architect] 流式生成失败，降级非流式修复：{exc}")
+            raw_content = ""
+    else:
+        raw_content = ""
+
+    if not raw_content.strip():
+        result = _fallback_architecture_result(
+            topic, outline, learner, memory_context, evidence, sources, client, review_mode
+        )
+        if result.get("issues"):
+            raise ValueError("课程架构审查未通过：" + "；".join(result["issues"]))
+        yield {"type": "result", "result": result}
+        return
+
+    try:
+        architecture = _parse_architecture(raw_content)
+        issues = validate_course_architecture(architecture)
+        review_unavailable = False
+        review_skipped = False
+        if issues:
+            raise ValueError("课程架构结构校验未通过：" + "；".join(issues))
+        if should_review_architecture(architecture, learner, review_mode):
+            review = asyncio.run(_review_course_architecture(client, architecture, learner))
+            review_unavailable = bool(review.get("reviewUnavailable"))
+            if not review["passed"]:
+                review_issues = review.get("issues") or []
+                raise ValueError("课程架构审查未通过：" + "；".join(
+                    f"[{item.get('code', 'QUALITY')}] {item.get('message', '')}"
+                    for item in review_issues
+                ))
+        else:
+            review_skipped = True
+    except Exception as exc:  # noqa: BLE001
+        print(f"[Course Architect] 流式结果校验失败，降级非流式修复：{exc}")
+        result = _fallback_architecture_result(
+            topic, outline, learner, memory_context, evidence, sources, client, review_mode
+        )
+        if result.get("issues"):
+            raise ValueError("课程架构审查未通过：" + "；".join(result["issues"]))
+        yield {"type": "result", "result": result}
+        return
+
+    result = {
+        "architecture": architecture.model_dump(),
+        "issues": [],
+        "reviewUnavailable": review_unavailable,
+        "reviewSkipped": review_skipped,
+        "promptVersion": PROMPT_VERSION,
+        "modelVersion": getattr(client, "model", "unknown"),
+    }
+    yield {"type": "result", "result": result}
 
 
 def generate_course_architecture_sync(*args, **kwargs) -> dict[str, Any]:

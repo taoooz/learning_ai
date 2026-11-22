@@ -351,6 +351,7 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
                     reasoning_split=True,
                     max_iterations=1,
                     max_searches=1,
+                    reasoning_effort="none",
                 )
                 # 检索决策使用紧凑 system prompt；正文仍必须使用完整教学 prompt。
                 # 只保留工具调用产生的 assistant/tool 上下文，避免模型丢掉内容配方。

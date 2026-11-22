@@ -4,8 +4,10 @@ import json
 from schemas.course_architecture import CourseArchitecture, validate_course_architecture
 from services.course_architect_service import (
     build_course_architect_prompt,
+    _complete_chapter_objects,
     generate_course_architecture,
     should_review_architecture,
+    stream_course_architecture,
 )
 
 
@@ -90,9 +92,38 @@ class FakeArchitectClient:
         return {"choices": [{"message": {"content": json.dumps(payload, ensure_ascii=False)}}]}
 
 
+class FakeStreamingArchitectClient(FakeArchitectClient):
+    def stream_chat_with_tools(self, messages, tools, tool_functions, **kwargs):
+        content = json.dumps(_valid_architecture(), ensure_ascii=False)
+        midpoint = content.index('"chapters"') + 1
+        yield {"type": "content_delta", "content": content[:midpoint]}
+        yield {"type": "content_delta", "content": content[midpoint:]}
+        yield {"type": "done"}
+
 def test_valid_architecture_passes_deterministic_validation():
     architecture = CourseArchitecture.model_validate(_valid_architecture())
     assert validate_course_architecture(architecture) == []
+
+
+def test_streamed_chapter_parser_only_returns_closed_chapter_objects():
+    content = json.dumps(_valid_architecture(), ensure_ascii=False)
+    closed = content[:content.index('"chapters"') + len('"chapters":[') + 80]
+    assert _complete_chapter_objects(closed) == []
+    assert len(_complete_chapter_objects(content)) == 2
+
+
+def test_stream_course_architecture_emits_nodes_before_final_result():
+    client = FakeStreamingArchitectClient([])
+    events = list(stream_course_architecture(
+        topic="推荐系统核心链路",
+        outline=_valid_architecture(),
+        learner={"estimatedLevel": "intermediate", "skipBasics": []},
+        client=client,
+    ))
+    types = [event["type"] for event in events]
+    assert types.count("node") == 2
+    assert types[-1] == "result"
+    assert types.index("node") < types.index("result")
 
 
 def test_architecture_detects_duplicate_deliverable_and_missing_reference():

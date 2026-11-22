@@ -45,6 +45,17 @@ PROMPT = {
 {{
   "architectureVersion": 1,
   "courseTopic": "课程主题",
+  "chapters": [
+    {{
+      "chapterId": "ch-1",
+      "title": "章节标题",
+      "roleInCourse": "本章在整门课中的独特职责",
+      "conceptIds": ["c1"],
+      "deliverable": "本章结束时可验证的交付物或能力",
+      "prerequisites": [],
+      "assessmentMode": "none | self_report | checkpoint"
+    }}
+  ],
   "thesis": {{
     "audience": "学习者当前画像",
     "currentBoundary": ["当前已能做到什么", "当前尚不能做到什么"],
@@ -62,17 +73,6 @@ PROMPT = {
       "evidenceIds": []
     }}
   ],
-  "chapters": [
-    {{
-      "chapterId": "ch-1",
-      "title": "章节标题",
-      "roleInCourse": "本章在整门课中的独特职责",
-      "conceptIds": ["c1"],
-      "deliverable": "本章结束时可验证的交付物或能力",
-      "prerequisites": [],
-      "assessmentMode": "none | self_report | checkpoint"
-    }}
-  ],
   "examplePolicy": {{
     "preferredDomains": ["优先使用的例子领域"],
     "personalExampleLimit": 1,
@@ -81,6 +81,7 @@ PROMPT = {
 }}
 
 ## 输出要求
+- 字段顺序不影响 JSON 契约；为前端渐进渲染，请先输出 courseTopic 与完整 chapters，再输出 thesis 与 conceptGraph。
 - 概念 ID、章节 ID 使用稳定短 ID，所有引用必须存在。
 - 非 skip 概念必须至少被一个章节覆盖。
 - 章节交付物不得重复。

@@ -94,7 +94,8 @@ def test_prepare_search_context_executes_tool_and_keeps_result_for_final_generat
     observed_tools = []
     tool_calls = []
 
-    def fake_call(messages, tools, model, max_tokens, reasoning_split, max_retries=3):
+    def fake_call(messages, tools, model, max_tokens, reasoning_split, max_retries=3, reasoning_effort=None):
+        del reasoning_effort
         observed_tools.append(tools)
         if observed_tools[-1] and messages[-1]["role"] == "user":
             return responses[0]
