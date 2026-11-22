@@ -2,9 +2,14 @@
 
 > 详细历史见 `docs/archive/CHANGELOG-2026-09.md`（2026-09-30 及更早，含学习系统分层升级与可读性定点修复）。
 
-### Memory V4 上线、硬化与 V3 下线（2026-11-19 至 2026-11-20）
+### Memory V4 上线、硬化与 V3 下线（2026-11-19 至 2026-11-21）
+- LLM 全链路切换为 `ark/deepseek-v4-1-flash`；接口真实请求已通过，旧 `zhipu/glm-5.3-flash` 配置与默认值同步清理
+- 搜索决策全链路交由模型：章节计划/任务正文改为 tool-calling，淘汰关键词预搜；模型只负责判断与查询，EvidencePack 仍由代码持久化、去重与约束
+- 课程质量 P0/P1：补齐水平置信度/已掌握/可能缺口/例子策略并加入低置信度校准门；章节交付进入蓝图，新增独立计划审查与概念重叠拦截；任务块改为弹性结构，章内共享概念与例子账本，个人经历默认每章最多 1 次
+- Course Architect 接入课程创建主链路：Architect 生成课程架构并由 Blueprint Compiler 落库，TOC 节点改为确定性渲染；LLM 审查改为 auto 风险触发，常规架构跳过。10 主题批跑全通过，3 个过度拆分主题收敛到 6 章；推荐课程完整链路 54 秒生成 6 章并通过 Blueprint 校验
+- 真实 Chromium E2E 打通登录→校准→纲要确认→Architect 生成→6 章落库→3 步任务→Checkpoint 判分；修复 Markdown GFM 表格缺失与单波浪号被误删，并兼容 Checkpoint 的 `items`/多题型示例包装
 - 新增 account-scoped Memory V4 Store、画像自动导入、Evidence 账本与 Concept/Topic 投影；课程生成/聊天改由服务端读取统一 Memory，旧 V3 直接写 mastery 路径下线
-- Checkpoint 改为服务端 sealed definition：教学范围由蓝图/章节容器反查，answer 独立为不可信数据，attempt 在账户锁内顺序写入；新增 tombstone、revision、场景化 D0-D3 Context Resolver、Memory 管理 UI、复习队列、来源可核验的 Candidate、服务端 Chat/Chapter Episode、Learning Summary 与投影 dirty 自愈；P1/P2 新增 Playwright server 模式确定性 E2E，lesson 保存改为单写入器 + 最新快照合并，并修复 StrictMode boot、刷新相位镜像、Checkpoint 完成事实和后台 Candidate 调度；同时彻底删除 Next/Python refine 入口、V3 Store/repository/aggregator/client、验证脚本与纯 V3 测试，聊天困惑与偏好信号继续由当前 Chat Summary 轻量规则承接，并新增双端 404 退役回归；同步收紧画像 prompt 类型边界、移除旧存储清理与无账户 key 自动迁移，并删除过期根目录验收材料与失效生成诊断脚本；P1 删除 `StoredData.courses`、旧课程类型、V1 回退分发和过渡 feature flag，存储只保留 `courses + userProfile + recommendations`；P2 统一内部类型、函数和组件命名，移除 `*V2`/`v2*` 后缀，保留 `protocolVersion: 2`、`/learning/v2` 路径与原 localStorage key；P2 将 `CourseBlueprint.mission` 收敛为必填唯一来源，删除顶层 `targetScenario` / `successCriteria` 兼容字段及运行时缺省兜底；P2 删除 TaskBlocks 旧证据文本兜底与旧可视化格式，收紧 API 响应包装和 Chat messages-only 旧入口，并在存储边界过滤非法/历史课程结构，避免旧数据击穿首页；新增 Memory 固定五维派生视图与渐进披露 UI，并按语义合并偏好、目标岗位和 Teaching Strategy 写入
+- P0/P2：Checkpoint 生成失败可原地重试；任务正文新增证据覆盖快路径、紧凑检索决策与失败降级，并默认关闭正文额外推理；真实同任务耗时 8～10 秒（此前 45～72 秒）
 
 ### 交互内容块 Phase 1（2026-10-08）
 - 新增 `interactive` 内容块类型与首批两个消费型组件：`parameter-demo`（改参数看结果，命名变量白名单公式求值）、`step-walkthrough`（分步演示）
@@ -15,16 +20,12 @@
 ### 课程内容文风规范（精简版，2026-10-08）
 - 任务内容/流内答疑/章节小结 prompt 注入四条文风规则：篇幅随素材（禁止注水与假细节）、知识状态分层（定论/惯例/无定论）、禁提示性开场与翻案腔、按学习者问题推进
 - 新增 `services/style_lint.py` 文风观测 lint（纯正则，零依赖）：挂到任务内容、答疑、小结生成完成路径，只记日志不拦截不重试；新增 4 个单测
-- 速度影响：prompt 增加约 300 tokens/次（毫秒级 prefill），lint 微秒级；后续按命中率数据决定是否收紧
-- 参考 Karpathy 的 ASD-STE100 受控英语建议（36kr 文章），补充两条规则：同一概念全篇同名（优先用课程统一术语表）、程序性步骤一句一操作
+- 速度影响：prompt 增加约 300 tokens/次（毫秒级 prefill），lint 微秒级；后续按命中率数据决定是否收紧；参考 Karpathy 的 ASD-STE100 受控英语建议（36kr 文章），补充两条规则：同一概念全篇同名（优先用课程统一术语表）、程序性步骤一句一操作
 
 ### 生成链路稳定性（2026-10-08）
-- 流式空闲超时：上游网关可能“保活连接但停发内容”（httpx 读超时不生效），
-  stream_chat 60s 无新数据行主动断流，答疑/任务流走既有错误重试路径
-- 检查点生成双层超时（前端 120s、代理 130s）：服务断线时自动解锁章节、可重试
+- 流式空闲超时：上游网关可能“保活连接但停发内容”（httpx 读超时不生效），stream_chat 60s 无新数据行主动断流，答疑/任务流走既有错误重试路径；检查点生成双层超时（前端 120s、代理 130s），服务断线时自动解锁章节、可重试
 ### 流式体验优化（2026-10-08）
-- 结构化块渐进渲染：example/key_point 块壳先行、内容逐行填充；校验失败降级 markdown
-- 边界卡去重（单一信息源）；互动演示卡片分区美化
+- 结构化块渐进渲染：example/key_point 块壳先行、内容逐行填充；校验失败降级 markdown；边界卡去重（单一信息源）；互动演示卡片分区美化
 ### 交互组件 Phase 2：对比组件 + 完成信号（2026-10-08）
 - 目录扩充至 5 个组件：新增 `bar-compare`（数值幅度对比条形图，单位/非负校验）与 `before-after`（前后状态切换，非数值对比）
 - 扩展性分工：数值幅度差距走 bar-compare，非数值状态对照走 before-after，多维度逐项对比保留 :::comparison 表格块；渲染入口改为注册表模式，新增组件 = 一个 View + 一条注册
@@ -45,5 +46,4 @@
   检验统一由章末理解检查承担。lint 增加填空式练习观测。
 
 ### flow-diagram 交互组件（2026-10-08）
-- 新增第三个交互组件：结构总览流程图（正向链 + 循环回边徽记），替代大部分 Mermaid flowchart 场景；sequenceDiagram/复杂分支仍用 :::diagram
-- 解析/校验/降级与渲染模式同 Phase 1；新增 3 个单测；架构文档同步
+- 新增第三个交互组件：结构总览流程图（正向链 + 循环回边徽记），替代大部分 Mermaid flowchart 场景；sequenceDiagram/复杂分支仍用 :::diagram；解析/校验/降级与渲染模式同 Phase 1；新增 3 个单测；架构文档同步

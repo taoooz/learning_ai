@@ -17,7 +17,7 @@
 ## 2. 核心用户路径
 
 1. **登录：** `/login` 输入邀请码；cookie 鉴权由 `middleware.ts` 保护页面路由。
-2. **创建课程：** `/generate/chat` 生成学习纲要与 `CourseMission` → `/generate/toc` 生成课程目录 → 前端映射为 `CourseBlueprint` 并落库。
+2. **创建课程：** `/generate/chat` 生成学习纲要与 `CourseMission` → `/generate/toc` 由 Course Architect 生成并校验课程架构，确定性渲染目录节点 → 前端用 Blueprint Compiler 落库。
 3. **系统课程：** 首页点击系统推荐课程，由内置大纲元数据派生课程蓝图，章节内容按需生成。
 4. **课程页：** `/course/{courseId}` 展示章节树、进度、当前可学章节、课程速查卡和统一术语。
 5. **章节学习：** `/course/{courseId}/chapter/{chapterId}` 按需生成章节计划，再流式输出任务内容。
@@ -29,7 +29,7 @@
 | 领域 | 主要入口 |
 |---|---|
 | 登录与鉴权 | `middleware.ts`, `app/api/auth`, `lib/auth.ts` |
-| 课程创建 | `app/generate`, `app/api/agents/outline`, `app/api/generate/toc` |
+| 课程创建 | `app/generate`, `app/api/agents/outline`, `app/api/generate/toc`, `python-agent/services/course_architect_service.py`, `lib/learning-v2/blueprint-from-architecture.ts` |
 | 系统课程 | `lib/data/system-courses.ts` |
 | 课程容器与分发 | `lib/learning-v2/dispatch.ts`, `lib/learning-v2/blueprint-map.ts` |
 | 首页课程列表 | `lib/learning-v2/course-list.ts`, `components/CourseCard.tsx` |
@@ -60,6 +60,7 @@
 11. server 模式 lesson 保存必须单写入器串行执行；写入在途时只合并为最新快照，不能让旧快照排队覆盖新状态。
 12. Profile Memory 使用固定五维派生视图（方向、背景、偏好、教学策略、学习轨迹）；摘要通过 `sourceRecordIds` 与 `sourceRevision` 指向原子记录，不形成第二事实层。
 13. Chat Agent API 只接受 `{ courseTopic, messages }` 结构化输入；不支持仅传 `messages` 的旧直连模式。
+14. 课程起点不得把“缺少主题学习记录”直接当成零基础：`LearnerStartingPoint` 可带水平置信度、背景、可能缺口和例子策略；低置信度且存在可迁移背景时必须先校准。课程创建先经 Course Architect 与确定性结构校验，LLM 架构审查仅在 auto 风险模式下按需触发；章节计划进入内容生成前仍须经过概念重复/过基础/过度拆分审查。
 
 ## 5. 详细文档索引
 
