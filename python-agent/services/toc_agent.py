@@ -1,163 +1,92 @@
-"""
-TOC Agent 服务 — 带搜索能力的 Agent 版课程目录生成
-复用 toc_service 的 prompt 构建和解析逻辑，
-通过 AgentClient 实现 function calling 自动搜索
-"""
+"""TOC Agent：Course Architect 生成课程架构后确定性渲染课程目录。"""
 import json
-import re
 from typing import Generator
-from lib.minimax_agent import AgentClient
-from lib.tools.search_tools import SEARCH_TOOLS, TOOL_FUNCTIONS
-from services.evidence_store import ensure_topic_evidence_pack_sync, evidence_to_prompt
-from services.toc_service import (
-    build_toc_prompt,
-    _extract_json_string_field,
-    _extract_complete_node_objects,
-)
+
+from services.course_architect_service import generate_course_architecture_sync
+from services.evidence_store import get_topic_evidence, evidence_to_prompt
+
+
+def _learner_from_blueprint(blueprint: dict, planning_payload: dict | None) -> dict:
+    learner = blueprint.get("learnerPositioning")
+    if isinstance(learner, dict) and learner:
+        return learner
+    snapshot = (planning_payload or {}).get("learnerSnapshot") or {}
+    return {
+        "estimatedLevel": snapshot.get("estimatedLevel", "beginner"),
+        "backgroundSummary": "",
+        "skipBasics": (planning_payload or {}).get("skippableBasics", []),
+        "likelyGaps": (planning_payload or {}).get("mustCoverConcepts", []),
+        "levelConfidence": snapshot.get("confidence", 0.35),
+        "preferredExampleDomains": [],
+        "personalExampleLimit": 1,
+    }
+
+
+def _toc_result(architecture: dict) -> dict:
+    nodes = []
+    for index, chapter in enumerate(architecture["chapters"], start=1):
+        nodes.append({
+            "index": index,
+            "title": chapter["title"],
+            "description": f"{chapter['roleInCourse']}。本章交付：{chapter['deliverable']}",
+            "frame": "total_split_total",
+        })
+    return {
+        "courseName": architecture["courseTopic"],
+        "courseDescription": architecture["thesis"]["targetCapability"],
+        "nodes": nodes,
+        "architecture": architecture,
+    }
 
 
 def stream_toc_with_tools(
     blueprint: dict,
     planning_payload: dict = None,
     user_profile: dict = None,
-    # glm-5.3-flash 思考长度方差大（实测 3k~12k 字），带 tools 决策时更长；
-    # 预算不足会被 max_tokens 截断在思考阶段（finish_reason=length、content 为空）
     max_tokens: int = 16000,
 ) -> Generator[str, None, None]:
-    """Agent 版 TOC 生成（带搜索能力）
-
-    流程:
-    1. 构建 prompt（复用 toc_service 的 build_toc_prompt）
-    2. 使用 AgentClient 进行 tool-calling 循环
-    3. 将 Agent 事件转换为前端期望的 SSE 格式（thinking/tool 信息）
-    4. 解析最终内容，逐字段 yield 和原版 stream_toc_events 一致的事件格式
-
-    Yields: SSE 格式字符串（data: {...}\n\n）
-    """
-    client = AgentClient()
-    topic = blueprint.get('topic', blueprint.get('learningDirection', ''))
-    evidence_pack = None
-    try:
-        evidence_pack = ensure_topic_evidence_pack_sync(topic)
-    except Exception as exc:  # noqa: BLE001 目录生成不因搜索失败阻塞
-        print(f"[TOC Agent] 课程证据包构建失败: {exc}")
+    """设计并审查课程架构，再把架构确定性地渲染为前端 TOC 事件。"""
+    del max_tokens  # 架构生成服务内部管理 token budget
+    topic = blueprint.get("topic", blueprint.get("learningDirection", ""))
+    learner = _learner_from_blueprint(blueprint, planning_payload)
+    evidence_pack = get_topic_evidence(topic)
     evidence, sources = evidence_to_prompt(evidence_pack)
-    system_prompt = build_toc_prompt(blueprint, planning_payload, user_profile, evidence=evidence, sources=sources)
+    memory_context = {
+        "scene": "course_architecture",
+        "planningMemory": planning_payload or {},
+        "userProfile": user_profile or {},
+    }
 
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": "请生成课程目录。"},
-    ]
-
-    agent_events = []
-    # 实时流式解析状态
-    streaming_thinking = ""
-    streaming_content = ""
-    emitted_course_name = None
-    emitted_course_description = None
-    emitted_nodes = []       # 已流式输出的节点，最终解析失败时用于兜底
-    consumed_node_count = 0  # 已扫描的节点数（含无效节点，避免重复扫描）
-
-    def _try_parse_and_yield():
-        """从当前累积内容中增量解析 TOC 字段并 yield SSE 事件"""
-        nonlocal emitted_course_name, emitted_course_description, consumed_node_count
-        content_clean = re.sub(r'Thinking.*?Thinking', '', streaming_content, flags=re.DOTALL).strip()
-        if not content_clean:
-            return
-
-        course_name = _extract_json_string_field(content_clean, "courseName")
-        if course_name and course_name != emitted_course_name:
-            emitted_course_name = course_name
-            yield f"data: {json.dumps({'type': 'course_name', 'value': course_name}, ensure_ascii=False)}\n\n"
-
-        course_description = _extract_json_string_field(content_clean, "courseDescription")
-        if course_description and course_description != emitted_course_description:
-            emitted_course_description = course_description
-            yield f"data: {json.dumps({'type': 'course_description', 'value': course_description}, ensure_ascii=False)}\n\n"
-
-        nodes = _extract_complete_node_objects(content_clean)
-        while consumed_node_count < len(nodes):
-            node = nodes[consumed_node_count]
-            consumed_node_count += 1
-            if isinstance(node, dict) and all(key in node for key in ("index", "title", "description")):
-                emitted_node = {
-                    'index': node['index'],
-                    'title': node['title'],
-                    'description': node['description'],
-                    'frame': node.get('frame', 'total_split_total'),
-                }
-                emitted_nodes.append(emitted_node)
-                yield f"data: {json.dumps({'type': 'node', 'node': emitted_node}, ensure_ascii=False)}\n\n"
+    yield f"data: {json.dumps({'type': 'thinking', 'message': '正在设计并审查课程架构'}, ensure_ascii=False)}\n\n"
 
     try:
-        for event in client.stream_chat_with_tools(
-            messages=messages,
-            tools=SEARCH_TOOLS,
-            tool_functions=TOOL_FUNCTIONS,
-            max_tokens=max_tokens,
-            reasoning_split=True,
-            max_iterations=5,
-        ):
-            agent_events.append(event)
-
-            if event["type"] == "thinking":
-                streaming_thinking += event["message"]
-                yield f"data: {json.dumps({'type': 'thinking', 'message': event['message']}, ensure_ascii=False)}\n\n"
-
-            elif event["type"] == "content_delta":
-                streaming_content += event["content"]
-                for sse in _try_parse_and_yield():
-                    yield sse
-
-            elif event["type"] == "tool_call":
-                tool_name = event["tool"]
-                tool_args = event["args"]
-                if tool_name == "web_search":
-                    query = tool_args.get("query", "")
-                    yield f"data: {json.dumps({'type': 'thinking', 'message': f'正在搜索：{query}'}, ensure_ascii=False)}\n\n"
-                elif tool_name == "read_url":
-                    url = tool_args.get("url", "")
-                    yield f"data: {json.dumps({'type': 'thinking', 'message': f'正在读取：{url}'}, ensure_ascii=False)}\n\n"
-
-    except Exception as e:
-        print(f"[TOC Agent] Error during agent loop: {e}")
-        import traceback
-        traceback.print_exc()
-        from services.outline_agent import _user_friendly_error
-        yield f"data: {json.dumps({'type': 'error', 'message': _user_friendly_error(e)}, ensure_ascii=False)}\n\n"
+        architecture_result = generate_course_architecture_sync(
+            topic=topic,
+            outline=blueprint,
+            learner=learner,
+            memory_context=memory_context,
+            evidence=evidence,
+            sources=sources,
+        )
+    except Exception as exc:  # noqa: BLE001 架构失败时不生成低质量目录
+        print(f"[TOC Agent] 课程架构生成失败: {exc}")
+        yield f"data: {json.dumps({'type': 'error', 'message': '课程架构生成失败，请重试'}, ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"
         return
 
-    # 最终兜底解析（确保 complete 事件包含完整数据）
-    content_clean = re.sub(r'Thinking.*?Thinking', '', streaming_content, flags=re.DOTALL).strip()
-    from lib.minimax import parse_json_response
-    result = None
-    try:
-        parsed = parse_json_response(content_clean)
-        parsed_nodes = parsed.get("nodes") if isinstance(parsed, dict) else None
-        if isinstance(parsed_nodes, list) and parsed_nodes:
-            result = parsed
-    except Exception:
-        pass
-
-    if result is None:
-        # 最终解析失败或未解析出节点：退化为流式阶段已提取的节点数据
-        result = {
-            "courseName": emitted_course_name or blueprint.get("topic", ""),
-            "courseDescription": emitted_course_description or "",
-            "nodes": emitted_nodes,
-        }
-
-    if not result.get("nodes"):
-        # 空目录不可用：明确发 error 事件，让前端展示错误并引导重试，
-        # 而不是用空结果假装完成（静默降级）
-        # thinking 有内容而正文为空 = 输出预算被思考耗尽（finish_reason=length），单独提示便于诊断
-        if streaming_thinking and not streaming_content:
-            yield f"data: {json.dumps({'type': 'error', 'message': '模型思考过长耗尽输出预算，请重试；若反复出现请反馈'}, ensure_ascii=False)}\n\n"
-        else:
-            yield f"data: {json.dumps({'type': 'error', 'message': '课程目录生成失败，请重试'}, ensure_ascii=False)}\n\n"
+    if architecture_result.get("issues"):
+        print(f"[TOC Agent] 课程架构审查未通过: {architecture_result['issues']}")
+        yield f"data: {json.dumps({'type': 'error', 'message': '课程架构审查未通过，请重试'}, ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"
         return
 
+    result = _toc_result(architecture_result["architecture"])
+    result["modelVersion"] = architecture_result.get("modelVersion")
+    result["promptVersion"] = architecture_result.get("promptVersion")
+
+    yield f"data: {json.dumps({'type': 'course_name', 'value': result['courseName']}, ensure_ascii=False)}\n\n"
+    yield f"data: {json.dumps({'type': 'course_description', 'value': result['courseDescription']}, ensure_ascii=False)}\n\n"
+    for node in result["nodes"]:
+        yield f"data: {json.dumps({'type': 'node', 'node': node}, ensure_ascii=False)}\n\n"
     yield f"data: {json.dumps({'type': 'complete', 'result': result}, ensure_ascii=False)}\n\n"
     yield "data: [DONE]\n\n"

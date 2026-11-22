@@ -151,14 +151,11 @@ def build_toc_prompt(blueprint: dict, planning_payload: dict = None, user_profil
 
 async def generate_toc(blueprint: dict, planning_payload: dict = None, user_profile: dict = None) -> dict:
     """生成 TOC"""
-    import asyncio
-    from services.evidence_store import ensure_topic_evidence_pack_sync, evidence_to_prompt
+    from services.evidence_store import get_topic_evidence, evidence_to_prompt
     client = get_client()
-    try:
-        topic = blueprint.get('topic', blueprint.get('learningDirection', ''))
-        evidence_pack = await asyncio.to_thread(ensure_topic_evidence_pack_sync, topic)
-    except Exception:
-        evidence_pack = None
+    # 非 Agent 旧入口只复用缓存，不再自动发起搜索；新模型搜索统一走 toc_agent。
+    topic = blueprint.get('topic', blueprint.get('learningDirection', ''))
+    evidence_pack = get_topic_evidence(topic)
     evidence, sources = evidence_to_prompt(evidence_pack)
     system_prompt = build_toc_prompt(blueprint, planning_payload, user_profile, evidence=evidence, sources=sources)
 

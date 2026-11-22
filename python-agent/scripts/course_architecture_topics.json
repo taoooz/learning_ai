@@ -1,0 +1,132 @@
+[
+  {
+    "topic": "推荐系统核心链路",
+    "learningGoal": "能定位推荐问题所在链路环节，并设计可验证方案",
+    "learnerPositioning": {
+      "estimatedLevel": "intermediate",
+      "backgroundSummary": "做过内容运营，参与过推荐位配置和效果复盘",
+      "skipBasics": ["推荐系统基本概念"],
+      "likelyGaps": ["召回与排序边界", "离线评估"],
+      "levelConfidence": 0.75,
+      "preferredExampleDomains": ["电商推荐", "内容平台"],
+      "personalExampleLimit": 1
+    }
+  },
+  {
+    "topic": "React Server Components 进阶",
+    "learningGoal": "能在 Next.js 应用中正确划分服务端与客户端组件边界",
+    "learnerPositioning": {
+      "estimatedLevel": "intermediate",
+      "backgroundSummary": "有 React 与 Next.js 项目经验，做过 App Router 页面",
+      "skipBasics": ["React 组件与 Props", "Next.js 路由基础"],
+      "likelyGaps": ["序列化边界", "缓存与数据获取"],
+      "levelConfidence": 0.78,
+      "preferredExampleDomains": ["内容站点", "后台管理"],
+      "personalExampleLimit": 1
+    }
+  },
+  {
+    "topic": "Kubernetes 故障排查",
+    "learningGoal": "能从 Pod 异常快速判断是配置、镜像、调度还是网络问题",
+    "learnerPositioning": {
+      "estimatedLevel": "advanced",
+      "backgroundSummary": "有后端开发和 Docker 使用经验，接触过 K8s 部署",
+      "skipBasics": ["容器与镜像基础", "K8s 基本资源对象"],
+      "likelyGaps": ["调度与网络故障分层", "事件与日志证据链"],
+      "levelConfidence": 0.82,
+      "preferredExampleDomains": ["在线服务", "批处理任务"],
+      "personalExampleLimit": 1
+    }
+  },
+  {
+    "topic": "大模型 RAG 工程实践",
+    "learningGoal": "能设计和评估一个可上线的 RAG 问答系统",
+    "learnerPositioning": {
+      "estimatedLevel": "intermediate",
+      "backgroundSummary": "有 Python 后端经验，调用过 LLM API",
+      "skipBasics": ["LLM API 调用", "向量基础"],
+      "likelyGaps": ["召回评估", "上下文组织", "答案忠实性"],
+      "levelConfidence": 0.72,
+      "preferredExampleDomains": ["企业知识库", "客服问答"],
+      "personalExampleLimit": 1
+    }
+  },
+  {
+    "topic": "产品经理的数据分析入门",
+    "learningGoal": "能把业务问题转成指标并用数据验证产品判断",
+    "learnerPositioning": {
+      "estimatedLevel": "beginner",
+      "backgroundSummary": "做过需求管理和用户访谈，会用 Excel 看基础报表",
+      "skipBasics": ["Excel 基础操作"],
+      "likelyGaps": ["指标口径", "漏斗分析", "实验意识"],
+      "levelConfidence": 0.68,
+      "preferredExampleDomains": ["移动产品", "内容产品"],
+      "personalExampleLimit": 1
+    }
+  },
+  {
+    "topic": "个人理财与资产配置",
+    "learningGoal": "能根据风险承受能力和目标制定资产配置方案",
+    "learnerPositioning": {
+      "estimatedLevel": "beginner",
+      "backgroundSummary": "了解基础收支管理，做过简单基金投资",
+      "skipBasics": ["收入与支出记录"],
+      "likelyGaps": ["风险预算", "资产相关性", "再平衡"],
+      "levelConfidence": 0.65,
+      "preferredExampleDomains": ["家庭理财", "长期投资"],
+      "personalExampleLimit": 0
+    }
+  },
+  {
+    "topic": "统计学假设检验",
+    "learningGoal": "能正确选择检验方法并解释 p 值与置信区间",
+    "learnerPositioning": {
+      "estimatedLevel": "intermediate",
+      "backgroundSummary": "有数据分析经验，理解均值、方差和分布",
+      "skipBasics": ["描述统计基础"],
+      "likelyGaps": ["检验选择", "多重比较", "结果解释"],
+      "levelConfidence": 0.77,
+      "preferredExampleDomains": ["A/B 实验", "市场调研"],
+      "personalExampleLimit": 0
+    }
+  },
+  {
+    "topic": "AI 产品设计与人机协作",
+    "learningGoal": "能设计可控、可解释、可纠错的 AI 产品流程",
+    "learnerPositioning": {
+      "estimatedLevel": "intermediate",
+      "backgroundSummary": "有产品设计经验，做过对话式功能原型",
+      "skipBasics": ["对话交互基础", "用户流程绘制"],
+      "likelyGaps": ["不确定性设计", "人机分工", "失败恢复"],
+      "levelConfidence": 0.73,
+      "preferredExampleDomains": ["客服工具", "创作工具"],
+      "personalExampleLimit": 1
+    }
+  },
+  {
+    "topic": "Git 团队协作与故障恢复",
+    "learningGoal": "能在团队协作中安全处理分支、冲突和误操作恢复",
+    "learnerPositioning": {
+      "estimatedLevel": "intermediate",
+      "backgroundSummary": "日常使用 Git 提交和拉取，参与过多人分支协作",
+      "skipBasics": ["commit / pull / push 基础"],
+      "likelyGaps": ["rebase 与 merge 边界", "误操作恢复", "团队分支策略"],
+      "levelConfidence": 0.8,
+      "preferredExampleDomains": ["多人代码仓库", "发布流程"],
+      "personalExampleLimit": 1
+    }
+  },
+  {
+    "topic": "跨团队项目管理",
+    "learningGoal": "能协调多个团队处理依赖、风险和交付节奏",
+    "learnerPositioning": {
+      "estimatedLevel": "beginner",
+      "backgroundSummary": "参与过跨团队需求协作，负责过局部项目推进",
+      "skipBasics": ["项目管理基本术语"],
+      "likelyGaps": ["依赖图", "风险升级", "决策记录"],
+      "levelConfidence": 0.66,
+      "preferredExampleDomains": ["产品发布", "组织协作"],
+      "personalExampleLimit": 1
+    }
+  }
+]

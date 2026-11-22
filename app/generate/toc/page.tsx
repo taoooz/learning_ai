@@ -8,7 +8,8 @@ import { CourseHeaderBar } from '@/components/CourseHeaderBar';
 import { getUserProfile } from '@/lib/storage';
 import { ingestProfileMemory } from '@/lib/memory-client';
 import { parseSSEStream } from '../chat/utils/sseParser';
-import { buildCourseMissionFromOutline, mapTocToBlueprint } from '@/lib/learning-v2/blueprint-map';
+import { buildCourseMissionFromOutline } from '@/lib/learning-v2/blueprint-map';
+import { compileCourseArchitecture } from '@/lib/learning-v2/blueprint-from-architecture';
 import { validateCourseBlueprint } from '@/lib/learning-v2/validators';
 import { createStoredCourse } from '@/lib/learning-v2/storage';
 import { createAndSaveStoredCourse } from '@/lib/learning-v2/dispatch';
@@ -110,19 +111,21 @@ function TocPageContent() {
 
         setIsComplete(true);
 
-        // TOC 结果映射为 V2 蓝图（唯一课程协议）。校验或落盘失败都视为生成失败，不再降级到 V1。
+        const architecture = completeResult?.architecture;
+        if (!architecture) {
+          throw new Error('课程架构缺失，请重试');
+        }
+        if (architecture.chapters.length !== finalNodes.length) {
+          throw new Error('课程架构与目录章节数量不一致，请重试');
+        }
+
+        // Course Architect 的架构通过确定性编译器进入 V2 蓝图协议。
         const courseId = `course-${Date.now()}`;
-        const blueprint = mapTocToBlueprint({
+        const blueprint = compileCourseArchitecture({
           courseId,
-          courseName: finalCourseName,
-          description: finalDescription || outline.learningGoal,
-          nodes: finalNodes,
-          outline: {
-            topic: outline.topic,
-            learningDirection: outline.learningDirection,
-            learningGoal: outline.learningGoal,
-            learnerPositioning: outline.learnerPositioning,
-          },
+          architecture,
+          learner: outline.learnerPositioning,
+          modelVersion: completeResult?.modelVersion,
         });
 
         const validation = validateCourseBlueprint(blueprint);

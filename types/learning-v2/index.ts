@@ -2,6 +2,7 @@
 // V2 类型桶导出（P2 新增 UserQuestion/TutorAnswer 条目与 Tutor 事件；Evidence/Checkpoint 推迟到 P3）P3a：CheckpointItem + 结构化题型
 
 export * from './blueprint';
+export * from './course-architecture';
 export * from './course-reference';
 export * from './teaching-state';
 export * from './checkpoint';
