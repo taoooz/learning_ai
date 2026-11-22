@@ -9,7 +9,7 @@
 - Course Architect 接入课程创建主链路：Architect 生成课程架构并由 Blueprint Compiler 落库，TOC 节点改为确定性渲染；LLM 审查改为 auto 风险触发，常规架构跳过。10 主题批跑全通过，3 个过度拆分主题收敛到 6 章；推荐课程完整链路 54 秒生成 6 章并通过 Blueprint 校验
 - 真实 Chromium E2E 打通登录→校准→纲要确认→Architect 生成→6 章落库→3 步任务→Checkpoint 判分；修复 Markdown GFM 表格缺失与单波浪号被误删，并兼容 Checkpoint 的 `items`/多题型示例包装
 - 新增 account-scoped Memory V4 Store、画像自动导入、Evidence 账本与 Concept/Topic 投影；课程生成/聊天改由服务端读取统一 Memory，旧 V3 直接写 mastery 路径下线
-- P0/P2：Checkpoint 生成失败可原地重试；Outline 澄清改为一次批量提问、一次提交并隐藏原始多题流；Architect 改为流式 JSON，章节对象闭合即渲染 node，并显示校验/审查进度；计划审查改为风险触发并加入阶段推理档位；正文首块立即展示、互动组件统一暖色视觉；真实任务正文耗时 8～10 秒，架构首个 node 约 16～18 秒
+- P0/P2：Checkpoint 生成失败可原地重试；Outline 澄清改为一次批量提问、一次提交并隐藏原始多题流；Architect 改为流式 JSON，课程范围由原始诉求推断、背景只调起点，章节交付物可为理解/判断/小练习/产物；计划审查改为风险触发并加入阶段推理档位；正文首块立即展示、互动组件统一暖色视觉；真实任务正文耗时 8～10 秒，架构首个 node 约 16～18 秒
 
 ### 交互内容块 Phase 1（2026-10-08）
 - 新增 `interactive` 内容块类型与首批两个消费型组件：`parameter-demo`（改参数看结果，命名变量白名单公式求值）、`step-walkthrough`（分步演示）

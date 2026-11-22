@@ -236,3 +236,6 @@ def test_course_architect_prompt_declares_design_contract():
     assert "课程结构由认知增量决定" in prompt
     assert "personalExampleLimit" in prompt
     assert "不得编造 URL" in prompt
+    assert "系统学习、全面入门" in prompt
+    assert "用户背景只调整起点" in prompt
+    assert "不强制每章写报告" in prompt
