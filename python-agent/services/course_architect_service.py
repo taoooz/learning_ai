@@ -69,7 +69,7 @@ def _prompt_context(
     if evidence:
         evidence_section = f"{evidence}\n\n来源：\n{source_lines}"
     return {
-        "topic": topic,
+        "topic": wrap_untrusted_context("learning_request", topic),
         "outline_section": wrap_untrusted_context("outline", outline),
         "memory_section": wrap_untrusted_context("learner_memory", memory_payload),
         "evidence_section": evidence_section,
@@ -112,11 +112,18 @@ def build_course_architect_meta_prompt(
     prompt_context = _prompt_context(
         topic, outline, learner, memory_context, evidence, sources
     )
+    required_concept_ids = sorted({
+        concept_id
+        for chapter in chapter_plan.chapters
+        for concept_id in chapter.conceptIds
+        if concept_id.strip()
+    })
     return build_prompt(
         "course_architect",
         ["meta"],
         **prompt_context,
         chapters_json=wrap_untrusted_context("chapters", chapter_plan.model_dump()),
+        required_concept_ids="\n".join(f"- {concept_id}" for concept_id in required_concept_ids),
     )
 
 
@@ -223,7 +230,10 @@ async def _review_course_architecture(
                     "course_architect",
                     ["review"],
                     learner_section=_format_learner_for_review(learner),
-                    architecture_json=json.dumps(_compact_architecture_for_review(architecture), ensure_ascii=False, indent=2),
+                    architecture_json=wrap_untrusted_context(
+                        "architecture_under_review",
+                        _compact_architecture_for_review(architecture),
+                    ),
                 ),
             },
             {"role": "user", "content": "请审查这份课程架构。"},
@@ -326,6 +336,9 @@ def _call_nonstream_stage(
             1,
             reasoning_effort=ARCHITECT_REASONING_EFFORT,
         )
+        return _response_content(response)
+    if hasattr(client, "chat"):
+        response = asyncio.run(client.chat(messages=messages, max_tokens=max_tokens))
         return _response_content(response)
     raise RuntimeError("当前模型客户端不支持同步阶段调用")
 
@@ -775,7 +788,7 @@ def stream_course_architecture(
 
     if plan is None or chapter_issues:
         print(f"[Course Architect] 章节目录需要定向修复：{chapter_issues}")
-        yield {"type": "progress", "message": "章节目录已完成，正在补齐结构细节…"}
+        yield {"type": "progress", "message": "章节目录需要补齐，正在修复结构…"}
         plan = _repair_chapter_plan_sync(
             client, chapter_messages, raw_content, chapter_issues or ["章节目录生成失败"]
         )

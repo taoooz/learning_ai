@@ -38,6 +38,7 @@ function TocPageContent() {
   const [countdown, setCountdown] = useState(3);
 
   const hasRequestedRef = useRef(false);
+  const streamNodesRef = useRef<Array<{ index: number; title: string; description: string }>>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -85,11 +86,14 @@ function TocPageContent() {
               break;
 
             case 'node':
-              setStreamNodes(prev => {
-                const existingIndex = prev.findIndex((node) => node.index === event.node.index);
-                if (existingIndex < 0) return [...prev, event.node];
-                return prev.map((node, index) => (index === existingIndex ? event.node : node));
-              });
+              {
+                const existingIndex = streamNodesRef.current.findIndex((node) => node.index === event.node.index);
+                const next = existingIndex < 0
+                  ? [...streamNodesRef.current, event.node]
+                  : streamNodesRef.current.map((node, index) => (index === existingIndex ? event.node : node));
+                streamNodesRef.current = next;
+                setStreamNodes(next);
+              }
               break;
 
             case 'progress':
@@ -100,6 +104,7 @@ function TocPageContent() {
               completeResult = event.result;
               setProgressMessage('');
               if (Array.isArray(event.result?.nodes) && event.result.nodes.length > 0) {
+                streamNodesRef.current = event.result.nodes;
                 setStreamNodes(event.result.nodes);
               }
               break;
@@ -110,19 +115,15 @@ function TocPageContent() {
         }
 
         // 用 complete 结果（更可靠）或已流式展示的数据构造 blueprint
-        const finalCourseName = completeResult?.courseName || courseName || outline.topic;
-        const finalDescription = completeResult?.courseDescription || courseDescription || outline.learningGoal;
         // 空数组是 truthy，必须显式检查长度，否则空目录会被当成有效结果
         const finalNodes = Array.isArray(completeResult?.nodes) && completeResult.nodes.length > 0
           ? completeResult.nodes
-          : streamNodes;
+          : streamNodesRef.current;
 
         // 空目录不可用：转入错误态引导重试，而不是静默创建一门没有章节的课程
         if (finalNodes.length === 0) {
           throw new Error('课程目录生成失败，请重试');
         }
-
-        setIsComplete(true);
 
         const architecture = completeResult?.architecture;
         if (!architecture) {
@@ -150,6 +151,7 @@ function TocPageContent() {
         if (!saved) {
           throw new Error('课程保存失败，请检查存储空间后重试');
         }
+        setIsComplete(true);
         refreshCourses();
 
         sessionStorage.removeItem('pendingOutline');

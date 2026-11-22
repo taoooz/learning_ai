@@ -171,8 +171,8 @@ ${typeof lp.personalExampleLimit === 'number' ? `<div slot="personalExampleLimit
       }
 
       updateMessageAt(idx, m => (
-        m.type === 'streaming' && m.clarificationQuestions?.length
-          ? { ...m, clarificationStreaming: false }
+        m.type === 'streaming'
+          ? { ...m, clarificationStreaming: false, questionStreamPending: false }
           : m
       ));
 

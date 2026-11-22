@@ -111,6 +111,21 @@ class FakeArchitectClient:
         return {"choices": [{"message": {"content": json.dumps(payload, ensure_ascii=False)}}]}
 
 
+class FakeChatOnlyClient:
+    """兼容旧入口：只实现 MiniMaxClient.chat，不提供 Agent tool API。"""
+
+    model = "fake-chat-only"
+
+    def __init__(self, responses: list[dict]):
+        self.responses = responses
+        self.calls = []
+
+    async def chat(self, messages, model=None, max_tokens=1500):
+        self.calls.append(messages)
+        payload = self.responses.pop(0)
+        return {"choices": [{"message": {"content": json.dumps(payload, ensure_ascii=False)}}]}
+
+
 class FakeStreamingArchitectClient(FakeArchitectClient):
     def __init__(
         self,
@@ -175,6 +190,25 @@ def test_stream_course_architecture_repairs_meta_without_restarting_chapters():
     assert "章节已固定" in client.calls[1][-1]["content"]
 
 
+def test_stream_course_architecture_supports_optional_semantic_review():
+    client = FakeStreamingArchitectClient(
+        review_responses=[{"passed": True, "issues": [], "repairNotes": ""}],
+    )
+
+    events = list(stream_course_architecture(
+        topic="推荐系统核心链路",
+        outline=_valid_architecture(),
+        learner={"estimatedLevel": "intermediate", "skipBasics": []},
+        client=client,
+        review_mode="always",
+    ))
+
+    result = events[-1]
+    assert result["type"] == "result"
+    assert result["result"]["reviewSkipped"] is False
+    assert len(client.review_calls) == 1
+
+
 def test_architecture_detects_duplicate_deliverable_and_missing_reference():
     data = _valid_architecture()
     data["chapters"][1]["deliverable"] = data["chapters"][0]["deliverable"]
@@ -224,6 +258,22 @@ def test_course_architect_service_repairs_invalid_design_once():
     assert "交付物重复" in client.calls[1][-1]["content"]
     assert "只修复 chapters 阶段" in client.calls[1][-1]["content"]
     assert "thesis" in client.calls[2][0]["content"]
+
+
+def test_course_architect_supports_chat_only_client():
+    client = FakeChatOnlyClient([_valid_chapter_plan(), _valid_meta()])
+
+    result = asyncio.run(generate_course_architecture(
+        topic="推荐系统核心链路",
+        outline={"learningGoal": "定位推荐问题"},
+        learner={"estimatedLevel": "intermediate"},
+        client=client,
+        review_mode="off",
+    ))
+
+    assert result["issues"] == []
+    assert result["reviewSkipped"] is True
+    assert len(client.calls) == 2
 
 
 def test_course_architect_repairs_metadata_without_regenerating_chapters():
@@ -279,6 +329,7 @@ def test_course_architect_semantic_review_can_trigger_revision():
     assert len(client.calls) == 4
     assert "DUPLICATE_CHAPTER" in client.calls[2][-1]["content"]
     assert "合并重复章节" in client.calls[2][-1]["content"]
+    assert "untrusted_context_data" in client.review_calls[0][0]["content"]
 
 
 def test_optional_review_skips_normal_architecture_and_runs_on_risk():
@@ -317,12 +368,17 @@ def test_course_architect_prompt_declares_design_contract():
     assert "用户背景只调整起点" in prompt
     assert "不强制每章写报告" in prompt
     assert "严禁在本阶段输出 thesis" in prompt
+    assert "learning_request" in prompt
+    assert "untrusted_context_data" in prompt
 
 
 def test_course_architect_meta_prompt_keeps_chapters_fixed():
     from schemas.course_architecture import CourseChapterPlan
 
-    plan = CourseChapterPlan.model_validate(_valid_chapter_plan())
+    chapter_plan = _valid_chapter_plan()
+    chapter_plan["chapters"][0]["conceptIds"] = ["c1-business-to-objective"]
+    chapter_plan["chapters"][1]["conceptIds"] = ["c2-experiment-decision"]
+    plan = CourseChapterPlan.model_validate(chapter_plan)
     prompt = build_course_architect_meta_prompt(
         "推荐系统核心链路",
         {"learningGoal": "定位推荐问题"},
@@ -333,3 +389,7 @@ def test_course_architect_meta_prompt_keeps_chapters_fixed():
     assert "不得新增、删除、重命名或改写章节" in prompt
     assert "personalExampleLimit" in prompt
     assert "推荐链路职责边界" in prompt
+    assert "c1-business-to-objective" in prompt
+    assert "c2-experiment-decision" in prompt
+    assert "必须逐字使用" in prompt
+    assert "禁止简化成 c1/c2/c3" in prompt

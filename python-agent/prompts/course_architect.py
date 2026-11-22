@@ -103,6 +103,9 @@ PROMPT = {
 
 ## 已确定章节
 {chapters_json}
+
+## 必须逐字使用的 conceptId 清单
+{required_concept_ids}
 </input_context>
 
 <output_contract>
@@ -133,7 +136,8 @@ PROMPT = {
 }}
 
 - 必须输出完整、闭合的 JSON，不能使用省略号或占位符。
-- conceptGraph 必须包含 chapters 中出现的每一个 conceptId，不能多、不能少。
+- conceptGraph 必须包含上方清单中的每一个 conceptId，不能多、不能少。
+- conceptId 必须逐字复制清单值，禁止简化成 c1/c2/c3，也禁止新增清单外 ID。
 - 所有 conceptId 与 prerequisiteConceptIds 必须一致且可解析。
 </output_contract>""",
 

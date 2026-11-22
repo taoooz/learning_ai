@@ -18,6 +18,7 @@ export type TocStreamResult = {
 export type TocSSEEvent =
   | { type: 'course_name'; value: string }
   | { type: 'course_description'; value: string }
+  | { type: 'progress'; message: string }
   | { type: 'node'; node: TocStreamNode }
   | { type: 'complete'; result: TocStreamResult }
   | { type: 'error'; message: string };
