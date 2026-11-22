@@ -8,6 +8,7 @@ export type SSEEvent =
   | { type: 'content_delta'; content: string }
   | { type: 'question_start'; questionNumber: number; total?: number }
   | { type: 'questions'; sessionId?: string; questions: ClarificationQuestion[] }
+  | { type: 'progress'; message: string }
   | { type: 'blueprint_start' }
   | { type: 'blueprint_field'; field: string; value: any }
   | { type: 'confirmation'; sessionId?: string; blueprint: any }

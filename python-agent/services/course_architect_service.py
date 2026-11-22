@@ -5,6 +5,7 @@ import asyncio
 import json
 import os
 import re
+import time
 from typing import Any, Generator
 
 from lib.minimax import MiniMaxClient, parse_json_response
@@ -395,6 +396,7 @@ def stream_course_architecture(
     allow_search: bool = True,
 ) -> Generator[dict[str, Any], None, None]:
     """流式生成架构：章节对象一闭合就发 node 事件，最终再做结构校验。"""
+    started_at = time.monotonic()
     client = client or AgentClient()
     system_prompt = build_course_architect_prompt(
         topic,
@@ -416,6 +418,7 @@ def stream_course_architecture(
 
     if hasattr(client, "stream_chat_with_tools"):
         try:
+            print(f"[Course Architect] 开始流式生成：{topic}")
             for event in client.stream_chat_with_tools(
                 messages=messages,
                 tools=SEARCH_TOOLS if allow_search else [],
@@ -454,7 +457,13 @@ def stream_course_architecture(
                     emitted_chapters += 1
                     node = architecture_chapter_to_node(chapter, emitted_chapters)
                     if node["title"]:
+                        print(
+                            f"[Course Architect] node={emitted_chapters} "
+                            f"elapsed={int((time.monotonic() - started_at) * 1000)}ms"
+                        )
                         yield {"type": "node", "node": node}
+                        if emitted_chapters == 1:
+                            yield {"type": "progress", "message": "章节骨架已开始生成，正在补齐后续章节与概念关系…"}
         except Exception as exc:  # noqa: BLE001
             print(f"[Course Architect] 流式生成失败，降级非流式修复：{exc}")
             raw_content = ""
@@ -462,6 +471,7 @@ def stream_course_architecture(
         raw_content = ""
 
     if not raw_content.strip():
+        print("[Course Architect] 流式内容为空，进入非流式修复")
         result = _fallback_architecture_result(
             topic, outline, learner, memory_context, evidence, sources, client, review_mode
         )
@@ -471,6 +481,7 @@ def stream_course_architecture(
         return
 
     try:
+        yield {"type": "progress", "message": "正在校验课程架构与章节关系…"}
         architecture = _parse_architecture(raw_content)
         issues = validate_course_architecture(architecture)
         review_unavailable = False
@@ -478,6 +489,11 @@ def stream_course_architecture(
         if issues:
             raise ValueError("课程架构结构校验未通过：" + "；".join(issues))
         if should_review_architecture(architecture, learner, review_mode):
+            yield {"type": "progress", "message": "正在审查课程设计风险…"}
+            print(
+                f"[Course Architect] 结构校验通过，进入语义审查 "
+                f"elapsed={int((time.monotonic() - started_at) * 1000)}ms"
+            )
             review = asyncio.run(_review_course_architecture(client, architecture, learner))
             review_unavailable = bool(review.get("reviewUnavailable"))
             if not review["passed"]:
@@ -488,6 +504,10 @@ def stream_course_architecture(
                 ))
         else:
             review_skipped = True
+        print(
+            f"[Course Architect] 结构校验完成 "
+            f"reviewSkipped={review_skipped} elapsed={int((time.monotonic() - started_at) * 1000)}ms"
+        )
     except Exception as exc:  # noqa: BLE001
         print(f"[Course Architect] 流式结果校验失败，降级非流式修复：{exc}")
         result = _fallback_architecture_result(

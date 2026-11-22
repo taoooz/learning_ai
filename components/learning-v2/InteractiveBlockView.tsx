@@ -385,10 +385,16 @@ export function InteractiveBlockView({ block, courseId }: { block: InteractiveBl
   }
 
   return (
-    <section className="my-5 overflow-hidden rounded-2xl border border-border bg-surface" data-interactive-component={block.component}>
-      <div className="flex items-center justify-between gap-2 border-b border-border bg-brand-soft/50 px-4 py-2.5">
+    <section
+      className="my-5 overflow-hidden rounded-2xl border border-[rgba(255,138,0,0.18)] bg-[rgba(255,138,0,0.045)] shadow-sm"
+      data-interactive-component={block.component}
+    >
+      <div className="flex items-center justify-between gap-2 border-b border-[rgba(255,138,0,0.12)] bg-[rgba(255,138,0,0.035)] px-4 py-2.5">
         <LabelChip />
-        <span className="text-[11px] text-tertiary">不计入测评</span>
+        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#9A6A2F]">
+          <span className="h-1.5 w-1.5 rounded-full bg-[rgba(255,138,0,0.55)]" aria-hidden />
+          不计入测评
+        </span>
       </div>
       <div className="p-4">
         <h3 className="mb-3 text-[16px] font-semibold leading-snug text-primary">{block.title}</h3>

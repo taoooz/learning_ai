@@ -76,6 +76,8 @@ def stream_toc_with_tools(
             event_type = event.get("type")
             if event_type == "node":
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+            elif event_type == "progress":
+                yield f"data: {json.dumps({'type': 'progress', 'message': event.get('message', '正在校验课程架构…')}, ensure_ascii=False)}\n\n"
             elif event_type in {"course_name", "course_description"}:
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
             elif event_type == "result":

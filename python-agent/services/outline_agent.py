@@ -72,6 +72,24 @@ def _format_clarification_answers(answers: list[dict] | None, answer: str = "") 
     return answer.strip()
 
 
+def _normalize_clarification_options(options: list) -> list[str]:
+    """兼容模型把 A/B/C/D 选项全部塞进一个 option 字段的输出。"""
+    cleaned = [str(option).strip() for option in (options or []) if str(option).strip()]
+    if not cleaned:
+        return []
+    if len(cleaned) == 1:
+        text = cleaned[0]
+        labels = re.findall(r'[A-D]\.', text)
+        if len(labels) >= 2:
+            parts = re.split(r'(?=[A-D]\.)', text)
+            cleaned = parts
+    return [
+        re.sub(r'^[A-D]\.\s*', '', option).strip()
+        for option in cleaned
+        if re.sub(r'^[A-D]\.\s*', '', option).strip()
+    ]
+
+
 def _emit_clarification_form(
     questions: list[dict],
     session_id: str,
@@ -89,7 +107,7 @@ def _emit_clarification_form(
         normalized.append({
             "id": question_id,
             "question": str(question.get("question") or "").strip(),
-            "options": [str(option).strip() for option in (question.get("options") or []) if str(option).strip()],
+            "options": _normalize_clarification_options(question.get("options") or []),
         })
     normalized = [question for question in normalized if question["question"]]
     if not normalized:

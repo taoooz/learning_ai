@@ -68,9 +68,15 @@ export function useStreamChat(topic: string) {
           case 'content_delta':
             if (foundBlueprint) break; // blueprint 已确认，不再用纯文本覆盖卡片
             fullContent += event.content;
+            const questionStreamPending = fullContent.includes('<quiz');
             updateMessageAt(idx, m => {
               if (m.type !== 'streaming') return m;
-              return { ...m, content: fullContent, isThinking: false };
+              return {
+                ...m,
+                content: questionStreamPending ? '' : fullContent,
+                questionStreamPending,
+                isThinking: false,
+              };
             });
             break;
 
@@ -88,6 +94,7 @@ export function useStreamChat(topic: string) {
                 return {
                   ...m,
                   clarificationQuestions: questions,
+                  questionStreamPending: false,
                   isThinking: false,
                 };
               });
@@ -136,6 +143,7 @@ ${typeof lp.personalExampleLimit === 'number' ? `<div slot="personalExampleLimit
                   ...m,
                   content: existingContent + '\n' + outlineTag,
                   clarificationQuestions: undefined,
+                  questionStreamPending: false,
                   isThinking: false,
                 };
               });

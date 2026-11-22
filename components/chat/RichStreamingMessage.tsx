@@ -16,6 +16,7 @@ type RichStreamingMessageProps = {
   isThinking?: boolean;
   onQuestionAnswer?: (answer: string) => void;
   clarificationQuestions?: ClarificationQuestion[];
+  questionStreamPending?: boolean;
   onClarificationAnswers?: (answers: ClarificationAnswer[]) => void;
   onOutlineConfirm?: () => void;
   disableInteractions?: boolean;
@@ -27,6 +28,7 @@ export function RichStreamingMessage({
   isThinking,
   onQuestionAnswer,
   clarificationQuestions,
+  questionStreamPending = false,
   onClarificationAnswers,
   onOutlineConfirm,
   disableInteractions = false,
@@ -61,7 +63,7 @@ export function RichStreamingMessage({
     blocks,
     content,
     thinkingContent,
-    hasClarificationContent: Boolean(clarificationQuestions?.length),
+    hasClarificationContent: Boolean(clarificationQuestions?.length || questionStreamPending),
   });
   const shouldShowThinkingSection = layoutState.hasThinkingContent;
   const shouldShowPrimarySection = layoutState.hasPrimaryContent;
@@ -175,6 +177,14 @@ export function RichStreamingMessage({
                     onSubmit={(answers) => onClarificationAnswers?.(answers)}
                     disabled={disableInteractions}
                   />
+                ) : questionStreamPending ? (
+                  <div className="rounded-2xl border border-[rgba(255,138,0,0.16)] bg-[rgba(255,138,0,0.035)] px-4 py-4">
+                    <div className="flex items-center gap-2">
+                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-accent/20 border-t-accent" />
+                      <p className="text-[13px] font-medium text-primary">正在整理澄清问题…</p>
+                    </div>
+                    <p className="mt-1 text-[12px] text-secondary">问题会一次准备好，再逐题填写并统一提交。</p>
+                  </div>
                 ) : blocks.length > 0 ? (() => {
                   const questionIndices = new Map<number, number>();
                   let qCount = 0;

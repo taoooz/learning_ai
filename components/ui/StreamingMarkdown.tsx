@@ -8,7 +8,9 @@ import { MarkdownContent } from './MarkdownContent';
  * 只对同一次流式追加生效；内容被替换/重试时立即同步，避免旧内容混入。
  */
 function useSmoothedMarkdown(target: string, streaming: boolean): string {
-  const [displayed, setDisplayed] = useState(() => (streaming ? '' : target));
+  // 首块内容到达时立即展示，后续增量再做平滑补间；否则结构化块先挂载时，
+  // 前面的 markdown 会先被“空白缓释”，看起来像在等待后面的组件完成。
+  const [displayed, setDisplayed] = useState(() => target);
   const displayedRef = useRef(displayed);
   const targetRef = useRef(target);
   const frameRef = useRef<number | null>(null);

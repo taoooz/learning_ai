@@ -33,6 +33,7 @@ function TocPageContent() {
   const [courseName, setCourseName] = useState('');
   const [courseDescription, setCourseDescription] = useState('');
   const [streamNodes, setStreamNodes] = useState<Array<{ index: number; title: string; description: string }>>([]);
+  const [progressMessage, setProgressMessage] = useState('');
   const [isComplete, setIsComplete] = useState(false);
   const [countdown, setCountdown] = useState(3);
 
@@ -91,8 +92,13 @@ function TocPageContent() {
               });
               break;
 
+            case 'progress':
+              setProgressMessage(event.message || '');
+              break;
+
             case 'complete':
               completeResult = event.result;
+              setProgressMessage('');
               if (Array.isArray(event.result?.nodes) && event.result.nodes.length > 0) {
                 setStreamNodes(event.result.nodes);
               }
@@ -286,7 +292,7 @@ function TocPageContent() {
                 )}
               </div>
               <span className="text-[13px] font-medium text-secondary/70">
-                {isComplete ? '课程规划完成' : '正在生成课程大纲...'}
+                {isComplete ? '课程规划完成' : (progressMessage || '正在生成课程大纲...')}
               </span>
             </motion.div>
 

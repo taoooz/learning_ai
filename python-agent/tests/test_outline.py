@@ -1,7 +1,11 @@
 import pytest
 from schemas.outline import OutlineRequest, LearnerPositioning, OutlineBlueprint
 from schemas.outline import OutlineAnswerRequest
-from services.outline_agent import _emit_clarification_form, _format_clarification_answers
+from services.outline_agent import (
+    _emit_clarification_form,
+    _format_clarification_answers,
+    _normalize_clarification_options,
+)
 from services.outline_service import needs_level_calibration, normalize_level, parse_content_blocks
 
 
@@ -90,6 +94,13 @@ def test_clarification_form_emits_all_questions_once():
     parsed = json.loads(payload)
     assert len(parsed["questions"]) == 2
     assert state["questions_asked"] == ["你做过什么？", "你最想解决什么？"]
+
+
+def test_clarification_options_split_when_model_puts_all_labels_in_one_field():
+    options = _normalize_clarification_options([
+        "A.只看过概念，没有实践B.搭过简单 demoC.独立做过一个环节D.完整负责过线上链路",
+    ])
+    assert options == ["只看过概念，没有实践", "搭过简单 demo", "独立做过一个环节", "完整负责过线上链路"]
 
 
 def test_outline_answer_request_supports_batch_answers_without_legacy_answer():

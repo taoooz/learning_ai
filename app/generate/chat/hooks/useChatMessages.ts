@@ -10,6 +10,7 @@ export type Message =
     thinkingContent?: string;
     isThinking?: boolean;
     clarificationQuestions?: ClarificationQuestion[];
+    questionStreamPending?: boolean;
     timestamp: number;
   };
 
