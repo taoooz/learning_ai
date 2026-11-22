@@ -4,6 +4,7 @@ from .outline import (
     OutlineResponse,
     LearnerPositioning,
     OutlineBlueprint,
+    ClarificationAnswer,
     ClarificationQuestion,
 )
 
@@ -13,5 +14,6 @@ __all__ = [
     "OutlineResponse",
     "LearnerPositioning",
     "OutlineBlueprint",
+    "ClarificationAnswer",
     "ClarificationQuestion",
 ]

@@ -11,6 +11,7 @@ import { createAndSaveStoredCourse } from '@/lib/learning-v2/dispatch';
 import { deleteCourse, listCourses, type CourseListEntry } from '@/lib/learning-v2/course-list';
 import { getSystemCourseRecommendations, getUserProfile } from '@/lib/storage';
 import { ingestProfileMemory } from '@/lib/memory-client';
+import type { ClarificationAnswer } from '@/types/course';
 
 interface CourseContextType {
   /** 首页课程清单（当前课程容器派生，按创建时间升序） */
@@ -22,7 +23,11 @@ interface CourseContextType {
   deleteCourse: (courseId: string) => Promise<void>;
   refreshCourses: () => void;
   /** 课程大纲对话（生成课程的第一步） */
-  submitOutlineMessage: (topic: string, userMessage?: string) => Promise<Response>;
+  submitOutlineMessage: (
+    topic: string,
+    userMessage?: string,
+    clarificationAnswers?: ClarificationAnswer[],
+  ) => Promise<Response>;
 }
 
 const CourseContext = createContext<CourseContextType | null>(null);
@@ -60,8 +65,15 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     refreshCourses();
   }, [refreshCourses]);
 
-  const submitOutlineMessage = useCallback(async (topic: string, userMessage?: string) => {
-    const sessionId = userMessage ? sessionStorage.getItem('outlineSessionId') : undefined;
+  const submitOutlineMessage = useCallback(async (
+    topic: string,
+    userMessage?: string,
+    clarificationAnswers?: ClarificationAnswer[],
+  ) => {
+    const hasClarificationAnswers = Boolean(clarificationAnswers?.length);
+    const sessionId = userMessage || hasClarificationAnswers
+      ? sessionStorage.getItem('outlineSessionId')
+      : undefined;
     await ingestProfileMemory(getUserProfile());
 
     const response = await fetch('/api/agents/outline', {
@@ -71,6 +83,7 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
         topic,
         userMessage,
         sessionId,
+        answers: clarificationAnswers,
       }),
     });
 

@@ -3,13 +3,12 @@
 export interface ClarificationQuestion {
   id: string;
   question: string;
-  type: 'single' | 'multiple';
+  type?: 'single' | 'multiple';
   options?: string[];
 }
 
 export interface ClarificationAnswer {
-  id: string;
-  question: string;
+  questionId: string;
   answer: string;
 }
 
@@ -42,8 +41,8 @@ export interface OutlineResponse {
 export type OutlineSSEEvent =
   | { type: 'thinking'; message: string }
   | { type: 'content_delta'; content: string }
-  | { type: 'question_start'; questionNumber: number }
-  | { type: 'questions'; questions: ClarificationQuestion[]; sessionId: string }
+  | { type: 'question_start'; questionNumber: number; total?: number }
+  | { type: 'questions'; questions: ClarificationQuestion[]; sessionId?: string }
   | { type: 'blueprint_start' }
   | { type: 'blueprint_field'; field: string; value: any }
   | { type: 'confirmation'; blueprint: OutlineBlueprint; sessionId: string }

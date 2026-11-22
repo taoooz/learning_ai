@@ -12,7 +12,14 @@ function ChatPageContent() {
   const searchParams = useSearchParams();
   const topic = searchParams.get('topic') || '';
 
-  const { messages, isWaitingResponse, currentBlueprint, generatedCourseName, sendMessage } = useStreamChat(topic);
+  const {
+    messages,
+    isWaitingResponse,
+    currentBlueprint,
+    generatedCourseName,
+    sendMessage,
+    submitClarificationAnswers,
+  } = useStreamChat(topic);
 
   const [adjustmentInput, setAdjustmentInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -70,7 +77,9 @@ function ChatPageContent() {
                   content={msg.content}
                   thinkingContent={msg.thinkingContent}
                   isThinking={msg.isThinking}
+                  clarificationQuestions={msg.clarificationQuestions}
                   onQuestionAnswer={(answer) => sendMessage(answer)}
+                  onClarificationAnswers={submitClarificationAnswers}
                   onOutlineConfirm={handleConfirmOutline}
                   disableInteractions={isWaitingResponse}
                 />

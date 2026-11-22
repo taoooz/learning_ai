@@ -29,6 +29,12 @@ class ClarificationQuestion(BaseModel):
     options: list[str] = Field(default_factory=list)
 
 
+class ClarificationAnswer(BaseModel):
+    """用户对单个澄清问题的回答。"""
+    questionId: str = Field(..., description="问题 ID")
+    answer: str = Field(..., description="用户答案")
+
+
 class OutlineResponse(BaseModel):
     """Outline 响应"""
     type: Literal["confirmation", "questions", "reconsider"]
@@ -48,4 +54,6 @@ class OutlineRequest(BaseModel):
 class OutlineAnswerRequest(BaseModel):
     """提交问题答案请求"""
     sessionId: str = Field(..., description="Session ID")
-    answer: str = Field(..., description="用户答案")
+    # 保留单答案入口兼容旧会话；新客户端一次提交 answers 数组。
+    answer: Optional[str] = Field(None, description="用户答案（旧入口）")
+    answers: list[ClarificationAnswer] = Field(default_factory=list, description="批量澄清答案")

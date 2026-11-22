@@ -3,6 +3,7 @@ import { useCourse } from '@/contexts/CourseContext';
 import { parseSSEStream } from '../utils/sseParser';
 import { useChatMessages } from './useChatMessages';
 import type { OutlineBlueprint } from '@/types/course';
+import type { ClarificationAnswer } from '@/types/outline';
 
 export function useStreamChat(topic: string) {
   const { submitOutlineMessage } = useCourse();
@@ -16,17 +17,26 @@ export function useStreamChat(topic: string) {
   const [currentBlueprint, setCurrentBlueprint] = useState<OutlineBlueprint | null>(null);
   const [generatedCourseName, setGeneratedCourseName] = useState('');
 
-  const sendMessage = useCallback(async (message?: string) => {
+  const sendMessage = useCallback(async (
+    message?: string,
+    clarificationAnswers?: ClarificationAnswer[],
+  ) => {
     if (isWaitingResponse) return;
     setIsWaitingResponse(true);
 
-    // 首次调用（无 message）时清除旧 session，避免走错 answer_agent 分支
-    if (!message) {
+    // 首次调用（无 message 且无批量答案）时清除旧 session，避免走错 answer_agent 分支
+    if (!message && !clarificationAnswers?.length) {
       sessionStorage.removeItem('outlineSessionId');
     }
 
     if (message) {
       addMessage({ type: 'user', content: message, timestamp: Date.now() });
+    } else if (clarificationAnswers?.length) {
+      addMessage({
+        type: 'system',
+        content: `已提交 ${clarificationAnswers.length} 个澄清回答，正在生成课程纲要`,
+        timestamp: Date.now(),
+      });
     } else {
       addMessage({ type: 'system', content: `收到，让我来帮你规划学习路径`, timestamp: Date.now() });
     }
@@ -39,7 +49,7 @@ export function useStreamChat(topic: string) {
     });
 
     try {
-      const response = await submitOutlineMessage(topic, message);
+      const response = await submitOutlineMessage(topic, message, clarificationAnswers);
 
       let fullContent = '';
       let thinkingContent = '';
@@ -73,19 +83,13 @@ export function useStreamChat(topic: string) {
           case 'questions': {
             const questions = event.questions || [];
             if (questions.length > 0) {
-              const questionText = questions
-                .map((q: { question: string; options?: string[] }) => {
-                  let text = q.question;
-                  if (q.options && q.options.length > 0) {
-                    text += '\n' + q.options.map((o: string, i: number) => `  ${String.fromCharCode(65 + i)}. ${o}`).join('\n');
-                  }
-                  return text;
-                })
-                .join('\n\n');
-              fullContent += questionText;
               updateMessageAt(idx, m => {
                 if (m.type !== 'streaming') return m;
-                return { ...m, content: fullContent, isThinking: false };
+                return {
+                  ...m,
+                  clarificationQuestions: questions,
+                  isThinking: false,
+                };
               });
             }
             if (event.sessionId) {
@@ -128,7 +132,12 @@ ${(lp.likelyGaps && lp.likelyGaps.length > 0) ? `<div slot="gaps">${lp.likelyGap
 ${(lp.preferredExampleDomains && lp.preferredExampleDomains.length > 0) ? `<div slot="exampleDomains">${lp.preferredExampleDomains.join('；')}</div>` : ''}
 ${typeof lp.personalExampleLimit === 'number' ? `<div slot="personalExampleLimit">${lp.personalExampleLimit}</div>` : ''}
 </outline>`;
-                return { ...m, content: existingContent + '\n' + outlineTag, isThinking: false };
+                return {
+                  ...m,
+                  content: existingContent + '\n' + outlineTag,
+                  clarificationQuestions: undefined,
+                  isThinking: false,
+                };
               });
             }
             if (event.sessionId) {
@@ -163,5 +172,19 @@ ${typeof lp.personalExampleLimit === 'number' ? `<div slot="personalExampleLimit
     }
   }, [isWaitingResponse, topic, submitOutlineMessage, addMessage, updateMessageAt]);
 
-  return { messages, isWaitingResponse, currentBlueprint, generatedCourseName, sendMessage };
+  const submitClarificationAnswers = useCallback(
+    (answers: ClarificationAnswer[]) => {
+      void sendMessage(undefined, answers);
+    },
+    [sendMessage],
+  );
+
+  return {
+    messages,
+    isWaitingResponse,
+    currentBlueprint,
+    generatedCourseName,
+    sendMessage,
+    submitClarificationAnswers,
+  };
 }

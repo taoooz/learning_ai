@@ -1,9 +1,17 @@
 import { useState, useCallback, useRef } from 'react';
+import type { ClarificationQuestion } from '@/types/outline';
 
 export type Message =
   | { type: 'system'; content: string; timestamp: number }
   | { type: 'user'; content: string; timestamp: number }
-  | { type: 'streaming'; content: string; thinkingContent?: string; isThinking?: boolean; timestamp: number };
+  | {
+    type: 'streaming';
+    content: string;
+    thinkingContent?: string;
+    isThinking?: boolean;
+    clarificationQuestions?: ClarificationQuestion[];
+    timestamp: number;
+  };
 
 export function useChatMessages() {
   const [messages, setMessages] = useState<Message[]>([]);

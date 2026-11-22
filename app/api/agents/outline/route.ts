@@ -14,17 +14,22 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { topic, userMessage, sessionId } = body;
+    const { topic, userMessage, sessionId, answers } = body as {
+      topic?: string;
+      userMessage?: string;
+      sessionId?: string;
+      answers?: Array<{ questionId: string; answer: string }>;
+    };
 
-    // 只有 sessionId 和 userMessage 都存在时才走 answer_agent（多轮回答）
+    // 有 sessionId 且存在单答案或批量答案时走 answer_agent。
     // 否则走 generate_agent（新课程生成），忽略可能残留的 sessionId
-    const hasAnswer = !!(sessionId && userMessage);
+    const hasAnswer = !!(sessionId && (userMessage || (Array.isArray(answers) && answers.length > 0)));
 
     const agentUrl = hasAnswer
       ? `${PYTHON_AGENT_URL}/api/agents/outline/answer_agent`
       : `${PYTHON_AGENT_URL}/api/agents/outline/generate_agent`;
     const agentBody = hasAnswer
-      ? { sessionId, answer: userMessage }
+      ? { sessionId, answer: userMessage, answers }
       : { topic };
 
     const response = await fetch(agentUrl, {

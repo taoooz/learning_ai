@@ -1,12 +1,13 @@
 /**
  * SSE 事件解析工具
  */
+import type { ClarificationQuestion } from '@/types/outline';
 
 export type SSEEvent =
   | { type: 'thinking'; message: string }
   | { type: 'content_delta'; content: string }
-  | { type: 'question_start'; questionNumber: number }
-  | { type: 'questions'; sessionId?: string; questions: Array<{ id: string; question: string; options: string[] }> }
+  | { type: 'question_start'; questionNumber: number; total?: number }
+  | { type: 'questions'; sessionId?: string; questions: ClarificationQuestion[] }
   | { type: 'blueprint_start' }
   | { type: 'blueprint_field'; field: string; value: any }
   | { type: 'confirmation'; sessionId?: string; blueprint: any }

@@ -4,19 +4,21 @@ type RichStreamingLayoutStateInput = {
   blocks: ContentBlock[];
   content: string;
   thinkingContent?: string;
+  hasClarificationContent?: boolean;
 };
 
 export function getRichStreamingLayoutState({
   blocks,
   content,
   thinkingContent,
+  hasClarificationContent = false,
 }: RichStreamingLayoutStateInput) {
   const hasStructuredPrimaryContent = blocks.some((block) => block.type !== 'text');
   const hasTextPrimaryContent = blocks.some(
     (block) => block.type === 'text' && block.content.trim().length > 0,
   );
   const hasFallbackPrimaryContent = !hasStructuredPrimaryContent && !hasTextPrimaryContent && content.trim().length > 0;
-  const hasPrimaryContent = hasStructuredPrimaryContent || hasTextPrimaryContent || hasFallbackPrimaryContent;
+  const hasPrimaryContent = hasClarificationContent || hasStructuredPrimaryContent || hasTextPrimaryContent || hasFallbackPrimaryContent;
   const hasThinkingContent = Boolean(thinkingContent?.trim());
 
   return {

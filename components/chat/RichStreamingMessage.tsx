@@ -7,12 +7,16 @@ import { getRichStreamingLayoutState } from './rich-streaming-layout';
 import { getThinkingPresentationMode } from './rich-streaming-presentation';
 import { QuestionCard } from './QuestionCard';
 import { OutlineCard } from './OutlineCard';
+import { ClarificationForm } from './ClarificationForm';
+import type { ClarificationAnswer, ClarificationQuestion } from '@/types/outline';
 
 type RichStreamingMessageProps = {
   content: string;
   thinkingContent?: string;
   isThinking?: boolean;
   onQuestionAnswer?: (answer: string) => void;
+  clarificationQuestions?: ClarificationQuestion[];
+  onClarificationAnswers?: (answers: ClarificationAnswer[]) => void;
   onOutlineConfirm?: () => void;
   disableInteractions?: boolean;
 };
@@ -22,6 +26,8 @@ export function RichStreamingMessage({
   thinkingContent,
   isThinking,
   onQuestionAnswer,
+  clarificationQuestions,
+  onClarificationAnswers,
   onOutlineConfirm,
   disableInteractions = false,
 }: RichStreamingMessageProps) {
@@ -51,7 +57,12 @@ export function RichStreamingMessage({
     setBlocks(parsedBlocks);
   }, [content]);
 
-  const layoutState = getRichStreamingLayoutState({ blocks, content, thinkingContent });
+  const layoutState = getRichStreamingLayoutState({
+    blocks,
+    content,
+    thinkingContent,
+    hasClarificationContent: Boolean(clarificationQuestions?.length),
+  });
   const shouldShowThinkingSection = layoutState.hasThinkingContent;
   const shouldShowPrimarySection = layoutState.hasPrimaryContent;
   const thinkingPresentation = getThinkingPresentationMode({
@@ -158,7 +169,13 @@ export function RichStreamingMessage({
               className={primarySectionClassName}
             >
               <div className="space-y-4">
-                {blocks.length > 0 ? (() => {
+                {clarificationQuestions?.length ? (
+                  <ClarificationForm
+                    questions={clarificationQuestions}
+                    onSubmit={(answers) => onClarificationAnswers?.(answers)}
+                    disabled={disableInteractions}
+                  />
+                ) : blocks.length > 0 ? (() => {
                   const questionIndices = new Map<number, number>();
                   let qCount = 0;
                   // 当存在结构化 block（outline/question）时，text block 是 LLM 的分析过程，不应展示

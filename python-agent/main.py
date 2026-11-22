@@ -30,7 +30,12 @@ from services.outline_service import (
     stream_llm_and_parse, stream_blueprint_fields, make_initial_state
 )
 from services.toc_service import generate_toc, stream_toc_events
-from services.outline_agent import stream_outline_with_tools, stream_answer_with_tools
+from services.outline_agent import (
+    _emit_clarification_form,
+    _format_clarification_answers,
+    stream_outline_with_tools,
+    stream_answer_with_tools,
+)
 from services.toc_agent import stream_toc_with_tools
 from services.chat_agent import stream_chat_with_tools, build_chat_system_prompt
 from routers.learning_v2 import router as learning_v2_router
@@ -278,12 +283,23 @@ async def answer_question(req: OutlineAnswerRequest):
             return
 
         state = session.state
-        state["answers"].append(req.answer)
-        state["question_count"] += 1
+        answers = [item.model_dump() for item in req.answers]
+        answer_text = _format_clarification_answers(answers or None, req.answer or "")
+        if not answer_text:
+            yield f"data: {json.dumps({'type': 'error', 'message': '缺少澄清回答'}, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
+            return
+        if answers:
+            valid_answers = [str(item.get("answer") or "").strip() for item in answers if str(item.get("answer") or "").strip()]
+            state["answers"].extend(valid_answers)
+            state["question_count"] += len(valid_answers)
+        else:
+            state["answers"].append(answer_text)
+            state["question_count"] += 1
 
         # 构建多轮 messages：历史对话 + 本轮用户回答
         llm_messages = list(state.get("llm_messages", []))
-        llm_messages.append({"role": "user", "content": req.answer})
+        llm_messages.append({"role": "user", "content": answer_text})
 
         try:
             async for event in stream_llm_and_parse(llm_messages, max_tokens=8000):
@@ -292,15 +308,9 @@ async def answer_question(req: OutlineAnswerRequest):
                     parsed = event.get("parsed", {})
 
                     if parsed.get("questions"):
-                        q = parsed["questions"][0]
-                        state["questions_asked"].append(q["question"])
-                        state["current_question"] = q
-
-                        # 发送前端期望的 question_start + questions 事件
-                        yield f"data: {json.dumps({'type': 'question_start', 'questionNumber': state['question_count'] + 1}, ensure_ascii=False)}\n\n"
-                        yield f"data: {json.dumps({'type': 'questions', 'questions': [q], 'sessionId': req.sessionId}, ensure_ascii=False)}\n\n"
-
-                    if parsed.get("outline"):
+                        for sse in _emit_clarification_form(parsed["questions"], req.sessionId, state):
+                            yield sse
+                    elif parsed.get("outline"):
                         outline = parsed["outline"]
                         blueprint = {
                             "learningDirection": outline.get("learningDirection", ""),
@@ -380,7 +390,8 @@ async def answer_outline_agent(req: OutlineAnswerRequest):
         try:
             yield from stream_answer_with_tools(
                 session_id=req.sessionId,
-                answer=req.answer,
+                answer=req.answer or "",
+                answers=[item.model_dump() for item in req.answers] or None,
             )
         except Exception as e:
             print(f"[Outline Answer Agent API] Error: {e}")

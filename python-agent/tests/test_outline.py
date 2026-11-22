@@ -1,5 +1,7 @@
 import pytest
 from schemas.outline import OutlineRequest, LearnerPositioning, OutlineBlueprint
+from schemas.outline import OutlineAnswerRequest
+from services.outline_agent import _emit_clarification_form, _format_clarification_answers
 from services.outline_service import needs_level_calibration, normalize_level, parse_content_blocks
 
 
@@ -57,6 +59,46 @@ def test_low_confidence_with_transferable_background_requires_calibration():
         "learnerSnapshot": {"estimatedLevel": "intermediate", "confidence": 0.82},
         "transferableBackground": [],
     }) is False
+
+
+def test_batch_clarification_answers_are_merged_into_one_model_message():
+    answers = [
+        {"questionId": "q1", "answer": "参与过推荐位配置"},
+        {"questionId": "q2", "answer": "想能定位召回问题"},
+    ]
+    text = _format_clarification_answers(answers)
+    assert "一次性回答" in text
+    assert "[q1] 参与过推荐位配置" in text
+    assert "[q2] 想能定位召回问题" in text
+
+
+def test_clarification_form_emits_all_questions_once():
+    state = {"question_count": 0, "questions_asked": [], "current_question": None}
+    events = list(_emit_clarification_form(
+        [
+            {"id": "q1", "question": "你做过什么？", "options": ["没有", "参与过"]},
+            {"id": "q2", "question": "你最想解决什么？", "options": ["定位问题", "设计实验"]},
+        ],
+        "session-1",
+        state,
+    ))
+    assert len(events) == 2
+    assert '"type": "question_start"' in events[0]
+    assert '"total": 2' in events[0]
+    payload = events[1].split("data: ", 1)[1].split("\n\n", 1)[0]
+    import json
+    parsed = json.loads(payload)
+    assert len(parsed["questions"]) == 2
+    assert state["questions_asked"] == ["你做过什么？", "你最想解决什么？"]
+
+
+def test_outline_answer_request_supports_batch_answers_without_legacy_answer():
+    request = OutlineAnswerRequest(
+        sessionId="session-1",
+        answers=[{"questionId": "q1", "answer": "参与过推荐位配置"}],
+    )
+    assert request.answer is None
+    assert request.answers[0].questionId == "q1"
 
 
 def test_learner_positioning_schema():

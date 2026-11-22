@@ -37,3 +37,15 @@ test('getRichStreamingLayoutState shows the primary area once structured content
   assert.equal(state.hasPrimaryContent, true);
   assert.equal(state.hasStructuredPrimaryContent, true);
 });
+
+test('getRichStreamingLayoutState reserves primary area for batched clarification form', () => {
+  const state = getRichStreamingLayoutState({
+    blocks: [],
+    content: '',
+    thinkingContent: '先确认用户起点',
+    hasClarificationContent: true,
+  });
+
+  assert.equal(state.hasPrimaryContent, true);
+  assert.equal(state.hasStructuredPrimaryContent, false);
+});

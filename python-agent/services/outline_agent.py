@@ -4,6 +4,7 @@ Outline Agent 服务 — 带搜索能力的 Agent 版 outline 生成
 通过 AgentClient 实现 function calling 自动搜索
 """
 import json
+import os
 import re
 from typing import Generator
 from lib.minimax_agent import AgentClient
@@ -41,6 +42,7 @@ def _extract_content_from_agent_events(events: list[dict]) -> str:
 
 # 与 prompt 约定一致：每次仅提 1 个问题，累计最多 3 个
 MAX_QUESTIONS = 3
+OUTLINE_REASONING_EFFORT = os.getenv("OUTLINE_REASONING_EFFORT", "low").strip() or None
 
 
 def _fallback_calibration_question(topic: str) -> dict:
@@ -57,7 +59,55 @@ def _fallback_calibration_question(topic: str) -> dict:
     }
 
 
-def _stream_agent_sse(client, messages: list[dict], max_tokens: int, agent_events: list) -> Generator[str, None, None]:
+def _format_clarification_answers(answers: list[dict] | None, answer: str = "") -> str:
+    """把批量答案整理成一条模型消息，保留问题 ID 便于模型对应答案。"""
+    if answers:
+        lines = [
+            f"- [{item.get('questionId', f'q{index + 1}')}] {item.get('answer', '')}"
+            for index, item in enumerate(answers)
+            if str(item.get("answer") or "").strip()
+        ]
+        if lines:
+            return "用户一次性回答了以下澄清问题：\n" + "\n".join(lines)
+    return answer.strip()
+
+
+def _emit_clarification_form(
+    questions: list[dict],
+    session_id: str,
+    state: dict,
+) -> Generator[str, None, None]:
+    """一次发送完整问题组，前端在本地逐题作答，最后一次性提交。"""
+    if not questions:
+        return
+    normalized = []
+    seen_ids: set[str] = set()
+    for index, question in enumerate(questions[:3]):
+        raw_id = str(question.get("id") or f"{index + 1}")
+        question_id = raw_id if raw_id not in seen_ids else f"{raw_id}-{index + 1}"
+        seen_ids.add(question_id)
+        normalized.append({
+            "id": question_id,
+            "question": str(question.get("question") or "").strip(),
+            "options": [str(option).strip() for option in (question.get("options") or []) if str(option).strip()],
+        })
+    normalized = [question for question in normalized if question["question"]]
+    if not normalized:
+        return
+
+    state["questions_asked"].extend(question["question"] for question in normalized)
+    state["current_question"] = normalized[0]
+    yield f"data: {json.dumps({'type': 'question_start', 'questionNumber': state['question_count'] + 1, 'total': len(normalized)}, ensure_ascii=False)}\n\n"
+    yield f"data: {json.dumps({'type': 'questions', 'questions': normalized, 'sessionId': session_id}, ensure_ascii=False)}\n\n"
+
+
+def _stream_agent_sse(
+    client,
+    messages: list[dict],
+    max_tokens: int,
+    agent_events: list,
+    reasoning_effort: str | None = None,
+) -> Generator[str, None, None]:
     """运行 Agent tool-calling 循环，把 agent 事件转成前端 SSE 格式，同时累积到 agent_events"""
     for event in client.stream_chat_with_tools(
         messages=messages,
@@ -67,6 +117,7 @@ def _stream_agent_sse(client, messages: list[dict], max_tokens: int, agent_event
         reasoning_split=True,
         max_iterations=8,
         max_searches=3,
+        reasoning_effort=reasoning_effort or OUTLINE_REASONING_EFFORT,
     ):
         agent_events.append(event)
 
@@ -180,15 +231,10 @@ def stream_outline_with_tools(
     state["session_id"] = session.session_id
     session_id = session.session_id
 
-    if parsed.get("questions"):
-        q = parsed["questions"][0]
-        state["questions_asked"].append(q["question"])
-        state["current_question"] = q
-
-        yield f"data: {json.dumps({'type': 'question_start', 'questionNumber': state['question_count'] + 1}, ensure_ascii=False)}\n\n"
-        yield f"data: {json.dumps({'type': 'questions', 'questions': [q], 'sessionId': session_id}, ensure_ascii=False)}\n\n"
-
-    if parsed.get("outline"):
+    questions = parsed.get("questions") or []
+    if questions:
+        yield from _emit_clarification_form(questions, session_id, state)
+    elif parsed.get("outline"):
         outline = parsed["outline"]
         blueprint = {
             "learningDirection": outline.get("learningDirection", ""),
@@ -226,7 +272,8 @@ def stream_outline_with_tools(
 
 def stream_answer_with_tools(
     session_id: str,
-    answer: str,
+    answer: str = "",
+    answers: list[dict] | None = None,
     max_tokens: int = 8000,
 ) -> Generator[str, None, None]:
     """Agent 版 outline 多轮回答（带搜索能力）
@@ -249,17 +296,27 @@ def stream_answer_with_tools(
         return
 
     state = session.state
-    state["answers"].append(answer)
-    state["question_count"] += 1
+    answer_text = _format_clarification_answers(answers, answer)
+    if not answer_text:
+        yield f"data: {json.dumps({'type': 'error', 'message': '缺少澄清回答', 'retryable': True}, ensure_ascii=False)}\n\n"
+        yield "data: [DONE]\n\n"
+        return
+    if answers:
+        valid_answers = [str(item.get("answer") or "").strip() for item in answers if str(item.get("answer") or "").strip()]
+        state["answers"].extend(valid_answers)
+        state["question_count"] += len(valid_answers)
+    else:
+        state["answers"].append(answer_text)
+        state["question_count"] += 1
 
     # 恢复历史 messages + 本轮用户回答
     messages = list(state.get("llm_messages", []))
-    messages.append({"role": "user", "content": answer})
+    messages.append({"role": "user", "content": answer_text})
     if state.get("forced_calibration"):
         messages.append({
             "role": "user",
             "content": (
-                "校准信息已收到。请结合这条回答直接输出 <outline> 学习计划，"
+                "校准信息已收到。请结合这些回答直接输出 <outline> 学习计划，"
                 "不要再提问；无法确定的内容写入 gaps，不要退回零基础假设。"
             ),
         })
@@ -304,15 +361,10 @@ def stream_answer_with_tools(
         content_clean = re.sub(r'Thinking.*?Thinking', '', full_content, flags=re.DOTALL).strip()
         parsed = parse_content_blocks(content_clean)
 
-    if parsed.get("questions"):
-        q = parsed["questions"][0]
-        state["questions_asked"].append(q["question"])
-        state["current_question"] = q
-
-        yield f"data: {json.dumps({'type': 'question_start', 'questionNumber': state['question_count'] + 1}, ensure_ascii=False)}\n\n"
-        yield f"data: {json.dumps({'type': 'questions', 'questions': [q], 'sessionId': session_id}, ensure_ascii=False)}\n\n"
-
-    if parsed.get("outline"):
+    questions = parsed.get("questions") or []
+    if questions:
+        yield from _emit_clarification_form(questions, session_id, state)
+    elif parsed.get("outline"):
         outline = parsed["outline"]
         blueprint = {
             "learningDirection": outline.get("learningDirection", ""),
