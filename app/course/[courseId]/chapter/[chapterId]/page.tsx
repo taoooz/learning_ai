@@ -122,6 +122,8 @@ function ChapterLearningView({
     isTutorBusy,
     submitCheckpoint,
     retryCheckpoint,
+    retryCheckpointGeneration,
+    generatingCheckpointTaskId,
     requestRemediation,
     planSuggestion,
     requestPlanSuggestion,
@@ -301,6 +303,8 @@ function ChapterLearningView({
                 tutorBusy={isTutorBusy}
                 onSubmitCheckpoint={submitCheckpoint}
                 onRetryCheckpoint={retryCheckpoint}
+                onRetryCheckpointGeneration={retryCheckpointGeneration}
+                generatingCheckpointTaskId={generatingCheckpointTaskId}
                 onRequestRemediation={requestRemediation}
               />
               {phase === 'completing' && !lesson?.recap && (
@@ -351,6 +355,8 @@ function ChapterLearningView({
                 tutorBusy={isTutorBusy}
                 onSubmitCheckpoint={submitCheckpoint}
                 onRetryCheckpoint={retryCheckpoint}
+                onRetryCheckpointGeneration={retryCheckpointGeneration}
+                generatingCheckpointTaskId={generatingCheckpointTaskId}
                 onRequestRemediation={requestRemediation}
               />
               <div className="mt-8">

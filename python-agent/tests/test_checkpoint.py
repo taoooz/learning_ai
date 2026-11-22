@@ -8,7 +8,7 @@ from schemas.checkpoint import (
     CheckpointEvaluateRequest,
     CheckpointEvaluationModel,
 )
-from services.checkpoint_service import _extract_json, evaluate_checkpoint
+from services.checkpoint_service import _extract_json, _validate_definition, evaluate_checkpoint
 
 
 def _scenario_choice(**overrides) -> CheckpointDefinitionModel:
@@ -80,6 +80,54 @@ def test_open_ended_kind_now_valid():
 def test_unknown_fields_rejected():
     with pytest.raises(ValidationError):
         _scenario_choice(evidence=[])
+
+
+def test_validate_definition_unwraps_single_item_list():
+    raw = {
+        "items": [{
+            "kind": "scenario_choice",
+            "prompt": "推荐效果波动时先看什么？",
+            "options": [
+                {"id": "a", "text": "直接改召回"},
+                {"id": "b", "text": "先看分层通过率与候选构成"},
+                {"id": "c", "text": "只看总点击率"},
+                {"id": "d", "text": "直接重启服务"},
+            ],
+            "correctAnswer": "b",
+            "remediationHint": "先定位链路断点。",
+            "estimatedSeconds": 45,
+        }]
+    }
+    checkpoint = _validate_definition(raw, "task-1", "obj-1")
+    assert checkpoint.kind == "scenario_choice"
+    assert checkpoint.correctAnswer == "b"
+
+
+def test_validate_definition_prefers_scenario_choice_from_multi_example_wrapper():
+    raw = {
+        "scenario_choice": {
+            "kind": "scenario_choice",
+            "prompt": "推荐效果波动时先看什么？",
+            "options": [
+                {"id": "a", "text": "直接改召回"},
+                {"id": "b", "text": "先看分层通过率与候选构成"},
+                {"id": "c", "text": "只看总点击率"},
+                {"id": "d", "text": "直接重启服务"},
+            ],
+            "correctAnswer": "b",
+            "remediationHint": "先定位链路断点。",
+        },
+        "sequence": {
+            "kind": "sequence",
+            "prompt": "排序题",
+            "sequenceItems": [{"id": "s1", "text": "一"}],
+            "correctAnswer": ["s1"],
+            "remediationHint": "按顺序。",
+        },
+    }
+    checkpoint = _validate_definition(raw, "task-1", "obj-1")
+    assert checkpoint.kind == "scenario_choice"
+    assert checkpoint.correctAnswer == "b"
 
 
 # ---- 程序判分 ----

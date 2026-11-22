@@ -22,6 +22,10 @@ import { getPendingTutorQuestions, TUTOR_AUTO_WINDOW_LIMIT } from '@/lib/learnin
 import { TaskBlockView } from './TaskBlocks';
 import { resolveAutoFollowOnTaskChange } from '@/lib/learning-v2/stream-scroll';
 import { isResolvedErrorNotice } from '@/lib/learning-v2/stream-item-presentation';
+import {
+  canRetryCheckpointGeneration,
+  isCheckpointGenerationFailure,
+} from '@/lib/learning-v2/checkpoint-generation';
 
 import { CheckpointCard } from './CheckpointCard';
 import { SourceRefsView } from './SourceRefsView';
@@ -45,6 +49,8 @@ export function LearningStream({
   tutorBusy = false,
   onSubmitCheckpoint,
   onRetryCheckpoint,
+  onRetryCheckpointGeneration,
+  generatingCheckpointTaskId = null,
   onRequestRemediation,
 }: {
   lesson: NodeLesson;
@@ -61,6 +67,10 @@ export function LearningStream({
   onSubmitCheckpoint?: (checkpointId: string, answer: string | string[]) => void;
   /** P3a：重试 Checkpoint（接 hook.retryCheckpoint） */
   onRetryCheckpoint?: (checkpointId: string) => void;
+  /** Checkpoint 生成失败后的重试入口 */
+  onRetryCheckpointGeneration?: (taskId: string) => void;
+  /** 正在重新生成 Checkpoint 的任务 ID */
+  generatingCheckpointTaskId?: string | null;
   /** P3a：请求补救内容 + 等价新题（接 hook.requestRemediation） */
   onRequestRemediation?: (checkpointId: string) => void;
   /** Phase 2 交互组件完成信号需要 courseId */
@@ -187,6 +197,8 @@ export function LearningStream({
           onRetryTutor={onRetryTutor}
           onSubmitCheckpoint={onSubmitCheckpoint}
           onRetryCheckpoint={onRetryCheckpoint}
+          onRetryCheckpointGeneration={onRetryCheckpointGeneration}
+          generatingCheckpointTaskId={generatingCheckpointTaskId}
           onRequestRemediation={onRequestRemediation}
           tutorBusy={tutorBusy}
         />
@@ -232,6 +244,8 @@ function StreamItemView({
   tutorBusy,
   onSubmitCheckpoint,
   onRetryCheckpoint,
+  onRetryCheckpointGeneration,
+  generatingCheckpointTaskId,
   onRequestRemediation,
 }: {
   item: LearningStreamItem;
@@ -246,6 +260,8 @@ function StreamItemView({
   tutorBusy: boolean;
   onSubmitCheckpoint?: (checkpointId: string, answer: string | string[]) => void;
   onRetryCheckpoint?: (checkpointId: string) => void;
+  onRetryCheckpointGeneration?: (taskId: string) => void;
+  generatingCheckpointTaskId: string | null;
   onRequestRemediation?: (checkpointId: string) => void;
 }) {
   switch (item.type) {
@@ -267,7 +283,15 @@ function StreamItemView({
         </div>
       );
     case 'system_notice':
-      return <SystemNoticeView item={item} onRetryTask={onRetryTask} onRetryTutor={onRetryTutor} />;
+      return (
+        <SystemNoticeView
+          item={item}
+          onRetryTask={onRetryTask}
+          onRetryTutor={onRetryTutor}
+          onRetryCheckpointGeneration={onRetryCheckpointGeneration}
+          checkpointGenerating={generatingCheckpointTaskId === item.taskId}
+        />
+      );
     case 'chapter_recap':
       return <ChapterRecapView recap={item.recap} streaming={item.status === 'streaming'} />;
     case 'user_question':
@@ -372,6 +396,7 @@ const NOTICE_ICON_STYLES: Record<SystemNoticeItem['tone'], string> = {
 };
 
 function getNoticeTitle(item: SystemNoticeItem): string {
+  if (isCheckpointGenerationFailure(item)) return '理解检查生成失败';
   if (item.tone === 'error') {
     return item.questionId ? '回答生成失败' : item.taskId ? '内容生成中断' : '出现问题';
   }
@@ -382,13 +407,21 @@ function SystemNoticeView({
   item,
   onRetryTask,
   onRetryTutor,
+  onRetryCheckpointGeneration,
+  checkpointGenerating = false,
 }: {
   item: SystemNoticeItem;
   onRetryTask?: (taskId: string) => void;
   onRetryTutor?: (questionId: string) => void;
+  onRetryCheckpointGeneration?: (taskId: string) => void;
+  checkpointGenerating?: boolean;
 }) {
   const canRetryTask = item.tone === 'error' && item.retryable !== false && !!item.taskId && !item.questionId;
   const canRetryTutor = item.tone === 'error' && item.retryable !== false && !!item.questionId;
+  const canRetryCheckpoint = canRetryCheckpointGeneration(
+    item,
+    !!onRetryCheckpointGeneration,
+  );
   const retryLabel = canRetryTutor ? '重试回答' : '重新生成本节';
 
   return (
@@ -405,16 +438,20 @@ function SystemNoticeView({
             <p className={`text-[13px] font-semibold ${item.tone === 'error' ? 'text-error' : 'text-primary'}`}>
               {getNoticeTitle(item)}
             </p>
-            {(canRetryTask || canRetryTutor) && (
+            {(canRetryTask || canRetryTutor || canRetryCheckpoint) && (
               <button
                 type="button"
+                disabled={canRetryCheckpoint && checkpointGenerating}
                 onClick={() => {
                   if (canRetryTutor && item.questionId) onRetryTutor?.(item.questionId);
+                  else if (canRetryCheckpoint && item.taskId) onRetryCheckpointGeneration?.(item.taskId);
                   else if (item.taskId) onRetryTask?.(item.taskId);
                 }}
-                className="text-[12px] font-semibold text-current underline underline-offset-4 opacity-80 transition-opacity hover:opacity-100"
+                className="text-[12px] font-semibold text-current underline underline-offset-4 opacity-80 transition-opacity hover:opacity-100 disabled:cursor-wait disabled:opacity-50"
               >
-                {canRetryTutor ? retryLabel : '重试'}
+                {canRetryCheckpoint
+                  ? checkpointGenerating ? '正在重新生成…' : '重新生成理解检查'
+                  : canRetryTutor ? retryLabel : '重试'}
               </button>
             )}
           </div>

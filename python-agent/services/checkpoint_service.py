@@ -74,6 +74,20 @@ def _extract_json(text: str) -> dict:
 
 def _validate_definition(raw: dict, task_id: str, objective_id: str) -> CheckpointDefinitionModel:
     """校验并补全 checkpoint 定义"""
+    # 兼容模型常见的单题包装：{"items":[checkpoint]} / {"checkpoint":{...}}。
+    if isinstance(raw.get("items"), list) and len(raw["items"]) == 1 and isinstance(raw["items"][0], dict):
+        raw = raw["items"][0]
+    elif isinstance(raw.get("checkpoints"), list) and raw["checkpoints"] and isinstance(raw["checkpoints"][0], dict):
+        raw = raw["checkpoints"][0]
+    elif isinstance(raw.get("checkpoint"), dict):
+        raw = raw["checkpoint"]
+    if not raw.get("kind"):
+        for kind in ("scenario_choice", "sequence", "self_explanation", "micro_practice"):
+            candidate = raw.get(kind)
+            if isinstance(candidate, dict):
+                raw = dict(candidate)
+                raw.setdefault("kind", kind)
+                break
     raw = _normalize_answer_references(raw)
     raw.setdefault("checkpointId", f"cp-{uuid4().hex[:12]}")
     raw.setdefault("taskId", task_id)
@@ -160,7 +174,7 @@ async def _call_for_json(
     max_tokens: int = 2000,
     retries: int = 3,
 ) -> dict:
-    """调用 LLM 并提取 JSON；解析失败时重试（glm-5.3-flash 偶尔空 content 或 JSON 内含特殊字符）"""
+    """调用 LLM 并提取 JSON；解析失败时重试（模型偶尔空 content 或 JSON 内含特殊字符）"""
     last_error: Exception | None = None
     for attempt in range(1, retries + 1):
         response = await client.chat(

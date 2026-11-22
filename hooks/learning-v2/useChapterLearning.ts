@@ -118,6 +118,10 @@ export interface UseChapterLearningResult {
   submitCheckpoint: (checkpointId: string, answer: string | string[]) => Promise<void>;
   /** P3a：重试 Checkpoint（清除评估结果回到 pending） */
   retryCheckpoint: (checkpointId: string) => void;
+  /** 重新生成失败的章末理解检查 */
+  retryCheckpointGeneration: (taskId: string) => void;
+  /** 正在重新生成理解检查的 taskId；null 表示空闲 */
+  generatingCheckpointTaskId: string | null;
   /** P3a：补救流程（LLM 生成补救内容 + 等价新题） */
   requestRemediation: (checkpointId: string) => Promise<void>;
   /** P4：待用户决策的调度建议（null = 无建议） */
@@ -317,7 +321,7 @@ export function useChapterLearning({
       const sortedTasks = [...lesson.chapterPlan.tasks].sort((a, b) => a.order - b.order);
       const currentIndex = sortedTasks.findIndex((t) => t.taskId === taskId);
       const nextTask = currentIndex >= 0 ? sortedTasks[currentIndex + 1] : undefined;
-      // previousTasks：已完成任务按 order 提供标题与要点，防内容重复
+      // previousTasks：已完成任务提供概念、模式和例子账本，防止章内重复
       const previousTasks = sortedTasks
         .slice(0, Math.max(currentIndex, 0))
         .filter((t) => lesson.runtime.completedTaskIds.includes(t.taskId))
@@ -328,6 +332,15 @@ export function useChapterLearning({
           return {
             title: t.title,
             takeaway: item && item.type === 'task_content' ? item.boundaryPrompt?.takeaway : undefined,
+            teachingPattern: t.teachingPattern,
+            conceptKeys: t.conceptKeys,
+            exampleScenarios: item && item.type === 'task_content'
+              ? item.blocks
+                .filter((block) => block.type === 'example')
+                .map((block) => block.context || block.title)
+                .filter(Boolean)
+                .slice(0, 3)
+              : [],
           };
         });
 
@@ -372,6 +385,8 @@ export function useChapterLearning({
   // ---- P3a Checkpoint 编排（生成/判分/重试/补救） ----
   const {
     maybeGenerateCheckpoint,
+    retryCheckpointGeneration,
+    generatingCheckpointTaskId,
     submitCheckpoint,
     retryCheckpoint,
     requestRemediation,
@@ -821,6 +836,8 @@ export function useChapterLearning({
     isTutorBusy,
     submitCheckpoint,
     retryCheckpoint,
+    retryCheckpointGeneration,
+    generatingCheckpointTaskId,
     requestRemediation,
     planSuggestion,
     requestPlanSuggestion,
