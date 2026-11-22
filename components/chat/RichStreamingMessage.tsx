@@ -17,6 +17,7 @@ type RichStreamingMessageProps = {
   onQuestionAnswer?: (answer: string) => void;
   clarificationQuestions?: ClarificationQuestion[];
   questionStreamPending?: boolean;
+  clarificationStreaming?: boolean;
   onClarificationAnswers?: (answers: ClarificationAnswer[]) => void;
   onOutlineConfirm?: () => void;
   disableInteractions?: boolean;
@@ -29,6 +30,7 @@ export function RichStreamingMessage({
   onQuestionAnswer,
   clarificationQuestions,
   questionStreamPending = false,
+  clarificationStreaming = false,
   onClarificationAnswers,
   onOutlineConfirm,
   disableInteractions = false,
@@ -176,6 +178,7 @@ export function RichStreamingMessage({
                     questions={clarificationQuestions}
                     onSubmit={(answers) => onClarificationAnswers?.(answers)}
                     disabled={disableInteractions}
+                    streaming={clarificationStreaming}
                   />
                 ) : questionStreamPending ? (
                   <div className="rounded-2xl border border-[rgba(255,138,0,0.16)] bg-[rgba(255,138,0,0.035)] px-4 py-4">

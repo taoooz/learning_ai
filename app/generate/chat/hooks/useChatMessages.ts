@@ -11,6 +11,7 @@ export type Message =
     isThinking?: boolean;
     clarificationQuestions?: ClarificationQuestion[];
     questionStreamPending?: boolean;
+    clarificationStreaming?: boolean;
     timestamp: number;
   };
 

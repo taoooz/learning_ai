@@ -2,8 +2,10 @@ import pytest
 from schemas.outline import OutlineRequest, LearnerPositioning, OutlineBlueprint
 from schemas.outline import OutlineAnswerRequest
 from services.outline_agent import (
+    _complete_quiz_questions,
     _emit_clarification_form,
     _format_clarification_answers,
+    _normalize_clarification_question,
     _normalize_clarification_options,
 )
 from services.outline_service import needs_level_calibration, normalize_level, parse_content_blocks
@@ -101,6 +103,25 @@ def test_clarification_options_split_when_model_puts_all_labels_in_one_field():
         "A.只看过概念，没有实践B.搭过简单 demoC.独立做过一个环节D.完整负责过线上链路",
     ])
     assert options == ["只看过概念，没有实践", "搭过简单 demo", "独立做过一个环节", "完整负责过线上链路"]
+
+
+def test_clarification_question_without_options_gets_choice_fallback():
+    question = _normalize_clarification_question(
+        {"id": "q1", "question": "请描述一下你的经历", "options": []},
+        0,
+        set(),
+    )
+    assert question is not None
+    assert len(question["options"]) == 4
+    assert question["options"][0] == "还没有实际接触"
+
+
+def test_complete_quiz_questions_only_returns_closed_blocks():
+    content = '''<quiz id="1"><div slot="question">第一题</div><div slot="option_A">A</div></quiz>
+<quiz id="2"><div slot="question">第二题</div><div slot="option_A">B</div></quiz>'''
+    questions = _complete_quiz_questions(content)
+    assert [question["id"] for question in questions] == ["1", "2"]
+    assert _complete_quiz_questions('<quiz id="3"><div slot="question">未闭合') == []
 
 
 def test_outline_answer_request_supports_batch_answers_without_legacy_answer():

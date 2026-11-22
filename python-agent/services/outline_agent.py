@@ -44,6 +44,13 @@ def _extract_content_from_agent_events(events: list[dict]) -> str:
 MAX_QUESTIONS = 3
 OUTLINE_REASONING_EFFORT = os.getenv("OUTLINE_REASONING_EFFORT", "low").strip() or None
 
+_DEFAULT_CLARIFICATION_OPTIONS = [
+    "还没有实际接触",
+    "了解概念但缺少实践",
+    "参与过部分实际工作",
+    "能独立负责并希望系统提升",
+]
+
 
 def _fallback_calibration_question(topic: str) -> dict:
     """模型未按要求提问时，用低歧义选项完成必要校准。"""
@@ -90,6 +97,31 @@ def _normalize_clarification_options(options: list) -> list[str]:
     ]
 
 
+def _normalize_clarification_question(raw: dict, index: int, seen_ids: set[str]) -> dict | None:
+    """把模型问题归一化为单题对象，并保证至少提供一组选择题选项。"""
+    raw_id = str(raw.get("id") or f"{index + 1}")
+    question_id = raw_id if raw_id not in seen_ids else f"{raw_id}-{index + 1}"
+    question = str(raw.get("question") or "").strip()
+    if not question:
+        return None
+    options = _normalize_clarification_options(raw.get("options") or [])
+    if not options:
+        # 模型偶尔会输出简答题。前端只接受选择题，统一降级为基础校准题。
+        question = "为了确定课程起点，你目前的实际情况更接近哪一项？"
+        options = list(_DEFAULT_CLARIFICATION_OPTIONS)
+    seen_ids.add(question_id)
+    return {"id": question_id, "question": question, "options": options}
+
+
+def _complete_quiz_questions(content: str) -> list[dict]:
+    """提取已经闭合的 <quiz> 题块，供流式逐题下发。"""
+    questions: list[dict] = []
+    for match in re.finditer(r'<quiz\b[^>]*>(.*?)</quiz>', content, re.DOTALL):
+        parsed = parse_content_blocks(match.group(0))
+        questions.extend(parsed.get("questions") or [])
+    return questions
+
+
 def _emit_clarification_form(
     questions: list[dict],
     session_id: str,
@@ -101,15 +133,9 @@ def _emit_clarification_form(
     normalized = []
     seen_ids: set[str] = set()
     for index, question in enumerate(questions[:3]):
-        raw_id = str(question.get("id") or f"{index + 1}")
-        question_id = raw_id if raw_id not in seen_ids else f"{raw_id}-{index + 1}"
-        seen_ids.add(question_id)
-        normalized.append({
-            "id": question_id,
-            "question": str(question.get("question") or "").strip(),
-            "options": _normalize_clarification_options(question.get("options") or []),
-        })
-    normalized = [question for question in normalized if question["question"]]
+        item = _normalize_clarification_question(question, index, seen_ids)
+        if item:
+            normalized.append(item)
     if not normalized:
         return
 
@@ -125,8 +151,10 @@ def _stream_agent_sse(
     max_tokens: int,
     agent_events: list,
     reasoning_effort: str | None = None,
+    content_observer=None,
 ) -> Generator[str, None, None]:
     """运行 Agent tool-calling 循环，把 agent 事件转成前端 SSE 格式，同时累积到 agent_events"""
+    content_parts: list[str] = []
     for event in client.stream_chat_with_tools(
         messages=messages,
         tools=SEARCH_TOOLS,
@@ -155,7 +183,10 @@ def _stream_agent_sse(
         elif event["type"] == "content_delta":
             content = event["content"]
             if content:
+                content_parts.append(content)
                 yield f"data: {json.dumps({'type': 'content_delta', 'content': content}, ensure_ascii=False)}\n\n"
+                if content_observer:
+                    yield from content_observer("".join(content_parts))
 
 
 def stream_outline_with_tools(
@@ -191,10 +222,41 @@ def stream_outline_with_tools(
         {"role": "user", "content": "请开始。"},
     ]
 
+    # 先创建 session，第一题闭合时前端就能拿到 sessionId 并开始作答。
+    from memory.session import get_session_store
+    session_store = get_session_store()
+    session = session_store.create("outline", state)
+    state["session_id"] = session.session_id
+    session_id = session.session_id
+    yield f"data: {json.dumps({'type': 'session_created', 'sessionId': session_id}, ensure_ascii=False)}\n\n"
+
+    seen_question_ids: set[str] = set()
+    streamed_questions: list[dict] = []
+    processed_question_count = 0
+
+    def observe_questions(content: str) -> Generator[str, None, None]:
+        nonlocal processed_question_count
+        complete = _complete_quiz_questions(content)
+        for raw in complete[processed_question_count:]:
+            index = len(streamed_questions)
+            item = _normalize_clarification_question(raw, index, seen_question_ids)
+            if not item:
+                continue
+            streamed_questions.append(item)
+            state["questions_asked"].append(item["question"])
+            state["current_question"] = item
+            if len(streamed_questions) == 1:
+                yield f"data: {json.dumps({'type': 'question_start', 'questionNumber': state['question_count'] + 1}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'questions', 'questions': [item], 'sessionId': session_id}, ensure_ascii=False)}\n\n"
+        processed_question_count = len(complete)
+
     agent_events = []
 
     try:
-        yield from _stream_agent_sse(client, messages, max_tokens, agent_events)
+        yield from _stream_agent_sse(
+            client, messages, max_tokens, agent_events,
+            content_observer=observe_questions,
+        )
     except Exception as e:
         print(f"[Outline Agent] Error during agent loop: {e}")
         import traceback
@@ -224,7 +286,10 @@ def stream_outline_with_tools(
         })
         agent_events = []
         try:
-            yield from _stream_agent_sse(client, messages, max_tokens, agent_events)
+            yield from _stream_agent_sse(
+                client, messages, max_tokens, agent_events,
+                content_observer=observe_questions,
+            )
         except Exception as e:
             print(f"[Outline Agent] Calibration error: {e}")
             import traceback
@@ -243,15 +308,14 @@ def stream_outline_with_tools(
             messages.append({"role": "assistant", "content": content_clean})
 
     # 生成 session_id 并保存状态
-    from memory.session import get_session_store
-    session_store = get_session_store()
-    session = session_store.create("outline", state)
-    state["session_id"] = session.session_id
-    session_id = session.session_id
-
     questions = parsed.get("questions") or []
     if questions:
-        yield from _emit_clarification_form(questions, session_id, state)
+        if len(streamed_questions) < len(questions):
+            yield from _emit_clarification_form(
+                questions[len(streamed_questions):],
+                session_id,
+                state,
+            )
     elif parsed.get("outline"):
         outline = parsed["outline"]
         blueprint = {
@@ -284,7 +348,6 @@ def stream_outline_with_tools(
     state["llm_messages"] = messages
     session_store.update(session_id, state)
 
-    yield f"data: {json.dumps({'type': 'session_created', 'sessionId': session_id}, ensure_ascii=False)}\n\n"
     yield "data: [DONE]\n\n"
 
 

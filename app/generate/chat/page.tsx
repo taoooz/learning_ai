@@ -79,6 +79,7 @@ function ChatPageContent() {
                   isThinking={msg.isThinking}
                   clarificationQuestions={msg.clarificationQuestions}
                   questionStreamPending={msg.questionStreamPending}
+                  clarificationStreaming={msg.clarificationStreaming}
                   onQuestionAnswer={(answer) => sendMessage(answer)}
                   onClarificationAnswers={submitClarificationAnswers}
                   onOutlineConfirm={handleConfirmOutline}

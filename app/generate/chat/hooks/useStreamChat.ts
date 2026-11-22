@@ -68,9 +68,9 @@ export function useStreamChat(topic: string) {
           case 'content_delta':
             if (foundBlueprint) break; // blueprint 已确认，不再用纯文本覆盖卡片
             fullContent += event.content;
-            const questionStreamPending = fullContent.includes('<quiz');
             updateMessageAt(idx, m => {
               if (m.type !== 'streaming') return m;
+              const questionStreamPending = !m.clarificationQuestions?.length && fullContent.includes('<quiz');
               return {
                 ...m,
                 content: questionStreamPending ? '' : fullContent,
@@ -91,10 +91,16 @@ export function useStreamChat(topic: string) {
             if (questions.length > 0) {
               updateMessageAt(idx, m => {
                 if (m.type !== 'streaming') return m;
+                const existing = m.clarificationQuestions || [];
+                const merged = [
+                  ...existing,
+                  ...questions.filter((question) => !existing.some((item) => item.id === question.id)),
+                ];
                 return {
                   ...m,
-                  clarificationQuestions: questions,
+                  clarificationQuestions: merged,
                   questionStreamPending: false,
+                  clarificationStreaming: true,
                   isThinking: false,
                 };
               });
@@ -144,6 +150,7 @@ ${typeof lp.personalExampleLimit === 'number' ? `<div slot="personalExampleLimit
                   content: existingContent + '\n' + outlineTag,
                   clarificationQuestions: undefined,
                   questionStreamPending: false,
+                  clarificationStreaming: false,
                   isThinking: false,
                 };
               });
@@ -162,6 +169,12 @@ ${typeof lp.personalExampleLimit === 'number' ? `<div slot="personalExampleLimit
             break;
         }
       }
+
+      updateMessageAt(idx, m => (
+        m.type === 'streaming' && m.clarificationQuestions?.length
+          ? { ...m, clarificationStreaming: false }
+          : m
+      ));
 
       // 流结束后如果没有 blueprint，尝试从 content 中解析问题
       if (!foundBlueprint && fullContent) {
