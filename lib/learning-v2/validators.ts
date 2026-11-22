@@ -53,6 +53,15 @@ export function validateCourseBlueprint(blueprint: CourseBlueprint): BlueprintVa
     issues.push('蓝图缺少章节。');
   }
 
+  const confidence = blueprint.learnerStartingPoint.levelConfidence;
+  if (typeof confidence === 'number' && (confidence < 0 || confidence > 1)) {
+    issues.push('学习者水平置信度必须在 0～1 之间。');
+  }
+  const personalExampleLimit = blueprint.learnerStartingPoint.personalExampleLimit;
+  if (typeof personalExampleLimit === 'number' && (personalExampleLimit < 0 || personalExampleLimit > 3)) {
+    issues.push('每章个人经历例子上限必须在 0～3 之间。');
+  }
+
   // ID 唯一性
   const objectiveIds = new Set<string>();
   for (const objective of blueprint.courseObjectives) {
@@ -283,11 +292,11 @@ export function validateChapterPlan(
     });
   }
 
-  // 任务数量建议 3～7（软约束）
-  if (plan.tasks.length < 3 || plan.tasks.length > 7) {
+  // 任务数量建议 2～7，由认知增量决定（软约束）
+  if (plan.tasks.length < 2 || plan.tasks.length > 7) {
     warnings.push({
       code: PLAN_VALIDATION_CODES.TASK_COUNT_OUT_OF_RANGE,
-      message: `任务数量 ${plan.tasks.length} 超出建议范围 3～7。`,
+      message: `任务数量 ${plan.tasks.length} 超出建议范围 2～7。`,
     });
   }
 

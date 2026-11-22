@@ -10,6 +10,7 @@ from lib.minimax_agent import AgentClient
 from lib.tools.search_tools import SEARCH_TOOLS, TOOL_FUNCTIONS
 from services.outline_service import (
     build_initial_prompt,
+    needs_level_calibration,
     parse_content_blocks,
     make_initial_state,
 )
@@ -40,6 +41,20 @@ def _extract_content_from_agent_events(events: list[dict]) -> str:
 
 # 与 prompt 约定一致：每次仅提 1 个问题，累计最多 3 个
 MAX_QUESTIONS = 3
+
+
+def _fallback_calibration_question(topic: str) -> dict:
+    """模型未按要求提问时，用低歧义选项完成必要校准。"""
+    return {
+        "id": "1",
+        "question": f"为了确定「{topic}」的合适起点，你目前能独立做到哪一步？",
+        "options": [
+            "还没接触过这个主题",
+            "了解一些概念，但没有独立实践",
+            "在工作中参与过部分环节，仍需系统补齐",
+            "能独立负责完整链路，希望重点查漏补缺",
+        ],
+    }
 
 
 def _stream_agent_sse(client, messages: list[dict], max_tokens: int, agent_events: list) -> Generator[str, None, None]:
@@ -78,7 +93,7 @@ def stream_outline_with_tools(
     topic: str,
     user_profile: dict,
     planning_memory: dict,
-    # glm-5.3-flash 思考长度方差大，预算不足会截断在思考阶段（同 TOC 教训）
+    # 推理型模型思考长度方差大，预算不足会截断在思考阶段。
     max_tokens: int = 12000,
 ) -> Generator[str, None, None]:
     """Agent 版 outline 生成（带搜索能力）
@@ -93,9 +108,15 @@ def stream_outline_with_tools(
     Yields: SSE 格式字符串（data: {...}\\n\\n）
     """
     client = AgentClient()
-    system_prompt = build_initial_prompt(topic, user_profile, planning_memory)
+    calibration_required = needs_level_calibration(planning_memory, user_profile)
     state = make_initial_state(topic, user_profile, planning_memory)
-
+    state["forced_calibration"] = calibration_required
+    system_prompt = build_initial_prompt(
+        topic,
+        user_profile,
+        planning_memory,
+        needs_calibration=calibration_required,
+    )
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": "请开始。"},
@@ -122,6 +143,36 @@ def stream_outline_with_tools(
 
     parsed = parse_content_blocks(content_clean)
 
+    # 低置信度且有可迁移背景时，先强制完成一次起点校准，避免默认从小白开始。
+    if calibration_required and parsed.get("outline") and state["question_count"] == 0:
+        messages.append({"role": "assistant", "content": content_clean})
+        messages.append({
+            "role": "user",
+            "content": (
+                "先不要输出学习计划。请基于已有画像，只提出 1 个最能确认当前主题实际掌握边界的单选题；"
+                "问题要询问用户实际做过什么或能独立完成什么。"
+            ),
+        })
+        agent_events = []
+        try:
+            yield from _stream_agent_sse(client, messages, max_tokens, agent_events)
+        except Exception as e:
+            print(f"[Outline Agent] Calibration error: {e}")
+            import traceback
+            traceback.print_exc()
+            yield f"data: {json.dumps({'type': 'error', 'message': _user_friendly_error(e)}, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
+            return
+
+        full_content = _extract_content_from_agent_events(agent_events)
+        content_clean = re.sub(r'Thinking.*?Thinking', '', full_content, flags=re.DOTALL).strip()
+        parsed = parse_content_blocks(content_clean)
+        if parsed.get("outline") and not parsed.get("questions"):
+            question = _fallback_calibration_question(topic)
+            parsed = {"questions": [question], "outline": None}
+            content_clean = question["question"]
+            messages.append({"role": "assistant", "content": content_clean})
+
     # 生成 session_id 并保存状态
     from memory.session import get_session_store
     session_store = get_session_store()
@@ -145,9 +196,13 @@ def stream_outline_with_tools(
             "learningGoal": outline.get("learningGoal", ""),
             "learnerPositioning": {
                 "estimatedLevel": outline.get("estimatedLevel", "beginner"),
-                "difficultySummary": "",
+                "difficultySummary": f"水平置信度：{outline.get('levelConfidence', 0.6)}",
                 "backgroundSummary": outline.get("backgroundSummary", ""),
-                "skipBasics": outline.get("skipBasics", []),
+                "skipBasics": outline.get("skipBasics") or [],
+                "likelyGaps": outline.get("likelyGaps") or [],
+                "levelConfidence": outline.get("levelConfidence", 0.6),
+                "preferredExampleDomains": outline.get("preferredExampleDomains") or [],
+                "personalExampleLimit": outline.get("personalExampleLimit", 1),
                 "whyThisCourseFits": "",
             },
         }
@@ -200,6 +255,15 @@ def stream_answer_with_tools(
     # 恢复历史 messages + 本轮用户回答
     messages = list(state.get("llm_messages", []))
     messages.append({"role": "user", "content": answer})
+    if state.get("forced_calibration"):
+        messages.append({
+            "role": "user",
+            "content": (
+                "校准信息已收到。请结合这条回答直接输出 <outline> 学习计划，"
+                "不要再提问；无法确定的内容写入 gaps，不要退回零基础假设。"
+            ),
+        })
+        state["forced_calibration"] = False
 
     client = AgentClient()
     agent_events = []
@@ -256,9 +320,13 @@ def stream_answer_with_tools(
             "learningGoal": outline.get("learningGoal", ""),
             "learnerPositioning": {
                 "estimatedLevel": outline.get("estimatedLevel", "beginner"),
-                "difficultySummary": "",
+                "difficultySummary": f"水平置信度：{outline.get('levelConfidence', 0.6)}",
                 "backgroundSummary": outline.get("backgroundSummary", ""),
-                "skipBasics": outline.get("skipBasics", []),
+                "skipBasics": outline.get("skipBasics") or [],
+                "likelyGaps": outline.get("likelyGaps") or [],
+                "levelConfidence": outline.get("levelConfidence", 0.6),
+                "preferredExampleDomains": outline.get("preferredExampleDomains") or [],
+                "personalExampleLimit": outline.get("personalExampleLimit", 1),
                 "whyThisCourseFits": "",
             },
         }

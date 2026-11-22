@@ -63,10 +63,28 @@ test('映射产物通过蓝图校验（锁定测试）', () => {
 test('observableOutcome 是行为描述，不是空泛词', () => {
   const blueprint = mapTocToBlueprint(makeInput());
   for (const objective of blueprint.courseObjectives) {
-    assert.match(objective.observableOutcome, /^能用自己的话说明/);
+    assert.match(objective.observableOutcome, /^能在真实场景中运用/);
     assert.equal(objective.importance, 'core');
     assert.equal(objective.evidenceRequirement, 'exposure');
   }
+});
+
+test('章节交付会进入 observableOutcome 和完成标准', () => {
+  const blueprint = mapTocToBlueprint(makeInput({
+    nodes: [{
+      index: 1,
+      title: '推荐链路',
+      description: '理解推荐系统基本结构。本章交付：能独立解释召回、排序、重排的职责边界',
+    }],
+  }));
+  assert.equal(
+    blueprint.courseObjectives[0].observableOutcome,
+    '能独立解释召回、排序、重排的职责边界',
+  );
+  assert.equal(
+    blueprint.chapters[0].completionCriteria[0],
+    '能完成本章交付：能独立解释召回、排序、重排的职责边界',
+  );
 });
 
 test('节点缺 index 时按位置补位且依赖链不断', () => {
@@ -124,12 +142,26 @@ test('skipBasics 映射为排除主题', () => {
       outline: {
         topic: 'Redis 缓存',
         learningGoal: '实操',
-        learnerPositioning: { estimatedLevel: '高级', skipBasics: ['数据类型', '安装'] },
+        learnerPositioning: {
+          estimatedLevel: '高级',
+          skipBasics: ['数据类型', '安装'],
+          likelyGaps: ['持久化选型'],
+          levelConfidence: 0.8,
+          backgroundSummary: '有后端开发经验',
+          preferredExampleDomains: ['电商库存', '消息队列'],
+          personalExampleLimit: 1,
+        },
       },
     }),
   );
   assert.deepEqual(blueprint.learnerStartingPoint.excludedTopics, ['数据类型', '安装']);
   assert.equal(blueprint.learnerStartingPoint.estimatedLevel, 'advanced');
+  assert.deepEqual(blueprint.learnerStartingPoint.confirmedKnowledge, ['数据类型', '安装']);
+  assert.deepEqual(blueprint.learnerStartingPoint.likelyGaps, ['持久化选型']);
+  assert.equal(blueprint.learnerStartingPoint.levelConfidence, 0.8);
+  assert.equal(blueprint.learnerStartingPoint.backgroundSummary, '有后端开发经验');
+  assert.deepEqual(blueprint.learnerStartingPoint.preferredExampleDomains, ['电商库存', '消息队列']);
+  assert.equal(blueprint.learnerStartingPoint.personalExampleLimit, 1);
   assert.equal(validateCourseBlueprint(blueprint).passed, true);
 });
 

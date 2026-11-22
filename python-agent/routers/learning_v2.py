@@ -105,7 +105,7 @@ async def _validate_learning_v2_request(request: Request, schema_cls):
 
 @router.post("/chapters/plan")
 async def learning_v2_chapters_plan(request: Request):
-    """V2 章节计划生成（同步 JSON）：把章节拆成 3～7 个短任务"""
+    """V2 章节计划生成（同步 JSON）：按认知增量拆成 2～7 个短任务"""
     req, error_response = await _validate_learning_v2_request(request, ChapterPlanRequest)
     if error_response is not None:
         return error_response

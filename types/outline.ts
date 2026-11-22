@@ -18,6 +18,10 @@ export interface OutlineLearnerPositioning {
   estimatedLevel: 'novice' | 'beginner' | 'intermediate' | 'advanced' | '初级' | '中级' | '高级';
   backgroundSummary?: string;
   skipBasics?: string[];
+  likelyGaps?: string[];
+  levelConfidence?: number;
+  preferredExampleDomains?: string[];
+  personalExampleLimit?: number;
 }
 
 export interface OutlineBlueprint {

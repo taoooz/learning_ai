@@ -1,23 +1,27 @@
 """
 V2 章节计划生成服务
-把章节目标拆成 3～7 个短任务，产出与 types/learning-v2/chapter-plan.ts 对齐的 ChapterPlan
+按认知增量把章节目标拆成 2～7 个短任务，产出与 types/learning-v2/chapter-plan.ts 对齐的 ChapterPlan
 """
+import asyncio
+import json
 import time
 from uuid import uuid4
 
+from lib.minimax_agent import AgentClient
 from lib.minimax import MiniMaxClient, extract_usage, parse_json_response
+from lib.tools.search_tools import SEARCH_TOOLS
 from prompts import build_prompt
 from schemas.learning_v2 import ChapterPlanRequest
-from services.evidence_store import ensure_chapter_evidence_pack, evidence_to_prompt
+from services.evidence_store import evidence_to_prompt, get_chapter_evidence
 from services.learning_v2_errors import (
     BlueprintDataError,
     ChapterNotFoundError,
     PlanValidationError,
 )
-from services.search_evidence import needs_search
+from services.search_evidence import ChapterEvidenceCollector, format_search_decision_policy
 from services.memory_context_v4 import format_memory_context_for_prompt
 
-PROMPT_VERSION = "chapter-plan-v1"
+PROMPT_VERSION = "chapter-plan-v3"
 
 # 教学模式枚举（对齐 chapter-plan.ts TaskTeachingPattern），值为中文释义
 TEACHING_PATTERNS = {
@@ -43,6 +47,7 @@ PLAN_VALIDATION_CODES = {
     "EMPTY_TASK_FIELD": "EMPTY_TASK_FIELD",
     "TASK_COUNT_OUT_OF_RANGE": "TASK_COUNT_OUT_OF_RANGE",
     "SINGLE_TEACHING_PATTERN": "SINGLE_TEACHING_PATTERN",
+    "SEMANTIC_CONCEPT_OVERLAP": "SEMANTIC_CONCEPT_OVERLAP",
     "TITLE_REPEATS_CHAPTER": "TITLE_REPEATS_CHAPTER",
     "INVALID_JSON": "INVALID_JSON",
 }
@@ -73,6 +78,15 @@ def _format_learner(starting_point: dict) -> str:
     gaps = (starting_point or {}).get("likelyGaps", [])
     if gaps:
         parts.append(f"潜在缺口：{'、'.join(gaps)}")
+    excluded = (starting_point or {}).get("excludedTopics", [])
+    if excluded:
+        parts.append(f"已掌握且应跳过：{'、'.join(excluded)}")
+    background = (starting_point or {}).get("backgroundSummary")
+    if background:
+        parts.append(f"相关背景（仅用于校准与例子选择）：{background}")
+    confidence = (starting_point or {}).get("levelConfidence")
+    if isinstance(confidence, (int, float)):
+        parts.append(f"水平判断置信度：{round(float(confidence) * 100)}%")
     return "\n".join(parts) if parts else "无"
 
 
@@ -139,7 +153,7 @@ def _format_completed_chapters(completed: list[dict] | None) -> str:
     return "\n".join(sections)
 
 
-def build_chapter_plan_prompt(topic: str, chapter: dict, objectives: list[dict], learner: dict, evidence: str | None = None, sources: list[dict] | None = None, mission: dict | None = None, teaching_state: dict | None = None, completed_chapters: list[dict] | None = None, intent_type: str | None = None, memory_context: dict | None = None) -> str:
+def build_chapter_plan_prompt(topic: str, chapter: dict, objectives: list[dict], learner: dict, evidence: str | None = None, sources: list[dict] | None = None, mission: dict | None = None, teaching_state: dict | None = None, completed_chapters: list[dict] | None = None, intent_type: str | None = None, memory_context: dict | None = None, allow_search: bool = False) -> str:
     """构建章节计划 system prompt；有证据包时约束规划来源"""
     evidence_section = ""
     if evidence:
@@ -149,8 +163,9 @@ def build_chapter_plan_prompt(topic: str, chapter: dict, objectives: list[dict],
             f"{evidence}\n\n## 可参考来源\n{source_lines}\n\n"
             "规划任务时优先围绕这些权威来源；不要规划证据未支持的高风险事实细节。"
         )
-    return build_prompt(
+    prompt = build_prompt(
         "chapter_plan",
+        ["role", "chapter_context", "output_format", "goal_alignment", "completed_chapters"],
         topic=topic,
         chapter_title=chapter.get("title", ""),
         teaching_goal=chapter.get("teachingGoal", ""),
@@ -159,6 +174,9 @@ def build_chapter_plan_prompt(topic: str, chapter: dict, objectives: list[dict],
         intent_type=intent_type or "未指定",
         completed_section=_format_completed_chapters(completed_chapters),
     ) + _format_mission(mission) + _format_teaching_state(teaching_state or {}) + format_memory_context_for_prompt(memory_context or {}) + evidence_section
+    if allow_search:
+        prompt += "\n\n" + format_search_decision_policy(max_searches=2)
+    return prompt
     intent_type = (chapter.get("intentType") or "") if isinstance(chapter, dict) else ""
     # intentType 在课程级，蓝图透传时挂在 chapter 上的场景做兜底读取
     if not intent_type:
@@ -313,9 +331,23 @@ def validate_plan_tasks(tasks: list[dict], objective_ids: list[str]) -> tuple[li
     if cycle:
         errors.append({"code": codes["PREREQ_CYCLE"], "message": f"任务依赖存在循环：{' → '.join(cycle)}"})
 
-    # 软约束：3～7 个任务、教学模式多样化（只告警不拦截）
-    if not (3 <= len(tasks) <= 7):
-        warnings.append({"code": codes["TASK_COUNT_OUT_OF_RANGE"], "message": f"任务数量 {len(tasks)} 超出建议范围 3～7。"})
+    # 相邻任务概念高度重合属于硬错误：避免同一基础概念反复换说法。
+    for previous, current in zip(tasks, tasks[1:]):
+        previous_keys = {key.strip().lower() for key in previous.get("conceptKeys", []) if key.strip()}
+        current_keys = {key.strip().lower() for key in current.get("conceptKeys", []) if key.strip()}
+        if previous.get("objectiveId") == current.get("objectiveId") and previous_keys and current_keys:
+            union = previous_keys | current_keys
+            overlap = len(previous_keys & current_keys) / max(1, len(union))
+            if overlap >= 0.8:
+                errors.append({
+                    "code": codes["SEMANTIC_CONCEPT_OVERLAP"],
+                    "taskId": current["taskId"],
+                    "message": f"相邻任务概念高度重合：{previous['taskId']} 与 {current['taskId']}，应合并或提升认知增量。",
+                })
+
+    # 软约束：2～7 个任务、教学模式多样化（只告警不拦截）
+    if not (2 <= len(tasks) <= 7):
+        warnings.append({"code": codes["TASK_COUNT_OUT_OF_RANGE"], "message": f"任务数量 {len(tasks)} 超出建议范围 2～7。"})
     if len(tasks) >= 2 and len({t["teachingPattern"] for t in tasks}) == 1:
         warnings.append({"code": codes["SINGLE_TEACHING_PATTERN"], "message": f"全章使用同一教学模式：{tasks[0]['teachingPattern']}"})
 
@@ -333,60 +365,123 @@ def _format_repair_notes(errors: list[dict]) -> str:
     return "\n".join(lines)
 
 
+async def _review_chapter_plan(
+    client: MiniMaxClient,
+    *,
+    chapter: dict,
+    teaching_goal: str,
+    learner: dict,
+    tasks: list[dict],
+) -> dict:
+    """独立审查计划的认知增量、重复度和水平匹配；不可解析时安全放行并记录。"""
+    review_tasks = [
+        {
+            "taskId": task.get("taskId"),
+            "title": task.get("title"),
+            "objectiveId": task.get("objectiveId"),
+            "taskGoal": task.get("taskGoal"),
+            "observableOutcome": task.get("observableOutcome"),
+            "conceptKeys": task.get("conceptKeys"),
+            "teachingPattern": task.get("teachingPattern"),
+            "expectedMinutes": task.get("expectedMinutes"),
+        }
+        for task in tasks
+    ]
+    try:
+        response = await client.chat(
+            messages=[
+                {
+                    "role": "system",
+                    "content": build_prompt(
+                        "chapter_plan",
+                        ["review"],
+                        chapter_title=chapter.get("title", ""),
+                        teaching_goal=teaching_goal,
+                        learner_section=_format_learner(learner),
+                        tasks_json=json.dumps(review_tasks, ensure_ascii=False, indent=2),
+                    ),
+                },
+                {"role": "user", "content": "请审查这份章节计划。"},
+            ],
+            max_tokens=8000,
+        )
+        content = (response.get("choices") or [{}])[0].get("message", {}).get("content", "")
+        parsed = parse_json_response(content)
+        if not isinstance(parsed, dict) or not isinstance(parsed.get("passed"), bool):
+            raise ValueError("review schema invalid")
+        issues = parsed.get("issues") if isinstance(parsed.get("issues"), list) else []
+        return {
+            "passed": parsed["passed"],
+            "issues": [item for item in issues if isinstance(item, dict)],
+            "repairNotes": str(parsed.get("repairNotes") or ""),
+        }
+    except Exception as exc:  # noqa: BLE001 质量审查失败不阻塞主流程
+        print(f"[章节计划] 质量审查不可用，按结构校验结果继续：{exc}")
+        return {"passed": True, "issues": [], "repairNotes": ""}
+
+
 async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClient | None = None, memory_context: dict | None = None) -> dict:
     """生成章节计划；校验失败带修复提示重试一次，仍失败抛 PlanValidationError"""
-    client = client or MiniMaxClient()
+    client = client or AgentClient()
     blueprint = request.blueprint or {}
     teaching_state = blueprint.get("teachingState") or {}
     chapter, objectives = _resolve_chapter(blueprint, request.chapterId)
     objective_ids = list(chapter.get("objectiveIds", []))
 
-    # 章节级证据：首次规划时搜索一次并持久化，后续任务与计划复用；失败不阻塞规划。
-    evidence_pack = None
-    try:
-        if needs_search(chapter.get("title", ""), chapter.get("teachingGoal", "")):
-            evidence_pack = await ensure_chapter_evidence_pack(
-                request.courseId,
-                request.chapterId,
-                blueprint.get("topic", ""),
-                chapter.get("title", ""),
-            )
-    except Exception as exc:  # noqa: BLE001
-        print(f"[章节计划] 证据包构建失败: {exc}")
+    # 已有章节证据直接作为模型上下文；是否需要补充搜索由模型通过工具调用决定。
+    collector = ChapterEvidenceCollector(
+        request.courseId,
+        request.chapterId,
+        blueprint.get("topic", ""),
+        chapter.get("title", ""),
+    )
+    evidence_pack = collector.pack
     evidence, sources = evidence_to_prompt(evidence_pack)
 
     completed_chapters = request.completedChapters or []
     intent_type = blueprint.get("intentType") or ""
-    system_prompt = build_chapter_plan_prompt(
-        topic=blueprint.get("topic", ""),
-        chapter=chapter,
-        objectives=objectives,
-        learner=blueprint.get("learnerStartingPoint", {}),
-        intent_type=intent_type,
-        completed_chapters=completed_chapters,
-        evidence=evidence,
-        sources=sources,
-        mission=blueprint.get("mission"),
-        teaching_state=teaching_state,
-        memory_context=memory_context,
-    )
-
     started = time.monotonic()
     last_errors: list[dict] = []
     repair_notes: str | None = None
 
-    for _round in range(2):
+    for _round in range(3):
+        evidence_pack = collector.pack
+        evidence, sources = evidence_to_prompt(evidence_pack)
+        system_prompt = build_chapter_plan_prompt(
+            topic=blueprint.get("topic", ""),
+            chapter=chapter,
+            objectives=objectives,
+            learner=blueprint.get("learnerStartingPoint", {}),
+            intent_type=intent_type,
+            completed_chapters=completed_chapters,
+            evidence=evidence,
+            sources=sources,
+            mission=blueprint.get("mission"),
+            teaching_state=teaching_state,
+            memory_context=memory_context,
+            allow_search=True,
+        )
         user_message = "请为这个章节生成任务计划。"
         if repair_notes:
             user_message += f"\n\n上一版输出存在以下问题，请修正后重新输出完整 JSON：\n{repair_notes}"
 
-        response = await client.chat(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
-            max_tokens=16000,
-        )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ]
+        if hasattr(client, "chat_with_tools"):
+            response = await asyncio.to_thread(
+                client.chat_with_tools,
+                messages=messages,
+                tools=SEARCH_TOOLS,
+                tool_functions=collector.tool_functions,
+                max_tokens=16000,
+                reasoning_split=True,
+                max_iterations=3,
+                max_searches=2,
+            )
+        else:
+            response = await client.chat(messages=messages, max_tokens=16000)
         content = (response.get("choices") or [{}])[0].get("message", {}).get("content", "")
 
         try:
@@ -411,7 +506,7 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
             print(f"[章节计划] 软约束告警：{warning['code']} {warning['message']}")
         if not errors:
             now_ms = time.time_ns() // 1_000_000
-            return {
+            plan = {
                 "chapterId": request.chapterId,
                 "planId": f"plan-{uuid4().hex[:12]}",
                 "planVersion": 1,
@@ -429,6 +524,26 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
                     **({"tokenUsage": usage} if (usage := extract_usage(response)) else {}),
                 },
             }
+            review = await _review_chapter_plan(
+                client,
+                chapter=chapter,
+                teaching_goal=chapter.get("teachingGoal", ""),
+                learner=blueprint.get("learnerStartingPoint", {}),
+                tasks=tasks,
+            )
+            if review["passed"] or _round >= 2:
+                if not review["passed"]:
+                    print("[章节计划] 二次修订后仍有质量告警，保留最终结构合法计划")
+                return plan
+
+            review_issues = review.get("issues") or []
+            for issue in review_issues:
+                print(f"[章节计划] 质量审查：{issue.get('code', 'QUALITY')} {issue.get('message', '')}")
+            last_errors = review_issues
+            issue_notes = _format_repair_notes(review_issues)
+            custom_notes = review.get("repairNotes") or ""
+            repair_notes = "\n".join(part for part in (issue_notes, custom_notes) if part)
+            continue
 
         last_errors = errors
         repair_notes = _format_repair_notes(errors)

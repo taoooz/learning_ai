@@ -1,110 +1,142 @@
-# tests/test_search_evidence.py — V2 任务内容搜索证据包：启发式判定 / 证据包构建 / prompt 注入
+# tests/test_search_evidence.py — 模型驱动搜索工具、EvidencePack 合并与提示词注入
 
-import json
 from unittest.mock import patch
 
-import pytest
-
-from services.search_evidence import build_evidence_pack, needs_search
-
-
-# ---- needs_search 启发式 ----
-
-
-def test_needs_search_time_sensitive_topics():
-    """时效性/工具类主题 → 搜索"""
-    assert needs_search("Next.js 15 新特性", "了解最新版本变化") is True
-    assert needs_search("React 状态管理库对比", "选型与生态") is True
-    assert needs_search("Claude API 价格", "当前定价策略") is True
+import services.search_evidence as search_evidence
+from lib.minimax_agent import AgentClient
+from lib.tools.search_tools import SEARCH_TOOLS
+from services.evidence_store import get_chapter_evidence
+from services.search_evidence import ChapterEvidenceCollector, format_search_decision_policy
+from services.task_content_service import build_task_content_prompt
 
 
-def test_needs_search_stable_basics_skipped():
-    """稳定基础概念（纯概念认知）→ 不搜索"""
-    assert needs_search("认识 HTTP 缓存", "理解缓存基本概念") is False
-    assert needs_search("什么是变量作用域", "理解概念本质") is False
-
-
-def test_needs_search_tool_practice_searched():
-    """工具实践类 → 搜索（配置/实战/排查等关键词）"""
-    assert needs_search("Git 分支操作实战", "分支创建与合并实践") is True
-    assert needs_search("缓存排查", "更新不生效的排查方法") is True
-
-
-def test_needs_search_env_kill_switch(monkeypatch):
-    monkeypatch.setenv("DISABLE_WEB_SEARCH", "1")
-    assert needs_search("Next.js 15 新特性", "最新版本") is False
-
-
-# ---- build_evidence_pack ----
-
-
-def test_build_evidence_pack_parses_sources():
-    fake = (
-        "- Next.js 15 发布说明\n"
-        "  新版本带来了大量更新\n"
-        "  来源: https://example.com/next15\n"
-        "- React 19 对比\n"
-        "  服务组件相关变化\n"
-        "  来源: https://example.com/react19"
+def test_collector_executes_model_search_and_persists_evidence(tmp_path, monkeypatch):
+    monkeypatch.setenv("EVIDENCE_STORE_DIR", str(tmp_path / "evidence"))
+    results = [
+        {
+            "title": "React official",
+            "url": "https://react.dev/reference/react/useactionstate",
+            "body": "official",
+            "authorityScore": 100,
+            "preferred": True,
+            "isPrimary": True,
+        },
+        {
+            "title": "Hacker news",
+            "url": "https://news.ycombinator.com/item?id=1",
+            "body": "community",
+            "authorityScore": 55,
+            "kind": "wisdom",
+        },
+    ]
+    collector = ChapterEvidenceCollector(
+        "course-1",
+        "ch-1",
+        "React 进阶",
+        "表单与状态",
+        task_title="useActionState",
+        task_goal="掌握 React 19 表单状态",
     )
-    with patch("lib.tools.search_tools.search_web_structured", return_value=[
-        {"title":"Next.js 15 发布说明","url":"https://example.com/next15","body":"新版本带来了大量更新","authorityScore":60},
-        {"title":"React 19 对比","url":"https://example.com/react19","body":"服务组件相关变化","authorityScore":60},
-    ]):
-        import asyncio
-        pack = asyncio.run(build_evidence_pack("Next.js 15 新特性"))
+
+    with patch.object(search_evidence, "search_web_structured", return_value=results):
+        text = collector.web_search("React useActionState 官方文档")
+
+    assert "证据ID" in text
+    pack = get_chapter_evidence("course-1", "ch-1")
     assert pack is not None
-    assert "Next.js 15" in pack["evidence"]
-    assert len(pack["sources"]) == 2
-    assert pack["sources"][0]["url"] == "https://example.com/next15"
+    assert pack["sources"][0]["isPrimary"] is True
+    assert pack["sources"][0]["useFor"].startswith("官方或高权威")
+    assert pack["sources"][1]["kind"] == "wisdom"
+    assert pack["sources"][1]["useFor"].startswith("社区或经验型")
+    assert pack["queryPlan"][0]["query"] == "React useActionState 官方文档"
 
 
-def test_build_evidence_pack_no_results_returns_none():
-    with patch("lib.tools.search_tools.search_web_structured", side_effect=RuntimeError("no results")):
-        import asyncio
-        assert asyncio.run(build_evidence_pack("完全不存在的主题xyzq")) is None
+def test_collector_returns_search_error_to_model(tmp_path, monkeypatch):
+    monkeypatch.setenv("EVIDENCE_STORE_DIR", str(tmp_path / "evidence"))
+    collector = ChapterEvidenceCollector("course-1", "ch-1", "任意主题", "任意章节")
+
+    with patch.object(search_evidence, "search_web_structured", side_effect=RuntimeError("网络错误")):
+        text = collector.web_search("任意查询")
+
+    assert text.startswith("搜索出错")
+    assert get_chapter_evidence("course-1", "ch-1") is None
 
 
-def test_build_evidence_pack_search_error_returns_none():
-    with patch("lib.tools.search_tools.search_web_structured", side_effect=RuntimeError("网络错误")):
-        import asyncio
-        assert asyncio.run(build_evidence_pack("任意查询")) is None
+def test_collector_respects_search_kill_switch(tmp_path, monkeypatch):
+    monkeypatch.setenv("EVIDENCE_STORE_DIR", str(tmp_path / "evidence"))
+    monkeypatch.setenv("DISABLE_WEB_SEARCH", "1")
+    collector = ChapterEvidenceCollector("course-1", "ch-1", "任意主题", "任意章节")
+
+    text = collector.web_search("任意查询")
+
+    assert text.startswith("联网搜索已禁用")
+    assert get_chapter_evidence("course-1", "ch-1") is None
 
 
-# ---- prompt 注入 ----
+def test_search_decision_policy_requires_model_judgment():
+    policy = format_search_decision_policy(max_searches=2)
+    assert "由你判断" in policy
+    assert "最多执行 2 次 web_search" in policy
+    assert "禁止编造 URL" in policy
 
 
-def test_task_prompt_injects_evidence_section():
-    """有证据包时 prompt 末尾追加证据节与来源（§搜索策略：证据包注入，不塞全量网页）"""
-    import asyncio
-    from services.task_content_service import build_task_content_prompt
-    import sys
-    sys.path.insert(0, ".")
-    from tests.test_task_content import _request  # 复用既有请求工厂
+def test_prepare_search_context_executes_tool_and_keeps_result_for_final_generation(monkeypatch):
+    client = AgentClient(api_key="test-key", base_url="http://llm.local/v1")
+    messages = [{"role": "system", "content": "test"}, {"role": "user", "content": "decide"}]
+    responses = [
+        {"choices": [{"message": {"content": "", "tool_calls": [{
+            "id": "call-search",
+            "type": "function",
+            "function": {"name": "web_search", "arguments": '{"query":"React 19"}'},
+        }]}}]},
+        {"choices": [{"message": {"content": "SEARCH_COMPLETE"}}]},
+    ]
+    observed_tools = []
+    tool_calls = []
+
+    def fake_call(messages, tools, model, max_tokens, reasoning_split, max_retries=3):
+        observed_tools.append(tools)
+        if observed_tools[-1] and messages[-1]["role"] == "user":
+            return responses[0]
+        assert messages[-1]["role"] == "tool"
+        return responses[1]
+
+    def fake_web_search(query: str):
+        tool_calls.append(query)
+        return "证据ID: ev-01 | React 19 文档"
+
+    monkeypatch.setattr(client, "_call_llm", fake_call)
+    client.prepare_search_context(
+        messages=messages,
+        tools=SEARCH_TOOLS,
+        tool_functions={"web_search": fake_web_search},
+        max_iterations=2,
+        max_searches=2,
+    )
+
+    assert tool_calls == ["React 19"]
+    assert messages[-1] == {
+        "role": "tool",
+        "tool_call_id": "call-search",
+        "content": "证据ID: ev-01 | React 19 文档",
+    }
+    assert observed_tools[0] == SEARCH_TOOLS
+
+
+def test_task_prompt_injects_existing_evidence_and_search_policy():
+    from tests.test_task_content import _request
 
     request = _request()
     prompt_with = build_task_content_prompt(
         request,
         evidence="- Next.js 15 发布说明\n  来源: https://example.com/next15",
         sources=[{"title": "Next.js 15", "url": "https://example.com/next15"}],
+        allow_search=True,
     )
     prompt_without = build_task_content_prompt(request)
 
     assert "搜索证据包" in prompt_with
     assert "https://example.com/next15" in prompt_with
+    assert "联网搜索决策" in prompt_with
     assert "搜索证据包" not in prompt_without
-
-
-def test_build_evidence_pack_preserves_kind_use_for_and_primary():
-    fake_results = [
-        {"title": "React official", "url": "https://react.dev/reference/react", "body": "official", "authorityScore": 100, "preferred": True, "isPrimary": True},
-        {"title": "Hacker news", "url": "https://news.ycombinator.com/item?id=1", "body": "community", "authorityScore": 55, "kind": "wisdom"},
-    ]
-    with patch("lib.tools.search_tools.search_web_structured", return_value=fake_results):
-        import asyncio
-        pack = asyncio.run(build_evidence_pack("React useActionState"))
-    assert pack is not None
-    assert pack["sources"][0]["isPrimary"] is True
-    assert pack["sources"][0]["useFor"].startswith("官方或高权威")
-    assert pack["sources"][1]["kind"] == "wisdom"
-    assert pack["sources"][1]["useFor"].startswith("社区或经验型")
+    assert "联网搜索决策" not in prompt_without

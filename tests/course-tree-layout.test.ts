@@ -98,7 +98,11 @@ test('parseStreamContent keeps text, quiz, and outline blocks in original order'
     '<outline>',
     '<div slot="direction">Agent 入门路径</div>',
     '<div slot="object">两周内建立完整认知</div>',
-    '<div slot="level">初级</div>',
+    '<div slot="level">中级</div>',
+    '<div slot="confidence">0.74</div>',
+    '<div slot="gaps">可能缺口1：工具调用边界；可能缺口2：多 Agent 协作</div>',
+    '<div slot="exampleDomains">客服自动化；研发协作</div>',
+    '<div slot="personalExampleLimit">1</div>',
     '</outline>',
   ].join(''));
 
@@ -127,7 +131,11 @@ test('parseStreamContent keeps text, quiz, and outline blocks in original order'
   if (blocks[3]?.type === 'outline') {
     assert.equal(blocks[3].learningDirection, 'Agent 入门路径');
     assert.equal(blocks[3].learningGoal, '两周内建立完整认知');
-    assert.equal(blocks[3].estimatedLevel, 'beginner');
+    assert.equal(blocks[3].estimatedLevel, 'intermediate');
+    assert.equal(blocks[3].levelConfidence, 0.74);
+    assert.deepEqual(blocks[3].likelyGaps, ['工具调用边界', '多 Agent 协作']);
+    assert.deepEqual(blocks[3].preferredExampleDomains, ['客服自动化', '研发协作']);
+    assert.equal(blocks[3].personalExampleLimit, 1);
     assert.equal(blocks[3].complete, true);
   }
 });

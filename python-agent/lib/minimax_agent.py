@@ -171,12 +171,16 @@ class AgentClient(MiniMaxClient):
 
     def chat_with_tools(self, messages, tools, tool_functions,
                         model=None, max_tokens=2000,
-                        reasoning_split=True, max_iterations=3) -> dict:
+                        reasoning_split=True, max_iterations=3,
+                        max_searches: int = 3,
+                        max_tool_result_chars: int = 3000) -> dict:
         """同步调用 chat API，自动处理 tool_calls 循环"""
         model = model or self.model
         iteration = 0
+        search_count = 0
         while iteration < max_iterations:
-            response = self._call_llm(messages, tools, model, max_tokens, reasoning_split)
+            effective_tools = tools if search_count < max_searches else None
+            response = self._call_llm(messages, effective_tools, model, max_tokens, reasoning_split)
             choice = response.get("choices", [{}])[0]
             message = choice.get("message", {})
 
@@ -188,12 +192,14 @@ class AgentClient(MiniMaxClient):
             for tc in message.get("tool_calls", []):
                 func_name = tc["function"]["name"]
                 func_args = json.loads(tc["function"]["arguments"])
+                if func_name == "web_search":
+                    search_count += 1
                 result = ""
                 if func_name in tool_functions:
                     try:
                         result = str(tool_functions[func_name](**func_args))
-                        if len(result) > 1500:
-                            result = result[:1500] + "\n...(结果已截断)"
+                        if len(result) > max_tool_result_chars:
+                            result = result[:max_tool_result_chars] + "\n...(结果已截断)"
                     except Exception as e:
                         result = f"工具执行失败: {e}"
                 else:
@@ -203,6 +209,48 @@ class AgentClient(MiniMaxClient):
             iteration += 1
 
         return self._call_llm(messages, [], model, max_tokens, reasoning_split)
+
+    def prepare_search_context(self, messages, tools, tool_functions,
+                               model=None, max_tokens=4000,
+                               reasoning_split=True, max_iterations=2,
+                               max_searches: int = 2,
+                               max_tool_result_chars: int = 3000) -> dict:
+        """让模型先决定并执行补充搜索，返回最后一次决策响应。
+
+        该阶段只准备检索上下文，不生成最终正文。调用方随后应追加新的 user
+        指令并复用同一 messages 做最终生成，使 tool 结果保持在上下文中。
+        """
+        model = model or self.model
+        response: dict[str, Any] = {"choices": [{"message": {"content": ""}}]}
+        iteration = 0
+        search_count = 0
+        while iteration < max_iterations:
+            effective_tools = tools if search_count < max_searches else None
+            response = self._call_llm(messages, effective_tools, model, max_tokens, reasoning_split)
+            choice = response.get("choices", [{}])[0]
+            message = choice.get("message", {})
+            if not self._has_tool_calls(response):
+                return response
+
+            messages.append(self._build_assistant_message(message, reasoning_split))
+            for tc in message.get("tool_calls", []):
+                func_name = tc["function"]["name"]
+                func_args = json.loads(tc["function"]["arguments"])
+                if func_name == "web_search":
+                    search_count += 1
+                result = ""
+                if func_name in tool_functions:
+                    try:
+                        result = str(tool_functions[func_name](**func_args))
+                        if len(result) > max_tool_result_chars:
+                            result = result[:max_tool_result_chars] + "\n...(结果已截断)"
+                    except Exception as e:
+                        result = f"工具执行失败: {e}"
+                else:
+                    result = f"未知工具: {func_name}"
+                messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result})
+            iteration += 1
+        return response
 
     def stream_chat_with_tools(
         self,

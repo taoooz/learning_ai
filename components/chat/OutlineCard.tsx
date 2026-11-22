@@ -25,11 +25,21 @@ const LEVEL_LABELS: Record<string, string> = {
 };
 
 export function OutlineCard({ blueprint, onConfirm, showActions, embedded = false, streaming = false }: OutlineCardProps) {
-  const { estimatedLevel, backgroundSummary, skipBasics } = blueprint.learnerPositioning;
+  const {
+    estimatedLevel,
+    backgroundSummary,
+    skipBasics,
+    likelyGaps,
+    levelConfidence,
+    preferredExampleDomains,
+    personalExampleLimit,
+  } = blueprint.learnerPositioning;
   const hasContent = shouldRenderLearnerPositioningCard({
     estimatedLevel,
     backgroundSummary,
     skipBasics,
+    likelyGaps,
+    preferredExampleDomains,
   });
   const shouldShowLearnerPositioning = hasContent || streaming;
 
@@ -80,6 +90,7 @@ export function OutlineCard({ blueprint, onConfirm, showActions, embedded = fals
                     <span className="text-tertiary">难度：</span>
                     <span className="font-medium">
                       {LEVEL_LABELS[estimatedLevel] ?? estimatedLevel}
+                      {typeof levelConfidence === 'number' ? ` · 把握度 ${Math.round(levelConfidence * 100)}%` : ''}
                     </span>
                   </div>
                   {backgroundSummary && (
@@ -92,6 +103,21 @@ export function OutlineCard({ blueprint, onConfirm, showActions, embedded = fals
                     <div className="space-y-1">
                       <p className="text-xs text-tertiary">已掌握知识</p>
                       <p className="text-[15px] leading-relaxed">{skipBasics.join('、')}</p>
+                    </div>
+                  )}
+                  {likelyGaps && likelyGaps.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-tertiary">可能缺口</p>
+                      <p className="text-[15px] leading-relaxed">{likelyGaps.join('、')}</p>
+                    </div>
+                  )}
+                  {(preferredExampleDomains?.length || typeof personalExampleLimit === 'number') && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-tertiary">例子策略</p>
+                      <p className="text-[15px] leading-relaxed">
+                        {preferredExampleDomains?.length ? `优先 ${preferredExampleDomains.join('、')}` : '优先通用场景'}
+                        {typeof personalExampleLimit === 'number' ? `；每章个人经历最多 ${personalExampleLimit} 次` : ''}
+                      </p>
                     </div>
                   )}
                 </div>

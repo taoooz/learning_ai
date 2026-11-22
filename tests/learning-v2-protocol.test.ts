@@ -395,12 +395,20 @@ test('chapter plan detects task prerequisite cycle', () => {
   assert.ok(result.errors.some((e) => e.code === PLAN_VALIDATION_CODES.PREREQ_CYCLE));
 });
 
-test('chapter plan warns on out-of-range task count and single teaching pattern', () => {
+test('chapter plan warns on out-of-range task count', () => {
+  const oneTask = makePlan({
+    tasks: [makeTask({ taskId: 'a', order: 0 })],
+  });
+  const result = validateChapterPlan(oneTask);
+  assert.ok(result.warnings.some((w) => w.code === PLAN_VALIDATION_CODES.TASK_COUNT_OUT_OF_RANGE));
+});
+
+test('two tasks are allowed but same teaching pattern still warns', () => {
   const twoSamePattern = makePlan({
     tasks: [makeTask({ taskId: 'a', order: 0 }), makeTask({ taskId: 'b', order: 1 })],
   });
   const result = validateChapterPlan(twoSamePattern);
-  assert.ok(result.warnings.some((w) => w.code === PLAN_VALIDATION_CODES.TASK_COUNT_OUT_OF_RANGE));
+  assert.ok(!result.warnings.some((w) => w.code === PLAN_VALIDATION_CODES.TASK_COUNT_OUT_OF_RANGE));
   assert.ok(result.warnings.some((w) => w.code === PLAN_VALIDATION_CODES.SINGLE_TEACHING_PATTERN));
 });
 

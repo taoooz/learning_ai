@@ -34,6 +34,11 @@ export interface TocOutlineInput {
   learnerPositioning: {
     estimatedLevel: string;
     skipBasics?: string[];
+    likelyGaps?: string[];
+    levelConfidence?: number;
+    backgroundSummary?: string;
+    preferredExampleDomains?: string[];
+    personalExampleLimit?: number;
   };
 }
 
@@ -102,6 +107,12 @@ export function buildCourseMissionFromOutline(
   };
 }
 
+/** 从 TOC 的章节交付描述中提取可验证能力；缺失时返回空串。 */
+export function extractChapterDeliverable(description: string): string {
+  const match = (description ?? '').match(/本章交付(?:是|为)?[：:]\s*([\s\S]+)$/);
+  return match?.[1]?.trim() ?? '';
+}
+
 export function mapTocToBlueprint(input: MapTocToBlueprintInput): CourseBlueprint {
   const { courseId, courseName, description, nodes, outline } = input;
   const now = input.now ?? Date.now();
@@ -110,10 +121,11 @@ export function mapTocToBlueprint(input: MapTocToBlueprintInput): CourseBlueprin
 
   const courseObjectives: LearningObjective[] = nodes.map((node, i) => {
     const index = node.index ?? i + 1;
+    const deliverable = extractChapterDeliverable(node.description);
     return {
       objectiveId: `obj-${index}`,
       description: node.description.trim() || node.title,
-      observableOutcome: `能用自己的话说明「${node.title}」的核心要点，并完成对应练习`,
+      observableOutcome: deliverable || `能在真实场景中运用「${node.title}」完成可观察任务`,
       importance: 'core',
       evidenceRequirement: 'exposure',
       conceptKeys: [],
@@ -122,6 +134,7 @@ export function mapTocToBlueprint(input: MapTocToBlueprintInput): CourseBlueprin
 
   const chapters: ChapterDefinition[] = nodes.map((node, i) => {
     const index = node.index ?? i + 1;
+    const deliverable = extractChapterDeliverable(node.description);
     return {
       chapterId: `ch-${index}`,
       index,
@@ -129,7 +142,10 @@ export function mapTocToBlueprint(input: MapTocToBlueprintInput): CourseBlueprin
       objectiveIds: [`obj-${index}`],
       prerequisites: i > 0 ? [`ch-${nodes[i - 1].index ?? i}`] : [],
       teachingGoal: node.description.trim() || node.title,
-      completionCriteria: [`能说明「${node.title}」的核心要点`, '完成本章全部学习任务'],
+      completionCriteria: [
+        `能完成本章交付：${deliverable || node.title}`,
+        '完成本章全部学习任务',
+      ],
     };
   });
 
@@ -140,9 +156,13 @@ export function mapTocToBlueprint(input: MapTocToBlueprintInput): CourseBlueprin
     intentType: inferIntentType(goalText),
     learnerStartingPoint: {
       estimatedLevel: normalizeEstimatedLevel(outline.learnerPositioning.estimatedLevel),
-      confirmedKnowledge: [],
-      likelyGaps: [],
+      confirmedKnowledge: (outline.learnerPositioning.skipBasics ?? []).map((item) => item.trim()).filter(Boolean),
+      likelyGaps: (outline.learnerPositioning.likelyGaps ?? []).map((item) => item.trim()).filter(Boolean),
       excludedTopics: outline.learnerPositioning.skipBasics ?? [],
+      levelConfidence: outline.learnerPositioning.levelConfidence,
+      backgroundSummary: outline.learnerPositioning.backgroundSummary?.trim() || undefined,
+      preferredExampleDomains: outline.learnerPositioning.preferredExampleDomains,
+      personalExampleLimit: outline.learnerPositioning.personalExampleLimit ?? 1,
     },
     courseObjectives,
     mission,

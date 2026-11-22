@@ -36,12 +36,20 @@ class TaskStreamLearnerStartingPoint(BaseModel):
     estimatedLevel: str
     confirmedKnowledge: list[str] = Field(default_factory=list)
     likelyGaps: list[str] = Field(default_factory=list)
+    excludedTopics: list[str] = Field(default_factory=list)
+    levelConfidence: Optional[float] = None
+    backgroundSummary: Optional[str] = None
+    preferredExampleDomains: list[str] = Field(default_factory=list)
+    personalExampleLimit: int = 1
 
 
 class PreviousTaskInfo(BaseModel):
     """本章已完成任务摘要（防内容重复用）"""
     title: str
     takeaway: Optional[str] = None
+    teachingPattern: Optional[str] = None
+    conceptKeys: list[str] = Field(default_factory=list)
+    exampleScenarios: list[str] = Field(default_factory=list)
 
 
 class TaskStreamRequest(BaseModel):

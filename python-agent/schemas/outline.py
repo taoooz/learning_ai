@@ -8,6 +8,10 @@ class LearnerPositioning(BaseModel):
     difficultySummary: str
     backgroundSummary: str
     skipBasics: list[str] = Field(default_factory=list)
+    likelyGaps: list[str] = Field(default_factory=list)
+    levelConfidence: Optional[float] = None
+    preferredExampleDomains: list[str] = Field(default_factory=list)
+    personalExampleLimit: int = 1
     whyThisCourseFits: str
 
 

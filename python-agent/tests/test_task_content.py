@@ -4,7 +4,12 @@ import httpx
 import pytest
 
 from schemas.learning_v2 import TaskStreamRequest
-from services.task_content_service import build_task_content_prompt, extract_takeaway, stream_task_events
+from services.task_content_service import (
+    build_task_content_prompt,
+    build_task_search_decision_prompt,
+    extract_takeaway,
+    stream_task_events,
+)
 from services.content_stream_parser import ContentStreamParser, parse_content_blocks
 
 
@@ -42,14 +47,62 @@ class FakeStreamClient:
         self.deltas = list(deltas)
         self.error = error
         self.error_after = error_after
+        self.final_messages = None
 
-    async def stream_chat(self, messages, model=None, max_tokens=1500, include_usage=False):
+    async def stream_chat(
+        self,
+        messages,
+        model=None,
+        max_tokens=1500,
+        include_usage=False,
+        reasoning_effort=None,
+    ):
+        self.final_messages = messages
+        self.reasoning_effort = reasoning_effort
         if self.error is not None and self.error_after is None:
             raise self.error
         for index, delta in enumerate(self.deltas):
             if self.error_after is not None and index == self.error_after:
                 raise self.error
             yield {"choices": [{"delta": {"content": delta}}]}
+
+
+class FakeSearchDecisionClient(FakeStreamClient):
+    """模拟任务正文前的模型自主搜索决策阶段。"""
+
+    def __init__(self, deltas=(), search_query: str | None = None):
+        super().__init__(deltas=deltas)
+        self.search_query = search_query
+        self.tools = None
+        self.decision_called = False
+        self.messages = None
+        self.decision_kwargs = None
+
+    def prepare_search_context(self, messages, tools, tool_functions, **kwargs):
+        self.decision_called = True
+        self.tools = tools
+        self.messages = messages
+        self.decision_kwargs = kwargs
+        if self.search_query:
+            result = tool_functions["web_search"](self.search_query)
+            messages.extend([
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [{
+                        "id": "call-search",
+                        "type": "function",
+                        "function": {"name": "web_search", "arguments": '{"query":"test"}'},
+                    }],
+                },
+                {"role": "tool", "tool_call_id": "call-search", "content": result},
+            ])
+        return {"choices": [{"message": {"content": "SEARCH_COMPLETE" if self.search_query else "NO_SEARCH"}}]}
+
+
+class FailingSearchDecisionClient(FakeStreamClient):
+    def prepare_search_context(self, messages, tools, tool_functions, **kwargs):
+        raise RuntimeError("搜索判断服务不可用")
 
 
 async def _collect(gen):
@@ -94,7 +147,7 @@ def test_full_event_sequence_single_markdown():
     assert task["boundaryPrompt"]["takeaway"] == "好指令一次只说一件事。"
     assert task["boundaryPrompt"]["nextHint"] == "接下来：对比好坏指令"
     meta = task["generationMeta"]
-    assert meta["promptVersion"] == "task-content-v3"
+    assert meta["promptVersion"] == "task-content-v4"
     assert meta["modelVersion"] == "fake-model"
     assert meta["degraded"] is False
 
@@ -400,78 +453,110 @@ def test_parser_diagram_empty_source():
     assert all(b["type"] != "diagram" for b in blocks)
 
 
-def test_task_level_search_uses_chapter_title_when_chapter_evidence_is_insufficient():
-    """章节证据不足且任务需要外部证据时：任务级补搜携带章节标题联合查询。"""
+def test_agent_model_decides_task_search_and_emits_sources(tmp_path, monkeypatch):
+    """任务正文阶段由模型调用 web_search，搜索结果持久化并回传 sourceRefs。"""
     from unittest.mock import patch
-    import services.task_content_service as service
+    import services.search_evidence as search_evidence
 
-    captured = {}
-
-    async def fake_build(course_topic, task_title, task_goal, chapter_title=""):
-        captured.update({
-            "courseTopic": course_topic,
-            "taskTitle": task_title,
-            "taskGoal": task_goal,
-            "chapterTitle": chapter_title,
-        })
-        return {
-            "evidence": "- React useActionState\n  官方 API\n  来源: https://react.dev/reference/react/useactionstate",
-            "sources": [{"title": "React useActionState", "url": "https://react.dev/reference/react/useactionstate"}],
-        }
-
-    fake_pack = {
-        "sources": [{
-            "title": "React 19 release notes",
-            "url": "https://react.dev/blog/react-19",
-            "summary": "React 19 changes",
-            "authorityScore": 90,
-        }]
-    }
+    monkeypatch.setenv("EVIDENCE_STORE_DIR", str(tmp_path / "evidence"))
+    results = [{
+        "title": "React useActionState",
+        "url": "https://react.dev/reference/react/useactionstate",
+        "body": "React 19 form action state API documentation.",
+        "authorityScore": 95,
+        "kind": "knowledge",
+        "preferred": True,
+        "isPrimary": True,
+    }]
 
     request = _request()
     request.chapter.title = "表单与状态"
+    client = FakeSearchDecisionClient(
+        deltas=["正文。\n\n> 要点。"],
+        search_query="React 19 useActionState 官方文档",
+    )
 
-    with patch.object(service, "get_chapter_evidence", return_value=fake_pack), \
-         patch.object(service, "task_evidence_coverage", return_value={"covered": False, "matchedTerms": 0}), \
-         patch.object(service, "needs_search", return_value=True), \
-         patch.object(service, "build_evidence_pack_with_context", side_effect=fake_build):
-        events = _events(request, FakeStreamClient(deltas=["正文。\n\n> 要点。"]))
+    with patch.object(search_evidence, "search_web_structured", return_value=results):
+        events = _events(request, client)
 
-    assert captured == {
-        "courseTopic": "提示词工程实践",
-        "taskTitle": "指令为什么需要说清楚",
-        "taskGoal": "理解指令三要素",
-        "chapterTitle": "表单与状态",
-    }
+    assert client.decision_called is True
+    assert {
+        tool.get("function", {}).get("name")
+        for tool in (client.tools or [])
+    } == {"web_search", "read_url"}
+    assert "检索决策器" in client.messages[0]["content"]
+    assert request.task.title in client.messages[0]["content"]
+    assert "<output_format>" not in client.messages[0]["content"]
+    assert client.decision_kwargs["max_tokens"] == 1200
+    assert client.decision_kwargs["max_iterations"] == 1
+    assert client.decision_kwargs["max_searches"] == 1
     sources_event = next(event for event in events if event["type"] == "sources_ready")
-    assert sources_event["payload"]["sources"][0]["url"] == "https://react.dev/reference/react/useactionstate"
+    assert sources_event["payload"]["sources"][0]["url"] == results[0]["url"]
+    task = next(event for event in events if event["type"] == "task_completed")["payload"]["task"]
+    assert task["sourceRefs"][0]["url"] == results[0]["url"]
 
 
-def test_stable_task_reuses_chapter_evidence_without_extra_search():
-    """章节证据弱覆盖但任务本身无需搜索：仍复用章节证据，不额外请求。"""
-    from unittest.mock import patch
-    import services.task_content_service as service
+def test_agent_model_reuses_cached_chapter_evidence_without_search(tmp_path, monkeypatch):
+    """已有证据覆盖当前任务时，直接进入正文，跳过额外的检索模型调用。"""
+    from services.evidence_store import merge_chapter_evidence_results
 
-    fake_pack = {
-        "sources": [{
-            "title": "React 19 release notes",
-            "url": "https://react.dev/blog/react-19",
-            "summary": "React 19 changes",
-            "authorityScore": 90,
-        }]
+    monkeypatch.setenv("EVIDENCE_STORE_DIR", str(tmp_path / "evidence"))
+    cached_result = {
+        "title": "指令三要素",
+        "url": "https://example.com/instruction-elements",
+        "body": "解释指令目的、上下文和输出格式，帮助学习者把要求说清楚。",
+        "authorityScore": 90,
+        "kind": "knowledge",
+        "preferred": True,
+        "isPrimary": True,
     }
-
-    async def fail_build(*args, **kwargs):
-        raise AssertionError("稳定任务不应触发补搜")
+    merge_chapter_evidence_results(
+        "course-1",
+        "ch-1",
+        "提示词工程实践",
+        "指令写作基础",
+        [{"kind": "agent", "query": "previous query", "preferredDomains": []}],
+        [cached_result],
+    )
 
     request = _request()
-    with patch.object(service, "get_chapter_evidence", return_value=fake_pack), \
-         patch.object(service, "task_evidence_coverage", return_value={"covered": False, "matchedTerms": 0}), \
-         patch.object(service, "needs_search", return_value=False), \
-         patch.object(service, "build_evidence_pack_with_context", side_effect=fail_build):
-        events = _events(request, FakeStreamClient(deltas=["正文。\n\n> 要点。"]))
+    client = FakeSearchDecisionClient(deltas=["正文。\n\n> 要点。"], search_query=None)
+    events = _events(request, client)
 
-    assert any(event["type"] == "sources_ready" for event in events)
+    assert client.decision_called is False
+    assert [event["type"] for event in events].count("sources_ready") == 1
+    sources_event = next(event for event in events if event["type"] == "sources_ready")
+    assert sources_event["payload"]["sources"][0]["url"] == cached_result["url"]
+    assert client.final_messages[0]["content"].startswith("你是课程内容检索决策器") is False
+    assert "<output_format>" in client.final_messages[0]["content"]
+    assert client.reasoning_effort == "none"
+
+
+def test_search_decision_failure_does_not_block_task_generation():
+    """检索判断阶段异常时降级为直接生成正文。"""
+    client = FailingSearchDecisionClient(deltas=["正文。\n\n> 要点。"])
+    events = _events(_request(), client)
+
+    assert [event["type"] for event in events].count("task_completed") == 1
+    assert client.final_messages[0]["content"].startswith("你是课程内容检索决策器") is False
+    assert "<output_format>" in client.final_messages[0]["content"]
+    assert client.reasoning_effort == "none"
+
+
+def test_compact_search_decision_prompt_keeps_task_context_without_recipe():
+    request = _request()
+    prompt = build_task_search_decision_prompt(
+        request,
+        evidence="- 指令三要素\n  来源: https://example.com/instruction-elements",
+        sources=[{"title": "指令三要素", "url": "https://example.com/instruction-elements"}],
+    )
+
+    assert "检索决策器" in prompt
+    assert request.task.title in prompt
+    assert request.task.taskGoal in prompt
+    assert "https://example.com/instruction-elements" in prompt
+    assert "最多执行 1 次 web_search" in prompt
+    assert "<output_format>" not in prompt
 
 
 def test_parser_extracts_block_evidence_refs_without_polluting_content():
@@ -503,6 +588,35 @@ def test_task_content_prompt_injects_course_mission():
     assert "前端性能优化" in prompt
     assert "能配置缓存策略" in prompt
     assert "后端存储" in prompt
+
+
+def test_task_content_prompt_includes_concept_and_example_ledger():
+    request = _request(
+        previousTasks=[{
+            "title": "推荐链路总览",
+            "takeaway": "推荐由召回、排序、重排组成",
+            "teachingPattern": "explain",
+            "conceptKeys": ["推荐链路", "召回", "排序"],
+            "exampleScenarios": ["电商首页推荐位；内容平台信息流"],
+        }],
+        learnerStartingPoint={
+            "estimatedLevel": "intermediate",
+            "confirmedKnowledge": ["推荐系统基本概念"],
+            "likelyGaps": ["召回与排序边界"],
+            "excludedTopics": ["推荐系统基本概念"],
+            "levelConfidence": 0.72,
+            "backgroundSummary": "做过内容运营，参与过推荐位配置",
+            "preferredExampleDomains": ["电商推荐", "内容平台"],
+            "personalExampleLimit": 1,
+        },
+    )
+    prompt = build_task_content_prompt(request, allow_search=True)
+    assert "已掌握且不要再从零讲" in prompt
+    assert "例子策略：优先 电商推荐、内容平台" in prompt
+    assert "已用例子场景：电商首页推荐位；内容平台信息流" in prompt
+    assert "不是硬模板" in prompt
+    assert "可以省略" in prompt
+    assert "不得跳过任何块" not in prompt
 
 
 def test_task_content_prompt_injects_teaching_state():

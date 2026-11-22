@@ -209,6 +209,10 @@ export function RichStreamingMessage({
                             estimatedLevel: block.estimatedLevel as 'novice' | 'beginner' | 'intermediate' | 'advanced',
                             backgroundSummary: block.backgroundSummary || '',
                             skipBasics: block.skipBasics || [],
+                            likelyGaps: block.likelyGaps || [],
+                            levelConfidence: block.levelConfidence,
+                            preferredExampleDomains: block.preferredExampleDomains || [],
+                            personalExampleLimit: block.personalExampleLimit,
                           },
                         }}
                         onConfirm={() => onOutlineConfirm?.()}

@@ -70,6 +70,27 @@ def normalize_level(level: str) -> str:
     return normalized if normalized in _VALID_LEVELS else "beginner"
 
 
+def needs_level_calibration(planning_memory: dict | None = None, user_profile: dict | None = None) -> bool:
+    """判断是否必须先用一个校准问题确认起点，避免把可迁移背景当成零基础。"""
+    memory = planning_memory or {}
+    learner = memory.get("learnerSnapshot") or {}
+    try:
+        confidence = float(learner.get("confidence", 0.35))
+    except (TypeError, ValueError):
+        confidence = 0.35
+    level = str(learner.get("estimatedLevel") or "").lower()
+    transferable_background = memory.get("transferableBackground") or []
+    insights = (user_profile or {}).get("insights") or {}
+    profile_background = (
+        insights.get("workSummary") or []
+    ) + (insights.get("analogyExperiences") or [])
+    has_background = bool(transferable_background or profile_background)
+
+    if confidence < 0.55:
+        return True
+    return has_background and level in {"novice", "beginner"}
+
+
 def _format_user_profile(user_profile: dict) -> str:
     """将用户画像 JSON 格式化为可读文本"""
     sections = []
@@ -194,7 +215,7 @@ def _format_planning_memory(planning_memory: dict) -> str:
     return '\n\n'.join(sections) if sections else ''
 
 
-def build_initial_prompt(topic: str, user_profile: dict, planning_memory: dict) -> str:
+def build_initial_prompt(topic: str, user_profile: dict, planning_memory: dict, needs_calibration: bool = False) -> str:
     """构建 system prompt（角色 + 指令 + 用户数据 + 格式约束）"""
     # 画像和 Memory 都可能包含用户或模型生成文本，统一按不可信数据注入。
     profile_section = wrap_untrusted_context("user_profile", user_profile) if user_profile else '暂无'
@@ -207,12 +228,20 @@ def build_initial_prompt(topic: str, user_profile: dict, planning_memory: dict) 
     from datetime import date
     today = date.today().isoformat()
 
-    return build_prompt("outline",
+    prompt = build_prompt("outline",
         today=today,
         topic=topic,
         profile_section=profile_section,
         memory_section=memory_section,
     )
+    if needs_calibration:
+        prompt += (
+            "\n\n## 强制校准状态\n"
+            "当前画像存在可迁移背景，但尚不足以确认该主题的实际掌握边界。"
+            "请先提出 1 个高信息量的单选题，确认用户实际做过什么或能独立完成什么；"
+            "收到回答后再输出学习计划，不要先按零基础生成。"
+        )
+    return prompt
 
 
 async def stream_llm_and_parse(messages: list[dict] | str, max_tokens: int = 1000):
@@ -285,6 +314,30 @@ def parse_content_blocks(content: str) -> dict:
         level_match = re.search(r'<div\s+slot="level">(.*?)</div>', outline_content, re.DOTALL)
         background_match = re.search(r'<div\s+slot="background">(.*?)</div>', outline_content, re.DOTALL)
         knowledge_match = re.search(r'<div\s+slot="knowledge">(.*?)</div>', outline_content, re.DOTALL)
+        confidence_match = re.search(r'<div\s+slot="confidence">(.*?)</div>', outline_content, re.DOTALL)
+        gaps_match = re.search(r'<div\s+slot="gaps">(.*?)</div>', outline_content, re.DOTALL)
+        example_domains_match = re.search(r'<div\s+slot="exampleDomains">(.*?)</div>', outline_content, re.DOTALL)
+        example_limit_match = re.search(r'<div\s+slot="personalExampleLimit">(.*?)</div>', outline_content, re.DOTALL)
+
+        confidence = None
+        if confidence_match:
+            try:
+                confidence = max(0.0, min(1.0, float(confidence_match.group(1).strip())))
+            except ValueError:
+                confidence = None
+        example_limit = 1
+        if example_limit_match:
+            try:
+                example_limit = max(0, min(3, int(example_limit_match.group(1).strip())))
+            except ValueError:
+                example_limit = 1
+
+        def _split_slot(value: str) -> list[str]:
+            return [
+                re.sub(r'^(?:已掌握|可能缺口)\s*\d+\s*[:：]\s*', '', item.strip())
+                for item in value.split('；')
+                if item.strip()
+            ]
 
         result["outline"] = {
             "learningDirection": direction_match.group(1).strip() if direction_match else "",
@@ -292,7 +345,11 @@ def parse_content_blocks(content: str) -> dict:
             "learningGoal": object_match.group(1).strip() if object_match else "",
             "estimatedLevel": normalize_level(level_match.group(1) if level_match else ""),
             "backgroundSummary": background_match.group(1).strip() if background_match else None,
-            "skipBasics": knowledge_match.group(1).strip().split('；') if knowledge_match else None,
+            "skipBasics": _split_slot(knowledge_match.group(1)) if knowledge_match else [],
+            "likelyGaps": _split_slot(gaps_match.group(1)) if gaps_match else [],
+            "levelConfidence": confidence,
+            "preferredExampleDomains": _split_slot(example_domains_match.group(1)) if example_domains_match else [],
+            "personalExampleLimit": example_limit,
         }
     
     return result

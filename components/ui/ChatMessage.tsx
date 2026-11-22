@@ -36,7 +36,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
             </div>
             <div className="prose prose-sm max-w-none text-[15px] leading-7 text-primary prose-p:my-0 prose-p:leading-7 prose-headings:mb-2 prose-headings:mt-4 prose-headings:font-semibold prose-headings:text-primary prose-strong:font-semibold prose-strong:text-primary prose-ul:my-3 prose-ul:pl-5 prose-ol:my-3 prose-ol:pl-5 prose-li:my-1 prose-li:text-primary prose-code:rounded prose-code:bg-black/[0.04] prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[0.92em] prose-code:text-primary prose-pre:bg-[#F7F3EE] prose-pre:text-primary prose-blockquote:border-l-[3px] prose-blockquote:border-[#C6D8E4] prose-blockquote:bg-[#F4F8FB] prose-blockquote:px-3 prose-blockquote:py-2 prose-blockquote:text-primary prose-table:my-3 prose-thead:bg-black/[0.03] prose-th:border prose-th:border-black/6 prose-th:px-2 prose-th:py-2 prose-th:text-left prose-th:font-medium prose-th:text-primary prose-td:border prose-td:border-black/6 prose-td:px-2 prose-td:py-2 prose-td:text-primary">
               <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
+                remarkPlugins={[[remarkGfm, { singleTilde: false }]]}
                 components={{
                   table: ({ children }) => (
                     <div className="my-3 overflow-x-auto">

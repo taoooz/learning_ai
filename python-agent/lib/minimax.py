@@ -12,11 +12,11 @@ class IdleStreamError(Exception):
 from typing import AsyncIterator, Iterator
 
 DEFAULT_LLM_API_BASE = "http://muses-openapi-prod.weizhipin.com/v1"
-DEFAULT_LLM_MODEL = "zhipu/glm-5.3-flash"
+DEFAULT_LLM_MODEL = "ark/deepseek-v4-1-flash"
 
 
 class MiniMaxClient:
-    """LLM API 客户端（OpenAI 兼容格式，当前接入 zhipu/glm-5.3-flash）"""
+    """LLM API 客户端（OpenAI 兼容格式，当前接入 ark/deepseek-v4-1-flash）"""
 
     def __init__(self, api_key: str | None = None, base_url: str | None = None):
         self.api_key = api_key or os.getenv("LLM_API_KEY", "")
@@ -86,6 +86,7 @@ class MiniMaxClient:
         model: str | None = None,
         max_tokens: int = 1500,
         include_usage: bool = False,
+        reasoning_effort: str | None = None,
     ) -> AsyncIterator[dict]:
         """流式调用 chat API
 
@@ -102,6 +103,8 @@ class MiniMaxClient:
         }
         if include_usage:
             body["stream_options"] = {"include_usage": True}
+        if reasoning_effort:
+            body["reasoning_effort"] = reasoning_effort
         async with httpx.AsyncClient() as client:
             async with client.stream(
                 "POST",

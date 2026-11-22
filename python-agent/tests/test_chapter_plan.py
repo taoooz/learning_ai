@@ -4,7 +4,7 @@ import json
 import pytest
 
 from schemas.learning_v2 import ChapterPlanRequest, TaskStreamRequest
-from services.chapter_plan_service import generate_chapter_plan
+from services.chapter_plan_service import generate_chapter_plan, validate_plan_tasks
 from services.learning_v2_errors import (
     BlueprintDataError,
     ChapterNotFoundError,
@@ -107,6 +107,27 @@ class FakeChatClient:
 
     async def chat(self, messages: list[dict], model=None, max_tokens=1500) -> dict:
         self.calls.append(messages)
+        if not self.responses:
+            assert "课程计划审查员" in messages[0]["content"]
+            return {"choices": [{"message": {"content": json.dumps({"passed": True, "issues": [], "repairNotes": ""}, ensure_ascii=False)}}]}
+        return self.responses.pop(0)
+
+
+class FakeToolChatClient(FakeChatClient):
+    """模拟支持工具调用的 AgentClient。"""
+
+    def __init__(self, tasks: list[dict], query: str):
+        super().__init__([tasks])
+        self.query = query
+        self.tool_functions = None
+        self.tools = None
+
+    def chat_with_tools(self, messages, tools, tool_functions, **kwargs):
+        self.calls.append(messages)
+        self.tools = tools
+        self.tool_functions = tool_functions
+        result = tool_functions["web_search"](self.query)
+        assert "证据ID" in result
         return self.responses.pop(0)
 
 
@@ -124,7 +145,7 @@ def test_generate_plan_success_fills_fields():
     assert plan["createdAt"] == plan["updatedAt"]
 
     meta = plan["generationMeta"]
-    assert meta["promptVersion"] == "chapter-plan-v1"
+    assert meta["promptVersion"] == "chapter-plan-v3"
     assert meta["modelVersion"] == "fake-model"
     assert meta["degraded"] is False
     assert isinstance(meta["generatedAt"], int)
@@ -140,7 +161,7 @@ def test_generate_plan_success_fills_fields():
     assert tasks[0]["prerequisiteTaskIds"] == []
     assert tasks[1]["prerequisiteTaskIds"] == ["t1"]
     assert tasks[2]["prerequisiteTaskIds"] == ["t2"]
-    assert len(client.calls) == 1
+    assert len(client.calls) == 2  # 一次规划 + 一次质量审查
 
 
 def test_task_id_filled_from_order():
@@ -149,6 +170,36 @@ def test_task_id_filled_from_order():
     client = FakeChatClient([raw])
     plan = asyncio.run(generate_chapter_plan(_plan_request(), client=client))
     assert [t["taskId"] for t in plan["tasks"]] == ["t1", "t2", "t3"]
+
+
+def test_agent_model_decides_search_and_persists_chapter_evidence(tmp_path, monkeypatch):
+    """章节计划通过模型工具调用补搜，搜索结果合并进 EvidencePack。"""
+    from unittest.mock import patch
+    from services.evidence_store import get_chapter_evidence
+    import services.search_evidence as search_evidence
+
+    monkeypatch.setenv("EVIDENCE_STORE_DIR", str(tmp_path / "evidence"))
+    client = FakeToolChatClient(_valid_tasks(), "React 19 表单状态 官方文档")
+    results = [{
+        "title": "React useActionState",
+        "url": "https://react.dev/reference/react/useactionstate",
+        "body": "React 19 form action state API documentation.",
+        "authorityScore": 95,
+        "kind": "knowledge",
+        "preferred": True,
+        "isPrimary": True,
+    }]
+    with patch.object(search_evidence, "search_web_structured", return_value=results):
+        plan = asyncio.run(generate_chapter_plan(_plan_request(), client=client))
+
+    assert {
+        tool.get("function", {}).get("name")
+        for tool in (client.tools or [])
+    } == {"web_search", "read_url"}
+    assert "联网搜索决策" in client.calls[0][0]["content"]
+    pack = get_chapter_evidence("course-1", "ch-1")
+    assert pack and pack["sources"][0]["url"] == results[0]["url"]
+    assert plan["tasks"]
 
 
 def test_invalid_prereq_falls_back_to_linear():
@@ -167,7 +218,7 @@ def test_retry_once_then_success():
     client = FakeChatClient([bad, _valid_tasks()])
 
     plan = asyncio.run(generate_chapter_plan(_plan_request(), client=client))
-    assert len(client.calls) == 2
+    assert len(client.calls) == 3  # 两次规划 + 一次质量审查
     assert [t["taskId"] for t in plan["tasks"]] == ["t1", "t2", "t3"]
 
     # 第二次调用的 user message 应带修复提示
@@ -179,18 +230,18 @@ def test_retry_once_then_success():
 def test_retry_exhausted_raises():
     """重试仍失败时抛 PlanValidationError 并携带错误列表"""
     bad = [{**t, "taskGoal": ""} for t in _valid_tasks()]
-    client = FakeChatClient([bad, bad])
+    client = FakeChatClient([bad, bad, bad])
 
     with pytest.raises(PlanValidationError) as excinfo:
         asyncio.run(generate_chapter_plan(_plan_request(), client=client))
-    assert len(client.calls) == 2
+    assert len(client.calls) == 3
     codes = {e["code"] for e in excinfo.value.errors}
     assert "EMPTY_TASK_FIELD" in codes
 
 
 def test_empty_tasks_errors():
     """任务数为 0 是硬错误，重试两次后抛错"""
-    client = FakeChatClient([[], []])
+    client = FakeChatClient([[], [], []])
     with pytest.raises(PlanValidationError) as excinfo:
         asyncio.run(generate_chapter_plan(_plan_request(), client=client))
     codes = {e["code"] for e in excinfo.value.errors}
@@ -202,7 +253,7 @@ def test_invalid_json_retries_then_raises():
     class BadJsonClient(FakeChatClient):
         def __init__(self):
             super().__init__([])
-            self.responses = [{"choices": [{"message": {"content": "抱歉，我无法生成。"}}]}] * 2
+            self.responses = [{"choices": [{"message": {"content": "抱歉，我无法生成。"}}]}] * 3
 
     with pytest.raises(PlanValidationError) as excinfo:
         asyncio.run(generate_chapter_plan(_plan_request(), client=BadJsonClient()))
@@ -215,7 +266,36 @@ def test_two_tasks_passes_with_warning_only():
     client = FakeChatClient([_valid_tasks()[:2]])
     plan = asyncio.run(generate_chapter_plan(_plan_request(), client=client))
     assert len(plan["tasks"]) == 2
-    assert len(client.calls) == 1
+    assert len(client.calls) == 2
+
+
+def test_semantic_overlap_between_adjacent_tasks_is_blocked():
+    tasks = _valid_tasks()[:2]
+    tasks[1]["conceptKeys"] = tasks[0]["conceptKeys"]
+    tasks[1]["objectiveId"] = tasks[0]["objectiveId"]
+    errors, _ = validate_plan_tasks(tasks, ["obj-1", "obj-2"])
+    assert any(error["code"] == "SEMANTIC_CONCEPT_OVERLAP" for error in errors)
+
+
+def test_plan_quality_review_can_trigger_one_revision():
+    client = FakeChatClient([_valid_tasks(), _valid_tasks()])
+    review_fail = {
+        "choices": [{"message": {"content": json.dumps({
+            "passed": False,
+            "issues": [{
+                "code": "DUPLICATE_CONCEPT",
+                "taskIds": ["t1", "t2"],
+                "message": "前两个任务都在重复推荐系统基础概念",
+            }],
+            "repairNotes": "合并重复概念，并提升后续任务的认知增量。",
+        }, ensure_ascii=False)}}],
+    }
+    client.responses.insert(1, review_fail)
+
+    plan = asyncio.run(generate_chapter_plan(_plan_request(), client=client))
+    assert len(plan["tasks"]) == 3
+    assert "DUPLICATE_CONCEPT" in client.calls[2][1]["content"]
+    assert "合并重复概念" in client.calls[2][1]["content"]
 
 
 def test_chapter_not_found_raises():

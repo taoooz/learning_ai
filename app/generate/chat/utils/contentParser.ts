@@ -7,7 +7,19 @@
 export type ContentBlock =
   | { type: 'text'; content: string }
   | { type: 'question'; id: string; question: string; options: Record<string, string>; complete: boolean }
-  | { type: 'outline'; learningDirection: string; learningGoal: string; estimatedLevel: string; backgroundSummary?: string; skipBasics?: string[]; complete: boolean };
+  | {
+    type: 'outline';
+    learningDirection: string;
+    learningGoal: string;
+    estimatedLevel: string;
+    backgroundSummary?: string;
+    skipBasics?: string[];
+    likelyGaps?: string[];
+    levelConfidence?: number;
+    preferredExampleDomains?: string[];
+    personalExampleLimit?: number;
+    complete: boolean;
+  };
 
 export function extractThinkingAndVisibleContent(content: string): {
   thinkingContent: string;
@@ -88,7 +100,7 @@ function normalizeKnowledge(knowledge: string): string[] | undefined {
 
   const items = knowledge
     .split(/[;；]/)
-    .map((item) => item.replace(/^已掌握\d+[:：]\s*/, '').trim())
+    .map((item) => item.replace(/^(?:已掌握|可能缺口)\d+[:：]\s*/, '').trim())
     .filter(Boolean);
 
   return items.length > 0 ? items : undefined;
@@ -129,6 +141,14 @@ function parsePartialOutline(partialContent: string): ContentBlock {
   );
   const backgroundSummary = extractSlotContent(partialContent, 'background', '<div\\s+slot="knowledge">') || undefined;
   const skipBasics = normalizeKnowledge(extractSlotContent(partialContent, 'knowledge'));
+  const likelyGaps = normalizeKnowledge(extractSlotContent(partialContent, 'gaps', '<div\\s+slot="exampleDomains">'));
+  const levelConfidence = normalizeConfidence(extractSlotContent(partialContent, 'confidence', '<div\\s+slot="background">'));
+  const preferredExampleDomains = normalizeKnowledge(
+    extractSlotContent(partialContent, 'exampleDomains', '<div\\s+slot="personalExampleLimit">'),
+  );
+  const personalExampleLimit = normalizePersonalExampleLimit(
+    extractSlotContent(partialContent, 'personalExampleLimit', '</outline>'),
+  );
 
   return {
     type: 'outline',
@@ -137,8 +157,24 @@ function parsePartialOutline(partialContent: string): ContentBlock {
     estimatedLevel,
     backgroundSummary,
     skipBasics,
+    likelyGaps,
+    levelConfidence,
+    preferredExampleDomains,
+    personalExampleLimit,
     complete: false,
   };
+}
+
+function normalizeConfidence(value: string): number | undefined {
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed)) return undefined;
+  return Math.max(0, Math.min(1, parsed));
+}
+
+function normalizePersonalExampleLimit(value: string): number | undefined {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return undefined;
+  return Math.max(0, Math.min(3, parsed));
 }
 
 function parseCompleteOutline(outlineContent: string): ContentBlock {
@@ -147,6 +183,10 @@ function parseCompleteOutline(outlineContent: string): ContentBlock {
   const levelMatch = outlineContent.match(/<div\s+slot="level">([\s\S]*?)<\/div>/);
   const backgroundMatch = outlineContent.match(/<div\s+slot="background">([\s\S]*?)<\/div>/);
   const knowledgeMatch = outlineContent.match(/<div\s+slot="knowledge">([\s\S]*?)<\/div>/);
+  const confidenceMatch = outlineContent.match(/<div\s+slot="confidence">([\s\S]*?)<\/div>/);
+  const gapsMatch = outlineContent.match(/<div\s+slot="gaps">([\s\S]*?)<\/div>/);
+  const exampleDomainsMatch = outlineContent.match(/<div\s+slot="exampleDomains">([\s\S]*?)<\/div>/);
+  const personalExampleLimitMatch = outlineContent.match(/<div\s+slot="personalExampleLimit">([\s\S]*?)<\/div>/);
 
   return {
     type: 'outline',
@@ -155,6 +195,12 @@ function parseCompleteOutline(outlineContent: string): ContentBlock {
     estimatedLevel: normalizeLevel(levelMatch ? levelMatch[1].trim() : ''),
     backgroundSummary: backgroundMatch ? backgroundMatch[1].trim() : undefined,
     skipBasics: normalizeKnowledge(knowledgeMatch ? knowledgeMatch[1].trim() : ''),
+    likelyGaps: normalizeKnowledge(gapsMatch ? gapsMatch[1].trim() : ''),
+    levelConfidence: normalizeConfidence(confidenceMatch ? confidenceMatch[1].trim() : ''),
+    preferredExampleDomains: normalizeKnowledge(exampleDomainsMatch ? exampleDomainsMatch[1].trim() : ''),
+    personalExampleLimit: normalizePersonalExampleLimit(
+      personalExampleLimitMatch ? personalExampleLimitMatch[1].trim() : '',
+    ),
     complete: true,
   };
 }

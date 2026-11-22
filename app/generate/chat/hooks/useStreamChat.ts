@@ -121,8 +121,12 @@ export function useStreamChat(topic: string) {
 <div slot="direction">${blueprint.learningDirection || ''}</div>
 <div slot="object">${blueprint.learningGoal || ''}</div>
 <div slot="level">${lp.estimatedLevel || 'beginner'}</div>
+${typeof lp.levelConfidence === 'number' ? `<div slot="confidence">${lp.levelConfidence}</div>` : ''}
 ${lp.backgroundSummary ? `<div slot="background">${lp.backgroundSummary}</div>` : ''}
 ${(lp.skipBasics && lp.skipBasics.length > 0) ? `<div slot="knowledge">${lp.skipBasics.map((k: string, i: number) => `已掌握${i + 1}：${k}`).join('；')}</div>` : ''}
+${(lp.likelyGaps && lp.likelyGaps.length > 0) ? `<div slot="gaps">${lp.likelyGaps.map((k: string, i: number) => `可能缺口${i + 1}：${k}`).join('；')}</div>` : ''}
+${(lp.preferredExampleDomains && lp.preferredExampleDomains.length > 0) ? `<div slot="exampleDomains">${lp.preferredExampleDomains.join('；')}</div>` : ''}
+${typeof lp.personalExampleLimit === 'number' ? `<div slot="personalExampleLimit">${lp.personalExampleLimit}</div>` : ''}
 </outline>`;
                 return { ...m, content: existingContent + '\n' + outlineTag, isThinking: false };
               });

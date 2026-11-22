@@ -10,7 +10,15 @@ interface ConfirmationCardProps {
 
 export function ConfirmationCard({ blueprint, onConfirm, onEdit }: ConfirmationCardProps) {
   const { learningDirection, learningGoal, learnerPositioning } = blueprint;
-  const { estimatedLevel, backgroundSummary, skipBasics } = learnerPositioning;
+  const {
+    estimatedLevel,
+    backgroundSummary,
+    skipBasics,
+    likelyGaps,
+    levelConfidence,
+    preferredExampleDomains,
+    personalExampleLimit,
+  } = learnerPositioning;
 
   const levelLabels: Record<string, string> = {
     novice: '初学者',
@@ -39,6 +47,7 @@ export function ConfirmationCard({ blueprint, onConfirm, onEdit }: ConfirmationC
             <span className="text-xs font-medium text-accent uppercase tracking-wide">学习方向</span>
             <span className="text-xs px-2 py-0.5 rounded-full bg-accent/12 text-accent font-medium">
               {levelLabels[estimatedLevel] || estimatedLevel}
+              {typeof levelConfidence === 'number' ? ` · 把握度 ${Math.round(levelConfidence * 100)}%` : ''}
             </span>
           </div>
           <p className="text-[15px] text-primary leading-relaxed pl-4 border-l-2 border-accent/20">
@@ -71,8 +80,23 @@ export function ConfirmationCard({ blueprint, onConfirm, onEdit }: ConfirmationC
             )}
             {skipBasics && skipBasics.length > 0 && (
               <div className="flex items-start gap-2">
-                <span className="text-sm text-tertiary shrink-0 w-16">已跳过</span>
+                <span className="text-sm text-tertiary shrink-0 w-16">已掌握</span>
                 <span className="text-sm text-secondary flex-1">{skipBasics.join('、')}</span>
+              </div>
+            )}
+            {likelyGaps && likelyGaps.length > 0 && (
+              <div className="flex items-start gap-2">
+                <span className="text-sm text-tertiary shrink-0 w-16">可能缺口</span>
+                <span className="text-sm text-secondary flex-1">{likelyGaps.join('、')}</span>
+              </div>
+            )}
+            {(preferredExampleDomains?.length || typeof personalExampleLimit === 'number') && (
+              <div className="flex items-start gap-2">
+                <span className="text-sm text-tertiary shrink-0 w-16">例子策略</span>
+                <span className="text-sm text-secondary flex-1">
+                  {preferredExampleDomains?.length ? `优先 ${preferredExampleDomains.join('、')}` : '优先通用场景'}
+                  {typeof personalExampleLimit === 'number' ? `；每章个人经历最多 ${personalExampleLimit} 次` : ''}
+                </span>
               </div>
             )}
           </div>

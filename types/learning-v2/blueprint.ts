@@ -19,6 +19,14 @@ export interface LearnerStartingPoint {
   confirmedKnowledge: string[];
   likelyGaps: string[];
   excludedTopics: string[];
+  /** 当前水平判断的置信度；低置信度应在生成课程前完成校准。 */
+  levelConfidence?: number;
+  /** 用于解释起点判断的相关背景摘要，不作为每段正文的素材库。 */
+  backgroundSummary?: string;
+  /** 优先使用的例子领域；内容生成仍须保证场景多样。 */
+  preferredExampleDomains?: string[];
+  /** 每章允许引用用户个人经历的软上限。 */
+  personalExampleLimit?: number;
 }
 
 export type ObjectiveImportance = 'core' | 'supporting' | 'optional';

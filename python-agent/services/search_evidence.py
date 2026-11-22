@@ -1,88 +1,110 @@
-"""
-P5 补全：V2 任务内容的搜索证据包（设计文档 §搜索策略）
-- needs_search：时效性关键词启发式判定（稳定基础知识不搜索，控制延迟）
-- build_evidence_pack：web_search → 压缩证据包 + 来源列表
-- 搜索失败/无结果安全降级（返回 None，生成流程照常无证据进行）
-"""
-import asyncio
+"""模型驱动的搜索证据工具：执行工具调用、合并 EvidencePack、生成搜索策略提示。"""
 import os
-import re
 
-# 时效性/事实性信号：命中才搜索（§搜索策略「必须搜索或校验」的启发式）
-_SEARCH_HINT_RE = re.compile(
-    r"版本|最新|新版|价格|收费|定价|发布|更新| deprecated|弃用|对比|选型|"
-    r"20[12]\d|前沿|趋势|生态|工具|库|框架|配置|实践|实战|排查"
-)
+from lib.tools.search_tools import read_url as fetch_url, search_web_structured
+from lib.tools.source_registry import infer_preferred_domains
+from services.evidence_store import get_chapter_evidence, merge_chapter_evidence_results
 
-# 稳定基础概念：明确不搜索（数学/语言基础概念等）
-_SKIP_RE = re.compile(r"^(什么是|认识|初识|理解).{0,12}(概念|本质|原理|思想)$")
+class ChapterEvidenceCollector:
+    """模型工具调用期间的章节证据收集器。
 
-
-def needs_search(task_title: str, task_goal: str) -> bool:
-    """时效性/工具类主题启发式：命中关键词才搜索
-
-    环境变量 DISABLE_WEB_SEARCH=1 可整体关闭（调试/离线用）。
+    模型决定是否调用 web_search；本类只负责执行搜索、格式化工具结果、
+    合并 EvidencePack 和持久化。搜索时机不再由关键词规则控制。
     """
-    if os.getenv("DISABLE_WEB_SEARCH", "").lower() in ("1", "true", "yes"):
-        return False
-    text = f"{task_title} {task_goal}"
-    if _SKIP_RE.search(task_title.strip()):
-        return False
-    return bool(_SEARCH_HINT_RE.search(text))
+
+    def __init__(
+        self,
+        course_id: str,
+        chapter_id: str,
+        course_topic: str,
+        chapter_title: str,
+        *,
+        task_title: str = "",
+        task_goal: str = "",
+    ):
+        self.course_id = course_id
+        self.chapter_id = chapter_id
+        self.course_topic = course_topic
+        self.chapter_title = chapter_title
+        self.task_title = task_title
+        self.task_goal = task_goal
+        self.pack = get_chapter_evidence(course_id, chapter_id)
+
+    @property
+    def tool_functions(self) -> dict:
+        return {"web_search": self.web_search, "read_url": self.read_url}
+
+    def web_search(self, query: str, max_results: int = 4) -> str:
+        """执行模型请求的搜索，并把结构化结果并入章节证据包。"""
+        if not search_tools_enabled():
+            return "联网搜索已禁用，请基于已有信息完成生成。"
+        preferred_domains = infer_preferred_domains(
+            self.course_topic,
+            self.chapter_title,
+            self.task_title,
+            self.task_goal,
+        )
+        # 模型已经写 site: 时不再追加偏好域，避免生成重复 site: 查询。
+        if "site:" in query.lower():
+            preferred_domains = []
+        try:
+            results = search_web_structured(
+                query,
+                max_results=max_results,
+                preferred_domains=preferred_domains,
+            )
+        except Exception as exc:  # noqa: BLE001 搜索失败交还模型自行降级
+            return f"搜索出错：{exc}"
+
+        query_plan = [{
+            "kind": "agent",
+            "query": query,
+            "preferredDomains": preferred_domains,
+        }]
+        self.pack, sources = merge_chapter_evidence_results(
+            self.course_id,
+            self.chapter_id,
+            self.course_topic,
+            self.chapter_title,
+            query_plan,
+            results,
+        )
+        lines = []
+        for source in sources:
+            lines.append(
+                f"- {source.get('title', '')}\n"
+                f"  {source.get('summary', '')}\n"
+                f"  来源: {source.get('url', '')}\n"
+                f"  证据ID: {source.get('evidenceId', '')} | 类型: {source.get('kind', 'knowledge')}"
+            )
+        text = "\n\n".join(lines)
+        return text[:3000] + ("\n...(搜索结果已截断)" if len(text) > 3000 else "")
+
+    def read_url(self, url: str) -> str:
+        """读取模型指定网页；正文由模型消费，不再额外生成证据摘要。"""
+        if not search_tools_enabled():
+            return "联网读取已禁用，请基于已有信息完成生成。"
+        return fetch_url(url)
 
 
-def _do_search(query: str, preferred_domains: list[str] | None = None) -> dict | None:
-    """同步执行免费搜索；优先权威域，失败安全降级。"""
-    from lib.tools.search_tools import search_web_structured
-    try:
-        results = search_web_structured(query, max_results=4, preferred_domains=preferred_domains or [])
-    except Exception as exc:  # noqa: BLE001
-        print(f"[SearchEvidence] 搜索异常: {exc}")
-        return None
-    if not results:
-        return None
-
-    lines = [f"- {item['title']}\n  {item['body']}\n  来源: {item['url']}" for item in results]
-    sources = [
-        {
-            "title": item["title"][:60],
-            "url": item["url"],
-            "evidenceId": item.get("evidenceId"),
-            "kind": item.get("kind") or "knowledge",
-            "useFor": (
-                "官方或高权威资料，用于支撑事实性结论"
-                if item.get("kind") != "wisdom"
-                else "社区或经验型来源，用于理解实践差异，不可作为唯一事实依据"
-            ),
-            "isPrimary": bool(item.get("isPrimary") or item.get("preferred")),
-            "authorityScore": item["authorityScore"],
-        }
-        for item in results
-    ]
-    return {"evidence": "\n\n".join(lines)[:3000], "sources": sources}
+def search_tools_enabled() -> bool:
+    """保留离线/应急关闭搜索的总开关。"""
+    disabled = (
+        os.getenv("DISABLE_WEB_SEARCH", "").lower() in ("1", "true", "yes")
+        or os.getenv("DISABLE_EVIDENCE_SEARCH", "").lower() in ("1", "true", "yes")
+    )
+    return not disabled
 
 
-async def build_evidence_pack(query: str, preferred_domains: list[str] | None = None) -> dict | None:
-    """构建搜索证据包（线程池执行同步搜索）；失败返回 None 安全降级"""
-    try:
-        return await asyncio.to_thread(_do_search, query, preferred_domains)
-    except Exception as exc:  # noqa: BLE001
-        print(f"[SearchEvidence] 证据包构建失败: {exc}")
-        return None
+def format_search_decision_policy(max_searches: int = 2) -> str:
+    """供章节计划/任务正文复用的模型自主搜索规则。"""
+    return f"""
 
-
-async def build_evidence_pack_with_context(
-    course_topic: str,
-    task_title: str,
-    task_goal: str,
-    chapter_title: str = "",
-) -> dict | None:
-    """结合课程/章节/任务上下文推断权威域，再走免费搜索。
-
-    章节标题会参与联合查询：章节证据不足以覆盖任务时，补搜结果更贴近当前教学块。
-    """
-    from lib.tools.source_registry import infer_preferred_domains
-
-    preferred_domains = infer_preferred_domains(course_topic, chapter_title, task_title, task_goal)
-    query = " ".join(part for part in (course_topic, chapter_title, task_title, task_goal) if part)
-    return await build_evidence_pack(query, preferred_domains)
+## 联网搜索决策（由你判断）
+- 你可以使用 web_search 工具搜索互联网，必要时可用 read_url 深入读取单个网页。
+- 先检查上下文中已有的搜索证据；证据足够时直接生成，不要为了“保险”重复搜索。
+- 只有以下情况需要搜索：信息可能已过时、涉及最新版本/价格/政策/产品能力、关键事实不确定，或已有证据无法覆盖当前任务。
+- 稳定基础知识、已有证据能够支撑的解释和例子不要搜索。
+- 最多执行 {max_searches} 次 web_search。搜索后基于已有信息继续完成任务，不要无限追查。
+- 引用外部事实时只能使用工具结果中出现的来源和证据 ID，禁止编造 URL 或依据训练记忆补造来源。
+""".rstrip()

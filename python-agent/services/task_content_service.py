@@ -6,14 +6,18 @@ V2 任务内容流式生成服务
 Content Recipe（切片 1）：按 teachingPattern 配方输出多块内容，
 markdown 段落实时流式；:::type…::: 结构化块在完整接收后一次性产出。
 """
+import asyncio
+import os
 import re
 import time
 from typing import AsyncGenerator
 from uuid import uuid4
 
+from lib.minimax_agent import AgentClient
 from lib.minimax import MiniMaxClient, extract_usage
-from services.search_evidence import build_evidence_pack_with_context, needs_search
-from services.evidence_store import evidence_to_prompt, get_chapter_evidence, task_evidence_coverage
+from lib.tools.search_tools import SEARCH_TOOLS
+from services.search_evidence import ChapterEvidenceCollector, format_search_decision_policy
+from services.evidence_store import evidence_to_prompt, task_evidence_coverage
 from services.content_stream_parser import ContentStreamParser
 from services.style_lint import lint_task_blocks, log_prose_findings
 from prompts import build_prompt
@@ -23,7 +27,7 @@ from services.chapter_plan_service import TEACHING_PATTERNS
 from services.learning_v2_errors import classify_llm_error
 from services.memory_context_v4 import format_memory_context_for_prompt
 
-PROMPT_VERSION = "task-content-v3"
+PROMPT_VERSION = "task-content-v4"
 
 _LEVEL_LABELS = {"beginner": "初级", "intermediate": "中级", "advanced": "高级"}
 
@@ -32,6 +36,10 @@ _SENTENCE_SPLIT_RE = re.compile(r"(?<=[。！？!?])")
 
 # 清理 ::: 定界符行（用于 extract_takeaway）
 _MARKER_LINE_RE = re.compile(r"^:::(\w+)?\s*$", re.MULTILINE)
+
+# 正文是“按已确定结构成稿”的末段任务；默认关闭额外推理以控制首字延迟，
+# 复杂任务或质量回归时可用环境变量恢复 low/medium/high。
+_TASK_CONTENT_REASONING_EFFORT = os.getenv("TASK_CONTENT_REASONING_EFFORT", "none").strip() or None
 
 
 def _format_teaching_state(teaching_state: dict | None) -> str:
@@ -86,6 +94,7 @@ def build_task_content_prompt(
     evidence: str | None = None,
     sources: list[dict] | None = None,
     memory_context: dict | None = None,
+    allow_search: bool = False,
 ) -> str:
     """构建任务内容 system prompt（evidence 非空时注入搜索证据包，§搜索策略）"""
     learner = request.learnerStartingPoint
@@ -94,11 +103,27 @@ def build_task_content_prompt(
         learner_lines.append(f"已确认掌握：{'、'.join(learner.confirmedKnowledge)}")
     if learner.likelyGaps:
         learner_lines.append(f"潜在缺口：{'、'.join(learner.likelyGaps)}")
+    if learner.excludedTopics:
+        learner_lines.append(f"已掌握且不要再从零讲：{'、'.join(learner.excludedTopics)}")
+    if learner.backgroundSummary:
+        learner_lines.append(f"相关背景（仅用于校准和必要时选例）：{learner.backgroundSummary}")
+    if learner.preferredExampleDomains or learner.personalExampleLimit is not None:
+        domains = '、'.join(learner.preferredExampleDomains) if learner.preferredExampleDomains else '通用行业场景'
+        learner_lines.append(
+            f"例子策略：优先 {domains}；个人经历不是默认案例库，每章最多引用 {learner.personalExampleLimit} 次"
+        )
 
     if request.previousTasks:
         previous_lines = []
         for previous in request.previousTasks:
             line = f"- {previous.title}"
+            if previous.teachingPattern:
+                line += f"（模式：{previous.teachingPattern}"
+                if previous.conceptKeys:
+                    line += f"；概念：{'、'.join(previous.conceptKeys)}"
+                line += "）"
+            if previous.exampleScenarios:
+                line += f"；已用例子场景：{'；'.join(previous.exampleScenarios)}"
             if previous.takeaway:
                 line += f"（要点：{previous.takeaway}）"
             previous_lines.append(line)
@@ -116,7 +141,7 @@ def build_task_content_prompt(
             "结构化块若依赖证据，请在块末单独写一行：证据：ev-01, ev-02（只使用证据包中的 ID）。"
         )
     pattern = request.task.teachingPattern
-    return build_prompt(
+    prompt = build_prompt(
         "task_content",
         course_topic=request.courseTopic,
         chapter_title=request.chapter.title,
@@ -129,6 +154,34 @@ def build_task_content_prompt(
         previous_section=previous_section,
         content_recipe=get_recipe(pattern),
         ) + _format_course_mission(request.courseMission) + _format_teaching_state(request.teachingState) + format_memory_context_for_prompt(memory_context or {}) + evidence_section
+    if allow_search:
+        prompt += "\n\n" + format_search_decision_policy(max_searches=2)
+    return prompt
+
+
+def build_task_search_decision_prompt(
+    request: TaskStreamRequest,
+    evidence: str | None = None,
+    sources: list[dict] | None = None,
+) -> str:
+    """构建只负责检索判断的紧凑 prompt，避免复用完整正文教学配方。"""
+    source_lines = "\n".join(
+        f"- {source.get('title', '')}（{source.get('url', '')}）"
+        for source in (sources or [])
+        if source.get('url')
+    ) or '无'
+    evidence_text = evidence or '无'
+    return (
+        "你是课程内容检索决策器，只判断当前任务是否需要补充联网证据，不要撰写正文。\n\n"
+        f"## 课程与任务\n"
+        f"- 课程主题：{request.courseTopic}\n"
+        f"- 章节：{request.chapter.title}｜{request.chapter.teachingGoal}\n"
+        f"- 当前任务：{request.task.title}｜{request.task.taskGoal}\n\n"
+        f"## 已有证据\n{evidence_text}\n\n"
+        f"## 可引用来源\n{source_lines}\n\n"
+        + format_search_decision_policy(max_searches=1)
+        + "\n\n完成判断后：需要补充时调用搜索工具；不需要时只输出 NO_SEARCH。"
+    )
 
 
 def extract_takeaway(markdown: str) -> str:
@@ -199,7 +252,7 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
     → task_completed → request_completed
     异常时发 request_error 后必须补发 request_completed（status=failed）
     """
-    client = client or MiniMaxClient()
+    client = client or AgentClient()
     request_id = f"req-{uuid4().hex[:12]}"
     sequence = 0
 
@@ -219,63 +272,45 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
             "payload": payload,
         }
 
-    # 证据策略：先判断章节 EvidencePack 是否覆盖当前任务；
-    # 覆盖则直接复用，不足且任务本身需要外部证据时，才用章节标题联合任务标题补搜一次。
-    evidence_pack = None
-    chapter_pack = get_chapter_evidence(request.courseId, request.chapterId)
+    # 章节 EvidencePack 作为已有上下文；是否需要补充搜索由模型通过工具调用决定。
+    collector = ChapterEvidenceCollector(
+        request.courseId,
+        request.chapterId,
+        request.courseTopic,
+        request.chapter.title,
+        task_title=request.task.title,
+        task_goal=request.task.taskGoal,
+    )
+    evidence, sources = evidence_to_prompt(
+        collector.pack,
+        request.task.title,
+        request.task.taskGoal,
+        max_sources=3,
+    )
     coverage = task_evidence_coverage(
-        chapter_pack,
+        collector.pack,
         request.task.title,
         request.task.taskGoal,
     )
-    if coverage.get("covered"):
-        evidence, sources = evidence_to_prompt(
-            chapter_pack,
-            request.task.title,
-            request.task.taskGoal,
-            max_sources=3,
-        )
-        if evidence:
-            evidence_pack = {"evidence": evidence, "sources": sources}
-            print(f"[任务流] 复用章节证据包: {len(sources)} 个来源")
-    elif needs_search(request.task.title, request.task.taskGoal):
-        pack = await build_evidence_pack_with_context(
-            request.courseTopic,
-            request.task.title,
-            request.task.taskGoal,
-            request.chapter.title,
-        )
-        if pack:
-            evidence_pack = pack
-            print(f"[任务流] 任务级补搜证据包: {len(pack['sources'])} 个来源")
-
-    # 章节证据未覆盖但任务无需外部证据时，仍用章节证据做轻量兜底，
-    # 避免稳定概念任务因为中文分词偶然不匹配而额外搜索。
-    if evidence_pack is None and chapter_pack:
-        evidence, sources = evidence_to_prompt(
-            chapter_pack,
-            request.task.title,
-            request.task.taskGoal,
-            max_sources=2,
-        )
-        if evidence:
-            evidence_pack = {"evidence": evidence, "sources": sources}
 
     system_prompt = build_task_content_prompt(
         request,
-        evidence=evidence_pack["evidence"] if evidence_pack else None,
-        sources=evidence_pack["sources"] if evidence_pack else None,
+        evidence=evidence,
+        sources=sources,
         memory_context=memory_context,
+        # 搜索工具只在独立决策阶段使用；正文阶段不再向模型暴露搜索承诺。
+        allow_search=False,
     )
+    final_user_message = {"role": "user", "content": f"请撰写任务「{request.task.title}」的学习正文。"}
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"请撰写任务「{request.task.title}」的学习正文。"},
+        final_user_message,
     ]
 
     started = time.monotonic()
     yield make_event("task_started", {"taskId": request.taskId, "title": request.task.title})
-    if evidence_pack and evidence_pack.get("sources"):
-        yield make_event("sources_ready", {"sources": evidence_pack["sources"]})
+    if sources:
+        yield make_event("sources_ready", {"sources": sources})
 
     parser = ContentStreamParser()
     started_blocks: set = set()
@@ -283,8 +318,67 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
     received_delta = False
     stream_usage = None
     try:
-        # glm-5.3-flash 思考长度方差大（3.4k~12k 字），max_tokens 预算必须给思考留足余量
-        async for chunk in client.stream_chat(messages=messages, max_tokens=16000, include_usage=True):
+        needs_search_decision = (
+            hasattr(client, "prepare_search_context")
+            and not coverage["covered"]
+        )
+        print(
+            f"[任务流] requestId={request_id} 证据覆盖={coverage['covered']} "
+            f"命中词={coverage['matchedTerms']} 搜索判断={needs_search_decision}"
+        )
+        if needs_search_decision:
+            decision_prompt = build_task_search_decision_prompt(
+                request,
+                evidence=evidence,
+                sources=sources,
+            )
+            decision_messages = [
+                {"role": "system", "content": decision_prompt},
+                {
+                    "role": "user",
+                    "content": (
+                        "只做检索判断：需要补充时调用搜索工具，否则只回复 NO_SEARCH。不要写正文。"
+                    ),
+                },
+            ]
+            try:
+                await asyncio.to_thread(
+                    client.prepare_search_context,
+                    messages=decision_messages,
+                    tools=SEARCH_TOOLS,
+                    tool_functions=collector.tool_functions,
+                    max_tokens=1200,
+                    reasoning_split=True,
+                    max_iterations=1,
+                    max_searches=1,
+                )
+                # 检索决策使用紧凑 system prompt；正文仍必须使用完整教学 prompt。
+                # 只保留工具调用产生的 assistant/tool 上下文，避免模型丢掉内容配方。
+                tool_context = decision_messages[2:]
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    *tool_context,
+                    final_user_message,
+                ]
+                searched_evidence, searched_sources = evidence_to_prompt(
+                    collector.pack,
+                    request.task.title,
+                    request.task.taskGoal,
+                    max_sources=3,
+                )
+                if searched_sources and searched_sources != sources:
+                    yield make_event("sources_ready", {"sources": searched_sources})
+                evidence, sources = searched_evidence, searched_sources
+            except Exception as exc:  # noqa: BLE001 搜索决策失败不应阻断正文
+                print(f"[任务流] requestId={request_id} 搜索决策失败，继续生成正文: {exc}")
+
+        # 推理型模型思考长度方差大，max_tokens 预算必须给思考留足余量。
+        async for chunk in client.stream_chat(
+            messages=messages,
+            max_tokens=16000,
+            include_usage=True,
+            reasoning_effort=_TASK_CONTENT_REASONING_EFFORT,
+        ):
             if not chunk.get("choices") and chunk.get("usage"):
                 stream_usage = extract_usage(chunk)
                 continue
@@ -333,7 +427,7 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
             "title": request.task.title,
             "blocks": final_blocks,
             "boundaryPrompt": boundary_prompt,
-            **({"sourceRefs": evidence_pack["sources"]} if evidence_pack and evidence_pack.get("sources") else {}),
+            **({"sourceRefs": sources} if sources else {}),
             "generationMeta": {
                 "promptVersion": PROMPT_VERSION,
                 "modelVersion": client.model,

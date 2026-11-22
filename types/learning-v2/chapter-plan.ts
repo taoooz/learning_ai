@@ -1,5 +1,5 @@
 // types/learning-v2/chapter-plan.ts
-// V2 章节计划：章节目标 → 3～7 个短任务的拆分契约
+// V2 章节计划：章节目标 → 按认知增量决定的 2～7 个短任务拆分契约
 // 依据 docs/architecture/v2_课程生成逻辑.md §2.2
 
 import type { GenerationMeta } from './generation-meta';

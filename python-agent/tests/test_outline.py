@@ -1,6 +1,6 @@
 import pytest
 from schemas.outline import OutlineRequest, LearnerPositioning, OutlineBlueprint
-from services.outline_service import normalize_level, parse_content_blocks
+from services.outline_service import needs_level_calibration, normalize_level, parse_content_blocks
 
 
 def test_normalize_level_chinese_to_english():
@@ -25,6 +25,38 @@ def test_parse_outline_normalizes_level():
 </outline>"""
     parsed = parse_content_blocks(content)
     assert parsed["outline"]["estimatedLevel"] == "intermediate"
+
+
+def test_parse_outline_keeps_calibration_and_example_policy():
+    content = """<outline>
+<div slot="direction">推荐系统进阶</div>
+<div slot="object">能独立拆解推荐链路</div>
+<div slot="level">中级</div>
+<div slot="confidence">0.72</div>
+<div slot="background">做过内容运营，参与过推荐位配置</div>
+<div slot="knowledge">已掌握1：推荐系统基本概念；已掌握2：曝光与点击</div>
+<div slot="gaps">可能缺口1：召回与排序边界；可能缺口2：离线评估</div>
+<div slot="exampleDomains">电商推荐；内容平台</div>
+<div slot="personalExampleLimit">1</div>
+</outline>"""
+    outline = parse_content_blocks(content)["outline"]
+    assert outline["levelConfidence"] == 0.72
+    assert outline["skipBasics"] == ["推荐系统基本概念", "曝光与点击"]
+    assert outline["likelyGaps"] == ["召回与排序边界", "离线评估"]
+    assert outline["preferredExampleDomains"] == ["电商推荐", "内容平台"]
+    assert outline["personalExampleLimit"] == 1
+
+
+def test_low_confidence_with_transferable_background_requires_calibration():
+    memory = {
+        "learnerSnapshot": {"estimatedLevel": "novice", "confidence": 0.35},
+        "transferableBackground": ["做过内容运营，参与过推荐位配置"],
+    }
+    assert needs_level_calibration(memory) is True
+    assert needs_level_calibration({
+        "learnerSnapshot": {"estimatedLevel": "intermediate", "confidence": 0.82},
+        "transferableBackground": [],
+    }) is False
 
 
 def test_learner_positioning_schema():

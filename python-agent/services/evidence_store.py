@@ -338,6 +338,85 @@ def _new_pack(course_id: str, chapter_id: str, course_topic: str, chapter_title:
     }
 
 
+def merge_chapter_evidence_results(
+    course_id: str,
+    chapter_id: str,
+    course_topic: str,
+    chapter_title: str,
+    query_plan: list[dict[str, Any]],
+    results: list[dict[str, Any]],
+    *,
+    root_dir: str | Path | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """把模型触发的搜索结果合并进章节 EvidencePack，并返回本次可引用来源。
+
+    相同 URL 复用已有 evidenceId，避免任务正文引用与 UI sourceRefs 脱节。
+    单章节最多保留 12 个来源，避免多轮搜索无限膨胀。
+    """
+    existing = get_chapter_evidence(course_id, chapter_id, root_dir=root_dir)
+    now = time.time()
+    now_ms = int(now * 1000)
+    sources = list(existing.get("sources") or []) if existing else []
+    by_url = {str(source.get("url") or ""): source for source in sources if isinstance(source, dict)}
+    matched_sources: list[dict[str, Any]] = []
+
+    for item in results:
+        url = str(item.get("url") or "").strip()
+        if not url:
+            continue
+        source = by_url.get(url)
+        if source is None:
+            source = {
+                "evidenceId": f"ev-{len(sources) + 1:02d}-{uuid4().hex[:6]}",
+                "title": str(item.get("title") or "")[:120],
+                "url": url,
+                "domain": _domain(url),
+                "summary": str(item.get("body") or item.get("summary") or "")[:260],
+                "authorityScore": int(item.get("authorityScore", 0)),
+                "preferred": bool(item.get("preferred", False)),
+                "kind": item.get("kind") or "knowledge",
+                "useFor": (
+                    "官方或高权威资料，用于支撑事实性结论"
+                    if item.get("kind") != "wisdom"
+                    else "社区或经验型来源，用于理解实践差异，不可作为唯一事实依据"
+                ),
+                "isPrimary": bool(item.get("isPrimary") or item.get("preferred")),
+                "retrievedAt": now_ms,
+            }
+            sources.append(source)
+            by_url[url] = source
+        matched_sources.append(source)
+
+    merged_plan: list[dict[str, Any]] = []
+    seen_queries: set[tuple[str, str]] = set()
+    plan_items = list(existing.get("queryPlan") or []) if existing else []
+    plan_items.extend(query_plan)
+    for item in plan_items:
+        if not isinstance(item, dict):
+            continue
+        key = (str(item.get("kind") or ""), str(item.get("query") or ""))
+        if key in seen_queries:
+            continue
+        seen_queries.add(key)
+        merged_plan.append(item)
+
+    pack = {
+        "packId": (existing or {}).get("packId") or f"evp-{uuid4().hex[:12]}",
+        "schemaVersion": EVIDENCE_SCHEMA_VERSION,
+        "courseId": course_id,
+        "chapterId": chapter_id,
+        "courseTopic": course_topic,
+        "chapterTitle": chapter_title,
+        "queryPlan": merged_plan,
+        "sources": sources[:12],
+        "createdAt": (existing or {}).get("createdAt") or now_ms,
+        "refreshedAt": now_ms,
+        "expiresAt": now + DEFAULT_EVIDENCE_TTL_SECONDS,
+    }
+    save_chapter_evidence(pack, root_dir=root_dir)
+    return pack, matched_sources
+
+
 async def ensure_chapter_evidence_pack(
     course_id: str,
     chapter_id: str,
