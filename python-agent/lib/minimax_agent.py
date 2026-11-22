@@ -377,11 +377,11 @@ class AgentClient(MiniMaxClient):
                     if iteration < max_iterations:
                         continue
                     else:
-                        yield {"type": "done"}
+                        yield {"type": "done", "finish_reason": choice.get("finish_reason")}
                         return
 
                 # 无工具调用，content_delta 已在流中推送，直接结束
-                yield {"type": "done"}
+                yield {"type": "done", "finish_reason": choice.get("finish_reason")}
                 return
 
             # 处理 tool_calls
@@ -421,14 +421,16 @@ class AgentClient(MiniMaxClient):
         }
         if reasoning_effort:
             final_payload["reasoning_effort"] = reasoning_effort
+        final_finish_reason = None
         for event in _do_streaming_call(self, final_payload):
             if event["type"] in ("thinking", "content_delta"):
                 yield event
             elif event["type"] == "response":
-                final_message = event["response"].get("choices", [{}])[0].get("message", {})
+                final_choice = event["response"].get("choices", [{}])[0]
+                final_finish_reason = final_choice.get("finish_reason")
                 # content_delta 已在流中推送，这里不再重复
 
-        yield {"type": "done"}
+        yield {"type": "done", "finish_reason": final_finish_reason}
 
     # ---- 以下为内部方法 ----
 

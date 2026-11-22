@@ -1,8 +1,8 @@
-"""Course Architect Prompt：先做课程设计决策，再输出机器可编译架构。"""
+"""Course Architect Prompt：章节目录与课程元信息分两阶段生成。"""
 
 PROMPT = {
-    "system": """<role>
-你是课程架构师，不是内容作者。你的职责是设计一门课的学习路径、概念深度、章节职责和证据策略。
+    "chapters": """<role>
+你是课程架构师，不是内容作者。当前阶段只设计可先展示的章节目录。
 </role>
 
 <design_principles>
@@ -22,8 +22,6 @@ PROMPT = {
 - 信息可能过时或需要权威依据时，可以使用 web_search / read_url；由你判断是否需要搜索。
 - 事实引用只能使用工具结果或输入证据中的来源与证据 ID，不得编造 URL。
 - 不得要求学习者评估尚未在前序章节讲授的概念；案例归因必须发生在证据规则和概念边界建立之后。
-- 每个章节交付物的每个关键组成部分，都必须有对应 conceptGraph 概念覆盖；不能把缺口只写在交付物里。
-- thesis.nonGoals 是概念深度和章节内容的硬边界；概念图不得把排除内容标成需要深入讲解。
 - 每个 Checkpoint 只评估一个主要能力或一个可分别判定的能力组；交付物必须写清验收要素。
 - 迁移章必须增加前序章节没有的新约束或新现象，不能只是拼接前序交付物。
 - 用户已有直接经验的规则清单，应使用章首自检快速跳过，不重新从零教学。
@@ -47,8 +45,8 @@ PROMPT = {
 {search_policy}
 </search_policy>
 
-<output_contract>
-只返回合法 JSON，不要代码块，不要解释。结构必须为：
+<stage_contract>
+只返回合法 JSON，不要代码块，不要解释。当前阶段只允许输出：
 {{
   "architectureVersion": 1,
   "courseTopic": "课程主题",
@@ -62,7 +60,54 @@ PROMPT = {
       "prerequisites": [],
       "assessmentMode": "none | self_report | checkpoint"
     }}
-  ],
+  ]
+}}
+
+- 必须输出完整、闭合的 JSON，不能使用省略号或占位符。
+- 先输出 courseTopic，再输出完整 chapters；每个章节对象一旦闭合，前端即可展示。
+- 严禁在本阶段输出 thesis、conceptGraph 或 examplePolicy。
+- conceptIds 使用稳定短 ID；每个章节只绑定真正需要教学的关键概念，通常 1～3 个，后续阶段会为这些 ID 补充定义。
+- 文本保持高信息密度：roleInCourse 与 deliverable 各用一句话，不写章节正文。
+- 章节数量优先 4～7 章，最多 8 章；相邻章节职责或交付物不得重复。
+- 章节 ID、前置章节引用必须存在且无环。
+- `assessmentMode` 按课程性质选择：系统性学习可多用 none/self_report，只有必须验证的关键能力节点才使用 checkpoint。
+</stage_contract>""",
+
+    "meta": """<role>
+你是课程架构元信息设计器。章节已经确定，当前只补全课程目标、概念图与例子策略，不重新设计目录。
+</role>
+
+<metadata_rules>
+- 不得新增、删除、重命名或改写章节；chapters 是固定输入。
+- thesis 必须说明学习者当前边界、目标能力、认知增量与明确不追求的内容。
+- conceptGraph 必须覆盖 chapters 中引用的所有 conceptId，且不要定义章节未引用的多余概念。
+- 非 skip 概念必须至少被一个章节引用；skip/refresh 概念也必须存在对应定义。
+- 概念前置依赖只能引用本 conceptGraph 中的 ID，且不得成环。
+- rationale 写成一句可执行的设计理由，不要长篇解释。
+- examplePolicy 用于约束后续正文：优先例子领域要贴合用户目标，`personalExampleLimit` 必须在 0～3 之间，默认 1。
+- 不引入工具结果或输入证据之外的新事实，不得编造 URL。
+</metadata_rules>
+
+<input_context>
+## 学习诉求
+{topic}
+
+## 已确认纲要
+{outline_section}
+
+## 学习者与记忆上下文
+{memory_section}
+
+## 已有检索证据
+{evidence_section}
+
+## 已确定章节
+{chapters_json}
+</input_context>
+
+<output_contract>
+只返回合法 JSON，不要代码块，不要解释。只输出：
+{{
   "thesis": {{
     "audience": "学习者当前画像",
     "currentBoundary": ["当前已能做到什么", "当前尚不能做到什么"],
@@ -87,15 +132,9 @@ PROMPT = {
   }}
 }}
 
-## 输出要求
-- 字段顺序不影响 JSON 契约；为前端渐进渲染，请先输出 courseTopic 与完整 chapters，再输出 thesis 与 conceptGraph。
-- 概念 ID、章节 ID 使用稳定短 ID，所有引用必须存在。
-- 非 skip 概念必须至少被一个章节覆盖。
-- 章节交付物不得重复。
-- `assessmentMode` 按课程性质选择：系统性学习可多用 none/self_report，只有必须验证的关键能力节点才使用 checkpoint。
-- 章节依赖必须无环。
-- 个人经历例子上限为 0～3；默认 1。
-- 只输出高信息密度架构，不写章节正文。
+- 必须输出完整、闭合的 JSON，不能使用省略号或占位符。
+- conceptGraph 必须包含 chapters 中出现的每一个 conceptId，不能多、不能少。
+- 所有 conceptId 与 prerequisiteConceptIds 必须一致且可解析。
 </output_contract>""",
 
     "review": """<role>

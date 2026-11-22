@@ -48,6 +48,22 @@ class CourseArchitecture(BaseModel):
     examplePolicy: CourseExamplePolicy
 
 
+class CourseChapterPlan(BaseModel):
+    """第一阶段输出：只生成可先展示的章节目录。"""
+
+    architectureVersion: Literal[1] = 1
+    courseTopic: str
+    chapters: list[ArchitectureChapter]
+
+
+class CourseArchitectureMeta(BaseModel):
+    """第二阶段输出：基于已确定的章节补全课程目标与概念关系。"""
+
+    thesis: CourseThesis
+    conceptGraph: list[ArchitectureConcept]
+    examplePolicy: CourseExamplePolicy
+
+
 def _find_cycle(edges: dict[str, list[str]]) -> list[str] | None:
     visited: set[str] = set()
     on_path: set[str] = set()
@@ -76,29 +92,57 @@ def _find_cycle(edges: dict[str, list[str]]) -> list[str] | None:
     return None
 
 
+def validate_course_chapters(chapters: list[ArchitectureChapter]) -> list[str]:
+    """校验第一阶段章节；概念引用等跨阶段约束留给最终合并校验。"""
+    issues: list[str] = []
+    if not chapters:
+        issues.append("课程至少需要一个章节。")
+    if len(chapters) > 8:
+        issues.append(f"章节数量 {len(chapters)} 过多，应合并相邻同层职责，优先收敛到 4～7 章。")
+
+    chapter_ids = [chapter.chapterId for chapter in chapters]
+    if len(chapter_ids) != len(set(chapter_ids)):
+        issues.append("章节 ID 重复。")
+    chapter_set = set(chapter_ids)
+
+    deliverables: set[str] = set()
+    for chapter in chapters:
+        if not chapter.title.strip() or not chapter.roleInCourse.strip() or not chapter.deliverable.strip():
+            issues.append(f"章节 {chapter.chapterId} 缺少标题、职责或交付物。")
+        if not chapter.conceptIds:
+            issues.append(f"章节 {chapter.chapterId} 未绑定任何概念。")
+        normalized_deliverable = chapter.deliverable.strip().lower()
+        if normalized_deliverable and normalized_deliverable in deliverables:
+            issues.append(f"章节交付物重复：{chapter.deliverable}")
+        deliverables.add(normalized_deliverable)
+        for prerequisite in chapter.prerequisites:
+            if prerequisite not in chapter_set:
+                issues.append(f"章节 {chapter.chapterId} 的前置章节不存在：{prerequisite}")
+
+    chapter_edges = {
+        chapter.chapterId: chapter.prerequisites
+        for chapter in chapters
+    }
+    chapter_cycle = _find_cycle(chapter_edges)
+    if chapter_cycle:
+        issues.append(f"章节依赖存在循环：{' → '.join(chapter_cycle)}")
+    return issues
+
+
 def validate_course_architecture(architecture: CourseArchitecture) -> list[str]:
     """校验引用、职责和依赖；语义重复由独立架构审查负责。"""
-    issues: list[str] = []
+    issues = validate_course_chapters(architecture.chapters)
     if not architecture.courseTopic.strip():
         issues.append("课程主题为空。")
     if not architecture.thesis.targetCapability.strip():
         issues.append("缺少课程目标能力。")
     if not architecture.thesis.learningDelta:
         issues.append("缺少可描述的认知增量。")
-    if not architecture.chapters:
-        issues.append("课程至少需要一个章节。")
-    if len(architecture.chapters) > 8:
-        issues.append(f"章节数量 {len(architecture.chapters)} 过多，应合并相邻同层职责，优先收敛到 4～7 章。")
 
     concept_ids = [concept.conceptId for concept in architecture.conceptGraph]
     if len(concept_ids) != len(set(concept_ids)):
         issues.append("概念 ID 重复。")
     concept_set = set(concept_ids)
-
-    chapter_ids = [chapter.chapterId for chapter in architecture.chapters]
-    if len(chapter_ids) != len(set(chapter_ids)):
-        issues.append("章节 ID 重复。")
-    chapter_set = set(chapter_ids)
 
     for concept in architecture.conceptGraph:
         for prerequisite in concept.prerequisiteConceptIds:
@@ -114,31 +158,11 @@ def validate_course_architecture(architecture: CourseArchitecture) -> list[str]:
         issues.append(f"概念依赖存在循环：{' → '.join(cycle)}")
 
     referenced_concepts: set[str] = set()
-    deliverables: set[str] = set()
     for chapter in architecture.chapters:
-        if not chapter.title.strip() or not chapter.roleInCourse.strip() or not chapter.deliverable.strip():
-            issues.append(f"章节 {chapter.chapterId} 缺少标题、职责或交付物。")
-        if not chapter.conceptIds:
-            issues.append(f"章节 {chapter.chapterId} 未绑定任何概念。")
         for concept_id in chapter.conceptIds:
             if concept_id not in concept_set:
                 issues.append(f"章节 {chapter.chapterId} 引用了不存在的概念：{concept_id}")
             referenced_concepts.add(concept_id)
-        normalized_deliverable = chapter.deliverable.strip().lower()
-        if normalized_deliverable and normalized_deliverable in deliverables:
-            issues.append(f"章节交付物重复：{chapter.deliverable}")
-        deliverables.add(normalized_deliverable)
-        for prerequisite in chapter.prerequisites:
-            if prerequisite not in chapter_set:
-                issues.append(f"章节 {chapter.chapterId} 的前置章节不存在：{prerequisite}")
-
-    chapter_edges = {
-        chapter.chapterId: chapter.prerequisites
-        for chapter in architecture.chapters
-    }
-    chapter_cycle = _find_cycle(chapter_edges)
-    if chapter_cycle:
-        issues.append(f"章节依赖存在循环：{' → '.join(chapter_cycle)}")
 
     for concept in architecture.conceptGraph:
         if concept.targetDepth != "skip" and concept.conceptId not in referenced_concepts:

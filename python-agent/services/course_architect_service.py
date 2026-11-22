@@ -12,12 +12,20 @@ from lib.minimax import MiniMaxClient, parse_json_response
 from lib.minimax_agent import AgentClient
 from lib.tools.search_tools import SEARCH_TOOLS, TOOL_FUNCTIONS
 from prompts import build_prompt
-from schemas.course_architecture import CourseArchitecture, validate_course_architecture
+from schemas.course_architecture import (
+    CourseArchitecture,
+    CourseArchitectureMeta,
+    CourseChapterPlan,
+    validate_course_architecture,
+    validate_course_chapters,
+)
 from services.memory_context_v4 import wrap_untrusted_context
 from services.search_evidence import format_search_decision_policy
 
-PROMPT_VERSION = "course-architect-v1"
+PROMPT_VERSION = "course-architect-v2-two-stage"
 ARCHITECT_REASONING_EFFORT = os.getenv("ARCHITECT_REASONING_EFFORT", "none").strip() or None
+ARCHITECT_CHAPTERS_MAX_TOKENS = int(os.getenv("ARCHITECT_CHAPTERS_MAX_TOKENS", "6000"))
+ARCHITECT_META_MAX_TOKENS = int(os.getenv("ARCHITECT_META_MAX_TOKENS", "8000"))
 
 
 def build_course_architect_prompt(
@@ -29,6 +37,26 @@ def build_course_architect_prompt(
     sources: list[dict[str, Any]] | None = None,
     allow_search: bool = True,
 ) -> str:
+    """兼容入口：默认返回第一阶段章节 Prompt。"""
+    return build_course_architect_chapters_prompt(
+        topic,
+        outline,
+        learner,
+        memory_context,
+        evidence,
+        sources,
+        allow_search,
+    )
+
+
+def _prompt_context(
+    topic: str,
+    outline: dict[str, Any],
+    learner: dict[str, Any],
+    memory_context: dict[str, Any] | None,
+    evidence: str | None,
+    sources: list[dict[str, Any]] | None,
+) -> dict[str, str]:
     memory_payload = {
         "learner": learner,
         "memoryContext": memory_context or {},
@@ -40,18 +68,55 @@ def build_course_architect_prompt(
     evidence_section = "无"
     if evidence:
         evidence_section = f"{evidence}\n\n来源：\n{source_lines}"
+    return {
+        "topic": topic,
+        "outline_section": wrap_untrusted_context("outline", outline),
+        "memory_section": wrap_untrusted_context("learner_memory", memory_payload),
+        "evidence_section": evidence_section,
+    }
+
+
+def build_course_architect_chapters_prompt(
+    topic: str,
+    outline: dict[str, Any],
+    learner: dict[str, Any],
+    memory_context: dict[str, Any] | None = None,
+    evidence: str | None = None,
+    sources: list[dict[str, Any]] | None = None,
+    allow_search: bool = True,
+) -> str:
+    prompt_context = _prompt_context(
+        topic, outline, learner, memory_context, evidence, sources
+    )
     return build_prompt(
         "course_architect",
-        ["system"],
-        topic=topic,
-        outline_section=wrap_untrusted_context("outline", outline),
-        memory_section=wrap_untrusted_context("learner_memory", memory_payload),
-        evidence_section=evidence_section,
+        ["chapters"],
+        **prompt_context,
         search_policy=(
             format_search_decision_policy(max_searches=1)
             if allow_search
             else "本阶段已有上下文足够，不提供联网搜索工具，也不要引用未提供的来源。"
         ),
+    )
+
+
+def build_course_architect_meta_prompt(
+    topic: str,
+    outline: dict[str, Any],
+    learner: dict[str, Any],
+    chapter_plan: CourseChapterPlan,
+    memory_context: dict[str, Any] | None = None,
+    evidence: str | None = None,
+    sources: list[dict[str, Any]] | None = None,
+) -> str:
+    prompt_context = _prompt_context(
+        topic, outline, learner, memory_context, evidence, sources
+    )
+    return build_prompt(
+        "course_architect",
+        ["meta"],
+        **prompt_context,
+        chapters_json=wrap_untrusted_context("chapters", chapter_plan.model_dump()),
     )
 
 
@@ -191,10 +256,213 @@ async def _review_course_architecture(
         return {"passed": True, "issues": [], "repairNotes": "", "reviewUnavailable": True}
 
 
-def _parse_architecture(content: str) -> CourseArchitecture:
+def _parse_chapter_plan(content: str) -> CourseChapterPlan:
     parsed = parse_json_response(content)
-    candidate = parsed.get("courseArchitecture") if isinstance(parsed, dict) else None
-    return CourseArchitecture.model_validate(candidate or parsed)
+    candidate = parsed.get("courseChapterPlan") if isinstance(parsed, dict) else None
+    return CourseChapterPlan.model_validate(candidate or parsed)
+
+
+def _parse_architecture_meta(content: str) -> CourseArchitectureMeta:
+    parsed = parse_json_response(content)
+    candidate = parsed.get("courseArchitectureMeta") if isinstance(parsed, dict) else None
+    return CourseArchitectureMeta.model_validate(candidate or parsed)
+
+
+def _chapter_plan_issues(plan: CourseChapterPlan) -> list[str]:
+    issues: list[str] = []
+    if not plan.courseTopic.strip():
+        issues.append("课程主题为空。")
+    issues.extend(validate_course_chapters(plan.chapters))
+    return issues
+
+
+def _assemble_architecture(
+    plan: CourseChapterPlan,
+    meta: CourseArchitectureMeta,
+) -> CourseArchitecture:
+    return CourseArchitecture(
+        architectureVersion=plan.architectureVersion,
+        courseTopic=plan.courseTopic,
+        thesis=meta.thesis,
+        conceptGraph=meta.conceptGraph,
+        chapters=plan.chapters,
+        examplePolicy=meta.examplePolicy,
+    )
+
+
+def _response_content(response: dict[str, Any]) -> str:
+    return str((response.get("choices") or [{}])[0].get("message", {}).get("content", ""))
+
+
+def _call_nonstream_stage(
+    client: MiniMaxClient,
+    messages: list[dict[str, Any]],
+    *,
+    max_tokens: int,
+    tools: list[dict[str, Any]] | None = None,
+    max_iterations: int = 1,
+    max_searches: int = 0,
+) -> str:
+    """同步执行一次非流式阶段；只用于阶段内定向修复，不重生成整门课。"""
+    if hasattr(client, "chat_with_tools"):
+        response = client.chat_with_tools(
+            messages=messages,
+            tools=tools or [],
+            tool_functions=TOOL_FUNCTIONS,
+            max_tokens=max_tokens,
+            reasoning_split=True,
+            max_iterations=max_iterations,
+            max_searches=max_searches,
+            reasoning_effort=ARCHITECT_REASONING_EFFORT,
+        )
+        return _response_content(response)
+    if hasattr(client, "_call_llm"):
+        response = client._call_llm(
+            messages,
+            tools,
+            getattr(client, "model", None),
+            max_tokens,
+            True,
+            1,
+            reasoning_effort=ARCHITECT_REASONING_EFFORT,
+        )
+        return _response_content(response)
+    raise RuntimeError("当前模型客户端不支持同步阶段调用")
+
+
+def _chapter_messages(
+    topic: str,
+    outline: dict[str, Any],
+    learner: dict[str, Any],
+    memory_context: dict[str, Any] | None,
+    evidence: str | None,
+    sources: list[dict[str, Any]] | None,
+    allow_search: bool,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "role": "system",
+            "content": build_course_architect_chapters_prompt(
+                topic,
+                outline,
+                learner,
+                memory_context,
+                evidence,
+                sources,
+                allow_search=allow_search,
+            ),
+        },
+        {"role": "user", "content": "请先完成这门课的章节目录设计。"},
+    ]
+
+
+def _meta_messages(
+    topic: str,
+    outline: dict[str, Any],
+    learner: dict[str, Any],
+    plan: CourseChapterPlan,
+    memory_context: dict[str, Any] | None,
+    evidence: str | None,
+    sources: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "role": "system",
+            "content": build_course_architect_meta_prompt(
+                topic,
+                outline,
+                learner,
+                plan,
+                memory_context,
+                evidence,
+                sources,
+            ),
+        },
+        {"role": "user", "content": "请基于已确定章节补全课程元信息。"},
+    ]
+
+
+def _repair_chapter_plan_sync(
+    client: MiniMaxClient,
+    base_messages: list[dict[str, Any]],
+    previous_content: str,
+    issues: list[str],
+) -> CourseChapterPlan:
+    messages = list(base_messages)
+    if previous_content.strip():
+        messages.append({"role": "assistant", "content": previous_content})
+    messages.append({
+        "role": "user",
+        "content": (
+            "章节目录未通过校验。只修复 chapters 阶段，输出完整且闭合的 chapters JSON；"
+            "不要生成 thesis、conceptGraph 或 examplePolicy，也不要输出解释。\n"
+            + "\n".join(f"- {issue}" for issue in issues)
+        ),
+    })
+    content = _call_nonstream_stage(
+        client,
+        messages,
+        max_tokens=ARCHITECT_CHAPTERS_MAX_TOKENS,
+    )
+    plan = _parse_chapter_plan(content)
+    repaired_issues = _chapter_plan_issues(plan)
+    if repaired_issues:
+        raise ValueError("章节目录定向修复未通过：" + "；".join(repaired_issues))
+    return plan
+
+
+def _repair_meta_sync(
+    client: MiniMaxClient,
+    base_messages: list[dict[str, Any]],
+    previous_content: str,
+    issues: list[str],
+) -> CourseArchitectureMeta:
+    messages = list(base_messages)
+    if previous_content.strip():
+        messages.append({"role": "assistant", "content": previous_content})
+    messages.append({
+        "role": "user",
+        "content": (
+            "课程元信息未通过校验。章节已固定，不得改动；只修复 thesis、conceptGraph 与 examplePolicy，"
+            "输出完整且闭合的 JSON，不要输出解释。\n"
+            + "\n".join(f"- {issue}" for issue in issues)
+        ),
+    })
+    content = _call_nonstream_stage(
+        client,
+        messages,
+        max_tokens=ARCHITECT_META_MAX_TOKENS,
+    )
+    return _parse_architecture_meta(content)
+
+
+def _generate_meta_with_repair(
+    client: MiniMaxClient,
+    messages: list[dict[str, Any]],
+    plan: CourseChapterPlan,
+) -> tuple[CourseArchitectureMeta, CourseArchitecture, str]:
+    content = _call_nonstream_stage(
+        client,
+        messages,
+        max_tokens=ARCHITECT_META_MAX_TOKENS,
+    )
+    try:
+        meta = _parse_architecture_meta(content)
+    except Exception as exc:  # noqa: BLE001
+        issues = [f"课程元信息 JSON 解析失败：{exc}"]
+    else:
+        architecture = _assemble_architecture(plan, meta)
+        issues = validate_course_architecture(architecture)
+        if not issues:
+            return meta, architecture, content
+
+    print(f"[Course Architect] 元信息定向修复，不重生成章节：{issues}")
+    meta = _repair_meta_sync(client, messages, content, issues)
+    architecture = _assemble_architecture(plan, meta)
+    repaired_issues = validate_course_architecture(architecture)
+    if repaired_issues:
+        raise ValueError("课程元信息定向修复未通过：" + "；".join(repaired_issues))
+    return meta, architecture, content
 
 
 _JSON_STRING_FIELD_TEMPLATE = r'"{field}"\s*:\s*"((?:\\.|[^"\\])*)"'
@@ -269,6 +537,121 @@ def architecture_chapter_to_node(chapter: dict[str, Any], index: int) -> dict[st
     }
 
 
+def _review_issues(
+    client: MiniMaxClient,
+    architecture: CourseArchitecture,
+    learner: dict[str, Any],
+    review_mode: str | None,
+) -> tuple[bool, bool, bool, list[str]]:
+    if not should_review_architecture(architecture, learner, review_mode):
+        return True, True, False, []
+    review = asyncio.run(_review_course_architecture(client, architecture, learner))
+    unavailable = bool(review.get("reviewUnavailable"))
+    if review["passed"]:
+        return True, False, unavailable, []
+    issues = [
+        f"[{item.get('code', 'QUALITY')}] {item.get('message', '')}"
+        for item in (review.get("issues") or [])
+    ] or ["课程架构语义审查未通过"]
+    repair_notes = str(review.get("repairNotes") or "").strip()
+    if repair_notes:
+        issues.append(repair_notes)
+    return False, False, unavailable, issues
+
+
+def _generate_chapter_plan_sync(
+    client: MiniMaxClient,
+    chapter_messages: list[dict[str, Any]],
+    allow_search: bool,
+) -> tuple[CourseChapterPlan, str]:
+    content = _call_nonstream_stage(
+        client,
+        chapter_messages,
+        max_tokens=ARCHITECT_CHAPTERS_MAX_TOKENS,
+        tools=SEARCH_TOOLS if allow_search else None,
+        max_iterations=2 if allow_search else 1,
+        max_searches=1 if allow_search else 0,
+    )
+    try:
+        plan = _parse_chapter_plan(content)
+    except Exception as exc:  # noqa: BLE001
+        issues = [f"章节目录 JSON 解析失败：{exc}"]
+    else:
+        issues = _chapter_plan_issues(plan)
+        if not issues:
+            return plan, content
+
+    print(f"[Course Architect] 章节目录定向修复：{issues}")
+    return _repair_chapter_plan_sync(client, chapter_messages, content, issues), content
+
+
+def _generate_course_architecture_sync(
+    topic: str,
+    outline: dict[str, Any],
+    learner: dict[str, Any],
+    memory_context: dict[str, Any] | None,
+    evidence: str | None,
+    sources: list[dict[str, Any]] | None,
+    client: MiniMaxClient,
+    review_mode: str | None,
+    allow_search: bool,
+) -> dict[str, Any]:
+    started_at = time.monotonic()
+    chapter_messages = _chapter_messages(
+        topic, outline, learner, memory_context, evidence, sources, allow_search
+    )
+    plan, _ = _generate_chapter_plan_sync(client, chapter_messages, allow_search)
+    print(
+        f"[Course Architect] 章节目录完成 chapters={len(plan.chapters)} "
+        f"elapsed={int((time.monotonic() - started_at) * 1000)}ms"
+    )
+
+    meta_messages = _meta_messages(
+        topic, outline, learner, plan, memory_context, evidence, sources
+    )
+    _meta, architecture, _ = _generate_meta_with_repair(
+        client, meta_messages, plan
+    )
+    print(
+        f"[Course Architect] 元信息完成 elapsed={int((time.monotonic() - started_at) * 1000)}ms"
+    )
+
+    review_passed, review_skipped, review_unavailable, review_issues = _review_issues(
+        client, architecture, learner, review_mode
+    )
+    if not review_passed:
+        print(f"[Course Architect] 审查失败，定向修复章节：{review_issues}")
+        plan = _repair_chapter_plan_sync(
+            client, chapter_messages, json.dumps(plan.model_dump(), ensure_ascii=False), review_issues
+        )
+        meta_messages = _meta_messages(
+            topic, outline, learner, plan, memory_context, evidence, sources
+        )
+        _meta, architecture, _ = _generate_meta_with_repair(
+            client, meta_messages, plan
+        )
+        review_passed, review_skipped, review_unavailable, reassessment_issues = _review_issues(
+            client, architecture, learner, review_mode
+        )
+        if not review_passed:
+            raise ValueError(
+                "课程架构审查未通过：" + "；".join(reassessment_issues or review_issues)
+            )
+
+    print(
+        f"[Course Architect] 两阶段架构完成 reviewSkipped={review_skipped} "
+        f"elapsed={int((time.monotonic() - started_at) * 1000)}ms"
+    )
+    return {
+        "architecture": architecture.model_dump(),
+        "issues": [],
+        "reviewUnavailable": review_unavailable,
+        "reviewSkipped": review_skipped,
+        "promptVersion": PROMPT_VERSION,
+        "modelVersion": getattr(client, "model", "unknown"),
+    }
+
+
 async def generate_course_architecture(
     topic: str,
     outline: dict[str, Any],
@@ -278,110 +661,30 @@ async def generate_course_architecture(
     sources: list[dict[str, Any]] | None = None,
     client: MiniMaxClient | None = None,
     review_mode: str | None = None,
+    allow_search: bool = True,
 ) -> dict[str, Any]:
-    """生成课程架构；结构失败时让模型修复一次，返回最终校验结果。"""
+    """非流式兼容入口：章节目录与元信息仍分两阶段生成。"""
     client = client or AgentClient()
-    system_prompt = build_course_architect_prompt(
+    return await asyncio.to_thread(
+        _generate_course_architecture_sync,
         topic,
         outline,
         learner,
         memory_context,
         evidence,
         sources,
+        client,
+        review_mode,
+        allow_search,
     )
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": "请完成这门课的架构设计。"},
-    ]
-
-    response: dict[str, Any] = {}
-    architecture: CourseArchitecture | None = None
-    issues: list[str] = []
-    review_unavailable = False
-    review_skipped = False
-    for attempt in range(2):
-        if hasattr(client, "chat_with_tools"):
-            response = await asyncio.to_thread(
-                client.chat_with_tools,
-                messages=messages,
-                tools=SEARCH_TOOLS,
-                tool_functions=TOOL_FUNCTIONS,
-                max_tokens=12000,
-                reasoning_split=True,
-                max_iterations=3,
-                max_searches=2,
-                reasoning_effort=ARCHITECT_REASONING_EFFORT,
-            )
-        else:
-            response = await client.chat(messages=messages, max_tokens=12000)
-
-        content = (response.get("choices") or [{}])[0].get("message", {}).get("content", "")
-        try:
-            architecture = _parse_architecture(content)
-        except Exception as exc:
-            issues = [f"架构 JSON 解析失败：{exc}"]
-        else:
-            issues = validate_course_architecture(architecture)
-            if not issues:
-                if not should_review_architecture(architecture, learner, review_mode):
-                    review_skipped = True
-                    break
-                review = await _review_course_architecture(client, architecture, learner)
-                review_unavailable = bool(review.get("reviewUnavailable"))
-                if review["passed"]:
-                    break
-                review_issues = review.get("issues") or []
-                issues = [
-                    f"[{item.get('code', 'QUALITY')}] {item.get('message', '')}"
-                    for item in review_issues
-                ] or ["课程架构语义审查未通过"]
-                custom_notes = review.get("repairNotes") or ""
-                if custom_notes:
-                    issues.append(custom_notes)
-
-        messages.append({"role": "assistant", "content": content})
-        messages.append({
-            "role": "user",
-            "content": (
-                "架构未通过校验。请修复以下问题并重新输出完整 JSON：\n"
-                + "\n".join(f"- {issue}" for issue in issues)
-            ),
-        })
-
-    if architecture is None:
-        raise ValueError("课程架构生成失败：" + "；".join(issues))
-
-    return {
-        "architecture": architecture.model_dump(),
-        "issues": issues,
-        "reviewUnavailable": review_unavailable,
-        "reviewSkipped": review_skipped,
-        "promptVersion": PROMPT_VERSION,
-        "modelVersion": getattr(client, "model", "unknown"),
-    }
 
 
-def _fallback_architecture_result(
-    topic: str,
-    outline: dict[str, Any],
-    learner: dict[str, Any],
-    memory_context: dict[str, Any] | None,
-    evidence: str | None,
-    sources: list[dict[str, Any]] | None,
-    client: MiniMaxClient,
-    review_mode: str | None,
-) -> dict[str, Any]:
-    """流式解析失败时复用已有的修复/审查链路。"""
-    return asyncio.run(generate_course_architecture(
-        topic=topic,
-        outline=outline,
-        learner=learner,
-        memory_context=memory_context,
-        evidence=evidence,
-        sources=sources,
-        client=client,
-        review_mode=review_mode,
-    ))
+def _emit_plan_nodes(plan: CourseChapterPlan) -> Generator[dict[str, Any], None, None]:
+    for index, chapter in enumerate(plan.chapters, start=1):
+        chapter_dict = chapter.model_dump()
+        node = architecture_chapter_to_node(chapter_dict, index)
+        if node["title"]:
+            yield {"type": "node", "node": node}
 
 
 def stream_course_architecture(
@@ -395,38 +698,31 @@ def stream_course_architecture(
     review_mode: str | None = None,
     allow_search: bool = True,
 ) -> Generator[dict[str, Any], None, None]:
-    """流式生成架构：章节对象一闭合就发 node 事件，最终再做结构校验。"""
+    """两阶段流式架构：先逐章输出目录，再定向补齐课程元信息。"""
     started_at = time.monotonic()
     client = client or AgentClient()
-    system_prompt = build_course_architect_prompt(
-        topic,
-        outline,
-        learner,
-        memory_context,
-        evidence,
-        sources,
-        allow_search=allow_search,
+    chapter_messages = _chapter_messages(
+        topic, outline, learner, memory_context, evidence, sources, allow_search
     )
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": "请完成这门课的架构设计。"},
-    ]
     raw_content = ""
     emitted_chapters = 0
     emitted_course_name = False
-    emitted_course_description = False
+    finish_reason: str | None = None
+
+    plan: CourseChapterPlan | None = None
+    chapter_issues: list[str] = []
 
     if hasattr(client, "stream_chat_with_tools"):
         try:
-            print(f"[Course Architect] 开始流式生成：{topic}")
+            print(f"[Course Architect] 第一阶段流式生成章节目录：{topic}")
             for event in client.stream_chat_with_tools(
-                messages=messages,
+                messages=chapter_messages,
                 tools=SEARCH_TOOLS if allow_search else [],
                 tool_functions=TOOL_FUNCTIONS,
-                max_tokens=12000,
+                max_tokens=ARCHITECT_CHAPTERS_MAX_TOKENS,
                 reasoning_split=True,
                 max_iterations=2 if allow_search else 1,
-                max_searches=1,
+                max_searches=1 if allow_search else 0,
                 reasoning_effort=ARCHITECT_REASONING_EFFORT,
             ):
                 event_type = event.get("type")
@@ -434,8 +730,10 @@ def stream_course_architecture(
                     raw_content = ""
                     emitted_chapters = 0
                     emitted_course_name = False
-                    emitted_course_description = False
-                    print(f"[Course Architect] 补充搜索：{event.get('tool')}")
+                    print(f"[Course Architect] 章节阶段补充搜索：{event.get('tool')}")
+                    continue
+                if event_type == "done":
+                    finish_reason = event.get("finish_reason")
                     continue
                 if event_type != "content_delta":
                     continue
@@ -446,11 +744,6 @@ def stream_course_architecture(
                     if course_name:
                         emitted_course_name = True
                         yield {"type": "course_name", "value": course_name}
-                if not emitted_course_description:
-                    description = _extract_json_string_field(raw_content, "targetCapability")
-                    if description:
-                        emitted_course_description = True
-                        yield {"type": "course_description", "value": description}
 
                 chapters = _complete_chapter_objects(raw_content)
                 for chapter in chapters[emitted_chapters:]:
@@ -463,61 +756,84 @@ def stream_course_architecture(
                         )
                         yield {"type": "node", "node": node}
                         if emitted_chapters == 1:
-                            yield {"type": "progress", "message": "章节骨架已开始生成，正在补齐后续章节与概念关系…"}
-        except Exception as exc:  # noqa: BLE001
-            print(f"[Course Architect] 流式生成失败，降级非流式修复：{exc}")
-            raw_content = ""
-    else:
-        raw_content = ""
-
-    if not raw_content.strip():
-        print("[Course Architect] 流式内容为空，进入非流式修复")
-        result = _fallback_architecture_result(
-            topic, outline, learner, memory_context, evidence, sources, client, review_mode
-        )
-        if result.get("issues"):
-            raise ValueError("课程架构审查未通过：" + "；".join(result["issues"]))
-        yield {"type": "result", "result": result}
-        return
-
-    try:
-        yield {"type": "progress", "message": "正在校验课程架构与章节关系…"}
-        architecture = _parse_architecture(raw_content)
-        issues = validate_course_architecture(architecture)
-        review_unavailable = False
-        review_skipped = False
-        if issues:
-            raise ValueError("课程架构结构校验未通过：" + "；".join(issues))
-        if should_review_architecture(architecture, learner, review_mode):
-            yield {"type": "progress", "message": "正在审查课程设计风险…"}
+                            yield {"type": "progress", "message": "章节骨架正在生成，先展示已完成的章节…"}
             print(
-                f"[Course Architect] 结构校验通过，进入语义审查 "
+                f"[Course Architect] 章节目录流结束 nodes={emitted_chapters} "
+                f"finishReason={finish_reason or 'unknown'} "
                 f"elapsed={int((time.monotonic() - started_at) * 1000)}ms"
             )
-            review = asyncio.run(_review_course_architecture(client, architecture, learner))
-            review_unavailable = bool(review.get("reviewUnavailable"))
-            if not review["passed"]:
-                review_issues = review.get("issues") or []
-                raise ValueError("课程架构审查未通过：" + "；".join(
-                    f"[{item.get('code', 'QUALITY')}] {item.get('message', '')}"
-                    for item in review_issues
-                ))
-        else:
-            review_skipped = True
-        print(
-            f"[Course Architect] 结构校验完成 "
-            f"reviewSkipped={review_skipped} elapsed={int((time.monotonic() - started_at) * 1000)}ms"
-        )
-    except Exception as exc:  # noqa: BLE001
-        print(f"[Course Architect] 流式结果校验失败，降级非流式修复：{exc}")
-        result = _fallback_architecture_result(
-            topic, outline, learner, memory_context, evidence, sources, client, review_mode
-        )
-        if result.get("issues"):
-            raise ValueError("课程架构审查未通过：" + "；".join(result["issues"]))
-        yield {"type": "result", "result": result}
-        return
+        except Exception as exc:  # noqa: BLE001
+            print(f"[Course Architect] 章节目录流失败：{exc}")
+            chapter_issues = [str(exc)]
 
+    if raw_content.strip():
+        try:
+            plan = _parse_chapter_plan(raw_content)
+            chapter_issues = _chapter_plan_issues(plan)
+        except Exception as exc:  # noqa: BLE001
+            chapter_issues = [f"章节目录 JSON 解析失败：{exc}"]
+
+    if plan is None or chapter_issues:
+        print(f"[Course Architect] 章节目录需要定向修复：{chapter_issues}")
+        yield {"type": "progress", "message": "章节目录已完成，正在补齐结构细节…"}
+        plan = _repair_chapter_plan_sync(
+            client, chapter_messages, raw_content, chapter_issues or ["章节目录生成失败"]
+        )
+        yield {"type": "course_name", "value": plan.courseTopic}
+        yield from _emit_plan_nodes(plan)
+
+    print(
+        f"[Course Architect] 章节阶段校验完成 chapters={len(plan.chapters)} "
+        f"elapsed={int((time.monotonic() - started_at) * 1000)}ms"
+    )
+    yield {
+        "type": "progress",
+        "message": "章节结构已确定，正在定义课程目标、概念关系与例子策略…",
+    }
+
+    meta_messages = _meta_messages(
+        topic, outline, learner, plan, memory_context, evidence, sources
+    )
+    try:
+        meta, architecture, _ = _generate_meta_with_repair(client, meta_messages, plan)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[Course Architect] 元信息阶段失败：{exc}")
+        raise
+
+    print(
+        f"[Course Architect] 元信息阶段完成 elapsed={int((time.monotonic() - started_at) * 1000)}ms"
+    )
+
+    review_passed, review_skipped, review_unavailable, review_issues = _review_issues(
+        client, architecture, learner, review_mode
+    )
+    if not review_passed:
+        yield {"type": "progress", "message": "正在按审查意见调整课程设计…"}
+        print(f"[Course Architect] 审查失败，定向修复章节：{review_issues}")
+        plan = _repair_chapter_plan_sync(
+            client,
+            chapter_messages,
+            json.dumps(plan.model_dump(), ensure_ascii=False),
+            review_issues,
+        )
+        yield {"type": "course_name", "value": plan.courseTopic}
+        yield from _emit_plan_nodes(plan)
+        meta_messages = _meta_messages(
+            topic, outline, learner, plan, memory_context, evidence, sources
+        )
+        meta, architecture, _ = _generate_meta_with_repair(client, meta_messages, plan)
+        review_passed, review_skipped, review_unavailable, reassessment_issues = _review_issues(
+            client, architecture, learner, review_mode
+        )
+        if not review_passed:
+            raise ValueError(
+                "课程架构审查未通过：" + "；".join(reassessment_issues or review_issues)
+            )
+
+    print(
+        f"[Course Architect] 流式两阶段架构完成 reviewSkipped={review_skipped} "
+        f"elapsed={int((time.monotonic() - started_at) * 1000)}ms"
+    )
     result = {
         "architecture": architecture.model_dump(),
         "issues": [],
@@ -526,6 +842,7 @@ def stream_course_architecture(
         "promptVersion": PROMPT_VERSION,
         "modelVersion": getattr(client, "model", "unknown"),
     }
+    yield {"type": "course_description", "value": architecture.thesis.targetCapability}
     yield {"type": "result", "result": result}
 
 

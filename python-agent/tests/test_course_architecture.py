@@ -4,6 +4,7 @@ import json
 from schemas.course_architecture import CourseArchitecture, validate_course_architecture
 from services.course_architect_service import (
     build_course_architect_prompt,
+    build_course_architect_meta_prompt,
     _complete_chapter_objects,
     generate_course_architecture,
     should_review_architecture,
@@ -68,6 +69,24 @@ def _valid_architecture() -> dict:
     }
 
 
+def _valid_chapter_plan() -> dict:
+    architecture = _valid_architecture()
+    return {
+        "architectureVersion": architecture["architectureVersion"],
+        "courseTopic": architecture["courseTopic"],
+        "chapters": architecture["chapters"],
+    }
+
+
+def _valid_meta() -> dict:
+    architecture = _valid_architecture()
+    return {
+        "thesis": architecture["thesis"],
+        "conceptGraph": architecture["conceptGraph"],
+        "examplePolicy": architecture["examplePolicy"],
+    }
+
+
 class FakeArchitectClient:
     model = "fake-architect"
 
@@ -93,12 +112,24 @@ class FakeArchitectClient:
 
 
 class FakeStreamingArchitectClient(FakeArchitectClient):
+    def __init__(
+        self,
+        responses: list[dict] | None = None,
+        review_responses: list[dict] | None = None,
+        chapter_payload: dict | None = None,
+    ):
+        super().__init__(responses or [_valid_meta()], review_responses)
+        self.chapter_payload = chapter_payload or _valid_chapter_plan()
+        self.stream_calls = []
+
     def stream_chat_with_tools(self, messages, tools, tool_functions, **kwargs):
-        content = json.dumps(_valid_architecture(), ensure_ascii=False)
+        self.stream_calls.append(messages)
+        content = json.dumps(self.chapter_payload, ensure_ascii=False)
         midpoint = content.index('"chapters"') + 1
         yield {"type": "content_delta", "content": content[:midpoint]}
         yield {"type": "content_delta", "content": content[midpoint:]}
-        yield {"type": "done"}
+        yield {"type": "done", "finish_reason": "stop"}
+
 
 def test_valid_architecture_passes_deterministic_validation():
     architecture = CourseArchitecture.model_validate(_valid_architecture())
@@ -124,6 +155,24 @@ def test_stream_course_architecture_emits_nodes_before_final_result():
     assert types.count("node") == 2
     assert types[-1] == "result"
     assert types.index("node") < types.index("result")
+
+
+def test_stream_course_architecture_repairs_meta_without_restarting_chapters():
+    broken_meta = _valid_meta()
+    broken_meta["conceptGraph"] = broken_meta["conceptGraph"][:1]
+    client = FakeStreamingArchitectClient(responses=[broken_meta, _valid_meta()])
+
+    events = list(stream_course_architecture(
+        topic="推荐系统核心链路",
+        outline=_valid_architecture(),
+        learner={"estimatedLevel": "intermediate", "skipBasics": []},
+        client=client,
+    ))
+
+    assert len(client.stream_calls) == 1
+    assert len(client.calls) == 2
+    assert [event["type"] for event in events].count("node") == 2
+    assert "章节已固定" in client.calls[1][-1]["content"]
 
 
 def test_architecture_detects_duplicate_deliverable_and_missing_reference():
@@ -157,9 +206,9 @@ def test_architecture_requires_scope_convergence():
 
 
 def test_course_architect_service_repairs_invalid_design_once():
-    invalid = _valid_architecture()
+    invalid = _valid_chapter_plan()
     invalid["chapters"][1]["deliverable"] = invalid["chapters"][0]["deliverable"]
-    client = FakeArchitectClient([invalid, _valid_architecture()])
+    client = FakeArchitectClient([invalid, _valid_chapter_plan(), _valid_meta()])
 
     result = asyncio.run(generate_course_architecture(
         topic="推荐系统核心链路",
@@ -171,8 +220,32 @@ def test_course_architect_service_repairs_invalid_design_once():
     assert result["issues"] == []
     assert result["reviewSkipped"] is True
     assert result["architecture"]["chapters"][1]["deliverable"] == "能为一个推荐问题设计离线与在线验证方案"
-    assert len(client.calls) == 2
+    assert len(client.calls) == 3
     assert "交付物重复" in client.calls[1][-1]["content"]
+    assert "只修复 chapters 阶段" in client.calls[1][-1]["content"]
+    assert "thesis" in client.calls[2][0]["content"]
+
+
+def test_course_architect_repairs_metadata_without_regenerating_chapters():
+    broken_meta = _valid_meta()
+    broken_meta["conceptGraph"] = broken_meta["conceptGraph"][:1]
+    client = FakeArchitectClient([
+        _valid_chapter_plan(),
+        broken_meta,
+        _valid_meta(),
+    ])
+
+    result = asyncio.run(generate_course_architecture(
+        topic="推荐系统核心链路",
+        outline={"learningGoal": "定位推荐问题"},
+        learner={"estimatedLevel": "intermediate"},
+        client=client,
+    ))
+
+    assert result["issues"] == []
+    assert len(client.calls) == 3
+    assert "章节已固定" in client.calls[2][-1]["content"]
+    assert "ch-1" in client.calls[2][0]["content"]
 
 
 def test_course_architect_semantic_review_can_trigger_revision():
@@ -186,7 +259,12 @@ def test_course_architect_semantic_review_can_trigger_revision():
         "repairNotes": "合并重复章节，并把评估能力提前到同一认知台阶。",
     }
     client = FakeArchitectClient(
-        [_valid_architecture(), _valid_architecture()],
+        [
+            _valid_chapter_plan(),
+            _valid_meta(),
+            _valid_chapter_plan(),
+            _valid_meta(),
+        ],
         review_responses=[review_fail, {"passed": True, "issues": [], "repairNotes": ""}],
     )
     result = asyncio.run(generate_course_architecture(
@@ -198,9 +276,9 @@ def test_course_architect_semantic_review_can_trigger_revision():
     ))
 
     assert result["issues"] == []
-    assert len(client.calls) == 2
-    assert "DUPLICATE_CHAPTER" in client.calls[1][-1]["content"]
-    assert "合并重复章节" in client.calls[1][-1]["content"]
+    assert len(client.calls) == 4
+    assert "DUPLICATE_CHAPTER" in client.calls[2][-1]["content"]
+    assert "合并重复章节" in client.calls[2][-1]["content"]
 
 
 def test_optional_review_skips_normal_architecture_and_runs_on_risk():
@@ -234,8 +312,24 @@ def test_course_architect_prompt_declares_design_contract():
     )
     assert "不是内容作者" in prompt
     assert "课程结构由认知增量决定" in prompt
-    assert "personalExampleLimit" in prompt
     assert "不得编造 URL" in prompt
     assert "系统学习、全面入门" in prompt
     assert "用户背景只调整起点" in prompt
     assert "不强制每章写报告" in prompt
+    assert "严禁在本阶段输出 thesis" in prompt
+
+
+def test_course_architect_meta_prompt_keeps_chapters_fixed():
+    from schemas.course_architecture import CourseChapterPlan
+
+    plan = CourseChapterPlan.model_validate(_valid_chapter_plan())
+    prompt = build_course_architect_meta_prompt(
+        "推荐系统核心链路",
+        {"learningGoal": "定位推荐问题"},
+        {"estimatedLevel": "intermediate", "likelyGaps": ["召回排序边界"]},
+        plan,
+        {"scene": "course_architecture"},
+    )
+    assert "不得新增、删除、重命名或改写章节" in prompt
+    assert "personalExampleLimit" in prompt
+    assert "推荐链路职责边界" in prompt
