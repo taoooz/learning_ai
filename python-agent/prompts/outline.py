@@ -34,8 +34,14 @@ PROMPT = {
 
 ## 第一步：分析
 
-### 1.1 判断实际需求
+### 1.1 判断实际需求与意图类型
 透过用户诉求看本质，思考用户潜在的实际学习需求是什么。
+结合诉求原文与澄清回答，判定课程意图类型（intentType），单选：
+- conceptual_understanding：系统理解概念、原理与框架
+- skill_mastery：学会动手操作、搭建或执行一套流程
+- problem_solving：定位、诊断或解决一类具体故障/难题
+- fast_review：已有基础，快速复习或速成要点
+以用户真实目的为准，不要凭个别关键词猜测；澄清回答与初始诉求冲突时，以澄清回答为准。
 
 ### 1.2 确定课程设计重点
 基于实际需求，从以下维度中选择 2-5 个作为课程讲解重点：
@@ -55,6 +61,7 @@ PROMPT = {
 - **课程定位**（direction）：参考实际需求，概括这门课的范围（建议 30 字内）
 - **课程重点**（keypoint）：基于选定的设计重点维度，总结课程内容重心（建议 40 字内）
 - **学习目标**（object）：学完后用户能达到什么效果，具体不务虚（建议 50 字内）
+- **意图类型**（intentType）：第一步判定的课程意图类型，四个枚举值之一
 - **个人情况**（learnerPositioning）：
   - 当前水平（level）：用户在该方向上的知识水平，单选 初级/中级/高级
   - 水平置信度（confidence）：0～1；没有足够证据时不要超过 0.6
@@ -98,6 +105,7 @@ PROMPT = {
 <div slot="direction">课程定位</div>
 <div slot="keypoint">课程重点</div>
 <div slot="object">学习目标</div>
+<div slot="intentType">conceptual_understanding/skill_mastery/problem_solving/fast_review</div>
 <div slot="level">初级/中级/高级</div>
 <div slot="confidence">0.0-1.0</div>
 <div slot="background">用户相关背景</div>

@@ -7,6 +7,7 @@ import {
   inferIntentType,
   mapTocToBlueprint,
   normalizeEstimatedLevel,
+  normalizeIntentType,
 } from '../lib/learning-v2/blueprint-map';
 import { validateCourseBlueprint } from '../lib/learning-v2/validators';
 import type { MapTocToBlueprintInput } from '../lib/learning-v2/blueprint-map';
@@ -168,4 +169,17 @@ test('skipBasics 映射为排除主题', () => {
 test('课程名为空时回退用 outline.topic', () => {
   const blueprint = mapTocToBlueprint(makeInput({ courseName: '  ' }));
   assert.equal(blueprint.topic, 'Redis 缓存');
+});
+
+test('inferIntentType 不再被裸“问题”一词误判', () => {
+  assert.equal(inferIntentType('理解常见缓存问题的成因'), 'conceptual_understanding');
+  assert.equal(inferIntentType('解决缓存问题'), 'problem_solving');
+});
+
+test('normalizeIntentType 只接受契约枚举', () => {
+  assert.equal(normalizeIntentType('skill_mastery'), 'skill_mastery');
+  assert.equal(normalizeIntentType('fast_review'), 'fast_review');
+  assert.equal(normalizeIntentType('casual_chat'), undefined);
+  assert.equal(normalizeIntentType(undefined), undefined);
+  assert.equal(normalizeIntentType(''), undefined);
 });

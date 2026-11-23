@@ -19,6 +19,8 @@ class OutlineBlueprint(BaseModel):
     """课程纲要 Blueprint"""
     learningDirection: str
     learningGoal: str
+    # 澄清阶段建立的业务契约；旧会话可能缺失，前端编译蓝图时回退关键词推断
+    intentType: str | None = None
     learnerPositioning: LearnerPositioning
 
 

@@ -71,12 +71,30 @@ export function normalizeEstimatedLevel(value: string | undefined): LearnerEstim
   }
 }
 
-/** 按学习诉求关键词推断意图类型（无关键词命中按概念理解） */
+/**
+ * 按学习诉求关键词推断意图类型（无关键词命中按概念理解）。
+ * 仅作回退：意图类型优先来自澄清阶段的业务契约（outline.intentType）。
+ * 不匹配裸“问题”一词——几乎所有课程交付物都含“问题”，误判面太大。
+ */
 export function inferIntentType(text: string): LearningIntentType {
   if (/复习|速成|快速|突击/.test(text)) return 'fast_review';
-  if (/解决|排障|排查|诊断|故障|问题/.test(text)) return 'problem_solving';
+  if (/解决|排障|排查|诊断|故障/.test(text)) return 'problem_solving';
   if (/实操|动手|搭建|步骤|流程|怎么做/.test(text)) return 'skill_mastery';
   return 'conceptual_understanding';
+}
+
+const INTENT_TYPES: readonly LearningIntentType[] = [
+  'conceptual_understanding',
+  'skill_mastery',
+  'problem_solving',
+  'fast_review',
+];
+
+/** 归一化澄清契约里的意图类型；缺失或非法返回 undefined，由调用方回退推断 */
+export function normalizeIntentType(value: unknown): LearningIntentType | undefined {
+  return INTENT_TYPES.includes(value as LearningIntentType)
+    ? (value as LearningIntentType)
+    : undefined;
 }
 
 /**

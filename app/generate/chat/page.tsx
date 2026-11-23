@@ -43,6 +43,7 @@ function ChatPageContent() {
       topic: generatedCourseName || topic,
       learningDirection: currentBlueprint.learningDirection,
       learningGoal: currentBlueprint.learningGoal,
+      intentType: currentBlueprint.intentType,
       learnerPositioning: currentBlueprint.learnerPositioning,
     };
     sessionStorage.setItem('pendingOutline', JSON.stringify(outline));

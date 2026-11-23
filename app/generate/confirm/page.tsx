@@ -124,6 +124,7 @@ function ConfirmPageContent() {
       topic,
       learningDirection: bp.learningDirection,
       learningGoal: bp.learningGoal,
+      intentType: bp.intentType,
       learnerPositioning: bp.learnerPositioning,
     }));
     router.push(`/generate/toc?topic=${encodeURIComponent(topic)}`);

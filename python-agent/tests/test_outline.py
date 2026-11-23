@@ -223,3 +223,19 @@ def test_outline_request_schema():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+def test_parse_outline_intent_type_contract():
+    """intentType 是澄清阶段建立的业务契约：只接受枚举，缺失/非法返回 None 由前端回退"""
+    content = """<outline>
+<div slot="direction">AI 排障实战</div>
+<div slot="object">能独立定位常见故障</div>
+<div slot="intentType">problem_solving</div>
+<div slot="level">中级</div>
+</outline>"""
+    assert parse_content_blocks(content)["outline"]["intentType"] == "problem_solving"
+    # 大小写归一化
+    assert parse_content_blocks(content.replace("problem_solving", "Skill_Mastery"))["outline"]["intentType"] == "skill_mastery"
+    # 非法值与缺失槽位都返回 None
+    assert parse_content_blocks(content.replace("problem_solving", "casual_chat"))["outline"]["intentType"] is None
+    assert parse_content_blocks(content.replace('<div slot="intentType">problem_solving</div>\n', ''))["outline"]["intentType"] is None

@@ -14,11 +14,13 @@ import { validateCourseBlueprint } from '@/lib/learning-v2/validators';
 import { createStoredCourse } from '@/lib/learning-v2/storage';
 import { createAndSaveStoredCourse } from '@/lib/learning-v2/dispatch';
 import type { OutlineLearnerPositioning } from '@/types/course';
+import type { LearningIntentType } from '@/types/learning-v2/blueprint';
 
 interface PendingOutline {
   topic: string;
   learningDirection: string;
   learningGoal: string;
+  intentType?: LearningIntentType;
   learnerPositioning: OutlineLearnerPositioning;
 }
 
@@ -139,6 +141,7 @@ function TocPageContent() {
           courseId,
           architecture,
           learner: outline.learnerPositioning,
+          intentType: outline.intentType,
           modelVersion: completeResult?.modelVersion,
         });
 

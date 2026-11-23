@@ -137,3 +137,23 @@ test('compiler falls back to architecture example domains when learner has none'
     architecture.examplePolicy.preferredDomains,
   );
 });
+
+test('intentType 优先澄清契约，缺失或非法时回退关键词推断', () => {
+  const base = {
+    courseId: 'course-intent',
+    architecture: makeArchitecture(),
+    learner: { estimatedLevel: '中级' as const },
+  };
+  // 契约值直接透传，不被目标文本关键词覆盖
+  assert.equal(
+    compileCourseArchitecture({ ...base, intentType: 'fast_review' }).intentType,
+    'fast_review',
+  );
+  // fixture 目标文本含裸“问题”但无强关键词：回退推断不再误判 problem_solving
+  assert.equal(compileCourseArchitecture(base).intentType, 'conceptual_understanding');
+  // 非法值按缺失处理
+  assert.equal(
+    compileCourseArchitecture({ ...base, intentType: 'casual_chat' as never }).intentType,
+    'conceptual_understanding',
+  );
+});

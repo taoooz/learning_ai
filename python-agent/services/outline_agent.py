@@ -337,6 +337,7 @@ def stream_outline_with_tools(
             "learningDirection": outline.get("learningDirection", ""),
             "learningKeypoint": outline.get("learningKeypoint", ""),
             "learningGoal": outline.get("learningGoal", ""),
+            "intentType": outline.get("intentType"),
             "learnerPositioning": {
                 "estimatedLevel": outline.get("estimatedLevel", "beginner"),
                 "difficultySummary": f"水平置信度：{outline.get('levelConfidence', 0.6)}",
@@ -479,6 +480,7 @@ def stream_answer_with_tools(
             "learningDirection": outline.get("learningDirection", ""),
             "learningKeypoint": outline.get("learningKeypoint", ""),
             "learningGoal": outline.get("learningGoal", ""),
+            "intentType": outline.get("intentType"),
             "learnerPositioning": {
                 "estimatedLevel": outline.get("estimatedLevel", "beginner"),
                 "difficultySummary": f"水平置信度：{outline.get('levelConfidence', 0.6)}",

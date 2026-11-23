@@ -186,6 +186,7 @@ function outlineFromBlueprint(blueprint: CourseBlueprint) {
     learningDirection: blueprint.topic,
     learningKeypoint: blueprint.mission.why,
     learningGoal: blueprint.mission.targetScenario,
+    intentType: blueprint.intentType,
     learnerPositioning: {
       estimatedLevel: learner.estimatedLevel === 'beginner'
         ? '初级'
@@ -374,6 +375,7 @@ export function getPromptLabBlueprint(snapshot: PromptLabSnapshot, artifacts: Re
         courseId: 'course-debug-prompt-lab',
         architecture: architecture as never,
         learner: compilerLearner as never,
+        intentType: asRecord(asRecord(artifacts.outline).outline).intentType as never,
         modelVersion: 'prompt-lab',
       });
     } catch {

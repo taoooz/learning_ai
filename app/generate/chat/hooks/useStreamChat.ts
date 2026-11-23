@@ -137,6 +137,7 @@ export function useStreamChat(topic: string) {
                 const outlineTag = `<outline>
 <div slot="direction">${blueprint.learningDirection || ''}</div>
 <div slot="object">${blueprint.learningGoal || ''}</div>
+${blueprint.intentType ? `<div slot="intentType">${blueprint.intentType}</div>` : ''}
 <div slot="level">${lp.estimatedLevel || 'beginner'}</div>
 ${typeof lp.levelConfidence === 'number' ? `<div slot="confidence">${lp.levelConfidence}</div>` : ''}
 ${lp.backgroundSummary ? `<div slot="background">${lp.backgroundSummary}</div>` : ''}

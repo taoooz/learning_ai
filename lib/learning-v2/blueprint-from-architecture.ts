@@ -9,11 +9,12 @@ import type {
   ChapterDefinition,
   CourseBlueprint,
   EvidenceRequirement,
+  LearningIntentType,
   LearningObjective,
   ObjectiveImportance,
 } from '@/types/learning-v2/blueprint';
 import type { OutlineLearnerPositioning } from '@/types/outline';
-import { inferIntentType, normalizeEstimatedLevel } from './blueprint-map';
+import { inferIntentType, normalizeEstimatedLevel, normalizeIntentType } from './blueprint-map';
 
 export const BLUEPRINT_ARCHITECTURE_COMPILER_VERSION = 'course-architecture-compiler-v1';
 
@@ -21,6 +22,8 @@ export interface CompileCourseArchitectureInput {
   courseId: string;
   architecture: CourseArchitecture;
   learner: OutlineLearnerPositioning;
+  /** 澄清阶段建立的业务契约；缺失时回退关键词推断（兼容旧会话） */
+  intentType?: LearningIntentType;
   modelVersion?: string;
   now?: number;
 }
@@ -114,7 +117,7 @@ export function compileCourseArchitecture(input: CompileCourseArchitectureInput)
     blueprintId: `bp-${courseId}`,
     protocolVersion: 2,
     topic: architecture.courseTopic,
-    intentType: inferIntentType(goalText),
+    intentType: normalizeIntentType(input.intentType) ?? inferIntentType(goalText),
     mission: {
       why: architecture.thesis.learningDelta[0] || architecture.thesis.targetCapability,
       targetScenario: architecture.thesis.targetCapability,

@@ -231,3 +231,22 @@ def test_learning_summary_is_injected_into_planning_and_chat(tmp_path):
     assert planning["learningSummary"]
     assert "sourceRecordIds" not in planning["learningSummary"]
     assert to_chat_prompt_payload(chat_context)["learningSummary"]
+
+
+def test_prompt_memory_payload_hides_record_ids():
+    """README#15：plan/task/tutor 的 prompt 不暴露内部 record ID，细节检索走 memory_search"""
+    context = {
+        "scene": "task_teaching",
+        "core": {"goals": [], "constraints": [], "activePreferences": [], "riskConcepts": []},
+        "learningState": {"conceptStates": []},
+        "index": [{"memoryId": "mem-index-1", "title": "工作背景", "summary": "做过内容运营"}],
+        "bodies": [{"memoryId": "mem-body-1", "title": "项目经历", "content": "参与过推荐位配置"}],
+        "evidence": [],
+    }
+    text = format_memory_context_for_prompt(context)
+    assert "mem-index-1" not in text
+    assert "mem-body-1" not in text
+    assert "memoryId" not in text
+    # 教学内容本身保留
+    assert "工作背景" in text
+    assert "参与过推荐位配置" in text

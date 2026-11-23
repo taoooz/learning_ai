@@ -1,5 +1,7 @@
 // types/outline.ts — Outline 纲要、澄清问题相关类型
 
+import type { LearningIntentType } from '@/types/learning-v2/blueprint';
+
 export interface ClarificationQuestion {
   id: string;
   question: string;
@@ -27,6 +29,8 @@ export interface OutlineBlueprint {
   learningDirection: string;
   learningKeypoint?: string;
   learningGoal: string;
+  /** 澄清阶段建立的业务契约；旧会话可能缺失，编译蓝图时回退关键词推断 */
+  intentType?: LearningIntentType;
   learnerPositioning: OutlineLearnerPositioning;
 }
 

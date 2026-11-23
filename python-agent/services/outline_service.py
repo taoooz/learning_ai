@@ -33,12 +33,21 @@ _LEVEL_ALIASES = {
 }
 _VALID_LEVELS = {"novice", "beginner", "intermediate", "advanced"}
 
+# 课程意图类型是澄清阶段建立的业务契约，下游章节规划据此对齐任务结构
+_VALID_INTENT_TYPES = {"conceptual_understanding", "skill_mastery", "problem_solving", "fast_review"}
+
 
 def normalize_level(level: str) -> str:
     """将模型输出的水平值归一化为英文键；无法识别时回退 beginner"""
     value = (level or "").strip()
     normalized = _LEVEL_ALIASES.get(value, value.lower())
     return normalized if normalized in _VALID_LEVELS else "beginner"
+
+
+def normalize_intent_type(value: str | None) -> str | None:
+    """意图类型只接受契约枚举；缺失或非法时返回 None，由前端回退推断"""
+    normalized = (value or "").strip().lower()
+    return normalized if normalized in _VALID_INTENT_TYPES else None
 
 
 def needs_level_calibration(planning_memory: dict | None = None, user_profile: dict | None = None) -> bool:
@@ -139,6 +148,7 @@ def parse_content_blocks(content: str) -> dict:
         gaps_match = re.search(r'<div\s+slot="gaps">(.*?)</div>', outline_content, re.DOTALL)
         example_domains_match = re.search(r'<div\s+slot="exampleDomains">(.*?)</div>', outline_content, re.DOTALL)
         example_limit_match = re.search(r'<div\s+slot="personalExampleLimit">(.*?)</div>', outline_content, re.DOTALL)
+        intent_type_match = re.search(r'<div\s+slot="intentType">(.*?)</div>', outline_content, re.DOTALL)
 
         confidence = None
         if confidence_match:
@@ -164,6 +174,7 @@ def parse_content_blocks(content: str) -> dict:
             "learningDirection": direction_match.group(1).strip() if direction_match else "",
             "learningKeypoint": keypoint_match.group(1).strip() if keypoint_match else "",
             "learningGoal": object_match.group(1).strip() if object_match else "",
+            "intentType": normalize_intent_type(intent_type_match.group(1) if intent_type_match else None),
             "estimatedLevel": normalize_level(level_match.group(1) if level_match else ""),
             "backgroundSummary": background_match.group(1).strip() if background_match else None,
             "skipBasics": _split_slot(knowledge_match.group(1)) if knowledge_match else [],

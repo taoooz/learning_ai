@@ -686,14 +686,15 @@ def format_memory_context_for_prompt(context: dict[str, Any]) -> str:
             {"concept": item.get("conceptName"), "status": item.get("status")}
             for item in concepts[:5]
         ]
+    # README#15：prompt 不暴露内部 record ID；细节检索走只读 memory_search（按关键词，不按 ID）
     if index:
         payload["memoryIndex"] = [
-            {"memoryId": item.get("memoryId"), "title": item.get("title"), "summary": item.get("summary")}
+            {"title": item.get("title"), "summary": item.get("summary")}
             for item in index[:5]
         ]
     if bodies:
         payload["memoryBodies"] = [
-            {"memoryId": item.get("memoryId"), "title": item.get("title"), "content": item.get("content")}
+            {"title": item.get("title"), "content": item.get("content")}
             for item in bodies[:2]
         ]
     if evidence:
