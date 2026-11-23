@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server'
 import { AUTH_COOKIE_NAME, isValidAuthCode } from '@/lib/auth'
 
 // 需要登录才能访问的路径（排除公开页面）
-const protectedPaths = ['/', '/course', '/generate', '/profile', '/review']
+const protectedPaths = ['/', '/course', '/generate', '/profile', '/review', '/debug']
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -40,5 +40,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/', '/course/:path*', '/generate/:path*', '/profile/:path*', '/review/:path*'],
+  matcher: ['/', '/course/:path*', '/generate/:path*', '/profile/:path*', '/review/:path*', '/debug/:path*'],
 }

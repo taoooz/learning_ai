@@ -24,6 +24,11 @@ export function UserProfileProvider({ children }: { children: React.ReactNode })
     (async () => {
       try {
         const localProfile = getUserProfile();
+        // Prompt Lab 是隔离调试页：只读取本地快照，不回写服务端 Memory 或正式画像缓存。
+        if (typeof window !== 'undefined' && window.location.pathname.startsWith('/debug/')) {
+          if (!cancelled && localProfile) setUserProfile(localProfile);
+          return;
+        }
         if (!cancelled && localProfile) setUserProfile(localProfile);
         const serverProfile = await getServerProfile();
         if (!cancelled && serverProfile) {

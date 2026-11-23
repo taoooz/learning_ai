@@ -41,6 +41,7 @@ from services.chat_agent import stream_chat_with_tools, build_chat_system_prompt
 from routers.learning_v2 import router as learning_v2_router
 from routers.user_data import router as user_data_router
 from routers.memory_v4 import router as memory_v4_router
+from routers.prompt_lab import router as prompt_lab_router
 from services.memory_v4_store import MemoryV4Store
 from services.memory_context_v4 import (
     resolve_memory_context,
@@ -145,6 +146,7 @@ app = FastAPI(title="Agent Outline Generator", version="1.0.0", lifespan=lifespa
 app.include_router(learning_v2_router)
 app.include_router(user_data_router)
 app.include_router(memory_v4_router)
+app.include_router(prompt_lab_router)
 
 app.add_middleware(
     CORSMiddleware,

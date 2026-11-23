@@ -390,15 +390,13 @@ def should_review_chapter_plan(
     return False
 
 
-async def _review_chapter_plan(
-    client: MiniMaxClient,
-    *,
-    chapter: dict,
+def build_chapter_plan_review_prompt(
+    chapter_title: str,
     teaching_goal: str,
     learner: dict,
     tasks: list[dict],
-) -> dict:
-    """独立审查计划的认知增量、重复度和水平匹配；不可解析时安全放行并记录。"""
+) -> str:
+    """生产与 Prompt Lab 共用的章节计划审查 system prompt。"""
     review_tasks = [
         {
             "taskId": task.get("taskId"),
@@ -412,18 +410,35 @@ async def _review_chapter_plan(
         }
         for task in tasks
     ]
+    return build_prompt(
+        "chapter_plan",
+        ["review"],
+        chapter_title=chapter_title,
+        teaching_goal=teaching_goal,
+        learner_section=_format_learner(learner),
+        tasks_json=json.dumps(review_tasks, ensure_ascii=False, indent=2),
+    )
+
+
+async def _review_chapter_plan(
+    client: MiniMaxClient,
+    *,
+    chapter: dict,
+    teaching_goal: str,
+    learner: dict,
+    tasks: list[dict],
+) -> dict:
+    """独立审查计划的认知增量、重复度和水平匹配；不可解析时安全放行并记录。"""
     try:
         response = await client.chat(
             messages=[
                 {
                     "role": "system",
-                    "content": build_prompt(
-                        "chapter_plan",
-                        ["review"],
-                        chapter_title=chapter.get("title", ""),
-                        teaching_goal=teaching_goal,
-                        learner_section=_format_learner(learner),
-                        tasks_json=json.dumps(review_tasks, ensure_ascii=False, indent=2),
+                    "content": build_chapter_plan_review_prompt(
+                        chapter.get("title", ""),
+                        teaching_goal,
+                        learner,
+                        tasks,
                     ),
                 },
                 {"role": "user", "content": "请审查这份章节计划。"},

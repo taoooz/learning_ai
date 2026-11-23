@@ -163,6 +163,22 @@ def _compact_architecture_for_review(architecture: CourseArchitecture) -> dict[s
     }
 
 
+def build_course_architect_review_prompt(
+    architecture: CourseArchitecture,
+    learner: dict[str, Any],
+) -> str:
+    """生产与 Prompt Lab 共用的架构审查 system prompt。"""
+    return build_prompt(
+        "course_architect",
+        ["review"],
+        learner_section=_format_learner_for_review(learner),
+        architecture_json=wrap_untrusted_context(
+            "architecture_under_review",
+            _compact_architecture_for_review(architecture),
+        ),
+    )
+
+
 def _text_terms(text: str) -> set[str]:
     normalized = text.strip().lower()
     terms = set(re.findall(r"[a-z0-9_]+", normalized))
@@ -224,18 +240,7 @@ async def _review_course_architecture(
 ) -> dict[str, Any]:
     try:
         messages = [
-            {
-                "role": "system",
-                "content": build_prompt(
-                    "course_architect",
-                    ["review"],
-                    learner_section=_format_learner_for_review(learner),
-                    architecture_json=wrap_untrusted_context(
-                        "architecture_under_review",
-                        _compact_architecture_for_review(architecture),
-                    ),
-                ),
-            },
+            {"role": "system", "content": build_course_architect_review_prompt(architecture, learner)},
             {"role": "user", "content": "请审查这份课程架构。"},
         ]
         if hasattr(client, "_call_llm"):

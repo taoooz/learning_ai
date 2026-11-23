@@ -42,6 +42,7 @@
 | 服务端存储 | `app/api/user`, `python-agent/routers/user_data.py`, `python-agent/services/user_data_store.py` |
 | Python 学习流 API | `python-agent/routers/learning_v2.py`, `python-agent/services` |
 | 内容生成与校验 | `python-agent/prompts`, `python-agent/services` |
+| Prompt 调试台 | `app/debug/course-pipeline`, `components/prompt-lab`, `python-agent/routers/prompt_lab.py`, `python-agent/services/prompt_lab_service.py` |
 | 用户 Memory / 画像 | `types/memory-v4.ts`, `python-agent/services/memory_v4_store.py`, `python-agent/services/memory_context_v4.py`, `python-agent/services/memory_candidate_service.py`, `python-agent/services/memory_summary_service.py`, `python-agent/routers/memory_v4.py`, `app/api/user/memory`, `hooks/useUserMemory.ts`, `components/profile/MemoryPanel.tsx`, `components/ReviewQueueCard.tsx`, `app/profile` |
 | 测试 | `tests`, `python-agent/tests`, `tests/e2e`, `playwright.config.ts` |
 
@@ -61,6 +62,7 @@
 12. Profile Memory 使用固定五维派生视图（方向、背景、偏好、教学策略、学习轨迹）；摘要通过 `sourceRecordIds` 与 `sourceRevision` 指向原子记录，不形成第二事实层。
 13. Chat Agent API 只接受 `{ courseTopic, messages }` 结构化输入；不支持仅传 `messages` 的旧直连模式。
 14. 课程起点不得把“缺少主题学习记录”直接当成零基础：`LearnerStartingPoint` 可带水平置信度、背景、可能缺口和例子策略；低置信度且存在可迁移背景时必须先校准。Course Architect 必须两阶段生成：第一阶段只流式输出 `courseTopic + chapters`，第二阶段固定章节并只补全 `thesis + conceptGraph + examplePolicy`；任一阶段失败只能做阶段内定向修复，不得重新生成完整课程。最终架构需通过确定性结构校验，LLM 架构审查仅在 auto 风险模式下按需触发；章节计划进入内容生成前按风险信号执行概念重复/过基础/过度拆分审查。
+15. Prompt Lab 与正式业务完全隔离：只复用生产 Prompt Builder，编辑后的 Prompt 仅作为本次调试覆盖；不得写入课程、章节、Memory 或 engagement。调试数据只存 `ai-learning-prompt-lab-v1`，生产默认关闭，显式设置 `ENABLE_PROMPT_DEBUGGER=1` 才会开放。
 
 ## 5. 详细文档索引
 
