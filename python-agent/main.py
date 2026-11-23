@@ -377,6 +377,7 @@ async def generate_outline_agent(req: OutlineRequest, request: Request):
                 topic=req.topic,
                 user_profile=req.userProfile,
                 planning_memory=req.planningMemory,
+                account_id=account,
             )
         except Exception as e:
             print(f"[Outline Agent API] Error: {e}")
@@ -389,7 +390,7 @@ async def generate_outline_agent(req: OutlineRequest, request: Request):
 
 
 @app.post("/api/agents/outline/answer_agent")
-async def answer_outline_agent(req: OutlineAnswerRequest):
+async def answer_outline_agent(req: OutlineAnswerRequest, request: Request):
     """Agent 版 outline 多轮回答（带搜索能力，流式）"""
     def event_generator():
         try:
@@ -397,6 +398,7 @@ async def answer_outline_agent(req: OutlineAnswerRequest):
                 session_id=req.sessionId,
                 answer=req.answer or "",
                 answers=[item.model_dump() for item in req.answers] or None,
+                account_id=request.headers.get("X-Account-Id"),
             )
         except Exception as e:
             print(f"[Outline Answer Agent API] Error: {e}")
@@ -451,7 +453,12 @@ async def generate_toc_agent_route(request: Request):
 
     def event_generator():
         try:
-            yield from stream_toc_with_tools(blueprint, planning_payload, user_profile)
+            yield from stream_toc_with_tools(
+                blueprint,
+                planning_payload,
+                user_profile,
+                account_id=account,
+            )
         except Exception as e:
             print(f"[TOC Agent API] Error: {e}")
             import traceback

@@ -170,6 +170,7 @@ def compile_prompt_lab_stage(stage: str, inputs: dict) -> dict[str, Any]:
             user_profile,
             planning_memory,
             needs_calibration=bool(inputs.get("needsCalibration")),
+            allow_memory_search=True,
         )
         system_prompt = initial_messages["system"]
         if stage == "outline_answer":
@@ -192,6 +193,7 @@ def compile_prompt_lab_stage(stage: str, inputs: dict) -> dict[str, Any]:
             evidence_text,
             sources,
             allow_search=bool(inputs.get("allowSearch", True)),
+            allow_memory_search=True,
         )
         system_prompt = stage_messages["system"]
         user_message = defaults["user_message"] + "\n\n" + stage_messages["user"]

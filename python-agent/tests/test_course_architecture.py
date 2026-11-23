@@ -136,9 +136,11 @@ class FakeStreamingArchitectClient(FakeArchitectClient):
         super().__init__(responses or [_valid_meta()], review_responses)
         self.chapter_payload = chapter_payload or _valid_chapter_plan()
         self.stream_calls = []
+        self.stream_tools = []
 
     def stream_chat_with_tools(self, messages, tools, tool_functions, **kwargs):
         self.stream_calls.append(messages)
+        self.stream_tools = tools
         content = json.dumps(self.chapter_payload, ensure_ascii=False)
         midpoint = content.index('"chapters"') + 1
         yield {"type": "content_delta", "content": content[:midpoint]}
@@ -207,6 +209,26 @@ def test_stream_course_architecture_supports_optional_semantic_review():
     assert result["type"] == "result"
     assert result["result"]["reviewSkipped"] is False
     assert len(client.review_calls) == 1
+
+
+def test_stream_course_architecture_exposes_account_scoped_memory_search():
+    client = FakeStreamingArchitectClient(
+        review_responses=[{"passed": True, "issues": [], "repairNotes": ""}],
+    )
+
+    list(stream_course_architecture(
+        topic="推荐系统核心链路",
+        outline=_valid_architecture(),
+        learner={"estimatedLevel": "intermediate", "skipBasics": []},
+        client=client,
+        account_id="account-1",
+    ))
+
+    assert "memory_search" in {
+        tool.get("function", {}).get("name")
+        for tool in client.stream_tools
+    }
+    assert "Memory 检索策略" in client.stream_calls[0][0]["content"]
 
 
 def test_architecture_detects_duplicate_deliverable_and_missing_reference():

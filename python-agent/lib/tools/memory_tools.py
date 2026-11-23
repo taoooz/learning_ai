@@ -33,6 +33,12 @@ MEMORY_SEARCH_TOOL = {
     },
 }
 
+MEMORY_SEARCH_POLICY = """## Memory 检索策略
+- 输入中的 Planning Memory 与画像只是已筛选摘要，不是全量长期记忆。
+- 只有当摘要不足以判断学习者背景、已掌握内容、薄弱概念或教学偏好时，才调用 memory_search。
+- memory_search 的结果不包含内部 record ID；不要臆测或编造未检索到的个人背景。
+- 已经获得足够信息时不要为了“更了解用户”而重复检索。"""
+
 
 def _terms(text: str) -> set[str]:
     normalized = text.lower().strip()

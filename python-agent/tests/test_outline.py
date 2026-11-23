@@ -2,13 +2,19 @@ import pytest
 from schemas.outline import OutlineRequest, LearnerPositioning, OutlineBlueprint
 from schemas.outline import OutlineAnswerRequest
 from services.outline_agent import (
+    _stream_agent_sse,
     _complete_quiz_questions,
     _emit_clarification_form,
     _format_clarification_answers,
     _normalize_clarification_question,
     _normalize_clarification_options,
 )
-from services.outline_service import needs_level_calibration, normalize_level, parse_content_blocks
+from services.outline_service import (
+    build_initial_messages,
+    needs_level_calibration,
+    normalize_level,
+    parse_content_blocks,
+)
 
 
 def test_normalize_level_chinese_to_english():
@@ -21,6 +27,47 @@ def test_normalize_level_chinese_to_english():
     assert normalize_level("beginner") == "beginner"
     assert normalize_level("未知值") == "beginner"
     assert normalize_level("") == "beginner"
+
+
+class _CaptureToolClient:
+    def __init__(self):
+        self.tools = []
+
+    def stream_chat_with_tools(self, messages, tools, tool_functions, **kwargs):
+        self.tools = tools
+        yield {"type": "content_delta", "content": "ok"}
+        yield {"type": "done", "finish_reason": "stop"}
+
+
+def test_outline_agent_exposes_memory_search_only_with_account():
+    client = _CaptureToolClient()
+    events = list(_stream_agent_sse(
+        client,
+        [{"role": "system", "content": "test"}, {"role": "user", "content": "test"}],
+        100,
+        [],
+        memory_account_id="account-1",
+    ))
+    assert events
+    assert "memory_search" in {tool["function"]["name"] for tool in client.tools}
+
+    no_account = _CaptureToolClient()
+    list(_stream_agent_sse(
+        no_account,
+        [{"role": "system", "content": "test"}, {"role": "user", "content": "test"}],
+        100,
+        [],
+    ))
+    assert "memory_search" not in {tool["function"]["name"] for tool in no_account.tools}
+
+    prompt = build_initial_messages(
+        "推荐系统",
+        {"targetJob": "产品经理"},
+        {"learnerSnapshot": {"estimatedLevel": "intermediate"}},
+        allow_memory_search=True,
+    )
+    assert "Memory 检索策略" in prompt["system"]
+    assert "Memory 检索策略" not in prompt["user"]
 
 
 def test_parse_outline_normalizes_level():

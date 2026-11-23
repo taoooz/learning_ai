@@ -42,6 +42,7 @@ def stream_toc_with_tools(
     planning_payload: dict = None,
     user_profile: dict = None,
     max_tokens: int = 16000,
+    account_id: str | None = None,
 ) -> Generator[str, None, None]:
     """设计并审查课程架构，再把架构确定性地渲染为前端 TOC 事件。"""
     del max_tokens  # 架构生成服务内部管理 token budget
@@ -72,6 +73,7 @@ def stream_toc_with_tools(
             evidence=evidence,
             sources=sources,
             allow_search=not coverage["covered"],
+            account_id=account_id,
         ):
             event_type = event.get("type")
             if event_type == "node":

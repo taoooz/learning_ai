@@ -8,6 +8,7 @@ from lib.minimax import MiniMaxClient, parse_json_response
 from lib.constants import LEVEL_DESCRIPTIONS, LEARNING_STYLE_DESCRIPTIONS, TECHNICAL_LEVEL_DESCRIPTIONS
 from memory.session import get_session_store
 from prompts import build_prompt
+from lib.tools.memory_tools import MEMORY_SEARCH_POLICY
 from services.memory_context_v4 import wrap_untrusted_context
 
 
@@ -220,6 +221,7 @@ def build_initial_messages(
     user_profile: dict,
     planning_memory: dict,
     needs_calibration: bool = False,
+    allow_memory_search: bool = False,
 ) -> dict[str, str]:
     """system 只保留行为与输出契约；本轮用户输入、画像和记忆进入 user prompt。"""
     # 画像和 Memory 都可能包含用户或模型生成文本，统一按不可信数据注入。
@@ -238,6 +240,8 @@ def build_initial_messages(
         ["critical_rules", "output_format"],
         today=today,
     )
+    if allow_memory_search:
+        system_prompt += "\n\n" + MEMORY_SEARCH_POLICY
     user_prompt = build_prompt(
         "outline",
         ["user_context"],
@@ -255,9 +259,15 @@ def build_initial_messages(
     return {"system": system_prompt, "user": user_prompt}
 
 
-def build_initial_prompt(topic: str, user_profile: dict, planning_memory: dict, needs_calibration: bool = False) -> str:
+def build_initial_prompt(topic: str, user_profile: dict, planning_memory: dict, needs_calibration: bool = False, allow_memory_search: bool = False) -> str:
     """兼容入口：返回 system + user 的完整文本，供旧调试脚本使用。"""
-    messages = build_initial_messages(topic, user_profile, planning_memory, needs_calibration)
+    messages = build_initial_messages(
+        topic,
+        user_profile,
+        planning_memory,
+        needs_calibration,
+        allow_memory_search,
+    )
     return messages["system"] + "\n\n" + messages["user"]
 
 

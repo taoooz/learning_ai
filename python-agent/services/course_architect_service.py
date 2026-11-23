@@ -10,6 +10,7 @@ from typing import Any, Generator
 
 from lib.minimax import MiniMaxClient, parse_json_response
 from lib.minimax_agent import AgentClient
+from lib.tools.memory_tools import MEMORY_SEARCH_POLICY, MEMORY_SEARCH_TOOL, create_memory_search
 from lib.tools.search_tools import SEARCH_TOOLS, TOOL_FUNCTIONS
 from prompts import build_prompt
 from schemas.course_architecture import (
@@ -84,11 +85,12 @@ def build_course_architect_chapters_prompt(
     evidence: str | None = None,
     sources: list[dict[str, Any]] | None = None,
     allow_search: bool = True,
+    allow_memory_search: bool = False,
 ) -> str:
     prompt_context = _prompt_context(
         topic, outline, learner, memory_context, evidence, sources
     )
-    return build_prompt(
+    prompt = build_prompt(
         "course_architect",
         ["chapters"],
         **prompt_context,
@@ -98,6 +100,9 @@ def build_course_architect_chapters_prompt(
             else "本阶段已有上下文足够，不提供联网搜索工具，也不要引用未提供的来源。"
         ),
     )
+    if allow_memory_search:
+        prompt += "\n\n" + MEMORY_SEARCH_POLICY
+    return prompt
 
 
 def _split_embedded_context(
@@ -127,6 +132,7 @@ def build_course_architect_chapters_messages(
     evidence: str | None = None,
     sources: list[dict[str, Any]] | None = None,
     allow_search: bool = True,
+    allow_memory_search: bool = False,
 ) -> dict[str, str]:
     return _split_embedded_context(
         build_course_architect_chapters_prompt(
@@ -137,6 +143,7 @@ def build_course_architect_chapters_messages(
             evidence,
             sources,
             allow_search=allow_search,
+            allow_memory_search=allow_memory_search,
         ),
         "<input_context>",
         "</input_context>",
@@ -435,6 +442,7 @@ def _chapter_messages(
     evidence: str | None,
     sources: list[dict[str, Any]] | None,
     allow_search: bool,
+    allow_memory_search: bool = False,
 ) -> list[dict[str, Any]]:
     messages = build_course_architect_chapters_messages(
         topic,
@@ -444,6 +452,7 @@ def _chapter_messages(
         evidence,
         sources,
         allow_search=allow_search,
+        allow_memory_search=allow_memory_search,
     )
     return [
         {"role": "system", "content": messages["system"]},
@@ -790,12 +799,14 @@ def stream_course_architecture(
     client: MiniMaxClient | None = None,
     review_mode: str | None = None,
     allow_search: bool = True,
+    account_id: str | None = None,
 ) -> Generator[dict[str, Any], None, None]:
     """两阶段流式架构：先逐章输出目录，再定向补齐课程元信息。"""
     started_at = time.monotonic()
     client = client or AgentClient()
     chapter_messages = _chapter_messages(
-        topic, outline, learner, memory_context, evidence, sources, allow_search
+        topic, outline, learner, memory_context, evidence, sources, allow_search,
+        allow_memory_search=bool(account_id),
     )
     raw_content = ""
     emitted_chapters = 0
@@ -808,13 +819,18 @@ def stream_course_architecture(
     if hasattr(client, "stream_chat_with_tools"):
         try:
             print(f"[Course Architect] 第一阶段流式生成章节目录：{topic}")
+            tools = list(SEARCH_TOOLS) if allow_search else []
+            tool_functions = dict(TOOL_FUNCTIONS)
+            if account_id:
+                tools.append(MEMORY_SEARCH_TOOL)
+                tool_functions["memory_search"] = create_memory_search(account_id)
             for event in client.stream_chat_with_tools(
                 messages=chapter_messages,
-                tools=SEARCH_TOOLS if allow_search else [],
-                tool_functions=TOOL_FUNCTIONS,
+                tools=tools,
+                tool_functions=tool_functions,
                 max_tokens=ARCHITECT_CHAPTERS_MAX_TOKENS,
                 reasoning_split=True,
-                max_iterations=2 if allow_search else 1,
+                max_iterations=2 if tools else 1,
                 max_searches=1 if allow_search else 0,
                 reasoning_effort=ARCHITECT_REASONING_EFFORT,
             ):
@@ -823,7 +839,7 @@ def stream_course_architecture(
                     raw_content = ""
                     emitted_chapters = 0
                     emitted_course_name = False
-                    print(f"[Course Architect] 章节阶段补充搜索：{event.get('tool')}")
+                    print(f"[Course Architect] 章节阶段调用工具：{event.get('tool')}")
                     continue
                 if event_type == "done":
                     finish_reason = event.get("finish_reason")

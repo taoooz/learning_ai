@@ -8,6 +8,7 @@ import os
 import re
 from typing import Generator
 from lib.minimax_agent import AgentClient
+from lib.tools.memory_tools import MEMORY_SEARCH_TOOL, create_memory_search
 from lib.tools.search_tools import SEARCH_TOOLS, TOOL_FUNCTIONS
 from services.outline_service import (
     build_initial_messages,
@@ -152,13 +153,19 @@ def _stream_agent_sse(
     agent_events: list,
     reasoning_effort: str | None = None,
     content_observer=None,
+    memory_account_id: str | None = None,
 ) -> Generator[str, None, None]:
     """运行 Agent tool-calling 循环，把 agent 事件转成前端 SSE 格式，同时累积到 agent_events"""
     content_parts: list[str] = []
+    tools = list(SEARCH_TOOLS)
+    tool_functions = dict(TOOL_FUNCTIONS)
+    if memory_account_id:
+        tools.append(MEMORY_SEARCH_TOOL)
+        tool_functions["memory_search"] = create_memory_search(memory_account_id)
     for event in client.stream_chat_with_tools(
         messages=messages,
-        tools=SEARCH_TOOLS,
-        tool_functions=TOOL_FUNCTIONS,
+        tools=tools,
+        tool_functions=tool_functions,
         max_tokens=max_tokens,
         reasoning_split=True,
         max_iterations=8,
@@ -179,6 +186,9 @@ def _stream_agent_sse(
             elif tool_name == "read_url":
                 url = tool_args.get("url", "")
                 yield f"data: {json.dumps({'type': 'thinking', 'message': f'正在读取：{url}'}, ensure_ascii=False)}\n\n"
+            elif tool_name == "memory_search":
+                query = tool_args.get("query", "")
+                yield f"data: {json.dumps({'type': 'thinking', 'message': f'正在检索学习记忆：{query}'}, ensure_ascii=False)}\n\n"
 
         elif event["type"] == "content_delta":
             content = event["content"]
@@ -195,6 +205,7 @@ def stream_outline_with_tools(
     planning_memory: dict,
     # 推理型模型思考长度方差大，预算不足会截断在思考阶段。
     max_tokens: int = 12000,
+    account_id: str | None = None,
 ) -> Generator[str, None, None]:
     """Agent 版 outline 生成（带搜索能力）
 
@@ -216,6 +227,7 @@ def stream_outline_with_tools(
         user_profile,
         planning_memory,
         needs_calibration=calibration_required,
+        allow_memory_search=bool(account_id),
     )
     messages = [
         {"role": "system", "content": initial_messages["system"]},
@@ -256,6 +268,7 @@ def stream_outline_with_tools(
         yield from _stream_agent_sse(
             client, messages, max_tokens, agent_events,
             content_observer=observe_questions,
+            memory_account_id=account_id,
         )
     except Exception as e:
         print(f"[Outline Agent] Error during agent loop: {e}")
@@ -289,6 +302,7 @@ def stream_outline_with_tools(
             yield from _stream_agent_sse(
                 client, messages, max_tokens, agent_events,
                 content_observer=observe_questions,
+                memory_account_id=account_id,
             )
         except Exception as e:
             print(f"[Outline Agent] Calibration error: {e}")
@@ -356,6 +370,7 @@ def stream_answer_with_tools(
     answer: str = "",
     answers: list[dict] | None = None,
     max_tokens: int = 8000,
+    account_id: str | None = None,
 ) -> Generator[str, None, None]:
     """Agent 版 outline 多轮回答（带搜索能力）
 
@@ -407,7 +422,13 @@ def stream_answer_with_tools(
     agent_events = []
 
     try:
-        yield from _stream_agent_sse(client, messages, max_tokens, agent_events)
+        yield from _stream_agent_sse(
+            client,
+            messages,
+            max_tokens,
+            agent_events,
+            memory_account_id=account_id,
+        )
     except Exception as e:
         print(f"[Outline Answer Agent] Error: {e}")
         import traceback
@@ -429,7 +450,13 @@ def stream_answer_with_tools(
         messages.append({"role": "user", "content": "已收集到足够信息，请不要再提问。请直接按输出格式给出 <outline> 学习计划。"})
         agent_events = []
         try:
-            yield from _stream_agent_sse(client, messages, max_tokens, agent_events)
+            yield from _stream_agent_sse(
+                client,
+                messages,
+                max_tokens,
+                agent_events,
+                memory_account_id=account_id,
+            )
         except Exception as e:
             print(f"[Outline Answer Agent] Force converge error: {e}")
             import traceback
