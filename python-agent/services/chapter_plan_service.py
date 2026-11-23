@@ -203,21 +203,21 @@ def build_chapter_plan_messages(
     """system 保留角色与 JSON/任务契约；动态章节上下文进入 user。"""
     system_prompt = build_prompt(
         "chapter_plan",
-        ["role", "output_format"],
+        ["role", "output_format", "goal_alignment"],
+        intent_type="见 user prompt 中提供的课程意图类型",
     )
     if allow_search:
         system_prompt += "\n\n" + format_search_decision_policy(max_searches=2)
     user_prompt = build_prompt(
         "chapter_plan",
-        ["chapter_context", "goal_alignment", "completed_chapters"],
+        ["chapter_context", "completed_chapters"],
         topic=topic,
         chapter_title=chapter.get("title", ""),
         teaching_goal=chapter.get("teachingGoal", ""),
         objectives_section=_format_objectives(objectives),
         learner_section=_format_learner(learner),
-        intent_type=intent_type or "未指定",
         completed_section=_format_completed_chapters(completed_chapters),
-    ) + _format_mission(mission) + _format_teaching_state(teaching_state or {}) + format_memory_context_for_prompt(memory_context or {})
+    ) + f"\n\n## 课程意图\n- 类型：{intent_type or '未指定'}" + _format_mission(mission) + _format_teaching_state(teaching_state or {}) + format_memory_context_for_prompt(memory_context or {})
     if evidence:
         source_lines = "\n".join(f"- {s.get('title', '')}（{s.get('url', '')}）" for s in (sources or []))
         user_prompt += (

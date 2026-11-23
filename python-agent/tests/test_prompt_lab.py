@@ -83,6 +83,7 @@ def test_compile_prompt_lab_reuses_all_production_builders():
         assert compiled["systemPrompt"].strip()
         assert compiled["userMessage"].strip()
         assert compiled["config"]["maxTokens"] > 0
+        assert "提示词工程实践" not in compiled["systemPrompt"]
 
     meta = compile_prompt_lab_stage("architect_meta", _stage_inputs("architect_meta"))
     assert "c1-business-to-objective" in meta["userMessage"] or "c1" in meta["userMessage"]
@@ -105,11 +106,15 @@ def test_prompt_lab_splits_static_system_and_dynamic_user_context():
     chapter_plan = compile_prompt_lab_stage("chapter_plan", _stage_inputs("chapter_plan"))
     assert "<chapter_context>" not in chapter_plan["systemPrompt"]
     assert "<chapter_context>" in chapter_plan["userMessage"]
+    assert "<output_format>" in chapter_plan["systemPrompt"]
+    assert "<goal_alignment>" in chapter_plan["systemPrompt"]
     assert "指令写作基础" in chapter_plan["userMessage"]
 
     task_content = compile_prompt_lab_stage("task_content", _stage_inputs("task_content"))
     assert "<task_context>" not in task_content["systemPrompt"]
     assert "<task_context>" in task_content["userMessage"]
+    assert "<output_format>" in task_content["systemPrompt"]
+    assert "浏览器缓存就像便利店的临期食品折扣" in task_content["systemPrompt"]
     assert "指令为什么需要说清楚" in task_content["userMessage"]
 
 

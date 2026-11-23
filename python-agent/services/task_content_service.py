@@ -202,13 +202,7 @@ def build_task_content_messages(
         previous_section = "无（这是本章第一个任务）"
 
     pattern = request.task.teachingPattern
-    system_prompt = build_prompt(
-        "task_content",
-        ["role", "style", "interactive_rules", "tone_reminder"],
-    )
-    user_prompt = build_prompt(
-        "task_content",
-        ["task_context", "output_format"],
+    prompt_args = dict(
         course_topic=request.courseTopic,
         chapter_title=request.chapter.title,
         chapter_goal=request.chapter.teachingGoal,
@@ -219,6 +213,16 @@ def build_task_content_messages(
         learner_section="\n".join(learner_lines),
         previous_section=previous_section,
         content_recipe=get_recipe(pattern),
+    )
+    system_prompt = build_prompt(
+        "task_content",
+        ["role", "style", "output_format", "interactive_rules", "tone_reminder"],
+        **prompt_args,
+    )
+    user_prompt = build_prompt(
+        "task_content",
+        ["task_context"],
+        **prompt_args,
     ) + _format_course_mission(request.courseMission) + _format_teaching_state(request.teachingState) + format_memory_context_for_prompt(memory_context or {})
     if evidence:
         source_lines = "\n".join(f"- {s.get('title', '')}（{s.get('url', '')}）" for s in (sources or []))
@@ -229,7 +233,7 @@ def build_task_content_messages(
             "结构化块若依赖证据，请在块末单独写一行：证据：ev-01, ev-02（只使用证据包中的 ID）。"
         )
     if allow_search:
-        user_prompt += "\n\n" + format_search_decision_policy(max_searches=2)
+        system_prompt += "\n\n" + format_search_decision_policy(max_searches=2)
     return {"system": system_prompt, "user": user_prompt}
 
 
@@ -272,6 +276,7 @@ def build_task_search_decision_messages(
     system_prompt = (
         "你是课程内容检索决策器，只判断当前任务是否需要补充联网证据，不要撰写正文。"
         + format_search_decision_policy(max_searches=1)
+        + "\n\n完成判断后：需要补充时调用搜索工具；不需要时只输出 NO_SEARCH。"
     )
     user_prompt = (
         f"## 课程与任务\n"
@@ -279,8 +284,7 @@ def build_task_search_decision_messages(
         f"- 章节：{request.chapter.title}｜{request.chapter.teachingGoal}\n"
         f"- 当前任务：{request.task.title}｜{request.task.taskGoal}\n\n"
         f"## 已有证据\n{evidence_text}\n\n"
-        f"## 可引用来源\n{source_lines}\n\n"
-        "完成判断后：需要补充时调用搜索工具；不需要时只输出 NO_SEARCH。"
+        f"## 可引用来源\n{source_lines}"
     )
     return {"system": system_prompt, "user": user_prompt}
 

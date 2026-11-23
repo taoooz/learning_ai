@@ -246,7 +246,7 @@ def build_initial_messages(
         memory_section=memory_section,
     )
     if needs_calibration:
-        user_prompt += (
+        system_prompt += (
             "\n\n## 强制校准状态\n"
             "当前画像存在可迁移背景，但尚不足以确认该主题的实际掌握边界。"
             "请先提出 1 个高信息量的单选题，确认用户实际做过什么或能独立完成什么；"
