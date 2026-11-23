@@ -203,6 +203,33 @@ def test_stream_success_emits_takeaways_then_completed_recap():
     assert recap["generationMeta"]["modelVersion"] == "fake-stream-model"
 
 
+def test_stream_takeaways_across_many_chunks_no_duplicates():
+    """回归：feed 只能接收增量。数组跨 ≥3 个 chunk 时，若误传 accumulated，
+    parser 内部会把累积全文再拼一遍，重复前缀里的字符串会被当成新要点下发。"""
+    payload = '{"keyTakeaways": ["要点一", "要点二", "要点三"], "recommendedReview": "复习一下"}'
+    # 每条要点各在一个 chunk 内闭合，数组直到最后一个 chunk 才闭合
+    cut_points = [
+        payload.index('"要点一"') + len('"要点一"'),
+        payload.index('"要点二"') + len('"要点二"'),
+        payload.index('"要点三"') + len('"要点三"'),
+    ]
+    deltas = []
+    prev = 0
+    for point in cut_points:
+        deltas.append(payload[prev:point])
+        prev = point
+    deltas.append(payload[prev:])
+    assert len(deltas) == 4
+
+    client = FakeStreamClient(deltas)
+    events = asyncio.run(_collect_stream(stream_chapter_recap_events(_recap_request(), client=client)))
+    takeaway_events = [event for event in events if event["type"] == "recap_takeaway"]
+    assert [event["payload"]["takeaway"] for event in takeaway_events] == ["要点一", "要点二", "要点三"]
+    assert [event["payload"]["index"] for event in takeaway_events] == [0, 1, 2]
+    assert events[-1]["type"] == "request_completed"
+    assert events[-1]["payload"]["status"] == "completed"
+
+
 def test_stream_error_after_partial_takeaways_is_retryable():
     client = FakeStreamClient(
         ['{"keyTakeaways": ["部分', '要点"'],

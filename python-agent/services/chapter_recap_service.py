@@ -270,7 +270,8 @@ async def stream_chapter_recap_events(
                 continue
             received_delta = True
             accumulated += delta
-            for takeaway in parser.feed(accumulated):
+            # feed 只接收增量：parser 内部自行累积，传 accumulated 会导致内容重复拼接
+            for takeaway in parser.feed(delta):
                 yield make_event(
                     "recap_takeaway",
                     {"index": takeaway_index, "takeaway": takeaway},

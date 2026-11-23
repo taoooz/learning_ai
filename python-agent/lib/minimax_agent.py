@@ -491,7 +491,12 @@ class AgentClient(MiniMaxClient):
                 return details[0].get("text", "")
         content = message.get("content", "")
         if "Thinking" in content:
-            thinks = re.findall(r'Thinking(.*?)Thinking', content, re.DOTALL)
+            # 仅提取独占行成对 Thinking 标记之间的内容（遗留格式），避免误抓正文
+            thinks = re.findall(
+                r'^[ \t]*Thinking[ \t]*\r?\n(.*?)^[ \t]*Thinking[ \t]*\r?$',
+                content,
+                re.DOTALL | re.MULTILINE,
+            )
             return "\n".join(t.strip() for t in thinks if t.strip())
         return ""
 

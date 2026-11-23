@@ -7,6 +7,7 @@ import json
 import os
 import re
 from typing import Generator
+from lib.minimax import strip_thinking_markers
 from lib.minimax_agent import AgentClient
 from lib.tools.memory_tools import MEMORY_SEARCH_TOOL, create_memory_search
 from lib.tools.search_tools import SEARCH_TOOLS, TOOL_FUNCTIONS
@@ -283,7 +284,7 @@ def stream_outline_with_tools(
     full_content = _extract_content_from_agent_events(agent_events)
 
     # 去除可能的 thinking 标签（兼容 reasoning_split=False 的情况）
-    content_clean = re.sub(r'Thinking.*?Thinking', '', full_content, flags=re.DOTALL).strip()
+    content_clean = strip_thinking_markers(full_content).strip()
 
     parsed = parse_content_blocks(content_clean)
 
@@ -313,7 +314,7 @@ def stream_outline_with_tools(
             return
 
         full_content = _extract_content_from_agent_events(agent_events)
-        content_clean = re.sub(r'Thinking.*?Thinking', '', full_content, flags=re.DOTALL).strip()
+        content_clean = strip_thinking_markers(full_content).strip()
         parsed = parse_content_blocks(content_clean)
         if parsed.get("outline") and not parsed.get("questions"):
             question = _fallback_calibration_question(topic)
@@ -440,7 +441,7 @@ def stream_answer_with_tools(
 
     # 解析最终内容
     full_content = _extract_content_from_agent_events(agent_events)
-    content_clean = re.sub(r'Thinking.*?Thinking', '', full_content, flags=re.DOTALL).strip()
+    content_clean = strip_thinking_markers(full_content).strip()
     parsed = parse_content_blocks(content_clean)
 
     # 防御：累计提问已达上限但模型仍要提问时，追加指令再跑一轮，强制收敛到学习计划
@@ -466,7 +467,7 @@ def stream_answer_with_tools(
             yield "data: [DONE]\n\n"
             return
         full_content = _extract_content_from_agent_events(agent_events)
-        content_clean = re.sub(r'Thinking.*?Thinking', '', full_content, flags=re.DOTALL).strip()
+        content_clean = strip_thinking_markers(full_content).strip()
         parsed = parse_content_blocks(content_clean)
 
     questions = parsed.get("questions") or []

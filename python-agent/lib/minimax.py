@@ -1,10 +1,23 @@
 import os
 import json
+import re
 import asyncio
 import httpx
 
 # 流式读取的应用层空闲超时（秒）：超过该时长没有新数据行即视为上游断流
 _STREAM_IDLE_TIMEOUT = 60.0
+
+# 遗留思考标记清理：只匹配独占一行的成对 "Thinking" 标记（旧模型格式）。
+# 不能匹配正文中的 Thinking 一词（如 Design Thinking 课程主题），否则会误删正文。
+_THINKING_BLOCK_RE = re.compile(
+    r'^[ \t]*Thinking[ \t]*\r?\n.*?^[ \t]*Thinking[ \t]*\r?$',
+    re.DOTALL | re.MULTILINE,
+)
+
+
+def strip_thinking_markers(content: str) -> str:
+    """移除成对独占行 Thinking 标记及其间的思考内容（遗留格式兼容，正文安全）"""
+    return _THINKING_BLOCK_RE.sub('', content)
 
 
 class IdleStreamError(Exception):
@@ -219,8 +232,8 @@ def parse_json_response(content: str) -> dict:
     content = re.sub(r'<minimax:tool_call>.*', '', content, flags=re.DOTALL)
     content = re.sub(r'<invoke\s+name=["\'][^"\']*["\']\s*>.*?</invoke\s*>', '', content, flags=re.DOTALL)
     content = re.sub(r'<invoke\s+[^>]*>.*', '', content, flags=re.DOTALL)
-    # 清理 Thinking 标签
-    content = re.sub(r'Thinking.*?Thinking', '', content, flags=re.DOTALL)
+    # 清理遗留 Thinking 标记（仅独占行成对标记，不伤正文）
+    content = strip_thinking_markers(content)
     content = content.strip()
 
     # 找到第一个 {

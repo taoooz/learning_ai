@@ -197,6 +197,54 @@ def test_sequence_letter_answer_is_normalized_to_item_ids():
     assert CheckpointDefinitionModel(**normalized).correctAnswer == ["s1", "s2", "s3"]
 
 
+def test_scenario_choice_uppercase_answer_normalized_to_lowercase_id():
+    """回归：模型输出 "B" 而 option id 是 "b" 时不得判为非法答案"""
+    from services.checkpoint_service import _normalize_answer_references
+    raw = _scenario_choice().model_dump()
+    raw["correctAnswer"] = "B"
+    normalized = _normalize_answer_references(raw)
+    assert normalized["correctAnswer"] == "b"
+    assert CheckpointDefinitionModel(**normalized).correctAnswer == "b"
+
+
+def test_scenario_choice_letter_maps_to_option_order():
+    """option id 非字母时，单字母答案按选项顺序映射"""
+    from services.checkpoint_service import _normalize_answer_references
+    raw = _scenario_choice().model_dump()
+    for index, option in enumerate(raw["options"], start=1):
+        option["id"] = f"opt-{index}"
+    raw["correctAnswer"] = "B"
+    normalized = _normalize_answer_references(raw)
+    assert normalized["correctAnswer"] == "opt-2"
+    assert CheckpointDefinitionModel(**normalized).correctAnswer == "opt-2"
+
+
+def test_scenario_choice_numeric_answer_maps_to_option_order():
+    from services.checkpoint_service import _normalize_answer_references
+    raw = _scenario_choice().model_dump()
+    raw["correctAnswer"] = "2"
+    normalized = _normalize_answer_references(raw)
+    assert normalized["correctAnswer"] == "b"
+
+
+def test_scenario_choice_answer_with_trailing_period_stripped():
+    from services.checkpoint_service import _normalize_answer_references
+    raw = _scenario_choice().model_dump()
+    raw["correctAnswer"] = "b。"
+    normalized = _normalize_answer_references(raw)
+    assert normalized["correctAnswer"] == "b"
+
+
+def test_scenario_choice_out_of_range_letter_still_rejected():
+    """越界字母不做映射，仍由 schema 拦截（保留原有防线）"""
+    from services.checkpoint_service import _normalize_answer_references
+    raw = _scenario_choice().model_dump()
+    raw["correctAnswer"] = "E"
+    normalized = _normalize_answer_references(raw)
+    with pytest.raises(ValidationError):
+        CheckpointDefinitionModel(**normalized)
+
+
 # ---- JSON 提取 ----
 
 

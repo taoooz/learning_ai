@@ -1,6 +1,13 @@
 # 项目迭代日志
 
-> 详细历史见 `docs/archive/CHANGELOG-2026-09.md`（2026-09-30 及更早，含学习系统分层升级与可读性定点修复）。
+> 详细历史见 `docs/archive/CHANGELOG-2026-09.md`（2026-09 及更早）与 `docs/archive/CHANGELOG-2026-10.md`（2026-10-08 交互组件与文风规范等）。
+
+### 课程生成链路体检：P0 bug 修复（2026-11-23）
+- 修复章节小结流式重复拼接：`stream_chapter_recap_events` 误把累积全文喂给增量解析器，keyTakeaways 跨多个 chunk 时下发重复/垃圾要点；改为只喂增量，补跨 4 chunk 回归测试
+- 修复聊天助理无记忆载荷时丢失全部课程上下文：去掉 `build_chat_system_prompt` "无记忆只回 base 一句"的早退，课程主题/学习节点/题目上下文/对话摘要始终注入
+- 修复遗留 `Thinking` 清理正则误删正文：改为只匹配独占行成对标记（outline_agent/minimax/minimax_agent 共 6 处），Design Thinking 等课程主题正文不再被吞
+- scenario_choice 正确答案归一：忽略大小写匹配 option id，单字母/1 基数字按选项顺序映射；越界答案仍由 schema 拦截
+- 新增 15 个回归测试（recap/chat/thinking/checkpoint），pytest 全量 338 通过
 
 ### Memory V4 上线、硬化与 V3 下线（2026-11-19 至 2026-11-21）
 - LLM 全链路切换为 `ark/deepseek-v4-1-flash`；搜索决策交由模型 tool-calling，淘汰关键词预搜，EvidencePack 仍由代码持久化、去重与约束
@@ -10,40 +17,3 @@
 - 新增 account-scoped Memory V4 Store、画像自动导入、Evidence 账本与 Concept/Topic 投影；课程生成/聊天改由服务端读取统一 Memory，旧 V3 直接写 mastery 路径下线
 - P0/P2：Checkpoint 生成失败可原地重试；Outline 澄清改为第一题闭合即流式展示、全选择题、点选自动前进、全部准备后统一提交；Architect 改为两阶段生成（先流式章节、再完整元信息，失败只做阶段内定向修复），并保留 chat-only 客户端兼容与用户输入不可信边界；课程范围由原始诉求推断、背景只调起点，章节交付物可为理解/判断/小练习/产物；计划审查改为风险触发并加入阶段推理档位；正文首块立即展示、互动组件统一暖色视觉；真实任务正文 8～10 秒，架构首章 3.2 秒、6 章 13.2 秒、总耗时 29.4 秒
 - 新增内部 Course Prompt Lab：9 个课程生成环节可切换调试，左侧输入默认读取服务端 Memory V4 画像与 planning payload，中间编辑静态 system 与动态 user Prompt，右侧流式思考/回复/解析/工具结果；Planning Memory 去除内部 record ID 并提供只读 memory_search，Outline 澄清题可直接作答后带入下一环节，调试主题/产物可跨环节继承且不写正式数据
-
-### 交互内容块 Phase 1（2026-10-08）
-- 新增 `interactive` 内容块类型与首批两个消费型组件：`parameter-demo`（改参数看结果，命名变量白名单公式求值）、`step-walkthrough`（分步演示）
-- Python 侧：流式解析器支持 interactive 块，schema 校验 + 公式试算，任一失败整块降级为等价 markdown（不阻塞生成流）；前端新增 InteractiveBlockView 渲染器与 `lib/interactive/formula` 求值器（未知组件降级渲染）
-- Prompt：流程/机制类任务优先用分步演示模板，含数值参数关系用参数演示模板；交互结果不计入掌握度证据（Phase 2 再打通）
-- 新增 Python 5 个 + Node 6 个单测；架构文档补充 InteractiveBlock 数据契约
-
-### 课程内容文风规范（精简版，2026-10-08）
-- 任务内容/流内答疑/章节小结 prompt 注入四条文风规则：篇幅随素材（禁止注水与假细节）、知识状态分层（定论/惯例/无定论）、禁提示性开场与翻案腔、按学习者问题推进
-- 新增 `services/style_lint.py` 文风观测 lint（纯正则，零依赖）：挂到任务内容、答疑、小结生成完成路径，只记日志不拦截不重试；新增 4 个单测
-- 速度影响：prompt 增加约 300 tokens/次（毫秒级 prefill），lint 微秒级；后续按命中率数据决定是否收紧；参考 Karpathy 的 ASD-STE100 受控英语建议（36kr 文章），补充两条规则：同一概念全篇同名（优先用课程统一术语表）、程序性步骤一句一操作
-
-### 生成链路稳定性（2026-10-08）
-- 流式空闲超时：上游网关可能“保活连接但停发内容”（httpx 读超时不生效），stream_chat 60s 无新数据行主动断流，答疑/任务流走既有错误重试路径；检查点生成双层超时（前端 120s、代理 130s），服务断线时自动解锁章节、可重试
-### 流式体验优化（2026-10-08）
-- 结构化块渐进渲染：example/key_point 块壳先行、内容逐行填充；校验失败降级 markdown；边界卡去重（单一信息源）；互动演示卡片分区美化
-### 交互组件 Phase 2：对比组件 + 完成信号（2026-10-08）
-- 目录扩充至 5 个组件：新增 `bar-compare`（数值幅度对比条形图，单位/非负校验）与 `before-after`（前后状态切换，非数值对比）
-- 扩展性分工：数值幅度差距走 bar-compare，非数值状态对照走 before-after，多维度逐项对比保留 :::comparison 表格块；渲染入口改为注册表模式，新增组件 = 一个 View + 一条注册
-- 交互完成接入参与信号（engagement `interactive_completed`，每块只记一次、静默失败）：parameter-demo 首次调参、step-walkthrough 走到最后一步、before-after 首次切换后记录；不计入掌握度证据（保持“只有 Checkpoint 评估投影记忆”不变量）
-- 新增 4 个单测；渲染器 courseId 透传（章节页 → 学习流 → 内容块）
-
-### 跨章去重 + 学习目标对齐（2026-10-08）
-- 章节计划注入已完成章节 recap 摘要（前端收集、请求透传），硬规则禁止复讲
-  已覆盖概念与重复举例；举例必须换场景
-- 大纲终点倒推：TOC 先推断“结课产出物”，每章描述必须以“本章交付：<可验证能力>>”
-  收尾；构建/复现类诉求下讲解/对比/生态类内容合计不超过一章
-- 章节计划注入课程意图类型（skill_mastery 等）与“本章交付”硬约束：
-  任务 observableOutcome 必须可验证且拼接后支撑本章交付
-
-### 练习环节职责修正（2026-10-08）
-- 修正上一条目未完全落地的拟人化禁令（补入 style_rules），并按用户反馈调整练习职责：
-  正文直接给结论（判断标准/误区/下一步），不再输出填空式自测让用户猜；
-  检验统一由章末理解检查承担。lint 增加填空式练习观测。
-
-### flow-diagram 交互组件（2026-10-08）
-- 新增第三个交互组件：结构总览流程图（正向链 + 循环回边徽记），替代大部分 Mermaid flowchart 场景；sequenceDiagram/复杂分支仍用 :::diagram；解析/校验/降级与渲染模式同 Phase 1；新增 3 个单测；架构文档同步

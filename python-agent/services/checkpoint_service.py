@@ -102,13 +102,32 @@ def _normalize_answer_references(raw: dict) -> dict:
     normalized = dict(raw)
     if normalized.get("kind") == "scenario_choice":
         answer = str(normalized.get("correctAnswer") or "").strip().rstrip("。.")
-        option_ids = {
-            str(item.get("id"))
-            for item in normalized.get("options") or []
+        options = [
+            item for item in normalized.get("options") or []
             if isinstance(item, dict) and item.get("id")
-        }
+        ]
+        option_ids = {str(item.get("id")) for item in options}
         if answer in option_ids:
             normalized["correctAnswer"] = answer
+        else:
+            # 大小写归一：模型输出 "B" 而 option id 是 "b" 时按忽略大小写匹配
+            lowered = answer.lower()
+            matched = next(
+                (str(item["id"]) for item in options if str(item["id"]).lower() == lowered),
+                None,
+            )
+            if matched is not None:
+                normalized["correctAnswer"] = matched
+            elif len(lowered) == 1 and lowered.isalpha() and options:
+                # 单字母 A/B/C/D → 按选项顺序映射到对应 id
+                index = ord(lowered) - ord("a")
+                if 0 <= index < len(options):
+                    normalized["correctAnswer"] = str(options[index]["id"])
+            elif answer.isdigit() and options:
+                # 纯数字按 1 基序号映射（模型偶发输出 "2" 表示第二个选项）
+                numeric = int(answer)
+                if 1 <= numeric <= len(options):
+                    normalized["correctAnswer"] = str(options[numeric - 1]["id"])
     if normalized.get("kind") == "sequence" and isinstance(normalized.get("sequenceItems"), list):
         items = normalized["sequenceItems"]
         answer = normalized.get("correctAnswer")

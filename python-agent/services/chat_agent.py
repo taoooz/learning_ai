@@ -47,8 +47,8 @@ def build_chat_system_prompt(
         conversation_summary: 过期对话摘要
         chat_memory: ChatMemoryPayload 精简记忆
     """
-    if not chat_memory:
-        return get_prompt("chat", "base")
+    # 课程上下文始终注入：记忆只是可选增强段（_build_memory_section 缺失时返回空串），
+    # 不能因没有记忆载荷就丢掉课程主题/学习节点/题目上下文（新用户或记忆解析失败场景）
 
     # 题目上下文
     question_section = ''
