@@ -179,11 +179,6 @@ def build_chapter_plan_prompt(topic: str, chapter: dict, objectives: list[dict],
     if allow_search:
         prompt += "\n\n" + format_search_decision_policy(max_searches=2)
     return prompt
-    intent_type = (chapter.get("intentType") or "") if isinstance(chapter, dict) else ""
-    # intentType 在课程级，蓝图透传时挂在 chapter 上的场景做兜底读取
-    if not intent_type:
-        pass
-    return _format_goal_alignment(intent_type) + _format_completed_chapters(completed_chapters)
 
 
 def build_chapter_plan_messages(

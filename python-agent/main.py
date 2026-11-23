@@ -25,14 +25,7 @@ if env_path.exists():
 
 from memory.session import get_session_store
 from schemas.outline import OutlineRequest, OutlineAnswerRequest
-from services.outline_service import (
-    build_initial_messages,
-    stream_llm_and_parse, stream_blueprint_fields, make_initial_state
-)
-from services.toc_service import generate_toc, stream_toc_events
 from services.outline_agent import (
-    _emit_clarification_form,
-    _format_clarification_answers,
     stream_outline_with_tools,
     stream_answer_with_tools,
 )
@@ -201,160 +194,6 @@ async def health_check():
     return {"status": "ok"}
 
 
-@app.post("/api/agents/outline/generate")
-async def generate_outline(req: OutlineRequest):
-    """启动 outline 生成（流式）"""
-    async def event_generator():
-        state = make_initial_state(req.topic, req.userProfile, req.planningMemory)
-        initial_messages = build_initial_messages(req.topic, req.userProfile, req.planningMemory)
-        session_id = None
-
-        try:
-            async for event in stream_llm_and_parse([
-                {"role": "system", "content": initial_messages["system"]},
-                {"role": "user", "content": initial_messages["user"]},
-            ]):
-                if event["type"] == "__full_content__":
-                    # 流式完成，解析并保存到 session
-                    parsed = event.get("parsed", {})
-
-                    # 创建 session
-                    session = session_store.create("outline", state)
-                    state["session_id"] = session.session_id
-                    session_id = session.session_id
-
-                    if parsed.get("questions"):
-                        q = parsed["questions"][0]
-                        state["questions_asked"].append(q["question"])
-                        state["current_question"] = q
-
-                        # 发送前端期望的 question_start + questions 事件
-                        yield f"data: {json.dumps({'type': 'question_start', 'questionNumber': state['question_count'] + 1}, ensure_ascii=False)}\n\n"
-                        yield f"data: {json.dumps({'type': 'questions', 'questions': [q], 'sessionId': session_id}, ensure_ascii=False)}\n\n"
-
-                    if parsed.get("outline"):
-                        outline = parsed["outline"]
-                        blueprint = {
-                            "learningDirection": outline.get("learningDirection", ""),
-                            "learningKeypoint": outline.get("learningKeypoint", ""),
-                            "learningGoal": outline.get("learningGoal", ""),
-                            "learnerPositioning": {
-                                "estimatedLevel": outline.get("estimatedLevel", "beginner"),
-                                "difficultySummary": "",
-                                "backgroundSummary": outline.get("backgroundSummary", ""),
-                                "skipBasics": outline.get("skipBasics", []),
-                                "whyThisCourseFits": "",
-                            },
-                        }
-                        state["blueprint"] = blueprint
-
-                        # 发送前端期望的 blueprint 事件序列
-                        yield f"data: {json.dumps({'type': 'blueprint_start'}, ensure_ascii=False)}\n\n"
-                        for field in ["learningDirection", "learningGoal", "learnerPositioning"]:
-                            yield f"data: {json.dumps({'type': 'blueprint_field', 'field': field, 'value': blueprint[field]}, ensure_ascii=False)}\n\n"
-                        yield f"data: {json.dumps({'type': 'confirmation', 'blueprint': blueprint, 'sessionId': session_id}, ensure_ascii=False)}\n\n"
-
-                    # 保存首次 messages 到 llm_messages，后续回答时用于构建多轮对话
-                    ai_reply = event.get("content", "")
-                    state["llm_messages"] = [
-                        {"role": "system", "content": initial_messages["system"]},
-                        {"role": "user", "content": initial_messages["user"]},
-                        {"role": "assistant", "content": ai_reply},
-                    ]
-
-                    session_store.update(session.session_id, state)
-                else:
-                    yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-        except Exception as e:
-            print(f"[Outline Generate] Error: {e}")
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
-
-        # 流式结束后发送 sessionId（如果还没发过）
-        if session_id:
-            yield f"data: {json.dumps({'type': 'session_created', 'sessionId': session_id}, ensure_ascii=False)}\n\n"
-
-        yield "data: [DONE]\n\n"
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
-
-
-@app.post("/api/agents/outline/answer")
-async def answer_question(req: OutlineAnswerRequest):
-    """提交问题答案（流式）"""
-    async def event_generator():
-        session = session_store.get(req.sessionId)
-        if not session:
-            yield f"data: {json.dumps({'type': 'error', 'message': 'Session not found'}, ensure_ascii=False)}\n\n"
-            return
-
-        state = session.state
-        answers = [item.model_dump() for item in req.answers]
-        answer_text = _format_clarification_answers(answers or None, req.answer or "")
-        if not answer_text:
-            yield f"data: {json.dumps({'type': 'error', 'message': '缺少澄清回答'}, ensure_ascii=False)}\n\n"
-            yield "data: [DONE]\n\n"
-            return
-        if answers:
-            valid_answers = [str(item.get("answer") or "").strip() for item in answers if str(item.get("answer") or "").strip()]
-            state["answers"].extend(valid_answers)
-            state["question_count"] += len(valid_answers)
-        else:
-            state["answers"].append(answer_text)
-            state["question_count"] += 1
-
-        # 构建多轮 messages：历史对话 + 本轮用户回答
-        llm_messages = list(state.get("llm_messages", []))
-        llm_messages.append({"role": "user", "content": answer_text})
-
-        try:
-            async for event in stream_llm_and_parse(llm_messages, max_tokens=8000):
-                if event["type"] == "__full_content__":
-                    # 流式完成，解析并保存到 session
-                    parsed = event.get("parsed", {})
-
-                    if parsed.get("questions"):
-                        for sse in _emit_clarification_form(parsed["questions"], req.sessionId, state):
-                            yield sse
-                    elif parsed.get("outline"):
-                        outline = parsed["outline"]
-                        blueprint = {
-                            "learningDirection": outline.get("learningDirection", ""),
-                            "learningKeypoint": outline.get("learningKeypoint", ""),
-                            "learningGoal": outline.get("learningGoal", ""),
-                            "learnerPositioning": {
-                                "estimatedLevel": outline.get("estimatedLevel", "beginner"),
-                                "difficultySummary": "",
-                                "backgroundSummary": outline.get("backgroundSummary", ""),
-                                "skipBasics": outline.get("skipBasics", []),
-                                "whyThisCourseFits": "",
-                            },
-                        }
-                        state["blueprint"] = blueprint
-
-                        # 发送前端期望的 blueprint 事件序列
-                        yield f"data: {json.dumps({'type': 'blueprint_start'}, ensure_ascii=False)}\n\n"
-                        for field in ["learningDirection", "learningGoal", "learnerPositioning"]:
-                            yield f"data: {json.dumps({'type': 'blueprint_field', 'field': field, 'value': blueprint[field]}, ensure_ascii=False)}\n\n"
-                        yield f"data: {json.dumps({'type': 'confirmation', 'blueprint': blueprint, 'sessionId': req.sessionId}, ensure_ascii=False)}\n\n"
-
-                    # 保存 AI 回复到 llm_messages
-                    ai_reply = event.get("content", "")
-                    llm_messages.append({"role": "assistant", "content": ai_reply})
-                    state["llm_messages"] = llm_messages
-
-                    # 更新 session
-                    session_store.update(req.sessionId, state)
-                else:
-                    yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-        except Exception as e:
-            print(f"[Outline Answer] Error: {e}")
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
-
-        yield "data: [DONE]\n\n"
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
-
-
 @app.post("/api/agents/outline/generate_agent")
 async def generate_outline_agent(req: OutlineRequest, request: Request):
     """Agent 版 outline 生成（带搜索能力，流式）"""
@@ -406,26 +245,6 @@ async def answer_outline_agent(req: OutlineAnswerRequest, request: Request):
             traceback.print_exc()
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
-
-
-@app.post("/api/agents/toc/generate")
-async def generate_toc_route(request: dict):
-    """生成 TOC（流式）"""
-    async def event_generator():
-        try:
-            blueprint = request.get('blueprint', {})
-            planning_payload = request.get('planningPayload')
-            user_profile = request.get('userProfile')
-
-            async for event in stream_toc_events(blueprint, planning_payload, user_profile):
-                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-        except Exception as e:
-            print(f"[TOC API] Error: {e}")
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
-
-        yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

@@ -19,7 +19,6 @@ logger = logging.getLogger("interactive_block")
 _ALLOWED_COMPONENTS = {"parameter-demo", "step-walkthrough", "flow-diagram", "bar-compare", "before-after"}
 _EXPR_ALLOWED = re.compile(r"^[\dA-Za-z_\u4e00-\u9fff+\-*/().\s]+$")
 _TOKEN_RE = re.compile(r"\d+(?:\.\d+)?|[A-Za-z_\u4e00-\u9fff][\w\u4e00-\u9fff]*|[()+\-*/]")
-_KV_RE = re.compile(r"^(参数|标题|说明|列|行|步|组件)[:：]\s*(.*)$")
 
 _LIMITS = {
     "parameters": 2,
@@ -27,7 +26,6 @@ _LIMITS = {
     "rows": 6,
     "steps": 8,
     "nodes": 10,
-    "edges": 12,
     "title": 60,
     "intro": 200,
 }

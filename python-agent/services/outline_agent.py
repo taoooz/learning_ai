@@ -211,7 +211,7 @@ def stream_outline_with_tools(
     """Agent 版 outline 生成（带搜索能力）
 
     流程:
-    1. 构建 prompt（复用 outline_service 的 build_initial_prompt）
+    1. 构建 prompt（复用 outline_service 的 build_initial_messages）
     2. 使用 AgentClient 进行 tool-calling 循环
     3. 将 Agent 事件转换为前端期望的 SSE 格式
     4. 解析最终内容（复用 outline_service 的 parse_content_blocks）

@@ -29,7 +29,7 @@ def get_prompt(name: str, key: str, **kwargs) -> str:
     """获取 prompt 中的某个片段并格式化
 
     Args:
-        name: prompt 模块名（如 "outline", "toc"）
+        name: prompt 模块名（如 "outline", "chapter_plan"）
         key: PROMPT dict 中的键名（如 "system", "rules"）
         **kwargs: 模板变量
 

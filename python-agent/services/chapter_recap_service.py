@@ -290,7 +290,7 @@ async def stream_chapter_recap_events(
             yield make_event("request_completed", {"requestId": req_id, "status": "failed", "errorCode": "RECAP_VALIDATION_FAILED"})
             return
 
-        _recap_texts = [recap_fields.get("summary", "")] + [
+        _recap_texts = [
             item if isinstance(item, str) else str(item)
             for item in (recap_fields.get("keyTakeaways") or [])
         ]

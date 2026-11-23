@@ -9,6 +9,12 @@
 - scenario_choice 正确答案归一：忽略大小写匹配 option id，单字母/1 基数字按选项顺序映射；越界答案仍由 schema 拦截
 - 新增 15 个回归测试（recap/chat/thinking/checkpoint），pytest 全量 338 通过
 
+### 课程生成链路体检：死重清理（2026-11-23）
+- 下线 V1 遗留双轨：删除 main.py 旧版 outline/generate、outline/answer、toc/generate 路由（BFF 只调 agent 版），连同 toc_service、prompts/toc、lib/constants（FRAME_DESCRIPTIONS 等 V1 画像/框架常量）与对应测试
+- outline_service 瘦身 410→190 行：删 BLUEPRINT_SCHEMA（XML 协议下的死 JSON schema）、阻塞式 stream_llm_and_parse、stream_blueprint_fields、三个无调用格式化函数与 build_initial_prompt 兼容入口
+- 清除散点死代码：checkpoint 重复的 OPEN_ENDED_EVAL_PROMPT、chat prompt 无调用 base 键、chapter_plan return 后不可达块、interactive_block 未用的 _KV_RE/edges 上限、toc_agent 即删的 max_tokens 参数、recap 引用不存在的 summary 字段、两处恒空的 recentQuestionSummaries
+- 净 -459 行；pytest 335、TS 330 全通过，应用启动冒烟确认路由只剩 agent 版
+
 ### Memory V4 上线、硬化与 V3 下线（2026-11-19 至 2026-11-21）
 - LLM 全链路切换为 `ark/deepseek-v4-1-flash`；搜索决策交由模型 tool-calling，淘汰关键词预搜，EvidencePack 仍由代码持久化、去重与约束
 - 课程质量 P0/P1：补齐水平置信度/已掌握/可能缺口/例子策略并加入低置信度校准门；章节交付进入蓝图，新增独立计划审查与概念重叠拦截；任务块改为弹性结构，章内共享概念与例子账本，个人经历默认每章最多 1 次

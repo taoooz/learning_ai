@@ -632,7 +632,6 @@ def to_chat_prompt_payload(context: dict[str, Any]) -> dict[str, Any]:
             "misconceptionHints": [item.get("statement") for item in state.get("misconceptions") or []][:2],
         } for state in concepts[:3]],
         "riskConcepts": risk_names[:3],
-        "recentQuestionSummaries": [],
         "analogyHints": [item for item in analogies if item],
         "preferredExplanationStyles": [item for item in styles if item],
         "topicSummary": episode.get("summary") if episode else "暂无",

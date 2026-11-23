@@ -1,12 +1,8 @@
 """
 Outline Agent 业务逻辑服务
-负责 prompt 构建、流式调用、状态管理
+负责 prompt 构建、输出解析与状态管理
 """
-import json
-from typing import TypedDict, Optional, AsyncGenerator
-from lib.minimax import MiniMaxClient, parse_json_response
-from lib.constants import LEVEL_DESCRIPTIONS, LEARNING_STYLE_DESCRIPTIONS, TECHNICAL_LEVEL_DESCRIPTIONS
-from memory.session import get_session_store
+from typing import TypedDict, Optional
 from prompts import build_prompt
 from lib.tools.memory_tools import MEMORY_SEARCH_POLICY
 from services.memory_context_v4 import wrap_untrusted_context
@@ -19,41 +15,15 @@ class OutlineState(TypedDict):
     topic: str
     user_profile: dict
     planning_memory: dict
-    messages: list[dict]
     current_question: Optional[dict]
     question_count: int
     questions_asked: list[str]
     answers: list[str]
     blueprint: Optional[dict]
     status: str
-    needs_tools: bool
-    tool_results: list[dict]
 
-BLUEPRINT_SCHEMA = """
-{
-  "learningDirection": "学习方向描述（1-2句话）",
-  "learningGoal": "学习目标描述（1-2句话）",
-  "learnerPositioning": {
-    "estimatedLevel": "初级 | 中级 | 高级 之一",
-    "difficultySummary": "难度定位说明",
-    "backgroundSummary": "相关背景说明",
-    "skipBasics": ["可以跳过的基础内容列表"],
-    "whyThisCourseFits": "为什么这门课适合该用户"
-  }
-}
-"""
-
-_client: MiniMaxClient | None = None
-
-def get_client() -> MiniMaxClient:
-    global _client
-    if _client is None:
-        _client = MiniMaxClient()
-    return _client
-
-
-# prompt 约定模型输出中文水平词，但前端展示与下游 prompt（LEVEL_DESCRIPTIONS 等）
-# 均以英文键为准，统一在解析层归一化，避免各消费方各自踩空
+# prompt 约定模型输出中文水平词，但前端展示与下游消费均以英文键为准，
+# 统一在解析层归一化，避免各消费方各自踩空
 _LEVEL_ALIASES = {
     "入门": "novice",
     "零基础": "novice",
@@ -90,130 +60,6 @@ def needs_level_calibration(planning_memory: dict | None = None, user_profile: d
     if confidence < 0.55:
         return True
     return has_background and level in {"novice", "beginner"}
-
-
-def _format_user_profile(user_profile: dict) -> str:
-    """将用户画像 JSON 格式化为可读文本"""
-    sections = []
-
-    # 目标岗位
-    target_job = user_profile.get('targetJob')
-    if target_job:
-        sections.append(f"目标岗位：{target_job}")
-
-    insights = user_profile.get('insights')
-    if insights:
-        # 工作背景
-        work_items = insights.get('workSummary', [])
-        if work_items:
-            sections.append("工作背景：\n" + '\n'.join(f"- {item}" for item in work_items))
-
-        # 教育背景
-        edu_items = insights.get('educationSummary', [])
-        if edu_items:
-            sections.append("教育背景：\n" + '\n'.join(f"- {item}" for item in edu_items))
-
-        # 类比经历
-        analogy_items = insights.get('analogyExperiences', [])
-        if analogy_items:
-            sections.append("类比经历：\n" + '\n'.join(f"- {item}" for item in analogy_items))
-
-        # 学习风格
-        learning_style = insights.get('learningStyle')
-        if learning_style:
-            desc = LEARNING_STYLE_DESCRIPTIONS.get(learning_style, learning_style)
-            sections.append(f"学习风格：{desc}")
-
-        # 技术接受度
-        tech_level = insights.get('technicalLevel')
-        if tech_level:
-            desc = TECHNICAL_LEVEL_DESCRIPTIONS.get(tech_level, tech_level)
-            sections.append(f"技术接受度：{desc}")
-
-        # 价值关注点
-        value_priorities = insights.get('valuePriorities', [])
-        if value_priorities:
-            sections.append(f"价值关注点：{', '.join(value_priorities)}，举例时优先围绕这些方向")
-
-        # 总结
-        summary = insights.get('summary')
-        if summary:
-            sections.append(f"背景总结：{summary}")
-
-    return '\n\n'.join(sections) if sections else '暂无'
-
-
-def _format_learning_plan(blueprint: dict) -> str:
-    """将 outline blueprint 格式化为可读文本"""
-    parts = []
-    if blueprint.get('learningDirection'):
-        parts.append(f"课程定位：{blueprint['learningDirection']}")
-    if blueprint.get('learningKeypoint'):
-        parts.append(f"课程重点：{blueprint['learningKeypoint']}")
-    if blueprint.get('learningGoal'):
-        parts.append(f"学习目标：{blueprint['learningGoal']}")
-
-    positioning = blueprint.get('learnerPositioning', {})
-    level = positioning.get('estimatedLevel', '')
-    if level:
-        level_label = LEVEL_DESCRIPTIONS.get(level, '')
-        if level_label:
-            parts.append(f"当前水平：{level_label}")
-    if positioning.get('backgroundSummary'):
-        parts.append(f"相关背景：{positioning['backgroundSummary']}")
-    skip = positioning.get('skipBasics', [])
-    if skip:
-        parts.append(f"已掌握知识：{', '.join(skip)}")
-
-    return '\n'.join(parts) if parts else '暂无'
-
-
-def _format_planning_memory(planning_memory: dict) -> str:
-    """将 PlanningMemoryPayload 格式化为可读文本"""
-    sections = []
-
-    learner = planning_memory.get('learnerSnapshot', {})
-    if learner:
-        level = learner.get('estimatedLevel', '')
-        if level:
-            level_map = {'novice': '零基础', 'beginner': '初级', 'intermediate': '中级', 'advanced': '高级'}
-            sections.append(f"当前水平：{level_map.get(level, level)}")
-        goal = learner.get('targetGoal')
-        if goal:
-            sections.append(f"学习目标：{goal}")
-
-    bg = planning_memory.get('transferableBackground', [])
-    if bg:
-        sections.append("可迁移背景：\n" + '\n'.join(f"- {item}" for item in bg))
-
-    must_cover = planning_memory.get('mustCoverConcepts', [])
-    if must_cover:
-        sections.append(f"必须覆盖的概念：{', '.join(must_cover)}")
-
-    skippable = planning_memory.get('skippableBasics', [])
-    if skippable:
-        sections.append(f"可跳过的基础：{', '.join(skippable)}")
-
-    risk = planning_memory.get('riskConcepts', [])
-    if risk:
-        sections.append(f"需重点关注的概念：{', '.join(risk)}")
-
-    recent = planning_memory.get('recentRelevantCourses', [])
-    if recent:
-        courses = [f"- {c.get('topic', '')}：{c.get('summary', '')}" for c in recent]
-        sections.append("近期相关课程：\n" + '\n'.join(courses))
-
-    summary = planning_memory.get('learningSummary')
-    if summary:
-        sections.append(
-            "学习旅程摘要：\n"
-            f"- 旅程：{summary.get('journey', '')}\n"
-            f"- 当前重点：{summary.get('currentFocus', '')}\n"
-            f"- 学习者特点：{'、'.join(summary.get('learnerInsights') or []) or '暂无'}\n"
-            f"- 需关注：{'、'.join(summary.get('areasToWatch') or []) or '暂无'}"
-        )
-
-    return '\n\n'.join(sections) if sections else ''
 
 
 def build_initial_messages(
@@ -257,58 +103,6 @@ def build_initial_messages(
             "收到回答后再输出学习计划，不要先按零基础生成。"
         )
     return {"system": system_prompt, "user": user_prompt}
-
-
-def build_initial_prompt(topic: str, user_profile: dict, planning_memory: dict, needs_calibration: bool = False, allow_memory_search: bool = False) -> str:
-    """兼容入口：返回 system + user 的完整文本，供旧调试脚本使用。"""
-    messages = build_initial_messages(
-        topic,
-        user_profile,
-        planning_memory,
-        needs_calibration,
-        allow_memory_search,
-    )
-    return messages["system"] + "\n\n" + messages["user"]
-
-
-async def stream_llm_and_parse(messages: list[dict] | str, max_tokens: int = 1000):
-    """流式调用 LLM，yield thinking + content_delta 事件
-    messages: messages 数组，或 system prompt 字符串（自动包装）
-    """
-    # 当前内部调用既可能传完整 messages，也可能直接传 system prompt
-    if isinstance(messages, str):
-        messages = [{"role": "system", "content": messages}, {"role": "user", "content": "请开始。"}]
-
-    client = get_client()
-    full_content = ""
-
-    for chunk in client.stream_chat_sync(
-        messages=messages,
-        max_tokens=max_tokens,
-    ):
-        delta = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
-        if not delta:
-            continue
-        
-        full_content += delta
-        yield {"type": "content_delta", "content": delta}
-    
-    # 处理完整内容，提取 thinking 和正文
-    import re
-    think_pattern = r'<think>(.*?)</think>'
-    thinks = re.findall(think_pattern, full_content, re.DOTALL)
-    
-    # 移除 think 标签，得到正文
-    content_without_think = re.sub(think_pattern, '', full_content, flags=re.DOTALL).strip()
-    
-    # 如果有 thinking 内容，发送 thinking 事件
-    if thinks:
-        for think in thinks:
-            yield {"type": "thinking", "message": think.strip()}
-    
-    # 解析问题和纲要
-    parsed = parse_content_blocks(content_without_think)
-    yield {"type": "__full_content__", "content": content_without_think, "parsed": parsed}
 
 
 def parse_content_blocks(content: str) -> dict:
@@ -382,14 +176,6 @@ def parse_content_blocks(content: str) -> dict:
     return result
 
 
-async def stream_blueprint_fields(blueprint: dict):
-    """逐字段 yield blueprint SSE 事件"""
-    yield {"type": "blueprint_start"}
-    for field in ["learningDirection", "learningGoal", "learnerPositioning"]:
-        if field in blueprint:
-            yield {"type": "blueprint_field", "field": field, "value": blueprint[field]}
-
-
 def make_initial_state(topic: str, user_profile: dict, planning_memory: dict) -> OutlineState:
     return {
         "session_id": "",
@@ -397,14 +183,11 @@ def make_initial_state(topic: str, user_profile: dict, planning_memory: dict) ->
         "topic": topic,
         "user_profile": user_profile,
         "planning_memory": planning_memory,
-        "messages": [],
-        "llm_messages": [],  # MiniMax messages 数组，用于多轮对话
+        "llm_messages": [],  # 多轮对话 messages 数组
         "current_question": None,
         "question_count": 0,
         "questions_asked": [],
         "answers": [],
         "blueprint": None,
         "status": "initial",
-        "needs_tools": False,
-        "tool_results": [],
     }

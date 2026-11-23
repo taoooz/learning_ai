@@ -1309,7 +1309,6 @@ class MemoryV4Store:
                 "misconceptionHints": [item.get("statement") for item in state.get("misconceptions", [])][:2],
             } for state in relevant],
             "riskConcepts": [item for item in risk if item][:3],
-            "recentQuestionSummaries": [],
             "analogyHints": analogies,
             "preferredExplanationStyles": styles,
             "topicSummary": topic_summary,

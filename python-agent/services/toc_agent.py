@@ -41,11 +41,9 @@ def stream_toc_with_tools(
     blueprint: dict,
     planning_payload: dict = None,
     user_profile: dict = None,
-    max_tokens: int = 16000,
     account_id: str | None = None,
 ) -> Generator[str, None, None]:
     """设计并审查课程架构，再把架构确定性地渲染为前端 TOC 事件。"""
-    del max_tokens  # 架构生成服务内部管理 token budget
     topic = blueprint.get("topic", blueprint.get("learningDirection", ""))
     learner = _learner_from_blueprint(blueprint, planning_payload)
     evidence_pack = get_topic_evidence(topic)
