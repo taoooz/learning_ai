@@ -180,5 +180,5 @@ def stream_chat_with_tools(
         print(f"[Chat Agent] Error: {e}")
         import traceback
         traceback.print_exc()
-        yield _format_content_delta(f"抱歉，回复生成失败：{str(e)}")
+        yield _format_content_delta("抱歉，回复生成失败，请稍后重试。")
         yield "data: [DONE]\n\n"

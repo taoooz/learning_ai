@@ -21,6 +21,7 @@ from services.learning_v2_errors import (
 )
 from services.search_evidence import ChapterEvidenceCollector, format_search_decision_policy
 from services.memory_context_v4 import format_memory_context_for_prompt
+from services.outline_service import LEVEL_CONFIDENCE_THRESHOLD
 
 PROMPT_VERSION = "chapter-plan-v3"
 PLAN_REASONING_EFFORT = os.getenv("PLAN_REASONING_EFFORT", "low").strip() or None
@@ -323,7 +324,7 @@ def _find_task_cycle(tasks: list[dict]) -> list[str] | None:
     return None
 
 
-def validate_plan_tasks(tasks: list[dict], objective_ids: list[str]) -> tuple[list[dict], list[dict]]:
+def validate_plan_tasks(tasks: list[dict], objective_ids: list[str], chapter_title: str | None = None) -> tuple[list[dict], list[dict]]:
     """计划结构校验，镜像 TS validateChapterPlan 的 error 项；返回 (errors, warnings)"""
     errors: list[dict] = []
     warnings: list[dict] = []
@@ -359,6 +360,14 @@ def validate_plan_tasks(tasks: list[dict], objective_ids: list[str]) -> tuple[li
         for prereq in task["prerequisiteTaskIds"]:
             if prereq not in task_id_set:
                 errors.append({"code": codes["PREREQ_TASK_NOT_FOUND"], "taskId": task["taskId"], "message": f"任务依赖不存在：{prereq}"})
+
+        # 镜像 TS validators.ts：任务标题与章节标题完全一致 → 软告警（提示改写，不阻断）
+        if chapter_title and task["title"].strip() == chapter_title.strip():
+            warnings.append({
+                "code": codes["TITLE_REPEATS_CHAPTER"],
+                "taskId": task["taskId"],
+                "message": f"任务标题只是章节标题的复述：{task['title']}",
+            })
 
     # 每个计划目标至少被一个任务覆盖
     covered = {t["objectiveId"] for t in tasks}
@@ -419,7 +428,7 @@ def should_review_chapter_plan(
     if warnings:
         return True
     confidence = (learner or {}).get("levelConfidence")
-    if isinstance(confidence, (int, float)) and confidence < 0.55:
+    if isinstance(confidence, (int, float)) and confidence < LEVEL_CONFIDENCE_THRESHOLD:
         return True
     # 没有 conceptKeys 的计划无法判断认知增量，交给独立审查补一层风险信号。
     if any(not task.get("conceptKeys") for task in tasks):
@@ -500,6 +509,7 @@ async def _review_chapter_plan(
                 {"role": "user", "content": "请审查这份章节计划。\n\n" + review_messages["user"]},
             ],
             max_tokens=8000,
+            response_format={"type": "json_object"},
         )
         content = (response.get("choices") or [{}])[0].get("message", {}).get("content", "")
         parsed = parse_json_response(content)
@@ -588,7 +598,7 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
                 reasoning_effort=PLAN_REASONING_EFFORT,
             )
         else:
-            response = await client.chat(messages=messages, max_tokens=16000)
+            response = await client.chat(messages=messages, max_tokens=16000, response_format={"type": "json_object"})
         content = (response.get("choices") or [{}])[0].get("message", {}).get("content", "")
 
         try:
@@ -608,7 +618,7 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
             tasks[-1]["evidencePolicy"] = "checkpoint"
         _normalize_prereqs(tasks)
 
-        errors, warnings = validate_plan_tasks(tasks, objective_ids)
+        errors, warnings = validate_plan_tasks(tasks, objective_ids, chapter_title=chapter.get("title"))
         for warning in warnings:
             print(f"[章节计划] 软约束告警：{warning['code']} {warning['message']}")
         if not errors:

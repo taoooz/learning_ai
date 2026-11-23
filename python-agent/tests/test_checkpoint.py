@@ -570,6 +570,141 @@ def test_remediate_endpoint_missing_fields():
     assert "必填字段" in response.json()["message"]
 
 
+def _seed_remediable_checkpoint(monkeypatch, tmp_path, *, outcome="not_demonstrated"):
+    """种一个可进入补救流程的检查题：权威学习数据 + sealed 定义 + 一次评估证据。"""
+    import services.memory_v4_store as memory_module
+    _seed_authoritative_learning(monkeypatch, tmp_path)
+    store = memory_module.MemoryV4Store()
+    cp = _scenario_choice()
+    store.save_checkpoint_definition(
+        "test-account",
+        cp.model_dump(),
+        {
+            "courseId": "c1", "chapterId": "ch1", "taskId": "task-1",
+            "courseTopic": "HTTP", "planId": "plan-1", "planVersion": 1,
+            "taskContentSummary": "304 表示资源未变化，应使用本地缓存。",
+        },
+    )
+    client = _endpoint_client()
+    answer = "b" if outcome == "demonstrated" else "a"
+    response = client.post("/api/learning/v2/checkpoints/evaluate", json={
+        "checkpointId": "cp-1", "answer": answer,
+        "idempotencyKey": "cp:ch1:v1:task-1:cp-1",
+    }, headers={"X-Account-Id": "test-account"})
+    assert response.status_code == 200
+    return client, store
+
+
+def test_remediate_rejects_when_already_demonstrated(monkeypatch, tmp_path):
+    client, _store = _seed_remediable_checkpoint(monkeypatch, tmp_path, outcome="demonstrated")
+    response = client.post("/api/learning/v2/checkpoints/remediate", json={
+        "checkpointId": "cp-1", "userAnswer": "b", "idempotencyKey": "rem-1",
+    }, headers={"X-Account-Id": "test-account"})
+    assert response.status_code == 409
+    body = response.json()
+    assert body["code"] == "REMEDIATION_NOT_NEEDED"
+    assert body["retryable"] is False
+
+
+def test_remediate_caps_consecutive_rounds(monkeypatch, tmp_path):
+    client, store = _seed_remediable_checkpoint(monkeypatch, tmp_path)
+    for round_no in (1, 2):
+        store.append_remediation("test-account", {
+            "remediationId": f"rem-cp-1-r{round_no}",
+            "originCheckpointId": "cp-1",
+            "round": round_no,
+            "outcome": "not_helped",
+            "createdAt": 1000 + round_no,
+        })
+
+    async def _must_not_generate(**_kwargs):
+        raise AssertionError("达到补救上限后不应再调用 LLM 生成")
+
+    monkeypatch.setattr("services.checkpoint_service.generate_remediation", _must_not_generate)
+    response = client.post("/api/learning/v2/checkpoints/remediate", json={
+        "checkpointId": "cp-1", "userAnswer": "a", "idempotencyKey": "rem-3",
+    }, headers={"X-Account-Id": "test-account"})
+    assert response.status_code == 409
+    body = response.json()
+    assert body["code"] == "REMEDIATION_LIMIT"
+    assert body["retryable"] is False
+
+
+def test_remediate_first_round_succeeds_and_records_round(monkeypatch, tmp_path):
+    client, store = _seed_remediable_checkpoint(monkeypatch, tmp_path)
+
+    async def fake_generate(**_kwargs):
+        return {
+            "remediationContent": "补救说明",
+            "newCheckpoint": {
+                "kind": "scenario_choice", "prompt": "新题",
+                "options": [
+                    {"id": "a", "text": "x"}, {"id": "b", "text": "y"},
+                    {"id": "c", "text": "z"}, {"id": "d", "text": "w"},
+                ],
+                "correctAnswer": "a", "remediationHint": "提示",
+            },
+        }
+
+    monkeypatch.setattr("services.checkpoint_service.generate_remediation", fake_generate)
+    response = client.post("/api/learning/v2/checkpoints/remediate", json={
+        "checkpointId": "cp-1", "userAnswer": "a", "idempotencyKey": "rem-1",
+    }, headers={"X-Account-Id": "test-account"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["remediationId"] == "rem-cp-1-1"
+    assert "correctAnswer" not in body["newCheckpoint"]
+    assert store.load_checkpoint("test-account", "cp-1-r1") is not None
+
+
+def test_remediate_chain_caps_at_two_rounds(monkeypatch, tmp_path):
+    """补救链 cp-1 → cp-1-r1 → cp-1-r1-r1：第三轮必须被服务端封顶。"""
+    client, store = _seed_remediable_checkpoint(monkeypatch, tmp_path)
+
+    async def fake_generate(**_kwargs):
+        return {
+            "remediationContent": "补救说明",
+            "newCheckpoint": {
+                "kind": "scenario_choice", "prompt": "新题",
+                "options": [
+                    {"id": "a", "text": "x"}, {"id": "b", "text": "y"},
+                    {"id": "c", "text": "z"}, {"id": "d", "text": "w"},
+                ],
+                "correctAnswer": "a", "remediationHint": "提示",
+            },
+        }
+
+    monkeypatch.setattr("services.checkpoint_service.generate_remediation", fake_generate)
+
+    def _evaluate_wrong(checkpoint_id: str, idem: str):
+        response = client.post("/api/learning/v2/checkpoints/evaluate", json={
+            "checkpointId": checkpoint_id, "answer": "b", "idempotencyKey": idem,
+        }, headers={"X-Account-Id": "test-account"})
+        assert response.status_code == 200
+
+    def _remediate(checkpoint_id: str, idem: str):
+        return client.post("/api/learning/v2/checkpoints/remediate", json={
+            "checkpointId": checkpoint_id, "userAnswer": "b", "idempotencyKey": idem,
+        }, headers={"X-Account-Id": "test-account"})
+
+    # 第 1 轮：原题答错（_seed 已评估）→ 补救成功
+    assert _remediate("cp-1", "rem-1").status_code == 200
+    # 第 2 轮：新题答错 → 补救成功
+    _evaluate_wrong("cp-1-r1", "ev-r1")
+    assert _remediate("cp-1-r1", "rem-2").status_code == 200
+    assert store.load_checkpoint("test-account", "cp-1-r1-r1") is not None
+    # 第 3 轮：链上已有 2 轮 → 封顶，且不调用 LLM
+    _evaluate_wrong("cp-1-r1-r1", "ev-r2")
+
+    async def _must_not_generate(**_kwargs):
+        raise AssertionError("达到补救上限后不应再调用 LLM 生成")
+
+    monkeypatch.setattr("services.checkpoint_service.generate_remediation", _must_not_generate)
+    response = _remediate("cp-1-r1-r1", "rem-3")
+    assert response.status_code == 409
+    assert response.json()["code"] == "REMEDIATION_LIMIT"
+
+
 # ---- P5 可观测性：token 用量提取 ----
 
 from lib.minimax import extract_usage

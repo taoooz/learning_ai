@@ -1,6 +1,24 @@
 from services.chat_agent import build_chat_system_prompt
 
 
+def test_stream_error_does_not_leak_exception_details(monkeypatch):
+    import services.chat_agent as chat_module
+
+    class BrokenClient:
+        def stream_chat_with_tools(self, **_kwargs):
+            raise RuntimeError("secret-internal-detail: connection to 10.0.0.1 refused")
+            yield  # pragma: no cover - 使其成为生成器函数
+
+    monkeypatch.setattr(chat_module, "AgentClient", BrokenClient)
+    chunks = list(chat_module.stream_chat_with_tools(
+        messages=[{"role": "user", "content": "你好"}],
+    ))
+    joined = "".join(chunks)
+    assert "secret-internal-detail" not in joined
+    assert "抱歉，回复生成失败，请稍后重试。" in joined
+    assert "data: [DONE]" in joined
+
+
 def test_context_kept_without_memory():
     """回归：没有记忆载荷（新用户/记忆解析失败）时，课程上下文不得被整体丢弃"""
     prompt = build_chat_system_prompt(

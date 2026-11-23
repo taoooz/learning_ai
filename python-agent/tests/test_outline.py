@@ -184,10 +184,8 @@ def test_learner_positioning_schema():
     """测试 LearnerPositioning Schema"""
     positioning = LearnerPositioning(
         estimatedLevel="beginner",
-        difficultySummary="适合前端开发者",
         backgroundSummary="有 React 基础",
         skipBasics=["React 基础"],
-        whyThisCourseFits="深入理解状态管理",
     )
     assert positioning.estimatedLevel == "beginner"
     assert "React" in positioning.backgroundSummary
@@ -200,10 +198,8 @@ def test_outline_blueprint_schema():
         learningGoal="掌握 Redux、Zustand 等状态管理方案",
         learnerPositioning=LearnerPositioning(
             estimatedLevel="intermediate",
-            difficultySummary="中等难度",
             backgroundSummary="有 2 年前端经验",
             skipBasics=[],
-            whyThisCourseFits="想深入理解状态管理",
         ),
     )
     assert "React" in blueprint.learningDirection
@@ -239,3 +235,13 @@ def test_parse_outline_intent_type_contract():
     # 非法值与缺失槽位都返回 None
     assert parse_content_blocks(content.replace("problem_solving", "casual_chat"))["outline"]["intentType"] is None
     assert parse_content_blocks(content.replace('<div slot="intentType">problem_solving</div>\n', ''))["outline"]["intentType"] is None
+
+
+def test_confidence_threshold_single_source():
+    """置信度阈值统一为 0.6：prompt 与代码同源，边界行为确定。"""
+    from services.outline_service import LEVEL_CONFIDENCE_THRESHOLD
+    assert LEVEL_CONFIDENCE_THRESHOLD == 0.6
+    low = {"learnerSnapshot": {"estimatedLevel": "intermediate", "confidence": 0.59}}
+    ok = {"learnerSnapshot": {"estimatedLevel": "intermediate", "confidence": 0.6}}
+    assert needs_level_calibration(low) is True
+    assert needs_level_calibration(ok) is False

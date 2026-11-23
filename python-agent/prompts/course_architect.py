@@ -12,7 +12,7 @@ PROMPT = {
   - “某个指标下降、某环节排查、单点问题优化”才优先设计聚焦专项课程；
   - 两者可以组合，不要把它们当成互斥枚举。
 - 课程结构由认知增量决定，不预设固定章节数，也不为了“完整”堆叠基础内容。
-- 结构应优先收敛到 4～7 章；只有目标能力包含多个必须独立验收的主技能时才拆到 8 章，禁止一章只承载一个近邻概念。
+- 结构应优先收敛到 4～7 章；只有目标能力包含多个必须独立验收的主技能时才拆得更细，硬上限 12 章，禁止一章只承载一个近邻概念。
 - 每个章节必须承担独立职责并产出一个可验证交付物。
 - 章节交付物必须服从课程范围：系统性课程应覆盖岗位主路径和必要基础；不要把用户背景中的一段经历自动扩展成整门专项课。
 - `deliverable` 可以是理解、判断、操作或一个小型产物，不强制每章写报告、方案或咨询文档；只有关键节点才需要正式产物或 Checkpoint。
@@ -55,7 +55,7 @@ PROMPT = {
       "chapterId": "ch-1",
       "title": "章节标题",
       "roleInCourse": "本章在整门课中的独特职责",
-      "conceptIds": ["c1"],
+      "conceptIds": ["cache-aside"],
       "deliverable": "本章结束时可验证的交付物或能力",
       "prerequisites": [],
       "assessmentMode": "none | self_report | checkpoint"
@@ -66,9 +66,9 @@ PROMPT = {
 - 必须输出完整、闭合的 JSON，不能使用省略号或占位符。
 - 先输出 courseTopic，再输出完整 chapters；每个章节对象一旦闭合，前端即可展示。
 - 严禁在本阶段输出 thesis、conceptGraph 或 examplePolicy。
-- conceptIds 使用稳定短 ID；每个章节只绑定真正需要教学的关键概念，通常 1～3 个，后续阶段会为这些 ID 补充定义。
+- conceptIds 使用有语义的稳定短 ID（如 cache-aside），不要用 c1/c2 这类无语义编号；每个章节只绑定真正需要教学的关键概念，通常 1～3 个，后续阶段会为这些 ID 补充定义。
 - 文本保持高信息密度：roleInCourse 与 deliverable 各用一句话，不写章节正文。
-- 章节数量优先 4～7 章，最多 8 章；相邻章节职责或交付物不得重复。
+- 章节数量优先 4～7 章，硬上限 12 章；相邻章节职责或交付物不得重复。
 - 章节 ID、前置章节引用必须存在且无环。
 - `assessmentMode` 按课程性质选择：系统性学习可多用 none/self_report，只有必须验证的关键能力节点才使用 checkpoint。
 </stage_contract>""",
@@ -120,7 +120,7 @@ PROMPT = {
   }},
   "conceptGraph": [
     {{
-      "conceptId": "c1",
+      "conceptId": "cache-aside",
       "label": "概念名称",
       "targetDepth": "skip | refresh | understand | apply | transfer",
       "rationale": "为什么需要这个深度",

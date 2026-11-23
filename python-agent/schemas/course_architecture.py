@@ -1,9 +1,15 @@
 """Course Architect 的结构化输出与确定性校验。"""
 from __future__ import annotations
 
+import re
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
+
+# observableOutcome（=章节交付物）必须是可观察的行为/产物，
+# 不能是"了解/熟悉/掌握"这类空泛认知动词（规格 v2_课程生成逻辑.md）。
+# "掌握度"是名词（如"掌握度自评表"），用负向前瞻排除误杀。
+_VAGUE_DELIVERABLE_RE = re.compile(r"^(了解|熟悉|掌握(?!度)|理解|认识|知道)")
 
 
 class CourseThesis(BaseModel):
@@ -97,8 +103,8 @@ def validate_course_chapters(chapters: list[ArchitectureChapter]) -> list[str]:
     issues: list[str] = []
     if not chapters:
         issues.append("课程至少需要一个章节。")
-    if len(chapters) > 8:
-        issues.append(f"章节数量 {len(chapters)} 过多，应合并相邻同层职责，优先收敛到 4～7 章。")
+    if len(chapters) > 12:
+        issues.append(f"章节数量 {len(chapters)} 超过硬上限 12，必须合并相邻同层职责，优先收敛到 4～7 章。")
 
     chapter_ids = [chapter.chapterId for chapter in chapters]
     if len(chapter_ids) != len(set(chapter_ids)):
@@ -115,6 +121,11 @@ def validate_course_chapters(chapters: list[ArchitectureChapter]) -> list[str]:
         if normalized_deliverable and normalized_deliverable in deliverables:
             issues.append(f"章节交付物重复：{chapter.deliverable}")
         deliverables.add(normalized_deliverable)
+        if _VAGUE_DELIVERABLE_RE.match(chapter.deliverable.strip()):
+            issues.append(
+                f"章节 {chapter.chapterId} 的交付物以空泛认知动词开头（{chapter.deliverable}），"
+                "请改为可观察的交付物或行为描述，例如一份方案、一张判断清单或能独立完成的动作。"
+            )
         for prerequisite in chapter.prerequisites:
             if prerequisite not in chapter_set:
                 issues.append(f"章节 {chapter.chapterId} 的前置章节不存在：{prerequisite}")

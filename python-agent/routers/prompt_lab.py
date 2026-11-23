@@ -1,5 +1,7 @@
 """Course Prompt Lab 调试路由。"""
-from fastapi import APIRouter, Request
+import os
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from starlette.responses import StreamingResponse
 
@@ -9,7 +11,26 @@ from services.memory_v4_store import MemoryV4Store
 from services.prompt_lab_service import compile_prompt_lab_stage, run_prompt_lab_stream
 
 
-router = APIRouter(prefix="/api/debug/course-pipeline", tags=["prompt-lab"])
+def _require_prompt_lab_enabled() -> None:
+    """与 BFF 同语义的纵深防御门禁：非 production 默认开放，production 需显式 ENABLE_PROMPT_DEBUGGER=1。
+
+    BFF（lib/prompt-lab/config.ts）已有同款检查；此处保证 Python 服务被直连时
+    生产环境也不能读取真实 Memory 或运行生产 prompt。生产部署须设置 ENV=production。
+    """
+    enabled = (
+        os.getenv("ENABLE_PROMPT_DEBUGGER", "") == "1"
+        or os.getenv("ENV", "development") != "production"
+    )
+    if not enabled:
+        raise HTTPException(status_code=404, detail="Prompt Lab 未启用")
+
+
+router = APIRouter(
+    prefix="/api/debug/course-pipeline",
+    tags=["prompt-lab"],
+    dependencies=[Depends(_require_prompt_lab_enabled)],
+)
+
 
 
 @router.post("/memory-snapshot")

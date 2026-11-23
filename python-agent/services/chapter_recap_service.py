@@ -182,6 +182,7 @@ async def generate_chapter_recap(request: ChapterRecapRequest, client: MiniMaxCl
                 {"role": "user", "content": user_message},
             ],
             max_tokens=8000,
+            response_format={"type": "json_object"},
         )
         content = (response.get("choices") or [{}])[0].get("message", {}).get("content", "")
 
@@ -286,7 +287,7 @@ async def stream_chapter_recap_events(
         parsed = parse_json_response(accumulated)
         errors, recap_fields = _validate_recap(parsed)
         if errors or recap_fields is None:
-            yield make_event("request_error", {"code": "RECAP_VALIDATION_FAILED", "message": "章节小结未通过校验，请重试", "retryable": False})
+            yield make_event("request_error", {"code": "RECAP_VALIDATION_FAILED", "message": "章节小结未通过校验，请重试", "retryable": True})
             yield make_event("request_completed", {"requestId": req_id, "status": "failed", "errorCode": "RECAP_VALIDATION_FAILED"})
             return
 

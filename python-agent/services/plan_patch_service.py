@@ -54,6 +54,7 @@ async def generate_plan_patch(
             {"role": "user", "content": "请分析证据并给出调度建议。只输出 JSON 对象。"},
         ],
         max_tokens=8000,
+        response_format={"type": "json_object"},
     )
     content = response["choices"][0]["message"]["content"]
 

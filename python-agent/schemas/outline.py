@@ -5,14 +5,12 @@ from typing import Literal, Optional
 class LearnerPositioning(BaseModel):
     """用户定位"""
     estimatedLevel: Literal["beginner", "intermediate", "advanced"]
-    difficultySummary: str
     backgroundSummary: str
     skipBasics: list[str] = Field(default_factory=list)
     likelyGaps: list[str] = Field(default_factory=list)
     levelConfidence: Optional[float] = None
     preferredExampleDomains: list[str] = Field(default_factory=list)
     personalExampleLimit: int = 1
-    whyThisCourseFits: str
 
 
 class OutlineBlueprint(BaseModel):

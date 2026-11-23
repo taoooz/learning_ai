@@ -55,14 +55,14 @@
 5. 删除课程必须清理课程容器、章节学习流和参与信号，并走 `LessonRepository.deleteCourse`。
 6. 任务/答疑错误通知在对应请求成功后从 UI 隐藏，但数据层保留原始 `system_notice` 用于恢复与审计。
 7. 用户可见文本使用中文；API 错误应包含可理解的中文信息和可重试标记。
-8. 每章最后一个任务必须触发 Checkpoint；服务端从蓝图/章节容器反查范围，sealed definition 判分成功后才按服务端 attempt 顺序追加 Learning Evidence；客户端不得提交正确答案、topic、planVersion 或任务摘要。
+8. 每章最后一个任务必须触发 Checkpoint；服务端从蓝图/章节容器反查范围，sealed definition 判分成功后才按服务端 attempt 顺序追加 Learning Evidence；客户端不得提交正确答案、topic、planVersion 或任务摘要。补救沿题链（previousCheckpointId）服务端封顶连续 2 轮，已达标（demonstrated）不得再请求补救。
 9. 密钥只放 `.env*`，不得进入源码或文档。
 10. 用户画像输入经服务端 Memory V4 ingestion 后，课程生成与聊天只读取场景 Resolver 选中的 V4 Memory；不保留 V3 Memory 兼容层。Chat Summary 与 Chapter Episode 只由服务端 transcript、lesson、Evidence、recap snapshot 生成；旧 `/api/memory/refine` 与 `/api/agents/memory/refine` 已删除，不得恢复双轨写入；localStorage 不迁移无账户后缀的旧 key。
 11. server 模式 lesson 保存必须单写入器串行执行；写入在途时只合并为最新快照，不能让旧快照排队覆盖新状态。
 12. Profile Memory 使用固定五维派生视图（方向、背景、偏好、教学策略、学习轨迹）；摘要通过 `sourceRecordIds` 与 `sourceRevision` 指向原子记录，不形成第二事实层。
 13. Chat Agent API 只接受 `{ courseTopic, messages }` 结构化输入；不支持仅传 `messages` 的旧直连模式。
-14. 课程起点不得把“缺少主题学习记录”直接当成零基础：`LearnerStartingPoint` 可带水平置信度、背景、可能缺口和例子策略；低置信度且存在可迁移背景时必须先校准。Course Architect 必须两阶段生成：第一阶段只流式输出 `courseTopic + chapters`，第二阶段固定章节并只补全 `thesis + conceptGraph + examplePolicy`；任一阶段失败只能做阶段内定向修复，不得重新生成完整课程。最终架构需通过确定性结构校验，LLM 架构审查仅在 auto 风险模式下按需触发；章节计划进入内容生成前按风险信号执行概念重复/过基础/过度拆分审查。
-15. Prompt Lab 与正式业务完全隔离：只复用生产 Prompt Builder，编辑后的 Prompt 仅作为本次调试覆盖；不得写入课程、章节、Memory 或 engagement。课程生成 Prompt 必须拆成静态 system（角色、行为、协议）与动态 user（本轮诉求、画像、Memory、证据、上游产物）；Planning Memory 不暴露内部 record ID，模型需要细节时通过只读 `memory_search` 工具按需检索。调试数据只存 `ai-learning-prompt-lab-v1`，生产默认关闭，显式设置 `ENABLE_PROMPT_DEBUGGER=1` 才会开放。
+14. 课程起点不得把“缺少主题学习记录”直接当成零基础：`LearnerStartingPoint` 可带水平置信度、背景、可能缺口和例子策略；低置信度且存在可迁移背景时必须先校准。Course Architect 必须两阶段生成：第一阶段只流式输出 `courseTopic + chapters`，第二阶段固定章节并只补全 `thesis + conceptGraph + examplePolicy`；任一阶段失败只能做阶段内定向修复，不得重新生成完整课程。最终架构需通过确定性结构校验（章节数硬上限 12），LLM 架构审查仅在 auto 风险模式下按需触发，默认软门（修复一次后仍不通过则携带 reviewIssues 放行，`ARCHITECT_REVIEW_STRICT=1` 恢复硬门）；章节计划进入内容生成前按风险信号执行概念重复/过基础/过度拆分审查。
+15. Prompt Lab 与正式业务完全隔离：只复用生产 Prompt Builder，编辑后的 Prompt 仅作为本次调试覆盖；不得写入课程、章节、Memory 或 engagement。课程生成 Prompt 必须拆成静态 system（角色、行为、协议）与动态 user（本轮诉求、画像、Memory、证据、上游产物）；Planning Memory 不暴露内部 record ID，模型需要细节时通过只读 `memory_search` 工具按需检索。Prompt Lab 内置按环节优化的助手，可主动对话、评测最近输出并生成可应用的 Prompt 改写。调试数据只存 `ai-learning-prompt-lab-v1`，生产默认关闭，显式设置 `ENABLE_PROMPT_DEBUGGER=1` 才会开放。
 
 ## 5. 详细文档索引
 

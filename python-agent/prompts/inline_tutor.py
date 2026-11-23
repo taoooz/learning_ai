@@ -51,9 +51,6 @@ PROMPT = {
 
 ## 最近问答（仅供衔接上下文，不要重复回答）
 {recent_qa_section}
-
-## 学习者当前问题
-{question_text}
 </tutor_context>""",
 
     "style": """<style_rules>
@@ -67,7 +64,7 @@ PROMPT = {
     "output_format": """<output_format>
 ## 回答要求
 - 第一行输出动作标记（格式见上方），空一行后输出正文
-- 针对上方「学习者当前问题」作答，使用中文
+- 针对学习者的提问（用户消息）作答，使用中文
 - 只输出 Markdown 正文：不要输出 JSON，不要用代码围栏包裹整篇内容
 - 回答控制在 300 字以内，口语化、贴近当前任务内容，例子具体
 - 不要输出思维过程、推理链或内部分析
@@ -100,7 +97,6 @@ def build_inline_tutor_prompt(request: InlineTutorRequest, memory_context: dict 
         task_description=request.task.taskDescription,
         visible_content=visible_content,
         recent_qa_section=recent_qa_section,
-        question_text=request.question.text,
     )
 
     base += format_memory_context_for_prompt(memory_context or {})

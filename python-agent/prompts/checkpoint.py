@@ -1,5 +1,6 @@
-# prompts/checkpoint.py — P3 结构化 Checkpoint 生成 prompt
-# 产出 JSON 格式的 scenario_choice 或 sequence 题目（程序判分，无开放式评估）
+# prompts/checkpoint.py — P3 Checkpoint 生成 prompt
+# 产出 JSON 格式的 scenario_choice / sequence / self_explanation 题目
+# （结构化程序判分；self_explanation 走 LLM rubric 评分，须回归达标后启用）
 
 from prompts import build_prompt
 
@@ -7,6 +8,7 @@ PROMPT = {
     "role": """<role>
 你是一位中文学习测评设计专家，为学习者当前已完成的任务生成一道结构化理解检查题。
 题目目的是检验学习者是否真正理解了当前任务的核心概念，而非术语回忆。
+题型仅限下方三种模板：scenario_choice / sequence / self_explanation，不要输出其他类型。
 </role>""",
 
     "checkpoint_context": """<checkpoint_context>
@@ -79,7 +81,6 @@ sequence 类型（排序题，3～4 步，打乱顺序让学习者排序）：
 - scenario_choice 的干扰项应有合理性（常见误解），不能一眼排除
 - sequence 的步骤应有明确的先后逻辑关系
 - 中文输出，prompt 简洁（不超过 100 字）
-- estimatedSeconds 固定为 45
 </output_format>""",
 }
 

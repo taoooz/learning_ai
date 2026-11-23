@@ -1,7 +1,14 @@
 import asyncio
 import json
 
-from schemas.course_architecture import CourseArchitecture, validate_course_architecture
+import pytest
+
+from schemas.course_architecture import (
+    ArchitectureChapter,
+    CourseArchitecture,
+    validate_course_architecture,
+    validate_course_chapters,
+)
 from services.course_architect_service import (
     build_course_architect_prompt,
     build_course_architect_meta_prompt,
@@ -101,7 +108,7 @@ class FakeArchitectClient:
         payload = self.responses.pop(0)
         return {"choices": [{"message": {"content": json.dumps(payload, ensure_ascii=False)}}]}
 
-    async def chat(self, messages, model=None, max_tokens=1500):
+    async def chat(self, messages, model=None, max_tokens=1500, response_format=None):
         self.review_calls.append(messages)
         payload = self.review_responses.pop(0) if self.review_responses else {
             "passed": True,
@@ -120,7 +127,7 @@ class FakeChatOnlyClient:
         self.responses = responses
         self.calls = []
 
-    async def chat(self, messages, model=None, max_tokens=1500):
+    async def chat(self, messages, model=None, max_tokens=1500, response_format=None):
         self.calls.append(messages)
         payload = self.responses.pop(0)
         return {"choices": [{"message": {"content": json.dumps(payload, ensure_ascii=False)}}]}
@@ -254,11 +261,11 @@ def test_architecture_requires_scope_convergence():
     template_chapter = data["chapters"][0]
     data["chapters"] = [
         {**template_chapter, "chapterId": f"ch-{index}", "title": f"拆分章节 {index}", "prerequisites": []}
-        for index in range(1, 10)
+        for index in range(1, 14)
     ]
     architecture = CourseArchitecture.model_validate(data)
     issues = validate_course_architecture(architecture)
-    assert any("章节数量 9 过多" in issue for issue in issues)
+    assert any("硬上限 12" in issue for issue in issues)
 
 
 def test_course_architect_service_repairs_invalid_design_once():
@@ -415,3 +422,108 @@ def test_course_architect_meta_prompt_keeps_chapters_fixed():
     assert "c2-experiment-decision" in prompt
     assert "必须逐字使用" in prompt
     assert "禁止简化成 c1/c2/c3" in prompt
+
+
+def _chapter_with_deliverable(deliverable: str):
+    from schemas.course_architecture import ArchitectureChapter
+    return ArchitectureChapter(
+        chapterId="ch1",
+        title="缓存一致性",
+        roleInCourse="建立判断边界",
+        conceptIds=["cache-aside"],
+        deliverable=deliverable,
+    )
+
+
+def test_vague_deliverable_is_flagged():
+    """交付物以空泛认知动词开头 → 校验 issue（进 architect 修复链）"""
+    from schemas.course_architecture import validate_course_chapters
+    for vague in ("掌握缓存一致性原理", "了解缓存穿透", "熟悉一致性协议", "理解缓存策略"):
+        issues = validate_course_chapters([_chapter_with_deliverable(vague)])
+        assert any("空泛认知动词" in issue for issue in issues), vague
+
+
+def test_concrete_deliverable_passes_vague_check():
+    """具体产物/行为描述不触发；'掌握度'是名词不误杀"""
+    from schemas.course_architecture import validate_course_chapters
+    for concrete in ("一份缓存穿透排查清单", "能独立判断缓存失效场景", "掌握度自评表"):
+        issues = validate_course_chapters([_chapter_with_deliverable(concrete)])
+        assert not any("空泛认知动词" in issue for issue in issues), concrete
+
+
+def _failed_review() -> dict:
+    return {
+        "passed": False,
+        "issues": [{"code": "WEAK_DELTA", "chapterIds": ["ch-1"], "message": "认知增量不足"}],
+        "repairNotes": "",
+    }
+
+
+def test_stream_review_soft_gate_passes_with_issues(monkeypatch):
+    """默认软门：修复后仍不通过 → 放行并携带 reviewIssues，不整课失败。"""
+    monkeypatch.delenv("ARCHITECT_REVIEW_STRICT", raising=False)
+    client = FakeStreamingArchitectClient(
+        responses=[_valid_meta(), _valid_chapter_plan(), _valid_meta()],
+        review_responses=[_failed_review(), _failed_review()],
+    )
+    events = list(stream_course_architecture(
+        topic="推荐系统核心链路",
+        outline=_valid_architecture(),
+        learner={"estimatedLevel": "intermediate", "skipBasics": []},
+        client=client,
+        review_mode="always",
+    ))
+    result = events[-1]
+    assert result["type"] == "result"
+    assert result["result"]["issues"] == []
+    assert result["result"]["reviewIssues"]
+    assert len(client.review_calls) == 2
+
+
+def test_stream_review_strict_gate_raises(monkeypatch):
+    """ARCHITECT_REVIEW_STRICT=1 恢复硬门：二次审查仍不通过 → 整课失败。"""
+    monkeypatch.setenv("ARCHITECT_REVIEW_STRICT", "1")
+    client = FakeStreamingArchitectClient(
+        responses=[_valid_meta(), _valid_chapter_plan(), _valid_meta()],
+        review_responses=[_failed_review(), _failed_review()],
+    )
+    with pytest.raises(ValueError, match="课程架构审查未通过"):
+        list(stream_course_architecture(
+            topic="推荐系统核心链路",
+            outline=_valid_architecture(),
+            learner={"estimatedLevel": "intermediate", "skipBasics": []},
+            client=client,
+            review_mode="always",
+        ))
+
+
+def test_sync_review_soft_gate_returns_review_issues(monkeypatch):
+    monkeypatch.delenv("ARCHITECT_REVIEW_STRICT", raising=False)
+    client = FakeArchitectClient(
+        responses=[_valid_chapter_plan(), _valid_meta(), _valid_chapter_plan(), _valid_meta()],
+        review_responses=[_failed_review(), _failed_review()],
+    )
+    result = asyncio.run(generate_course_architecture(
+        topic="推荐系统核心链路",
+        outline=_valid_architecture(),
+        learner={"estimatedLevel": "intermediate", "skipBasics": []},
+        client=client,
+        review_mode="always",
+    ))
+    assert result["issues"] == []
+    assert result["reviewIssues"]
+
+
+def test_chapter_count_hard_limit_is_twelve():
+    """9～12 章不再硬拦截（交给 prompt 收敛与风险审查）；超过 12 章硬拦截。"""
+    base = _valid_chapter_plan()["chapters"][0]
+    nine = [
+        ArchitectureChapter(**{**base, "chapterId": f"ch-{i}", "prerequisites": []})
+        for i in range(9)
+    ]
+    assert not any("章节数量" in issue for issue in validate_course_chapters(nine))
+    thirteen = [
+        ArchitectureChapter(**{**base, "chapterId": f"ch-{i}", "prerequisites": []})
+        for i in range(13)
+    ]
+    assert any("硬上限 12" in issue for issue in validate_course_chapters(thirteen))

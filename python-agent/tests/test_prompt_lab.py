@@ -196,6 +196,46 @@ def test_prompt_lab_memory_snapshot_uses_read_only_planning_payload(monkeypatch)
     assert body["planningMemory"]["learnerSnapshot"]["estimatedLevel"] == "intermediate"
 
 
+def test_prompt_lab_gate_blocks_production_without_flag(monkeypatch):
+    from main import app
+
+    monkeypatch.setenv("PYTHON_INTERNAL_TOKEN", "prompt-lab-token")
+    monkeypatch.setenv("ENV", "production")
+    monkeypatch.delenv("ENABLE_PROMPT_DEBUGGER", raising=False)
+    response = TestClient(app).post(
+        "/api/debug/course-pipeline/memory-snapshot",
+        json={"topic": "推荐系统"},
+        headers={"X-Internal-Token": "prompt-lab-token", "X-Account-Id": "account-1"},
+    )
+    assert response.status_code == 404
+
+
+def test_prompt_lab_gate_allows_production_with_flag(monkeypatch):
+    import routers.prompt_lab as router_module
+    from main import app
+
+    monkeypatch.setenv("PYTHON_INTERNAL_TOKEN", "prompt-lab-token")
+    monkeypatch.setenv("ENV", "production")
+    monkeypatch.setenv("ENABLE_PROMPT_DEBUGGER", "1")
+    monkeypatch.setattr(router_module, "MemoryV4Store", lambda: object())
+    monkeypatch.setattr(
+        router_module,
+        "safe_resolve_memory_context",
+        lambda *_args, **_kwargs: {"scene": "course_planning"},
+    )
+    monkeypatch.setattr(
+        router_module,
+        "to_planning_prompt_payload",
+        lambda *_args, **_kwargs: {"userProfile": {}, "planningMemory": {}},
+    )
+    response = TestClient(app).post(
+        "/api/debug/course-pipeline/memory-snapshot",
+        json={"topic": "推荐系统"},
+        headers={"X-Internal-Token": "prompt-lab-token", "X-Account-Id": "account-1"},
+    )
+    assert response.status_code == 200
+
+
 def test_prompt_lab_memory_search_returns_content_without_record_ids(monkeypatch):
     import lib.tools.memory_tools as memory_tools
 

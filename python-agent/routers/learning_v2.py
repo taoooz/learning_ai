@@ -43,6 +43,9 @@ from services.learning_v2_authority import (
     validate_checkpoint_still_current,
 )
 
+# 连续补救轮次上限（规格：最多连续两轮，不伪造掌握）
+MAX_REMEDIATION_ROUNDS = 2
+
 router = APIRouter(prefix="/api/learning/v2")
 
 
@@ -616,6 +619,20 @@ async def learning_v2_checkpoints_remediate(request: Request):
             "ok": False, "code": "EVIDENCE_NOT_FOUND",
             "message": "尚未找到本次检查的评估证据，无法进入补救", "retryable": True,
         })
+    # 只有未达标（partial / not_demonstrated）才允许补救；答对后请求补救属于客户端误用
+    if str(before_evidence.get("outcome") or "") == "demonstrated":
+        return JSONResponse(status_code=409, content={
+            "ok": False, "code": "REMEDIATION_NOT_NEEDED",
+            "message": "本次检查已达标，无需补救", "retryable": False,
+        })
+    # 在调用 LLM 之前封顶，避免浪费生成预算。
+    # 注意：补救链每轮换新题 ID，须按整条链计数；命名仍按单题轮次（与前端一致）。
+    next_round = store.next_remediation_round(account, req.checkpointId)
+    if store.remediation_chain_depth(account, req.checkpointId) >= MAX_REMEDIATION_ROUNDS:
+        return JSONResponse(status_code=409, content={
+            "ok": False, "code": "REMEDIATION_LIMIT",
+            "message": f"补救已达上限（{MAX_REMEDIATION_ROUNDS} 轮），请继续后续学习", "retryable": False,
+        })
 
     evidence = None
     sources = None
@@ -641,7 +658,7 @@ async def learning_v2_checkpoints_remediate(request: Request):
             evidence=evidence,
             sources=sources,
         )
-        round_number = store.next_remediation_round(account, definition.checkpointId)
+        round_number = next_round
         new_checkpoint_id = f"{definition.checkpointId}-r{round_number}"
         remediation_id = f"rem-{definition.checkpointId}-{round_number}"
         new_definition = CheckpointDefinitionModel(

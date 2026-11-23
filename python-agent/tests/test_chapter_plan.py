@@ -129,7 +129,7 @@ class FakeChatClient:
         content = json.dumps({"tasks": tasks}, ensure_ascii=False)
         return {"choices": [{"message": {"content": content}}]}
 
-    async def chat(self, messages: list[dict], model=None, max_tokens=1500) -> dict:
+    async def chat(self, messages: list[dict], model=None, max_tokens=1500, response_format=None) -> dict:
         self.calls.append(messages)
         if not self.responses:
             assert "课程计划审查员" in messages[0]["content"]
@@ -444,3 +444,18 @@ def test_no_relevant_memory_prompt_abstains():
         memory_context={"scene": "chapter_planning", "fallback": "no_relevant_memory"},
     )
     assert "不要强行个性化" in prompt
+
+
+def test_title_repeats_chapter_is_warning():
+    """镜像 TS：任务标题与章节标题完全一致 → 软告警不阻断"""
+    tasks = _valid_tasks()
+    tasks[0]["title"] = "提示词工程入门"
+    errors, warnings = validate_plan_tasks(tasks, ["obj-1", "obj-2"], chapter_title="提示词工程入门")
+    assert not any(error["code"] == "TITLE_REPEATS_CHAPTER" for error in errors)
+    assert any(
+        warning["code"] == "TITLE_REPEATS_CHAPTER" and warning["taskId"] == "t1"
+        for warning in warnings
+    )
+    # 不传章节标题时不产生该告警（兼容旧调用方）
+    _, warnings_without = validate_plan_tasks(tasks, ["obj-1", "obj-2"])
+    assert not any(warning["code"] == "TITLE_REPEATS_CHAPTER" for warning in warnings_without)

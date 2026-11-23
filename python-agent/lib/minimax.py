@@ -76,18 +76,26 @@ class MiniMaxClient:
         messages: list[dict],
         model: str | None = None,
         max_tokens: int = 1500,
+        response_format: dict | None = None,
     ) -> dict:
-        """同步调用 chat API"""
+        """同步调用 chat API。
+
+        response_format 可选 {"type": "json_object"} 或 {"type": "json_schema", ...}；
+        端点（litellm 网关）真实支持并强制约束输出（2026-11-23 探测确认）。
+        """
         model = model or self.model
+        body: dict = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+        }
+        if response_format:
+            body["response_format"] = response_format
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{self.base_url}/chat/completions",
                 headers=self._get_headers(),
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "max_tokens": max_tokens,
-                },
+                json=body,
                 timeout=60.0,
             )
             response.raise_for_status()

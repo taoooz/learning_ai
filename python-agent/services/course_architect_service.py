@@ -318,6 +318,16 @@ def should_review_architecture(
     return False
 
 
+def _review_strict() -> bool:
+    """语义审查是否升级为硬门。
+
+    默认软门：定向修复一次后仍不通过则记录意见并放行（与章节计划审查一致，
+    LLM 语义意见不应一票否决整课）；设 ARCHITECT_REVIEW_STRICT=1 恢复硬门。
+    确定性结构校验不受此开关影响，始终硬拦截。
+    """
+    return os.getenv("ARCHITECT_REVIEW_STRICT", "0").strip().lower() in {"1", "true", "yes"}
+
+
 async def _review_course_architecture(
     client: MiniMaxClient,
     architecture: CourseArchitecture,
@@ -340,7 +350,7 @@ async def _review_course_architecture(
                 1,
             )
         else:
-            response = await client.chat(messages=messages, max_tokens=12000)
+            response = await client.chat(messages=messages, max_tokens=12000, response_format={"type": "json_object"})
         content = (response.get("choices") or [{}])[0].get("message", {}).get("content", "")
         parsed = parse_json_response(content)
         if not isinstance(parsed, dict) or not isinstance(parsed.get("passed"), bool):
@@ -429,7 +439,7 @@ def _call_nonstream_stage(
         )
         return _response_content(response)
     if hasattr(client, "chat"):
-        response = asyncio.run(client.chat(messages=messages, max_tokens=max_tokens))
+        response = asyncio.run(client.chat(messages=messages, max_tokens=max_tokens, response_format={"type": "json_object"}))
         return _response_content(response)
     raise RuntimeError("当前模型客户端不支持同步阶段调用")
 
@@ -635,7 +645,6 @@ def architecture_chapter_to_node(chapter: dict[str, Any], index: int) -> dict[st
         "index": index,
         "title": str(chapter.get("title") or ""),
         "description": f"{chapter.get('roleInCourse', '')}。本章交付：{chapter.get('deliverable', '')}",
-        "frame": "total_split_total",
     }
 
 
@@ -718,6 +727,7 @@ def _generate_course_architecture_sync(
         f"[Course Architect] 元信息完成 elapsed={int((time.monotonic() - started_at) * 1000)}ms"
     )
 
+    soft_review_issues: list[str] = []
     review_passed, review_skipped, review_unavailable, review_issues = _review_issues(
         client, architecture, learner, review_mode
     )
@@ -736,9 +746,11 @@ def _generate_course_architecture_sync(
             client, architecture, learner, review_mode
         )
         if not review_passed:
-            raise ValueError(
-                "课程架构审查未通过：" + "；".join(reassessment_issues or review_issues)
-            )
+            final_issues = reassessment_issues or review_issues
+            if _review_strict():
+                raise ValueError("课程架构审查未通过：" + "；".join(final_issues))
+            print(f"[Course Architect] 语义审查未通过，软门放行（ARCHITECT_REVIEW_STRICT=1 可改硬门）：{final_issues}")
+            soft_review_issues = final_issues
 
     print(
         f"[Course Architect] 两阶段架构完成 reviewSkipped={review_skipped} "
@@ -747,6 +759,7 @@ def _generate_course_architecture_sync(
     return {
         "architecture": architecture.model_dump(),
         "issues": [],
+        "reviewIssues": soft_review_issues,
         "reviewUnavailable": review_unavailable,
         "reviewSkipped": review_skipped,
         "promptVersion": PROMPT_VERSION,
@@ -913,6 +926,7 @@ def stream_course_architecture(
         f"[Course Architect] 元信息阶段完成 elapsed={int((time.monotonic() - started_at) * 1000)}ms"
     )
 
+    soft_review_issues: list[str] = []
     review_passed, review_skipped, review_unavailable, review_issues = _review_issues(
         client, architecture, learner, review_mode
     )
@@ -935,9 +949,11 @@ def stream_course_architecture(
             client, architecture, learner, review_mode
         )
         if not review_passed:
-            raise ValueError(
-                "课程架构审查未通过：" + "；".join(reassessment_issues or review_issues)
-            )
+            final_issues = reassessment_issues or review_issues
+            if _review_strict():
+                raise ValueError("课程架构审查未通过：" + "；".join(final_issues))
+            print(f"[Course Architect] 语义审查未通过，软门放行（ARCHITECT_REVIEW_STRICT=1 可改硬门）：{final_issues}")
+            soft_review_issues = final_issues
 
     print(
         f"[Course Architect] 流式两阶段架构完成 reviewSkipped={review_skipped} "
@@ -946,6 +962,7 @@ def stream_course_architecture(
     result = {
         "architecture": architecture.model_dump(),
         "issues": [],
+        "reviewIssues": soft_review_issues,
         "reviewUnavailable": review_unavailable,
         "reviewSkipped": review_skipped,
         "promptVersion": PROMPT_VERSION,

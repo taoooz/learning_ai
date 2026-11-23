@@ -41,7 +41,7 @@ class FakeChatClient:
         content = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)
         return {"choices": [{"message": {"content": content}}]}
 
-    async def chat(self, messages: list[dict], model=None, max_tokens=1500) -> dict:
+    async def chat(self, messages: list[dict], model=None, max_tokens=1500, response_format=None) -> dict:
         self.calls.append(messages)
         return self.responses.pop(0)
 

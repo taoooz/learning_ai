@@ -53,9 +53,16 @@ def stream_toc_with_tools(
         topic,
         blueprint.get("learningGoal", "") or blueprint.get("learningDirection", ""),
     )
+    # learner 已携带校准后的定位（来自纲要或 learnerSnapshot）；
+    # planningMemory 里再带一份 learnerSnapshot 属于同源重复注入，剔除。
+    planning_for_prompt = {
+        key: value
+        for key, value in (planning_payload or {}).items()
+        if key != "learnerSnapshot"
+    }
     memory_context = {
         "scene": "course_architecture",
-        "planningMemory": planning_payload or {},
+        "planningMemory": planning_for_prompt,
         "userProfile": user_profile or {},
     }
 

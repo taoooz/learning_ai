@@ -26,7 +26,6 @@ def _stream(result):
                 "index": index,
                 "title": chapter["title"],
                 "description": f"{chapter['roleInCourse']}。本章交付：{chapter['deliverable']}",
-                "frame": "total_split_total",
             },
         }
     yield {"type": "result", "result": result}

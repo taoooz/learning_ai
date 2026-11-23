@@ -44,11 +44,12 @@ def _request(**overrides) -> InlineTutorRequest:
 
 
 def test_prompt_contains_current_task_but_not_full_course():
-    """简报基线：prompt 含当前任务与当前问题，明确不输出思维过程"""
+    """简报基线：prompt 含当前任务，明确不输出思维过程；
+    问题只走 user message，不在 system 里重复注入"""
     request = _request()
     prompt = build_inline_tutor_prompt(request)
     assert "当前任务" in prompt
-    assert request.question.text in prompt
+    assert request.question.text not in prompt
     assert "不要输出思维过程" in prompt
 
 

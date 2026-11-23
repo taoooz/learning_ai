@@ -7,6 +7,10 @@ from prompts import build_prompt
 from lib.tools.memory_tools import MEMORY_SEARCH_POLICY
 from services.memory_context_v4 import wrap_untrusted_context
 
+# 水平置信度阈值的唯一事实来源：prompt（outline.py）与代码判定共用 0.6。
+# 低于该值视为起点不确定，需要先校准再设计课程。
+LEVEL_CONFIDENCE_THRESHOLD = 0.6
+
 
 class OutlineState(TypedDict):
     """Outline Agent 状态"""
@@ -66,7 +70,7 @@ def needs_level_calibration(planning_memory: dict | None = None, user_profile: d
     ) + (insights.get("analogyExperiences") or [])
     has_background = bool(transferable_background or profile_background)
 
-    if confidence < 0.55:
+    if confidence < LEVEL_CONFIDENCE_THRESHOLD:
         return True
     return has_background and level in {"novice", "beginner"}
 

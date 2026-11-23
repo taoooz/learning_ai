@@ -1128,6 +1128,25 @@ class MemoryV4Store:
         ]
         return max(rounds, default=0) + 1
 
+    def remediation_chain_depth(self, account_id: str, checkpoint_id: str) -> int:
+        """沿 previousCheckpointId 链统计已发生的补救轮数（含当前题）。
+
+        补救会生成新题（cp-1 → cp-1-r1 → cp-1-r1-r1），每轮请求的 checkpointId 不同；
+        只按单个 checkpointId 计数无法封顶整条链，必须回溯到根题统计。
+        """
+        chain = {checkpoint_id}
+        sealed = self.load_checkpoint(account_id, checkpoint_id)
+        prev = ((sealed or {}).get("meta") or {}).get("previousCheckpointId")
+        while prev and prev not in chain and len(chain) < 32:
+            chain.add(prev)
+            prev_sealed = self.load_checkpoint(account_id, prev)
+            prev = ((prev_sealed or {}).get("meta") or {}).get("previousCheckpointId")
+        return sum(
+            1
+            for row in self._read_jsonl(self._remediation_path(account_id))
+            if row.get("originCheckpointId") in chain
+        )
+
     def append_remediation(self, account_id: str, record: dict[str, Any]) -> None:
         self._append_jsonl(self._remediation_path(account_id), record)
 

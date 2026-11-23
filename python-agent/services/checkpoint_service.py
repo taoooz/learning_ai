@@ -199,6 +199,7 @@ async def _call_for_json(
         response = await client.chat(
             messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_message}],
             max_tokens=max_tokens,
+            response_format={"type": "json_object"},
         )
         message = response["choices"][0]["message"]
         content = message.get("content") or ""

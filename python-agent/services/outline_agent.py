@@ -340,14 +340,12 @@ def stream_outline_with_tools(
             "intentType": outline.get("intentType"),
             "learnerPositioning": {
                 "estimatedLevel": outline.get("estimatedLevel", "beginner"),
-                "difficultySummary": f"水平置信度：{outline.get('levelConfidence', 0.6)}",
                 "backgroundSummary": outline.get("backgroundSummary", ""),
                 "skipBasics": outline.get("skipBasics") or [],
                 "likelyGaps": outline.get("likelyGaps") or [],
                 "levelConfidence": outline.get("levelConfidence", 0.6),
                 "preferredExampleDomains": outline.get("preferredExampleDomains") or [],
                 "personalExampleLimit": outline.get("personalExampleLimit", 1),
-                "whyThisCourseFits": "",
             },
         }
         state["blueprint"] = blueprint
@@ -483,14 +481,12 @@ def stream_answer_with_tools(
             "intentType": outline.get("intentType"),
             "learnerPositioning": {
                 "estimatedLevel": outline.get("estimatedLevel", "beginner"),
-                "difficultySummary": f"水平置信度：{outline.get('levelConfidence', 0.6)}",
                 "backgroundSummary": outline.get("backgroundSummary", ""),
                 "skipBasics": outline.get("skipBasics") or [],
                 "likelyGaps": outline.get("likelyGaps") or [],
                 "levelConfidence": outline.get("levelConfidence", 0.6),
                 "preferredExampleDomains": outline.get("preferredExampleDomains") or [],
                 "personalExampleLimit": outline.get("personalExampleLimit", 1),
-                "whyThisCourseFits": "",
             },
         }
         state["blueprint"] = blueprint

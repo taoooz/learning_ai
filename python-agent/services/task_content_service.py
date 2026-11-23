@@ -138,7 +138,7 @@ def build_task_content_prompt(
             f"\n\n## 搜索证据包（外部资料，引用时须注明来源）\n{evidence}\n\n"
             f"## 可引用来源\n{source_lines}\n\n"
             "引用上述证据时保持事实准确，不要编造未在证据中出现的内容。\n"
-            "结构化块若依赖证据，请在块末单独写一行：证据：ev-01, ev-02（只使用证据包中的 ID）。"
+            "结构化块若依赖证据，请在块末单独写一行：证据：ev-01-a1b2c3, ev-02-d4e5f6（逐字复制证据包中的完整 ID，禁止截断或编造）。"
         )
     pattern = request.task.teachingPattern
     prompt = build_prompt(
@@ -230,7 +230,7 @@ def build_task_content_messages(
             f"\n\n## 搜索证据包（外部资料，引用时须注明来源）\n{evidence}\n\n"
             f"## 可引用来源\n{source_lines}\n\n"
             "引用上述证据时保持事实准确，不要编造未在证据中出现的内容。\n"
-            "结构化块若依赖证据，请在块末单独写一行：证据：ev-01, ev-02（只使用证据包中的 ID）。"
+            "结构化块若依赖证据，请在块末单独写一行：证据：ev-01-a1b2c3, ev-02-d4e5f6（逐字复制证据包中的完整 ID，禁止截断或编造）。"
         )
     if allow_search:
         system_prompt += "\n\n" + format_search_decision_policy(max_searches=2)
