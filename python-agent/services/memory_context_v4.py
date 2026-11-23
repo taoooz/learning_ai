@@ -562,6 +562,15 @@ def to_planning_prompt_payload(store: MemoryV4Store, account_id: str, context: d
         for item in core.get("activePreferences") or []
         if item.get("text")
     ][:3]
+    learning_summary = context.get("learningSummary") or {}
+    if isinstance(learning_summary, dict):
+        learning_summary = {
+            key: learning_summary.get(key)
+            for key in ("journey", "currentFocus", "learnerInsights", "areasToWatch")
+            if learning_summary.get(key)
+        }
+    else:
+        learning_summary = {}
     return {
         # 只暴露 Resolver 已选择的记录，避免 planning payload 绕过场景预算。
         "userProfile": {
@@ -587,7 +596,8 @@ def to_planning_prompt_payload(store: MemoryV4Store, account_id: str, context: d
             "skippableBasics": skippable[:2],
             "riskConcepts": risk[:3],
             "recentRelevantCourses": recent,
-            "learningSummary": context.get("learningSummary"),
+            # planning payload 只保留可教学摘要；record IDs 留给检索工具按需读取。
+            "learningSummary": learning_summary,
         },
     }
 

@@ -215,8 +215,13 @@ def _format_planning_memory(planning_memory: dict) -> str:
     return '\n\n'.join(sections) if sections else ''
 
 
-def build_initial_prompt(topic: str, user_profile: dict, planning_memory: dict, needs_calibration: bool = False) -> str:
-    """构建 system prompt（角色 + 指令 + 用户数据 + 格式约束）"""
+def build_initial_messages(
+    topic: str,
+    user_profile: dict,
+    planning_memory: dict,
+    needs_calibration: bool = False,
+) -> dict[str, str]:
+    """system 只保留行为与输出契约；本轮用户输入、画像和记忆进入 user prompt。"""
     # 画像和 Memory 都可能包含用户或模型生成文本，统一按不可信数据注入。
     profile_section = wrap_untrusted_context("user_profile", user_profile) if user_profile else '暂无'
 
@@ -228,20 +233,32 @@ def build_initial_prompt(topic: str, user_profile: dict, planning_memory: dict, 
     from datetime import date
     today = date.today().isoformat()
 
-    prompt = build_prompt("outline",
+    system_prompt = build_prompt(
+        "outline",
+        ["critical_rules", "output_format"],
         today=today,
+    )
+    user_prompt = build_prompt(
+        "outline",
+        ["user_context"],
         topic=topic,
         profile_section=profile_section,
         memory_section=memory_section,
     )
     if needs_calibration:
-        prompt += (
+        user_prompt += (
             "\n\n## 强制校准状态\n"
             "当前画像存在可迁移背景，但尚不足以确认该主题的实际掌握边界。"
             "请先提出 1 个高信息量的单选题，确认用户实际做过什么或能独立完成什么；"
             "收到回答后再输出学习计划，不要先按零基础生成。"
         )
-    return prompt
+    return {"system": system_prompt, "user": user_prompt}
+
+
+def build_initial_prompt(topic: str, user_profile: dict, planning_memory: dict, needs_calibration: bool = False) -> str:
+    """兼容入口：返回 system + user 的完整文本，供旧调试脚本使用。"""
+    messages = build_initial_messages(topic, user_profile, planning_memory, needs_calibration)
+    return messages["system"] + "\n\n" + messages["user"]
 
 
 async def stream_llm_and_parse(messages: list[dict] | str, max_tokens: int = 1000):

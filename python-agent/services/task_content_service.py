@@ -159,6 +159,80 @@ def build_task_content_prompt(
     return prompt
 
 
+def build_task_content_messages(
+    request: TaskStreamRequest,
+    evidence: str | None = None,
+    sources: list[dict] | None = None,
+    memory_context: dict | None = None,
+    allow_search: bool = False,
+) -> dict[str, str]:
+    """system 只保留写作行为规范；任务、学习者、记忆和证据进入 user。"""
+    learner = request.learnerStartingPoint
+    learner_lines = [f"当前水平：{_LEVEL_LABELS.get(learner.estimatedLevel, learner.estimatedLevel)}"]
+    if learner.confirmedKnowledge:
+        learner_lines.append(f"已确认掌握：{'、'.join(learner.confirmedKnowledge)}")
+    if learner.likelyGaps:
+        learner_lines.append(f"潜在缺口：{'、'.join(learner.likelyGaps)}")
+    if learner.excludedTopics:
+        learner_lines.append(f"已掌握且不要再从零讲：{'、'.join(learner.excludedTopics)}")
+    if learner.backgroundSummary:
+        learner_lines.append(f"相关背景（仅用于校准和必要时选例）：{learner.backgroundSummary}")
+    if learner.preferredExampleDomains or learner.personalExampleLimit is not None:
+        domains = '、'.join(learner.preferredExampleDomains) if learner.preferredExampleDomains else '通用行业场景'
+        learner_lines.append(
+            f"例子策略：优先 {domains}；个人经历不是默认案例库，每章最多引用 {learner.personalExampleLimit} 次"
+        )
+
+    if request.previousTasks:
+        previous_lines = []
+        for previous in request.previousTasks:
+            line = f"- {previous.title}"
+            if previous.teachingPattern:
+                line += f"（模式：{previous.teachingPattern}"
+                if previous.conceptKeys:
+                    line += f"；概念：{'、'.join(previous.conceptKeys)}"
+                line += "）"
+            if previous.exampleScenarios:
+                line += f"；已用例子场景：{'；'.join(previous.exampleScenarios)}"
+            if previous.takeaway:
+                line += f"（要点：{previous.takeaway}）"
+            previous_lines.append(line)
+        previous_section = "\n".join(previous_lines)
+    else:
+        previous_section = "无（这是本章第一个任务）"
+
+    pattern = request.task.teachingPattern
+    system_prompt = build_prompt(
+        "task_content",
+        ["role", "style", "interactive_rules", "tone_reminder"],
+    )
+    user_prompt = build_prompt(
+        "task_content",
+        ["task_context", "output_format"],
+        course_topic=request.courseTopic,
+        chapter_title=request.chapter.title,
+        chapter_goal=request.chapter.teachingGoal,
+        task_title=request.task.title,
+        task_goal=request.task.taskGoal,
+        pattern_label=TEACHING_PATTERNS.get(pattern, pattern),
+        observable_outcome=request.task.observableOutcome,
+        learner_section="\n".join(learner_lines),
+        previous_section=previous_section,
+        content_recipe=get_recipe(pattern),
+    ) + _format_course_mission(request.courseMission) + _format_teaching_state(request.teachingState) + format_memory_context_for_prompt(memory_context or {})
+    if evidence:
+        source_lines = "\n".join(f"- {s.get('title', '')}（{s.get('url', '')}）" for s in (sources or []))
+        user_prompt += (
+            f"\n\n## 搜索证据包（外部资料，引用时须注明来源）\n{evidence}\n\n"
+            f"## 可引用来源\n{source_lines}\n\n"
+            "引用上述证据时保持事实准确，不要编造未在证据中出现的内容。\n"
+            "结构化块若依赖证据，请在块末单独写一行：证据：ev-01, ev-02（只使用证据包中的 ID）。"
+        )
+    if allow_search:
+        user_prompt += "\n\n" + format_search_decision_policy(max_searches=2)
+    return {"system": system_prompt, "user": user_prompt}
+
+
 def build_task_search_decision_prompt(
     request: TaskStreamRequest,
     evidence: str | None = None,
@@ -182,6 +256,33 @@ def build_task_search_decision_prompt(
         + format_search_decision_policy(max_searches=1)
         + "\n\n完成判断后：需要补充时调用搜索工具；不需要时只输出 NO_SEARCH。"
     )
+
+
+def build_task_search_decision_messages(
+    request: TaskStreamRequest,
+    evidence: str | None = None,
+    sources: list[dict] | None = None,
+) -> dict[str, str]:
+    source_lines = "\n".join(
+        f"- {source.get('title', '')}（{source.get('url', '')}）"
+        for source in (sources or [])
+        if source.get('url')
+    ) or '无'
+    evidence_text = evidence or '无'
+    system_prompt = (
+        "你是课程内容检索决策器，只判断当前任务是否需要补充联网证据，不要撰写正文。"
+        + format_search_decision_policy(max_searches=1)
+    )
+    user_prompt = (
+        f"## 课程与任务\n"
+        f"- 课程主题：{request.courseTopic}\n"
+        f"- 章节：{request.chapter.title}｜{request.chapter.teachingGoal}\n"
+        f"- 当前任务：{request.task.title}｜{request.task.taskGoal}\n\n"
+        f"## 已有证据\n{evidence_text}\n\n"
+        f"## 可引用来源\n{source_lines}\n\n"
+        "完成判断后：需要补充时调用搜索工具；不需要时只输出 NO_SEARCH。"
+    )
+    return {"system": system_prompt, "user": user_prompt}
 
 
 def extract_takeaway(markdown: str) -> str:
@@ -293,7 +394,7 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
         request.task.taskGoal,
     )
 
-    system_prompt = build_task_content_prompt(
+    stage_messages = build_task_content_messages(
         request,
         evidence=evidence,
         sources=sources,
@@ -301,7 +402,11 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
         # 搜索工具只在独立决策阶段使用；正文阶段不再向模型暴露搜索承诺。
         allow_search=False,
     )
-    final_user_message = {"role": "user", "content": f"请撰写任务「{request.task.title}」的学习正文。"}
+    system_prompt = stage_messages["system"]
+    final_user_message = {
+        "role": "user",
+        "content": f"请撰写任务「{request.task.title}」的学习正文。\n\n" + stage_messages["user"],
+    }
     messages = [
         {"role": "system", "content": system_prompt},
         final_user_message,
@@ -327,19 +432,14 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
             f"命中词={coverage['matchedTerms']} 搜索判断={needs_search_decision}"
         )
         if needs_search_decision:
-            decision_prompt = build_task_search_decision_prompt(
+            decision_messages = build_task_search_decision_messages(
                 request,
                 evidence=evidence,
                 sources=sources,
             )
             decision_messages = [
-                {"role": "system", "content": decision_prompt},
-                {
-                    "role": "user",
-                    "content": (
-                        "只做检索判断：需要补充时调用搜索工具，否则只回复 NO_SEARCH。不要写正文。"
-                    ),
-                },
+                {"role": "system", "content": decision_messages["system"]},
+                {"role": "user", "content": decision_messages["user"]},
             ]
             try:
                 await asyncio.to_thread(

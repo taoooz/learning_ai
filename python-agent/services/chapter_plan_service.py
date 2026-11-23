@@ -186,6 +186,48 @@ def build_chapter_plan_prompt(topic: str, chapter: dict, objectives: list[dict],
     return _format_goal_alignment(intent_type) + _format_completed_chapters(completed_chapters)
 
 
+def build_chapter_plan_messages(
+    topic: str,
+    chapter: dict,
+    objectives: list[dict],
+    learner: dict,
+    evidence: str | None = None,
+    sources: list[dict] | None = None,
+    mission: dict | None = None,
+    teaching_state: dict | None = None,
+    completed_chapters: list[dict] | None = None,
+    intent_type: str | None = None,
+    memory_context: dict | None = None,
+    allow_search: bool = False,
+) -> dict[str, str]:
+    """system 保留角色与 JSON/任务契约；动态章节上下文进入 user。"""
+    system_prompt = build_prompt(
+        "chapter_plan",
+        ["role", "output_format"],
+    )
+    if allow_search:
+        system_prompt += "\n\n" + format_search_decision_policy(max_searches=2)
+    user_prompt = build_prompt(
+        "chapter_plan",
+        ["chapter_context", "goal_alignment", "completed_chapters"],
+        topic=topic,
+        chapter_title=chapter.get("title", ""),
+        teaching_goal=chapter.get("teachingGoal", ""),
+        objectives_section=_format_objectives(objectives),
+        learner_section=_format_learner(learner),
+        intent_type=intent_type or "未指定",
+        completed_section=_format_completed_chapters(completed_chapters),
+    ) + _format_mission(mission) + _format_teaching_state(teaching_state or {}) + format_memory_context_for_prompt(memory_context or {})
+    if evidence:
+        source_lines = "\n".join(f"- {s.get('title', '')}（{s.get('url', '')}）" for s in (sources or []))
+        user_prompt += (
+            "\n\n## 课程证据包\n"
+            f"{evidence}\n\n## 可参考来源\n{source_lines}\n\n"
+            "规划任务时优先围绕这些权威来源；不要规划证据未支持的高风险事实细节。"
+        )
+    return {"system": system_prompt, "user": user_prompt}
+
+
 def _resolve_chapter(blueprint: dict, chapter_id: str) -> tuple[dict, list[dict]]:
     """从蓝图中定位章节与其课程目标；找不到时抛业务错误"""
     chapters = blueprint.get("chapters", [])
@@ -420,6 +462,24 @@ def build_chapter_plan_review_prompt(
     )
 
 
+def build_chapter_plan_review_messages(
+    chapter_title: str,
+    teaching_goal: str,
+    learner: dict,
+    tasks: list[dict],
+) -> dict[str, str]:
+    prompt = build_chapter_plan_review_prompt(chapter_title, teaching_goal, learner, tasks)
+    start = prompt.find("<input_data>")
+    end = prompt.find("</input_data>", start)
+    if start < 0 or end < 0:
+        return {"system": prompt, "user": "请审查这份章节计划。"}
+    end += len("</input_data>")
+    return {
+        "system": (prompt[:start] + prompt[end:]).strip(),
+        "user": prompt[start:end].strip(),
+    }
+
+
 async def _review_chapter_plan(
     client: MiniMaxClient,
     *,
@@ -430,18 +490,19 @@ async def _review_chapter_plan(
 ) -> dict:
     """独立审查计划的认知增量、重复度和水平匹配；不可解析时安全放行并记录。"""
     try:
+        review_messages = build_chapter_plan_review_messages(
+            chapter.get("title", ""),
+            teaching_goal,
+            learner,
+            tasks,
+        )
         response = await client.chat(
             messages=[
                 {
                     "role": "system",
-                    "content": build_chapter_plan_review_prompt(
-                        chapter.get("title", ""),
-                        teaching_goal,
-                        learner,
-                        tasks,
-                    ),
+                    "content": review_messages["system"],
                 },
-                {"role": "user", "content": "请审查这份章节计划。"},
+                {"role": "user", "content": "请审查这份章节计划。\n\n" + review_messages["user"]},
             ],
             max_tokens=8000,
         )
@@ -496,7 +557,7 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
             ),
         )
         allow_search = not coverage["covered"]
-        system_prompt = build_chapter_plan_prompt(
+        stage_messages = build_chapter_plan_messages(
             topic=blueprint.get("topic", ""),
             chapter=chapter,
             objectives=objectives,
@@ -510,7 +571,8 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
             memory_context=memory_context,
             allow_search=allow_search,
         )
-        user_message = "请为这个章节生成任务计划。"
+        system_prompt = stage_messages["system"]
+        user_message = "请为这个章节生成任务计划。\n\n" + stage_messages["user"]
         if repair_notes:
             user_message += f"\n\n上一版输出存在以下问题，请修正后重新输出完整 JSON：\n{repair_notes}"
 

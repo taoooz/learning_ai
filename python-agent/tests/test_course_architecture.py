@@ -295,7 +295,7 @@ def test_course_architect_repairs_metadata_without_regenerating_chapters():
     assert result["issues"] == []
     assert len(client.calls) == 3
     assert "章节已固定" in client.calls[2][-1]["content"]
-    assert "ch-1" in client.calls[2][0]["content"]
+    assert "ch-1" in client.calls[2][1]["content"]
 
 
 def test_course_architect_semantic_review_can_trigger_revision():
@@ -329,7 +329,7 @@ def test_course_architect_semantic_review_can_trigger_revision():
     assert len(client.calls) == 4
     assert "DUPLICATE_CHAPTER" in client.calls[2][-1]["content"]
     assert "合并重复章节" in client.calls[2][-1]["content"]
-    assert "untrusted_context_data" in client.review_calls[0][0]["content"]
+    assert "untrusted_context_data" in client.review_calls[0][1]["content"]
 
 
 def test_optional_review_skips_normal_architecture_and_runs_on_risk():

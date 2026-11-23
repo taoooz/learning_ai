@@ -42,8 +42,10 @@ async def compile_prompt(req: PromptLabCompileRequest):
 
 
 @router.post("/run")
-async def run_prompt(req: PromptLabRunRequest):
+async def run_prompt(req: PromptLabRunRequest, request: Request):
+    account = request.headers.get("X-Account-Id")
+
     def event_generator():
-        yield from run_prompt_lab_stream(req)
+        yield from run_prompt_lab_stream(req, account_id=account)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")

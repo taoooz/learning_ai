@@ -33,6 +33,11 @@ test('Prompt Lab builds editable defaults for every stage', () => {
     task_search_decision: { toolResults: [{ tool: 'web_search', result: '补充搜索结果' }] },
   });
   assert.match(String(taskContent.evidence), /补充搜索结果/);
+
+  const newTopicInputs = buildPromptLabInputs('architect_chapters', snapshot, {
+    outline: { outline: { learningDirection: '全新调试课程主题' } },
+  });
+  assert.equal(newTopicInputs.topic, '全新调试课程主题');
 });
 
 test('Prompt Lab SSE parser handles thinking, content, parsed and metrics', async () => {

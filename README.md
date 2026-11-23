@@ -62,7 +62,7 @@
 12. Profile Memory 使用固定五维派生视图（方向、背景、偏好、教学策略、学习轨迹）；摘要通过 `sourceRecordIds` 与 `sourceRevision` 指向原子记录，不形成第二事实层。
 13. Chat Agent API 只接受 `{ courseTopic, messages }` 结构化输入；不支持仅传 `messages` 的旧直连模式。
 14. 课程起点不得把“缺少主题学习记录”直接当成零基础：`LearnerStartingPoint` 可带水平置信度、背景、可能缺口和例子策略；低置信度且存在可迁移背景时必须先校准。Course Architect 必须两阶段生成：第一阶段只流式输出 `courseTopic + chapters`，第二阶段固定章节并只补全 `thesis + conceptGraph + examplePolicy`；任一阶段失败只能做阶段内定向修复，不得重新生成完整课程。最终架构需通过确定性结构校验，LLM 架构审查仅在 auto 风险模式下按需触发；章节计划进入内容生成前按风险信号执行概念重复/过基础/过度拆分审查。
-15. Prompt Lab 与正式业务完全隔离：只复用生产 Prompt Builder，编辑后的 Prompt 仅作为本次调试覆盖；不得写入课程、章节、Memory 或 engagement。调试数据只存 `ai-learning-prompt-lab-v1`，生产默认关闭，显式设置 `ENABLE_PROMPT_DEBUGGER=1` 才会开放。
+15. Prompt Lab 与正式业务完全隔离：只复用生产 Prompt Builder，编辑后的 Prompt 仅作为本次调试覆盖；不得写入课程、章节、Memory 或 engagement。课程生成 Prompt 必须拆成静态 system（角色、行为、协议）与动态 user（本轮诉求、画像、Memory、证据、上游产物）；Planning Memory 不暴露内部 record ID，模型需要细节时通过只读 `memory_search` 工具按需检索。调试数据只存 `ai-learning-prompt-lab-v1`，生产默认关闭，显式设置 `ENABLE_PROMPT_DEBUGGER=1` 才会开放。
 
 ## 5. 详细文档索引
 

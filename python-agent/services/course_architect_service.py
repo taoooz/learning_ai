@@ -100,6 +100,49 @@ def build_course_architect_chapters_prompt(
     )
 
 
+def _split_embedded_context(
+    prompt: str,
+    start_tag: str,
+    end_tag: str,
+) -> dict[str, str]:
+    """把完整 Prompt 中的动态上下文块从 system 移到 user。"""
+    start = prompt.find(start_tag)
+    if start < 0:
+        return {"system": prompt, "user": "请完成当前阶段任务。"}
+    end = prompt.find(end_tag, start)
+    if end < 0:
+        return {"system": prompt, "user": "请完成当前阶段任务。"}
+    end += len(end_tag)
+    return {
+        "system": (prompt[:start] + prompt[end:]).strip(),
+        "user": prompt[start:end].strip(),
+    }
+
+
+def build_course_architect_chapters_messages(
+    topic: str,
+    outline: dict[str, Any],
+    learner: dict[str, Any],
+    memory_context: dict[str, Any] | None = None,
+    evidence: str | None = None,
+    sources: list[dict[str, Any]] | None = None,
+    allow_search: bool = True,
+) -> dict[str, str]:
+    return _split_embedded_context(
+        build_course_architect_chapters_prompt(
+            topic,
+            outline,
+            learner,
+            memory_context,
+            evidence,
+            sources,
+            allow_search=allow_search,
+        ),
+        "<input_context>",
+        "</input_context>",
+    )
+
+
 def build_course_architect_meta_prompt(
     topic: str,
     outline: dict[str, Any],
@@ -124,6 +167,30 @@ def build_course_architect_meta_prompt(
         **prompt_context,
         chapters_json=wrap_untrusted_context("chapters", chapter_plan.model_dump()),
         required_concept_ids="\n".join(f"- {concept_id}" for concept_id in required_concept_ids),
+    )
+
+
+def build_course_architect_meta_messages(
+    topic: str,
+    outline: dict[str, Any],
+    learner: dict[str, Any],
+    chapter_plan: CourseChapterPlan,
+    memory_context: dict[str, Any] | None = None,
+    evidence: str | None = None,
+    sources: list[dict[str, Any]] | None = None,
+) -> dict[str, str]:
+    return _split_embedded_context(
+        build_course_architect_meta_prompt(
+            topic,
+            outline,
+            learner,
+            chapter_plan,
+            memory_context,
+            evidence,
+            sources,
+        ),
+        "<input_context>",
+        "</input_context>",
     )
 
 
@@ -176,6 +243,17 @@ def build_course_architect_review_prompt(
             "architecture_under_review",
             _compact_architecture_for_review(architecture),
         ),
+    )
+
+
+def build_course_architect_review_messages(
+    architecture: CourseArchitecture,
+    learner: dict[str, Any],
+) -> dict[str, str]:
+    return _split_embedded_context(
+        build_course_architect_review_prompt(architecture, learner),
+        "<input_data>",
+        "</input_data>",
     )
 
 
@@ -239,9 +317,10 @@ async def _review_course_architecture(
     learner: dict[str, Any],
 ) -> dict[str, Any]:
     try:
+        review_messages = build_course_architect_review_messages(architecture, learner)
         messages = [
-            {"role": "system", "content": build_course_architect_review_prompt(architecture, learner)},
-            {"role": "user", "content": "请审查这份课程架构。"},
+            {"role": "system", "content": review_messages["system"]},
+            {"role": "user", "content": "请审查以下课程架构。\n\n" + review_messages["user"]},
         ]
         if hasattr(client, "_call_llm"):
             response = await asyncio.to_thread(
@@ -357,20 +436,18 @@ def _chapter_messages(
     sources: list[dict[str, Any]] | None,
     allow_search: bool,
 ) -> list[dict[str, Any]]:
+    messages = build_course_architect_chapters_messages(
+        topic,
+        outline,
+        learner,
+        memory_context,
+        evidence,
+        sources,
+        allow_search=allow_search,
+    )
     return [
-        {
-            "role": "system",
-            "content": build_course_architect_chapters_prompt(
-                topic,
-                outline,
-                learner,
-                memory_context,
-                evidence,
-                sources,
-                allow_search=allow_search,
-            ),
-        },
-        {"role": "user", "content": "请先完成这门课的章节目录设计。"},
+        {"role": "system", "content": messages["system"]},
+        {"role": "user", "content": "请先完成这门课的章节目录设计。\n\n" + messages["user"]},
     ]
 
 
@@ -383,20 +460,18 @@ def _meta_messages(
     evidence: str | None,
     sources: list[dict[str, Any]] | None,
 ) -> list[dict[str, Any]]:
+    messages = build_course_architect_meta_messages(
+        topic,
+        outline,
+        learner,
+        plan,
+        memory_context,
+        evidence,
+        sources,
+    )
     return [
-        {
-            "role": "system",
-            "content": build_course_architect_meta_prompt(
-                topic,
-                outline,
-                learner,
-                plan,
-                memory_context,
-                evidence,
-                sources,
-            ),
-        },
-        {"role": "user", "content": "请基于已确定章节补全课程元信息。"},
+        {"role": "system", "content": messages["system"]},
+        {"role": "user", "content": "请基于已确定章节补全课程元信息。\n\n" + messages["user"]},
     ]
 
 

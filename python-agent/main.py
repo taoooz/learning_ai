@@ -26,7 +26,7 @@ if env_path.exists():
 from memory.session import get_session_store
 from schemas.outline import OutlineRequest, OutlineAnswerRequest
 from services.outline_service import (
-    build_initial_prompt,
+    build_initial_messages,
     stream_llm_and_parse, stream_blueprint_fields, make_initial_state
 )
 from services.toc_service import generate_toc, stream_toc_events
@@ -206,11 +206,14 @@ async def generate_outline(req: OutlineRequest):
     """启动 outline 生成（流式）"""
     async def event_generator():
         state = make_initial_state(req.topic, req.userProfile, req.planningMemory)
-        system_prompt = build_initial_prompt(req.topic, req.userProfile, req.planningMemory)
+        initial_messages = build_initial_messages(req.topic, req.userProfile, req.planningMemory)
         session_id = None
 
         try:
-            async for event in stream_llm_and_parse(system_prompt):
+            async for event in stream_llm_and_parse([
+                {"role": "system", "content": initial_messages["system"]},
+                {"role": "user", "content": initial_messages["user"]},
+            ]):
                 if event["type"] == "__full_content__":
                     # 流式完成，解析并保存到 session
                     parsed = event.get("parsed", {})
@@ -254,8 +257,8 @@ async def generate_outline(req: OutlineRequest):
                     # 保存首次 messages 到 llm_messages，后续回答时用于构建多轮对话
                     ai_reply = event.get("content", "")
                     state["llm_messages"] = [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": "请开始。"},
+                        {"role": "system", "content": initial_messages["system"]},
+                        {"role": "user", "content": initial_messages["user"]},
                         {"role": "assistant", "content": ai_reply},
                     ]
 

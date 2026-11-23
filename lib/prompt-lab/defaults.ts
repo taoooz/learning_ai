@@ -390,6 +390,12 @@ export function buildPromptLabInputs(
 ): Record<string, string | boolean | number> {
   const blueprint = getPromptLabBlueprint(snapshot, artifacts);
   const outline = asRecord(artifacts.outline).outline ?? outlineFromBlueprint(blueprint);
+  const debugTopic = String(
+    asRecord(outline).learningDirection
+    || artifacts.debug_topic
+    || blueprint.topic
+    || snapshot.topic
+  );
   const learner = asRecord(asRecord(outline).learnerPositioning);
   const chapterPlan = asRecord(artifacts.architect_chapters);
   const meta = asRecord(artifacts.architect_meta);
@@ -429,7 +435,7 @@ export function buildPromptLabInputs(
   switch (stageId) {
     case 'outline_initial':
       return {
-        topic: snapshot.topic,
+        topic: debugTopic,
         userProfile: json(snapshot.userProfile ?? {}),
         planningMemory: json(snapshot.planningMemory),
         history: '[]',
@@ -438,7 +444,7 @@ export function buildPromptLabInputs(
     case 'outline_answer': {
       const outlineRaw = String(artifacts.outline_raw || '');
       return {
-        topic: snapshot.topic,
+        topic: debugTopic,
         userProfile: json(snapshot.userProfile ?? {}),
         planningMemory: json(snapshot.planningMemory),
         answers: json([
@@ -451,7 +457,7 @@ export function buildPromptLabInputs(
     }
     case 'architect_chapters':
       return {
-        topic: blueprint.topic,
+        topic: debugTopic,
         outline: json(outline),
         learner: json(learner),
         memoryContext: json(emptyMemory),
@@ -462,7 +468,7 @@ export function buildPromptLabInputs(
       };
     case 'architect_meta':
       return {
-        topic: blueprint.topic,
+        topic: debugTopic,
         outline: json(outline),
         learner: json(learner),
         chapterPlan: json(Object.keys(chapterPlan).length ? chapterPlan : SAMPLE_ARCHITECTURE),

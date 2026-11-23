@@ -13,6 +13,7 @@ from tests.test_course_architecture import (
     _valid_chapter_plan,
     _valid_meta,
 )
+from lib.tools.memory_tools import create_memory_search
 
 
 def _task_request() -> dict:
@@ -84,14 +85,44 @@ def test_compile_prompt_lab_reuses_all_production_builders():
         assert compiled["config"]["maxTokens"] > 0
 
     meta = compile_prompt_lab_stage("architect_meta", _stage_inputs("architect_meta"))
-    assert "c1-business-to-objective" in meta["systemPrompt"] or "c1" in meta["systemPrompt"]
-    assert "untrusted_context_data" in meta["systemPrompt"]
+    assert "c1-business-to-objective" in meta["userMessage"] or "c1" in meta["userMessage"]
+    assert "untrusted_context_data" in meta["userMessage"]
+    assert "<input_context>" not in meta["systemPrompt"]
+
+
+def test_prompt_lab_splits_static_system_and_dynamic_user_context():
+    outline = compile_prompt_lab_stage("outline_initial", _stage_inputs("outline_initial"))
+    assert "<critical_rules>" in outline["systemPrompt"]
+    assert "提示词工程实践" not in outline["systemPrompt"]
+    assert "提示词工程实践" in outline["userMessage"]
+
+    chapters = compile_prompt_lab_stage("architect_chapters", _stage_inputs("architect_chapters"))
+    assert "<stage_contract>" in chapters["systemPrompt"]
+    assert "<input_context>" not in chapters["systemPrompt"]
+    assert "<input_context>" in chapters["userMessage"]
+    assert "提示词工程实践" in chapters["userMessage"]
+
+    chapter_plan = compile_prompt_lab_stage("chapter_plan", _stage_inputs("chapter_plan"))
+    assert "<chapter_context>" not in chapter_plan["systemPrompt"]
+    assert "<chapter_context>" in chapter_plan["userMessage"]
+    assert "指令写作基础" in chapter_plan["userMessage"]
+
+    task_content = compile_prompt_lab_stage("task_content", _stage_inputs("task_content"))
+    assert "<task_context>" not in task_content["systemPrompt"]
+    assert "<task_context>" in task_content["userMessage"]
+    assert "指令为什么需要说清楚" in task_content["userMessage"]
 
 
 class FakeAgentClient:
     model = "fake-prompt-lab"
+    last_instance = None
+
+    def __init__(self):
+        self.tools = []
+        FakeAgentClient.last_instance = self
 
     def stream_chat_with_tools(self, messages, tools, tool_functions, **kwargs):
+        self.tools = tools
         payload = _valid_chapter_plan()
         yield {"type": "thinking", "message": "先设计章节。"}
         yield {"type": "content_delta", "content": json.dumps(payload, ensure_ascii=False)}
@@ -107,11 +138,12 @@ def test_run_prompt_lab_streams_and_parses_structured_output(monkeypatch):
         inputs=_stage_inputs("architect_chapters"),
         system_prompt="测试 system",
         user_message="生成章节",
-        tools_enabled=False,
+        tools_enabled=True,
         max_tokens=1000,
     )
     events = []
-    for raw in run_prompt_lab_stream(request):
+    client = service.AgentClient()
+    for raw in run_prompt_lab_stream(request, account_id="account-1"):
         if not raw.startswith("data: "):
             continue
         body = raw[6:].strip()
@@ -121,6 +153,10 @@ def test_run_prompt_lab_streams_and_parses_structured_output(monkeypatch):
     assert [event["type"] for event in events] == ["thinking", "content_delta", "parsed", "metrics"]
     assert events[2]["validation"]["valid"] is True
     assert len(events[2]["parsed"]["chapters"]) == 2
+    assert "memory_search" in {
+        tool["function"]["name"]
+        for tool in FakeAgentClient.last_instance.tools
+    }
 
 
 def test_prompt_lab_memory_snapshot_uses_read_only_planning_payload(monkeypatch):
@@ -153,3 +189,30 @@ def test_prompt_lab_memory_snapshot_uses_read_only_planning_payload(monkeypatch)
     assert body["source"] == "server_memory_v4"
     assert body["userProfile"]["targetJob"] == "产品经理"
     assert body["planningMemory"]["learnerSnapshot"]["estimatedLevel"] == "intermediate"
+
+
+def test_prompt_lab_memory_search_returns_content_without_record_ids(monkeypatch):
+    import lib.tools.memory_tools as memory_tools
+
+    class FakeStore:
+        def load_store(self, _account_id):
+            return {
+                "records": [
+                    {
+                        "memoryId": "mem-secret-1",
+                        "status": "active",
+                        "kind": "fact",
+                        "title": "推荐系统工作经验",
+                        "summary": "参与过召回和重排",
+                        "content": "负责过推荐位与重排规则设计",
+                        "conceptKeys": ["召回", "重排"],
+                        "tags": ["work"],
+                        "importance": 0.8,
+                    },
+                ],
+            }
+
+    monkeypatch.setattr(memory_tools, "MemoryV4Store", lambda: FakeStore())
+    result = create_memory_search("account-1")("推荐 重排")
+    assert "负责过推荐位与重排规则设计" in result
+    assert "mem-secret-1" not in result

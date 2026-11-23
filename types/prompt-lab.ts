@@ -107,7 +107,7 @@ export interface PromptLabStageState {
 }
 
 export interface PromptLabSession {
-  version: 2;
+  version: 3;
   activeStage: PromptLabStageId;
   stages: Partial<Record<PromptLabStageId, PromptLabStageState>>;
   artifacts: Record<string, unknown>;

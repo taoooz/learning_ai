@@ -42,7 +42,7 @@ function loadSession(): PromptLabSession | null {
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PromptLabSession;
-    if (parsed.version !== 2 || !parsed.activeStage || !parsed.stages || !parsed.artifacts) return null;
+    if (parsed.version !== 3 || !parsed.activeStage || !parsed.stages || !parsed.artifacts) return null;
     return parsed;
   } catch {
     return null;
@@ -153,7 +153,7 @@ export function CoursePromptLab() {
     if (!ready) return;
     const timer = setTimeout(() => {
       const session: PromptLabSession = {
-        version: 2,
+        version: 3,
         activeStage,
         stages,
         artifacts,
@@ -274,6 +274,11 @@ export function CoursePromptLab() {
     if (stageId === 'outline_initial' || stageId === 'outline_answer') {
       next.outline = parsed;
       next.outline_raw = rawContent;
+      const outline = (parsed as { outline?: Record<string, unknown> | null }).outline;
+      const direction = String(outline?.learningDirection || '').trim();
+      if (direction) next.debug_topic = direction;
+      const learner = outline?.learnerPositioning;
+      if (learner && typeof learner === 'object') next.debug_learner = learner;
     } else if (stageId === 'architect_chapters') {
       next.architect_chapters = parsed;
       const chapterList = (parsed as Record<string, unknown>).chapters;
@@ -688,7 +693,7 @@ export function CoursePromptLab() {
                         config: { ...state.config, toolsEnabled: event.target.checked },
                       }))}
                     />
-                    搜索工具
+                    工具（搜索 / Memory）
                   </label>
                   <NumberConfig label="max_tokens" value={activeState.config.maxTokens} onChange={(value) => updateActiveState((state) => ({ ...state, config: { ...state.config, maxTokens: value } }))} />
                   <NumberConfig label="max_searches" value={activeState.config.maxSearches} onChange={(value) => updateActiveState((state) => ({ ...state, config: { ...state.config, maxSearches: value } }))} />

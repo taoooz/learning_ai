@@ -7,6 +7,7 @@ from typing import Any, Generator
 
 from lib.minimax import parse_json_response
 from lib.minimax_agent import AgentClient
+from lib.tools.memory_tools import MEMORY_SEARCH_TOOL, create_memory_search
 from lib.tools.search_tools import SEARCH_TOOLS, TOOL_FUNCTIONS
 from schemas.course_architecture import (
     CourseArchitecture,
@@ -18,21 +19,21 @@ from schemas.learning_v2 import TaskStreamRequest
 from schemas.prompt_lab import PromptLabRunRequest
 from services.chapter_plan_service import (
     _normalize_task,
-    build_chapter_plan_prompt,
-    build_chapter_plan_review_prompt,
+    build_chapter_plan_messages,
+    build_chapter_plan_review_messages,
     validate_plan_tasks,
 )
 from services.content_stream_parser import ContentStreamParser
 from services.course_architect_service import (
-    build_course_architect_chapters_prompt,
-    build_course_architect_meta_prompt,
-    build_course_architect_review_prompt,
+    build_course_architect_chapters_messages,
+    build_course_architect_meta_messages,
+    build_course_architect_review_messages,
 )
 from services.outline_agent import _format_clarification_answers
-from services.outline_service import build_initial_prompt, parse_content_blocks
+from services.outline_service import build_initial_messages, parse_content_blocks
 from services.task_content_service import (
-    build_task_content_prompt,
-    build_task_search_decision_prompt,
+    build_task_content_messages,
+    build_task_search_decision_messages,
 )
 
 
@@ -164,22 +165,26 @@ def compile_prompt_lab_stage(stage: str, inputs: dict) -> dict[str, Any]:
     sources = _sources(inputs.get("sources"))
 
     if stage in {"outline_initial", "outline_answer"}:
-        prompt = build_initial_prompt(
+        initial_messages = build_initial_messages(
             topic,
             user_profile,
             planning_memory,
             needs_calibration=bool(inputs.get("needsCalibration")),
         )
+        system_prompt = initial_messages["system"]
         if stage == "outline_answer":
             answers = [item for item in _as_list(inputs.get("answers")) if isinstance(item, dict)]
-            user_message = _format_clarification_answers(answers, str(inputs.get("answer") or ""))
+            user_message = _format_clarification_answers(
+                answers,
+                str(inputs.get("answer") or ""),
+            )
             if not user_message:
-                user_message = defaults["user_message"]
+                user_message = initial_messages["user"]
         else:
-            user_message = defaults["user_message"]
+            user_message = initial_messages["user"]
 
     elif stage == "architect_chapters":
-        prompt = build_course_architect_chapters_prompt(
+        stage_messages = build_course_architect_chapters_messages(
             topic,
             _as_dict(inputs.get("outline")),
             _as_dict(inputs.get("learner")),
@@ -188,11 +193,12 @@ def compile_prompt_lab_stage(stage: str, inputs: dict) -> dict[str, Any]:
             sources,
             allow_search=bool(inputs.get("allowSearch", True)),
         )
-        user_message = defaults["user_message"]
+        system_prompt = stage_messages["system"]
+        user_message = defaults["user_message"] + "\n\n" + stage_messages["user"]
 
     elif stage == "architect_meta":
         plan = CourseChapterPlan.model_validate(_as_dict(inputs.get("chapterPlan")))
-        prompt = build_course_architect_meta_prompt(
+        stage_messages = build_course_architect_meta_messages(
             topic,
             _as_dict(inputs.get("outline")),
             _as_dict(inputs.get("learner")),
@@ -201,15 +207,17 @@ def compile_prompt_lab_stage(stage: str, inputs: dict) -> dict[str, Any]:
             evidence_text,
             sources,
         )
-        user_message = defaults["user_message"]
+        system_prompt = stage_messages["system"]
+        user_message = defaults["user_message"] + "\n\n" + stage_messages["user"]
 
     elif stage == "architect_review":
         architecture = CourseArchitecture.model_validate(_as_dict(inputs.get("architecture")))
-        prompt = build_course_architect_review_prompt(
+        stage_messages = build_course_architect_review_messages(
             architecture,
             _as_dict(inputs.get("learner")),
         )
-        user_message = defaults["user_message"]
+        system_prompt = stage_messages["system"]
+        user_message = defaults["user_message"] + "\n\n" + stage_messages["user"]
 
     elif stage in {"chapter_plan", "chapter_plan_review"}:
         blueprint = _as_dict(inputs.get("blueprint"))
@@ -219,7 +227,7 @@ def compile_prompt_lab_stage(stage: str, inputs: dict) -> dict[str, Any]:
             raise ValueError("blueprint 中未找到当前 chapterId")
         learner = _as_dict(blueprint.get("learnerStartingPoint"))
         if stage == "chapter_plan":
-            prompt = build_chapter_plan_prompt(
+            stage_messages = build_chapter_plan_messages(
                 topic=str(blueprint.get("topic") or topic),
                 chapter=chapter,
                 objectives=objectives,
@@ -235,40 +243,43 @@ def compile_prompt_lab_stage(stage: str, inputs: dict) -> dict[str, Any]:
             )
         else:
             tasks = [item for item in _as_list(inputs.get("tasks")) if isinstance(item, dict)]
-            prompt = build_chapter_plan_review_prompt(
+            stage_messages = build_chapter_plan_review_messages(
                 str(chapter.get("title") or ""),
                 str(chapter.get("teachingGoal") or chapter.get("roleInCourse") or ""),
                 learner,
                 tasks,
             )
-        user_message = defaults["user_message"]
+        system_prompt = stage_messages["system"]
+        user_message = defaults["user_message"] + "\n\n" + stage_messages["user"]
 
     elif stage == "task_search_decision":
         request = _task_request(inputs)
-        prompt = build_task_search_decision_prompt(
+        stage_messages = build_task_search_decision_messages(
             request,
             evidence=evidence_text,
             sources=sources,
         )
-        user_message = defaults["user_message"]
+        system_prompt = stage_messages["system"]
+        user_message = stage_messages["user"]
 
     elif stage == "task_content":
         request = _task_request(inputs)
-        prompt = build_task_content_prompt(
+        stage_messages = build_task_content_messages(
             request,
             evidence=evidence_text,
             sources=sources,
             memory_context=memory_context,
             allow_search=bool(inputs.get("allowSearch", False)),
         )
-        user_message = f"请撰写任务「{request.task.title}」的学习正文。"
+        system_prompt = stage_messages["system"]
+        user_message = f"请撰写任务「{request.task.title}」的学习正文。\n\n" + stage_messages["user"]
 
     else:  # pragma: no cover - Pydantic Literal 已提前限制
         raise ValueError(f"未知调试环节：{stage}")
 
     return {
         "stage": stage,
-        "systemPrompt": prompt,
+        "systemPrompt": system_prompt,
         "userMessage": user_message,
         "history": [item for item in _as_list(inputs.get("history")) if isinstance(item, dict)],
         "config": {
@@ -370,7 +381,10 @@ def _json_event(event: dict[str, Any]) -> str:
     return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
 
-def run_prompt_lab_stream(req: PromptLabRunRequest) -> Generator[str, None, None]:
+def run_prompt_lab_stream(
+    req: PromptLabRunRequest,
+    account_id: str | None = None,
+) -> Generator[str, None, None]:
     """真实调用模型；不写课程、Memory、lesson 或 engagement。"""
     client = AgentClient()
     messages = [{"role": "system", "content": req.system_prompt}]
@@ -388,10 +402,14 @@ def run_prompt_lab_stream(req: PromptLabRunRequest) -> Generator[str, None, None
     tool_results: list[dict] = []
     try:
         tools = SEARCH_TOOLS if req.tools_enabled else []
+        tool_functions = dict(TOOL_FUNCTIONS)
+        if req.tools_enabled and account_id:
+            tools = [*tools, MEMORY_SEARCH_TOOL]
+            tool_functions["memory_search"] = create_memory_search(account_id)
         for event in client.stream_chat_with_tools(
             messages=messages,
             tools=tools,
-            tool_functions=TOOL_FUNCTIONS,
+            tool_functions=tool_functions,
             max_tokens=req.max_tokens,
             reasoning_split=True,
             max_iterations=req.max_iterations if req.tools_enabled else 1,

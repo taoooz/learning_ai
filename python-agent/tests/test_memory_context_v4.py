@@ -218,7 +218,7 @@ def test_learning_summary_is_injected_into_planning_and_chat(tmp_path):
         "currentFocus": "工具调用",
         "learnerInsights": ["偏好实践例子"],
         "areasToWatch": ["工具选择时机"],
-        "sourceRecordIds": [],
+        "sourceRecordIds": ["mem-private-1"],
         "sourceEvidenceIds": [],
         "summaryVersion": "learning-summary-v1",
         "sourceLedgerRevision": 0,
@@ -227,5 +227,7 @@ def test_learning_summary_is_injected_into_planning_and_chat(tmp_path):
     planning_context = resolve_memory_context(store, "account-a", {"scene": "course_planning", "topic": "Agent"})
     chat_context = resolve_memory_context(store, "account-a", {"scene": "chat", "topic": "Agent"})
     assert planning_context["learningSummary"]["currentFocus"] == "工具调用"
-    assert to_planning_prompt_payload(store, "account-a", planning_context)["planningMemory"]["learningSummary"]
+    planning = to_planning_prompt_payload(store, "account-a", planning_context)["planningMemory"]
+    assert planning["learningSummary"]
+    assert "sourceRecordIds" not in planning["learningSummary"]
     assert to_chat_prompt_payload(chat_context)["learningSummary"]

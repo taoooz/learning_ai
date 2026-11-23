@@ -10,7 +10,7 @@ from typing import Generator
 from lib.minimax_agent import AgentClient
 from lib.tools.search_tools import SEARCH_TOOLS, TOOL_FUNCTIONS
 from services.outline_service import (
-    build_initial_prompt,
+    build_initial_messages,
     needs_level_calibration,
     parse_content_blocks,
     make_initial_state,
@@ -211,15 +211,15 @@ def stream_outline_with_tools(
     calibration_required = needs_level_calibration(planning_memory, user_profile)
     state = make_initial_state(topic, user_profile, planning_memory)
     state["forced_calibration"] = calibration_required
-    system_prompt = build_initial_prompt(
+    initial_messages = build_initial_messages(
         topic,
         user_profile,
         planning_memory,
         needs_calibration=calibration_required,
     )
     messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": "请开始。"},
+        {"role": "system", "content": initial_messages["system"]},
+        {"role": "user", "content": initial_messages["user"]},
     ]
 
     # 先创建 session，第一题闭合时前端就能拿到 sessionId 并开始作答。

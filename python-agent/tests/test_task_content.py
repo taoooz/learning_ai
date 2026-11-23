@@ -485,8 +485,9 @@ def test_agent_model_decides_task_search_and_emits_sources(tmp_path, monkeypatch
         for tool in (client.tools or [])
     } == {"web_search", "read_url"}
     assert "检索决策器" in client.messages[0]["content"]
-    assert request.task.title in client.messages[0]["content"]
+    assert request.task.title in client.messages[1]["content"]
     assert "<output_format>" not in client.messages[0]["content"]
+    assert "<output_format>" not in client.messages[1]["content"]
     assert client.decision_kwargs["max_tokens"] == 1200
     assert client.decision_kwargs["max_iterations"] == 1
     assert client.decision_kwargs["max_searches"] == 1
@@ -528,7 +529,7 @@ def test_agent_model_reuses_cached_chapter_evidence_without_search(tmp_path, mon
     sources_event = next(event for event in events if event["type"] == "sources_ready")
     assert sources_event["payload"]["sources"][0]["url"] == cached_result["url"]
     assert client.final_messages[0]["content"].startswith("你是课程内容检索决策器") is False
-    assert "<output_format>" in client.final_messages[0]["content"]
+    assert "<output_format>" in client.final_messages[1]["content"]
     assert client.reasoning_effort == "none"
 
 
@@ -539,7 +540,7 @@ def test_search_decision_failure_does_not_block_task_generation():
 
     assert [event["type"] for event in events].count("task_completed") == 1
     assert client.final_messages[0]["content"].startswith("你是课程内容检索决策器") is False
-    assert "<output_format>" in client.final_messages[0]["content"]
+    assert "<output_format>" in client.final_messages[1]["content"]
     assert client.reasoning_effort == "none"
 
 
