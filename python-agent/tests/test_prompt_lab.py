@@ -1,5 +1,7 @@
 import json
 
+from fastapi.testclient import TestClient
+
 from schemas.prompt_lab import PromptLabRunRequest
 from services.prompt_lab_service import (
     compile_prompt_lab_stage,
@@ -119,3 +121,35 @@ def test_run_prompt_lab_streams_and_parses_structured_output(monkeypatch):
     assert [event["type"] for event in events] == ["thinking", "content_delta", "parsed", "metrics"]
     assert events[2]["validation"]["valid"] is True
     assert len(events[2]["parsed"]["chapters"]) == 2
+
+
+def test_prompt_lab_memory_snapshot_uses_read_only_planning_payload(monkeypatch):
+    import routers.prompt_lab as router_module
+    from main import app
+
+    monkeypatch.setenv("PYTHON_INTERNAL_TOKEN", "prompt-lab-token")
+    monkeypatch.setattr(router_module, "MemoryV4Store", lambda: object())
+    monkeypatch.setattr(
+        router_module,
+        "safe_resolve_memory_context",
+        lambda *_args, **_kwargs: {"scene": "course_planning"},
+    )
+    monkeypatch.setattr(
+        router_module,
+        "to_planning_prompt_payload",
+        lambda *_args, **_kwargs: {
+            "userProfile": {"targetJob": "产品经理", "insights": {"summary": "有推荐经验"}},
+            "planningMemory": {"learnerSnapshot": {"estimatedLevel": "intermediate"}},
+        },
+    )
+
+    response = TestClient(app).post(
+        "/api/debug/course-pipeline/memory-snapshot",
+        json={"topic": "推荐系统"},
+        headers={"X-Internal-Token": "prompt-lab-token", "X-Account-Id": "account-1"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source"] == "server_memory_v4"
+    assert body["userProfile"]["targetJob"] == "产品经理"
+    assert body["planningMemory"]["learnerSnapshot"]["estimatedLevel"] == "intermediate"

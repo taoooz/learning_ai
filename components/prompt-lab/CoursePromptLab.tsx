@@ -18,6 +18,7 @@ import {
   buildPromptLabInputs,
   buildPromptLabSnapshot,
   getPromptLabBlueprint,
+  hydratePromptLabSnapshot,
   type PromptLabSnapshot,
 } from '@/lib/prompt-lab/defaults';
 import { parsePromptLabSSE } from '@/lib/prompt-lab/sse';
@@ -25,6 +26,12 @@ import { parsePromptLabSSE } from '@/lib/prompt-lab/sse';
 const SESSION_KEY = 'ai-learning-prompt-lab-v1';
 
 type OutputTab = 'thinking' | 'output' | 'parsed' | 'tools';
+
+type PromptLabClarificationQuestion = {
+  id: string;
+  question: string;
+  options: string[];
+};
 
 function jsonText(value: unknown): string {
   return JSON.stringify(value ?? null, null, 2);
@@ -35,7 +42,7 @@ function loadSession(): PromptLabSession | null {
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PromptLabSession;
-    if (parsed.version !== 1 || !parsed.activeStage || !parsed.stages || !parsed.artifacts) return null;
+    if (parsed.version !== 2 || !parsed.activeStage || !parsed.stages || !parsed.artifacts) return null;
     return parsed;
   } catch {
     return null;
@@ -86,6 +93,21 @@ function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function extractClarificationQuestions(parsed: unknown): PromptLabClarificationQuestion[] {
+  const questions = (parsed as { questions?: unknown } | null | undefined)?.questions;
+  if (!Array.isArray(questions)) return [];
+  return questions
+    .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
+    .map((item) => ({
+      id: String(item.id || ''),
+      question: String(item.question || '').trim(),
+      options: Array.isArray(item.options)
+        ? item.options.map((option) => String(option || '').trim()).filter(Boolean)
+        : [],
+    }))
+    .filter((item) => item.id && item.question);
+}
+
 export function CoursePromptLab() {
   const [snapshot, setSnapshot] = useState<PromptLabSnapshot | null>(null);
   const [activeStage, setActiveStage] = useState<PromptLabStageId>('outline_initial');
@@ -108,23 +130,30 @@ export function CoursePromptLab() {
   const currentArtifacts = artifacts;
 
   useEffect(() => {
-    const nextSnapshot = buildPromptLabSnapshot();
-    setSnapshot(nextSnapshot);
-    const saved = loadSession();
-    if (saved) {
-      setActiveStage(saved.activeStage);
-      setStages(saved.stages);
-      artifactsRef.current = saved.artifacts;
-      setArtifacts(saved.artifacts);
-    }
-    setReady(true);
+    let cancelled = false;
+    (async () => {
+      const nextSnapshot = await hydratePromptLabSnapshot(buildPromptLabSnapshot());
+      if (cancelled) return;
+      setSnapshot(nextSnapshot);
+      const saved = loadSession();
+      if (saved) {
+        setActiveStage(saved.activeStage);
+        setStages(saved.stages);
+        artifactsRef.current = saved.artifacts;
+        setArtifacts(saved.artifacts);
+      }
+      setReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     if (!ready) return;
     const timer = setTimeout(() => {
       const session: PromptLabSession = {
-        version: 1,
+        version: 2,
         activeStage,
         stages,
         artifacts,
@@ -352,6 +381,18 @@ export function CoursePromptLab() {
           parsed = event.parsed;
           validation = event.validation;
           toolResults = event.toolResults || toolResults;
+          if (activeStage === 'outline_initial') {
+            const questions = extractClarificationQuestions(parsed);
+            if (questions.length > 0) {
+              updateActiveState((state) => ({
+                ...state,
+                clarificationAnswers: questions.reduce<Record<string, string>>((answers, question) => {
+                  answers[question.id] = state.clarificationAnswers?.[question.id] || '';
+                  return answers;
+                }, {}),
+              }));
+            }
+          }
           patchRun((run) => ({
             ...run,
             parsed,
@@ -390,9 +431,36 @@ export function CoursePromptLab() {
     return getNextPromptLabStage(activeStage);
   }, [activeStage, activeState?.lastRun?.parsed]);
 
+  const outlineQuestions = activeStage === 'outline_initial'
+    ? extractClarificationQuestions(activeState?.lastRun?.parsed)
+    : [];
+  const outlineAnswers = activeState?.clarificationAnswers ?? {};
+  const outlineClarificationComplete = outlineQuestions.length > 0
+    && outlineQuestions.every((question) => Boolean(outlineAnswers[question.id]?.trim()));
+  const nextButtonDisabled = Boolean(
+    activeStage === 'outline_initial'
+    && outlineQuestions.length > 0
+    && !outlineClarificationComplete,
+  );
+  const nextButtonLabel = nextButtonDisabled
+    ? '请先完成澄清回答'
+    : dynamicNextStage === 'outline_answer'
+      ? '提交回答并进入下一环节'
+      : '带入下一环节';
+
   const moveToNextStage = async () => {
     if (!snapshot || !dynamicNextStage) return;
+    if (activeStage === 'outline_initial' && dynamicNextStage === 'outline_answer' && !outlineClarificationComplete) {
+      setError('请先完成全部澄清问题，再进入下一环节');
+      return;
+    }
     const nextInputs = buildPromptLabInputs(dynamicNextStage, snapshot, artifactsRef.current);
+    if (activeStage === 'outline_initial' && dynamicNextStage === 'outline_answer') {
+      nextInputs.answers = jsonText(outlineQuestions.map((question) => ({
+        questionId: question.id,
+        answer: outlineAnswers[question.id],
+      })));
+    }
     setActiveStage(dynamicNextStage);
     setStages((previous) => ({ ...previous, [dynamicNextStage]: createEmptyStageState(nextInputs) }));
     await compileStage(dynamicNextStage, nextInputs, { resetDirty: true, preserveRun: false });
@@ -419,6 +487,12 @@ export function CoursePromptLab() {
   const advancedFields = activeDefinition.fields.filter((field) => field.advanced);
   const lastRun = activeState?.lastRun;
   const blueprintSource = currentArtifacts.blueprint ? '调试产物' : '本地课程快照';
+  const memorySourceLabel = {
+    server_memory_v4: '服务端 Memory V4',
+    local_synthetic: '本地课程快照合成',
+    mixed: 'Memory V4 + 本地兜底',
+    unavailable: '暂无可用画像',
+  }[snapshot.memorySource];
 
   return (
     <main className="flex h-screen min-h-[720px] flex-col overflow-hidden bg-[#f4f2ed] text-primary">
@@ -476,9 +550,10 @@ export function CoursePromptLab() {
               <button
                 type="button"
                 onClick={() => void moveToNextStage()}
-                className="min-h-9 rounded-full bg-accent px-4 text-[12px] font-semibold text-primary"
+                disabled={nextButtonDisabled}
+                className="min-h-9 rounded-full bg-accent px-4 text-[12px] font-semibold text-primary disabled:cursor-not-allowed disabled:opacity-40"
               >
-                带入下一环节
+                {nextButtonLabel}
               </button>
             )}
           </div>
@@ -496,7 +571,7 @@ export function CoursePromptLab() {
           <div className="flex items-center justify-between border-b border-black/[0.06] px-4 py-3">
             <div>
               <h2 className="text-[13px] font-bold">输入参数</h2>
-              <p className="text-[11px] text-tertiary">默认读取本地数据；当前蓝图：{blueprintSource}</p>
+              <p className="text-[11px] text-tertiary">画像 / Memory：{memorySourceLabel}；当前蓝图：{blueprintSource}</p>
             </div>
             <button
               type="button"
@@ -533,6 +608,19 @@ export function CoursePromptLab() {
                       ))}
                     </div>
                   </details>
+                )}
+                {outlineQuestions.length > 0 && (
+                  <OutlineClarificationPanel
+                    questions={outlineQuestions}
+                    answers={outlineAnswers}
+                    onChange={(questionId, answer) => updateActiveState((state) => ({
+                      ...state,
+                      clarificationAnswers: {
+                        ...(state.clarificationAnswers || {}),
+                        [questionId]: answer,
+                      },
+                    }))}
+                  />
                 )}
               </>
             )}
@@ -677,6 +765,68 @@ export function CoursePromptLab() {
         </section>
       </div>
     </main>
+  );
+}
+
+function OutlineClarificationPanel({
+  questions,
+  answers,
+  onChange,
+}: {
+  questions: PromptLabClarificationQuestion[];
+  answers: Record<string, string>;
+  onChange: (questionId: string, answer: string) => void;
+}) {
+  const answered = questions.filter((question) => Boolean(answers[question.id]?.trim())).length;
+  return (
+    <div className="rounded-2xl border border-accent/20 bg-accent/[0.045] p-3">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div>
+          <h3 className="text-[12px] font-bold text-primary">澄清回答</h3>
+          <p className="text-[10.5px] text-tertiary">模型已提出问题。逐题选择后提交到下一环节。</p>
+        </div>
+        <span className="rounded-full bg-white px-2.5 py-1 text-[10.5px] font-semibold text-accent">
+          {answered} / {questions.length}
+        </span>
+      </div>
+      <div className="space-y-3">
+        {questions.map((question, questionIndex) => (
+          <div key={question.id} className="rounded-xl border border-black/[0.06] bg-white p-3">
+            <p className="text-[12px] font-semibold leading-relaxed text-primary">
+              {questionIndex + 1}. {question.question}
+            </p>
+            <div className="mt-2 space-y-1.5">
+              {question.options.length > 0 ? question.options.map((option, optionIndex) => {
+                const selected = answers[question.id] === option;
+                return (
+                  <button
+                    key={`${question.id}-${optionIndex}`}
+                    type="button"
+                    onClick={() => onChange(question.id, option)}
+                    className={`w-full rounded-lg border px-2.5 py-2 text-left text-[11px] leading-relaxed transition-colors ${
+                      selected
+                        ? 'border-accent/40 bg-accent/[0.07] text-primary'
+                        : 'border-black/[0.06] bg-[#fbfbfa] text-secondary hover:border-accent/20'
+                    }`}
+                  >
+                    <span className="mr-1.5 font-bold text-accent">{String.fromCharCode(65 + optionIndex)}.</span>
+                    {option}
+                  </button>
+                );
+              }) : (
+                <textarea
+                  value={answers[question.id] || ''}
+                  onChange={(event) => onChange(question.id, event.target.value)}
+                  rows={3}
+                  placeholder="输入你的回答"
+                  className="w-full rounded-lg border border-black/[0.08] bg-[#fbfbfa] p-2 text-[11px] text-primary outline-none focus:border-accent/40"
+                />
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

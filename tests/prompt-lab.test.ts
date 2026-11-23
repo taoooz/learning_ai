@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { PROMPT_LAB_STAGES, getNextPromptLabStage } from '../lib/prompt-lab/stages';
-import { buildPromptLabInputs, buildPromptLabSnapshot } from '../lib/prompt-lab/defaults';
+import { buildPromptLabInputs, buildPromptLabSnapshot, hydratePromptLabSnapshot } from '../lib/prompt-lab/defaults';
 import { parsePromptLabSSE } from '../lib/prompt-lab/sse';
 import type { PromptLabSSEEvent } from '../types/prompt-lab';
 
@@ -53,4 +53,26 @@ test('Prompt Lab SSE parser handles thinking, content, parsed and metrics', asyn
     events.push(event);
   }
   assert.deepEqual(events.map((event) => event.type), ['thinking', 'content_delta', 'parsed', 'metrics']);
+});
+
+test('Prompt Lab falls back to local profile when server Memory profile is empty', async () => {
+  const originalFetch = globalThis.fetch;
+  const snapshot = buildPromptLabSnapshot();
+  snapshot.userProfile = {
+    targetJob: '本地画像中的产品经理',
+    insights: { summary: '本地画像摘要' },
+  } as typeof snapshot.userProfile;
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    ok: true,
+    source: 'server_memory_v4',
+    userProfile: { targetJob: '', insights: {} },
+    planningMemory: { learnerSnapshot: { estimatedLevel: 'novice' } },
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as typeof fetch;
+  try {
+    const hydrated = await hydratePromptLabSnapshot(snapshot);
+    assert.equal((hydrated.userProfile as { targetJob?: string } | null)?.targetJob, '本地画像中的产品经理');
+    assert.equal(hydrated.memorySource, 'mixed');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

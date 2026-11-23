@@ -101,11 +101,13 @@ export interface PromptLabStageState {
   userMessage: string;
   promptDirty: boolean;
   config: PromptLabRunConfig;
+  /** Outline 首次生成返回的选择题答案，按 questionId 保存。 */
+  clarificationAnswers?: Record<string, string>;
   lastRun?: PromptLabLastRun;
 }
 
 export interface PromptLabSession {
-  version: 1;
+  version: 2;
   activeStage: PromptLabStageId;
   stages: Partial<Record<PromptLabStageId, PromptLabStageState>>;
   artifacts: Record<string, unknown>;

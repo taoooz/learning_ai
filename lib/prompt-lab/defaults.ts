@@ -266,6 +266,7 @@ export interface PromptLabSnapshot {
   topic: string;
   userProfile: UserProfile | null;
   planningMemory: Record<string, unknown>;
+  memorySource: 'server_memory_v4' | 'local_synthetic' | 'mixed' | 'unavailable';
   blueprint: CourseBlueprint;
   chapterId: string;
   teachingState: Record<string, unknown> | null;
@@ -296,11 +297,55 @@ export function buildPromptLabSnapshot(): PromptLabSnapshot {
       mustCoverConcepts: blueprint.learnerStartingPoint.likelyGaps,
       skippableBasics: blueprint.learnerStartingPoint.confirmedKnowledge,
     },
+    memorySource: 'local_synthetic',
     blueprint,
     chapterId,
     teachingState: latestCourse?.teachingState ? asRecord(latestCourse.teachingState) : null,
     lesson,
   };
+}
+
+export async function hydratePromptLabSnapshot(snapshot: PromptLabSnapshot): Promise<PromptLabSnapshot> {
+  try {
+    const response = await fetch('/api/debug/course-pipeline/memory-snapshot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic: snapshot.topic }),
+    });
+    if (!response.ok) return snapshot;
+    const payload = await response.json() as {
+      source?: string;
+      userProfile?: UserProfile | null;
+      planningMemory?: Record<string, unknown>;
+    };
+    const serverProfileCandidate = payload.userProfile && typeof payload.userProfile === 'object'
+      ? payload.userProfile
+      : null;
+    const serverInsights = asRecord(serverProfileCandidate?.insights);
+    const serverProfileHasData = Boolean(
+      String(serverProfileCandidate?.targetJob || '').trim()
+      || Object.values(serverInsights).some((value) => (
+        Array.isArray(value) ? value.some((item) => Boolean(String(item || '').trim())) : Boolean(String(value || '').trim())
+      ))
+    );
+    const serverProfile = serverProfileHasData ? serverProfileCandidate : null;
+    const serverPlanning = payload.planningMemory && typeof payload.planningMemory === 'object'
+      ? payload.planningMemory
+      : {};
+    const hasServerMemory = payload.source === 'server_memory_v4';
+    const useLocalProfile = !serverProfile && Boolean(snapshot.userProfile);
+    const useLocalPlanning = Object.keys(serverPlanning).length === 0;
+    return {
+      ...snapshot,
+      userProfile: serverProfile ?? snapshot.userProfile,
+      planningMemory: useLocalPlanning ? snapshot.planningMemory : serverPlanning,
+      memorySource: hasServerMemory
+        ? (useLocalProfile || useLocalPlanning ? 'mixed' : 'server_memory_v4')
+        : (snapshot.userProfile && snapshot.memorySource === 'local_synthetic' ? 'mixed' : 'unavailable'),
+    };
+  } catch {
+    return snapshot;
+  }
 }
 
 export function getPromptLabBlueprint(snapshot: PromptLabSnapshot, artifacts: Record<string, unknown>): CourseBlueprint {
