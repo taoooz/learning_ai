@@ -9,7 +9,8 @@ import time
 from uuid import uuid4
 
 from lib.minimax_agent import AgentClient
-from lib.minimax import MiniMaxClient, extract_usage, parse_json_response
+from lib.minimax import MiniMaxClient, extract_usage, parse_enforced_json, parse_json_response
+from lib.structured_output import plan_response_format
 from lib.tools.search_tools import SEARCH_TOOLS
 from prompts import build_prompt
 from schemas.learning_v2 import ChapterPlanRequest
@@ -36,6 +37,41 @@ TEACHING_PATTERNS = {
     "practice": "练习巩固",
     "case_analysis": "案例分析",
     "recap": "总结回顾",
+}
+
+# 章节计划输出的 strict JSON Schema（response_format json_schema 迁移）。
+# 字段集合 = _normalize_task 实际消费的 10 个字段；evidencePolicy/origin/status
+# 由服务端写入，不进 schema。teachingPattern 枚举与 TEACHING_PATTERNS 同源。
+CHAPTER_PLAN_JSON_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "tasks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "taskId": {"type": "string"},
+                    "order": {"type": "integer"},
+                    "title": {"type": "string"},
+                    "objectiveId": {"type": "string"},
+                    "taskGoal": {"type": "string"},
+                    "observableOutcome": {"type": "string"},
+                    "conceptKeys": {"type": "array", "items": {"type": "string"}},
+                    "prerequisiteTaskIds": {"type": "array", "items": {"type": "string"}},
+                    "teachingPattern": {"type": "string", "enum": list(TEACHING_PATTERNS)},
+                    "expectedMinutes": {"type": "integer"},
+                },
+                "required": [
+                    "taskId", "order", "title", "objectiveId", "taskGoal",
+                    "observableOutcome", "conceptKeys", "prerequisiteTaskIds",
+                    "teachingPattern", "expectedMinutes",
+                ],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["tasks"],
+    "additionalProperties": False,
 }
 
 # 校验错误码，镜像 TS lib/learning-v2/validators.ts 的 PLAN_VALIDATION_CODES
@@ -585,6 +621,9 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
         ]
+        # strict schema 约束输出；LLM_STRICT_JSON_SCHEMA=0 时退回 json_object。
+        # 网关拒绝时客户端自动降级（lib/structured_output.py）。
+        response_format = plan_response_format("chapter_plan", CHAPTER_PLAN_JSON_SCHEMA)
         if hasattr(client, "chat_with_tools"):
             response = await asyncio.to_thread(
                 client.chat_with_tools,
@@ -596,13 +635,15 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
                 max_iterations=2 if allow_search else 1,
                 max_searches=1,
                 reasoning_effort=PLAN_REASONING_EFFORT,
+                response_format=response_format,
             )
         else:
-            response = await client.chat(messages=messages, max_tokens=16000, response_format={"type": "json_object"})
+            response = await client.chat(messages=messages, max_tokens=16000, response_format=response_format)
         content = (response.get("choices") or [{}])[0].get("message", {}).get("content", "")
 
         try:
-            parsed = parse_json_response(content)
+            # 约束输出解析：引号修复/XML/Thinking 启发式已在本路径退役
+            parsed = parse_enforced_json(content)
         except ValueError as exc:
             last_errors = [{"code": PLAN_VALIDATION_CODES["INVALID_JSON"], "message": f"输出不是合法 JSON：{exc}"}]
             repair_notes = _format_repair_notes(last_errors)

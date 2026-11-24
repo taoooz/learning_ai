@@ -459,3 +459,85 @@ def test_title_repeats_chapter_is_warning():
     # 不传章节标题时不产生该告警（兼容旧调用方）
     _, warnings_without = validate_plan_tasks(tasks, ["obj-1", "obj-2"])
     assert not any(warning["code"] == "TITLE_REPEATS_CHAPTER" for warning in warnings_without)
+
+
+# ---- response_format json_schema(strict) 迁移回归 ----
+
+class RecordingToolClient(FakeChatClient):
+    """记录 chat_with_tools 收到的 kwargs（含 response_format）。"""
+
+    def __init__(self, tasks: list[dict]):
+        super().__init__([tasks])
+        self.kwargs_seen: list[dict] = []
+
+    def chat_with_tools(self, messages, tools, tool_functions, **kwargs):
+        self.calls.append(messages)
+        self.kwargs_seen.append(kwargs)
+        return self.responses.pop(0)
+
+
+class RecordingChatClient(FakeChatClient):
+    """记录 chat 收到的 response_format。"""
+
+    def __init__(self, task_lists):
+        super().__init__(task_lists)
+        self.formats: list = []
+
+    async def chat(self, messages, model=None, max_tokens=1500, response_format=None):
+        self.formats.append(response_format)
+        return await super().chat(messages, model=model, max_tokens=max_tokens, response_format=response_format)
+
+
+def test_plan_passes_strict_schema_to_agent_client(monkeypatch):
+    from services.chapter_plan_service import CHAPTER_PLAN_JSON_SCHEMA
+    monkeypatch.setenv("LLM_STRICT_JSON_SCHEMA", "1")
+    client = RecordingToolClient(_valid_tasks())
+    asyncio.run(generate_chapter_plan(_plan_request(), client=client))
+    fmt = client.kwargs_seen[0]["response_format"]
+    assert fmt["type"] == "json_schema"
+    assert fmt["json_schema"]["name"] == "chapter_plan"
+    assert fmt["json_schema"]["strict"] is True
+    assert fmt["json_schema"]["schema"] == CHAPTER_PLAN_JSON_SCHEMA
+
+
+def test_plan_env_off_uses_json_object(monkeypatch):
+    monkeypatch.setenv("LLM_STRICT_JSON_SCHEMA", "0")
+    client = RecordingToolClient(_valid_tasks())
+    asyncio.run(generate_chapter_plan(_plan_request(), client=client))
+    assert client.kwargs_seen[0]["response_format"] == {"type": "json_object"}
+
+
+def test_plan_chat_only_client_receives_strict_schema(monkeypatch):
+    from services.chapter_plan_service import CHAPTER_PLAN_JSON_SCHEMA
+    monkeypatch.setenv("LLM_STRICT_JSON_SCHEMA", "1")
+    client = RecordingChatClient([_valid_tasks()])
+    asyncio.run(generate_chapter_plan(_plan_request(), client=client))
+    fmt = client.formats[0]
+    assert fmt["type"] == "json_schema"
+    assert fmt["json_schema"]["schema"] == CHAPTER_PLAN_JSON_SCHEMA
+
+
+def test_plan_quote_repair_retired_bad_quotes_raise(monkeypatch):
+    """引号修复启发式退役：字符串内未转义英文双引号不再被静默修复，
+    走 INVALID_JSON 重试，耗尽后抛 PlanValidationError。"""
+    monkeypatch.setenv("LLM_STRICT_JSON_SCHEMA", "1")
+    bad_content = '{"tasks": [{"taskId": "t1", "title": "说"你好"的任务"}]}'
+
+    class BadQuoteClient(FakeChatClient):
+        def __init__(self):
+            super().__init__([])
+            self.responses = [{"choices": [{"message": {"content": bad_content}}]}] * 3
+
+    client = BadQuoteClient()
+    with pytest.raises(PlanValidationError) as excinfo:
+        asyncio.run(generate_chapter_plan(_plan_request(), client=client))
+    assert len(client.calls) == 3
+    codes = {e["code"] for e in excinfo.value.errors}
+    assert "INVALID_JSON" in codes
+
+
+def test_plan_prompt_no_longer_begs_about_quotes():
+    from prompts.chapter_plan import PROMPT
+    assert "英文双引号" not in PROMPT["output_format"]
+    assert "「」" not in PROMPT["output_format"]
+    assert "只返回 JSON" in PROMPT["output_format"]

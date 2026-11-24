@@ -70,6 +70,92 @@ class CourseArchitectureMeta(BaseModel):
     examplePolicy: CourseExamplePolicy
 
 
+# ---- response_format json_schema(strict) 输出契约 ----
+# 与上方 pydantic 模型一一对应（回归测试校验字段集合一致）。
+# strict 约束：所有字段 required、additionalProperties: false、无 default；
+# 可空字段用 type 联合（evidenceIds: ["array", "null"]）。
+# 2026-11-23 已用代表性大 schema 实测网关强制约束生效（scripts/probe_strict_schema.py）。
+
+COURSE_CHAPTERS_JSON_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "architectureVersion": {"type": "integer", "enum": [1]},
+        "courseTopic": {"type": "string"},
+        "chapters": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "chapterId": {"type": "string"},
+                    "title": {"type": "string"},
+                    "roleInCourse": {"type": "string"},
+                    "conceptIds": {"type": "array", "items": {"type": "string"}},
+                    "deliverable": {"type": "string"},
+                    "prerequisites": {"type": "array", "items": {"type": "string"}},
+                    "assessmentMode": {"type": "string", "enum": ["none", "self_report", "checkpoint"]},
+                },
+                "required": [
+                    "chapterId", "title", "roleInCourse", "conceptIds",
+                    "deliverable", "prerequisites", "assessmentMode",
+                ],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["architectureVersion", "courseTopic", "chapters"],
+    "additionalProperties": False,
+}
+
+COURSE_META_JSON_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "thesis": {
+            "type": "object",
+            "properties": {
+                "audience": {"type": "string"},
+                "currentBoundary": {"type": "array", "items": {"type": "string"}},
+                "targetCapability": {"type": "string"},
+                "learningDelta": {"type": "array", "items": {"type": "string"}},
+                "nonGoals": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["audience", "currentBoundary", "targetCapability", "learningDelta", "nonGoals"],
+            "additionalProperties": False,
+        },
+        "conceptGraph": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "conceptId": {"type": "string"},
+                    "label": {"type": "string"},
+                    "targetDepth": {"type": "string", "enum": ["skip", "refresh", "understand", "apply", "transfer"]},
+                    "rationale": {"type": "string"},
+                    "prerequisiteConceptIds": {"type": "array", "items": {"type": "string"}},
+                    "evidenceIds": {"type": ["array", "null"], "items": {"type": "string"}},
+                },
+                "required": [
+                    "conceptId", "label", "targetDepth", "rationale",
+                    "prerequisiteConceptIds", "evidenceIds",
+                ],
+                "additionalProperties": False,
+            },
+        },
+        "examplePolicy": {
+            "type": "object",
+            "properties": {
+                "preferredDomains": {"type": "array", "items": {"type": "string"}},
+                "personalExampleLimit": {"type": "integer"},
+                "avoidRepeatedScenarios": {"type": "boolean"},
+            },
+            "required": ["preferredDomains", "personalExampleLimit", "avoidRepeatedScenarios"],
+            "additionalProperties": False,
+        },
+    },
+    "required": ["thesis", "conceptGraph", "examplePolicy"],
+    "additionalProperties": False,
+}
+
+
 def _find_cycle(edges: dict[str, list[str]]) -> list[str] | None:
     visited: set[str] = set()
     on_path: set[str] = set()

@@ -8,12 +8,15 @@ import re
 import time
 from typing import Any, Generator
 
-from lib.minimax import MiniMaxClient, parse_json_response
+from lib.minimax import MiniMaxClient, parse_enforced_json, parse_json_response
 from lib.minimax_agent import AgentClient
+from lib.structured_output import plan_response_format
 from lib.tools.memory_tools import MEMORY_SEARCH_POLICY, MEMORY_SEARCH_TOOL, create_memory_search
 from lib.tools.search_tools import SEARCH_TOOLS, TOOL_FUNCTIONS
 from prompts import build_prompt
 from schemas.course_architecture import (
+    COURSE_CHAPTERS_JSON_SCHEMA,
+    COURSE_META_JSON_SCHEMA,
     CourseArchitecture,
     CourseArchitectureMeta,
     CourseChapterPlan,
@@ -367,14 +370,25 @@ async def _review_course_architecture(
         return {"passed": True, "issues": [], "repairNotes": "", "reviewUnavailable": True}
 
 
+def _chapters_response_format() -> dict:
+    """章节阶段输出约束：strict schema（LLM_STRICT_JSON_SCHEMA=0 时退回 json_object）。"""
+    return plan_response_format("course_chapters", COURSE_CHAPTERS_JSON_SCHEMA)
+
+
+def _meta_response_format() -> dict:
+    """元信息阶段输出约束：strict schema（含 nullable evidenceIds）。"""
+    return plan_response_format("course_meta", COURSE_META_JSON_SCHEMA)
+
+
 def _parse_chapter_plan(content: str) -> CourseChapterPlan:
-    parsed = parse_json_response(content)
+    # 约束输出解析：引号修复/XML/Thinking 启发式已在本路径退役
+    parsed = parse_enforced_json(content)
     candidate = parsed.get("courseChapterPlan") if isinstance(parsed, dict) else None
     return CourseChapterPlan.model_validate(candidate or parsed)
 
 
 def _parse_architecture_meta(content: str) -> CourseArchitectureMeta:
-    parsed = parse_json_response(content)
+    parsed = parse_enforced_json(content)
     candidate = parsed.get("courseArchitectureMeta") if isinstance(parsed, dict) else None
     return CourseArchitectureMeta.model_validate(candidate or parsed)
 
@@ -413,8 +427,12 @@ def _call_nonstream_stage(
     tools: list[dict[str, Any]] | None = None,
     max_iterations: int = 1,
     max_searches: int = 0,
+    response_format: dict | None = None,
 ) -> str:
-    """同步执行一次非流式阶段；只用于阶段内定向修复，不重生成整门课。"""
+    """同步执行一次非流式阶段；只用于阶段内定向修复，不重生成整门课。
+
+    response_format 透传到客户端；网关拒绝时客户端自动降级（lib/structured_output.py）。
+    """
     if hasattr(client, "chat_with_tools"):
         response = client.chat_with_tools(
             messages=messages,
@@ -425,6 +443,7 @@ def _call_nonstream_stage(
             max_iterations=max_iterations,
             max_searches=max_searches,
             reasoning_effort=ARCHITECT_REASONING_EFFORT,
+            response_format=response_format,
         )
         return _response_content(response)
     if hasattr(client, "_call_llm"):
@@ -436,10 +455,11 @@ def _call_nonstream_stage(
             True,
             1,
             reasoning_effort=ARCHITECT_REASONING_EFFORT,
+            response_format=response_format,
         )
         return _response_content(response)
     if hasattr(client, "chat"):
-        response = asyncio.run(client.chat(messages=messages, max_tokens=max_tokens, response_format={"type": "json_object"}))
+        response = asyncio.run(client.chat(messages=messages, max_tokens=max_tokens, response_format=response_format))
         return _response_content(response)
     raise RuntimeError("当前模型客户端不支持同步阶段调用")
 
@@ -515,6 +535,7 @@ def _repair_chapter_plan_sync(
         client,
         messages,
         max_tokens=ARCHITECT_CHAPTERS_MAX_TOKENS,
+        response_format=_chapters_response_format(),
     )
     plan = _parse_chapter_plan(content)
     repaired_issues = _chapter_plan_issues(plan)
@@ -544,6 +565,7 @@ def _repair_meta_sync(
         client,
         messages,
         max_tokens=ARCHITECT_META_MAX_TOKENS,
+        response_format=_meta_response_format(),
     )
     return _parse_architecture_meta(content)
 
@@ -557,6 +579,7 @@ def _generate_meta_with_repair(
         client,
         messages,
         max_tokens=ARCHITECT_META_MAX_TOKENS,
+        response_format=_meta_response_format(),
     )
     try:
         meta = _parse_architecture_meta(content)
@@ -682,6 +705,7 @@ def _generate_chapter_plan_sync(
         tools=SEARCH_TOOLS if allow_search else None,
         max_iterations=2 if allow_search else 1,
         max_searches=1 if allow_search else 0,
+        response_format=_chapters_response_format(),
     )
     try:
         plan = _parse_chapter_plan(content)
@@ -846,6 +870,7 @@ def stream_course_architecture(
                 max_iterations=2 if tools else 1,
                 max_searches=1 if allow_search else 0,
                 reasoning_effort=ARCHITECT_REASONING_EFFORT,
+                response_format=_chapters_response_format(),
             ):
                 event_type = event.get("type")
                 if event_type == "tool_call":

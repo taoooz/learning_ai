@@ -527,3 +527,125 @@ def test_chapter_count_hard_limit_is_twelve():
         for i in range(13)
     ]
     assert any("硬上限 12" in issue for issue in validate_course_chapters(thirteen))
+
+
+# ---- response_format json_schema(strict) 迁移回归 ----
+
+class RecordingArchitectClient(FakeArchitectClient):
+    """记录 chat_with_tools 收到的 kwargs（含 response_format）。"""
+
+    def __init__(self, responses, review_responses=None):
+        super().__init__(responses, review_responses)
+        self.kwargs_seen: list[dict] = []
+
+    def chat_with_tools(self, messages, tools, tool_functions, **kwargs):
+        self.kwargs_seen.append(kwargs)
+        return super().chat_with_tools(messages, tools, tool_functions, **kwargs)
+
+
+class RecordingStreamingClient(FakeStreamingArchitectClient):
+    """记录流式与 meta 阶段收到的 kwargs（含 response_format）。"""
+
+    def __init__(self, responses=None, review_responses=None, chapter_payload=None):
+        super().__init__(responses, review_responses, chapter_payload)
+        self.stream_kwargs: list[dict] = []
+        self.kwargs_seen: list[dict] = []
+
+    def stream_chat_with_tools(self, messages, tools, tool_functions, **kwargs):
+        self.stream_kwargs.append(kwargs)
+        yield from super().stream_chat_with_tools(messages, tools, tool_functions, **kwargs)
+
+    def chat_with_tools(self, messages, tools, tool_functions, **kwargs):
+        self.kwargs_seen.append(kwargs)
+        return super().chat_with_tools(messages, tools, tool_functions, **kwargs)
+
+
+class RecordingChatOnlyClient(FakeChatOnlyClient):
+    """记录 chat 收到的 response_format。"""
+
+    def __init__(self, responses):
+        super().__init__(responses)
+        self.formats: list = []
+
+    async def chat(self, messages, model=None, max_tokens=1500, response_format=None):
+        self.formats.append(response_format)
+        return await super().chat(messages, model=model, max_tokens=max_tokens, response_format=response_format)
+
+
+def test_stream_passes_strict_schemas_to_both_stages(monkeypatch):
+    from schemas.course_architecture import COURSE_CHAPTERS_JSON_SCHEMA, COURSE_META_JSON_SCHEMA
+    monkeypatch.setenv("LLM_STRICT_JSON_SCHEMA", "1")
+    client = RecordingStreamingClient([])
+    events = list(stream_course_architecture(
+        topic="推荐系统核心链路",
+        outline=_valid_architecture(),
+        learner={"estimatedLevel": "intermediate", "skipBasics": []},
+        client=client,
+    ))
+    assert events[-1]["type"] == "result"
+    chapters_fmt = client.stream_kwargs[0]["response_format"]
+    assert chapters_fmt["type"] == "json_schema"
+    assert chapters_fmt["json_schema"]["name"] == "course_chapters"
+    assert chapters_fmt["json_schema"]["strict"] is True
+    assert chapters_fmt["json_schema"]["schema"] == COURSE_CHAPTERS_JSON_SCHEMA
+    meta_fmt = client.kwargs_seen[0]["response_format"]
+    assert meta_fmt["json_schema"]["name"] == "course_meta"
+    assert meta_fmt["json_schema"]["schema"] == COURSE_META_JSON_SCHEMA
+
+
+def test_stream_meta_repair_also_carries_strict_schema(monkeypatch):
+    from schemas.course_architecture import COURSE_META_JSON_SCHEMA
+    monkeypatch.setenv("LLM_STRICT_JSON_SCHEMA", "1")
+    broken_meta = _valid_meta()
+    broken_meta["conceptGraph"] = broken_meta["conceptGraph"][:1]
+    client = RecordingStreamingClient(responses=[broken_meta, _valid_meta()])
+    list(stream_course_architecture(
+        topic="推荐系统核心链路",
+        outline=_valid_architecture(),
+        learner={"estimatedLevel": "intermediate", "skipBasics": []},
+        client=client,
+    ))
+    assert len(client.kwargs_seen) == 2
+    for kwargs in client.kwargs_seen:
+        assert kwargs["response_format"]["json_schema"]["schema"] == COURSE_META_JSON_SCHEMA
+
+
+def test_stream_env_off_uses_json_object(monkeypatch):
+    monkeypatch.setenv("LLM_STRICT_JSON_SCHEMA", "0")
+    client = RecordingStreamingClient([])
+    list(stream_course_architecture(
+        topic="推荐系统核心链路",
+        outline=_valid_architecture(),
+        learner={"estimatedLevel": "intermediate", "skipBasics": []},
+        client=client,
+    ))
+    assert client.stream_kwargs[0]["response_format"] == {"type": "json_object"}
+    assert client.kwargs_seen[0]["response_format"] == {"type": "json_object"}
+
+
+def test_nonstream_generate_passes_strict_schemas(monkeypatch):
+    from schemas.course_architecture import COURSE_CHAPTERS_JSON_SCHEMA, COURSE_META_JSON_SCHEMA
+    monkeypatch.setenv("LLM_STRICT_JSON_SCHEMA", "1")
+    client = RecordingArchitectClient([_valid_chapter_plan(), _valid_meta()])
+    asyncio.run(generate_course_architecture(
+        topic="推荐系统核心链路",
+        outline={"learningGoal": "定位推荐问题"},
+        learner={"estimatedLevel": "intermediate"},
+        client=client,
+    ))
+    assert client.kwargs_seen[0]["response_format"]["json_schema"]["schema"] == COURSE_CHAPTERS_JSON_SCHEMA
+    assert client.kwargs_seen[1]["response_format"]["json_schema"]["schema"] == COURSE_META_JSON_SCHEMA
+
+
+def test_chat_only_client_receives_strict_schemas(monkeypatch):
+    from schemas.course_architecture import COURSE_CHAPTERS_JSON_SCHEMA, COURSE_META_JSON_SCHEMA
+    monkeypatch.setenv("LLM_STRICT_JSON_SCHEMA", "1")
+    client = RecordingChatOnlyClient([_valid_chapter_plan(), _valid_meta()])
+    asyncio.run(generate_course_architecture(
+        topic="推荐系统核心链路",
+        outline={"learningGoal": "定位推荐问题"},
+        learner={"estimatedLevel": "intermediate"},
+        client=client,
+    ))
+    assert client.formats[0]["json_schema"]["schema"] == COURSE_CHAPTERS_JSON_SCHEMA
+    assert client.formats[1]["json_schema"]["schema"] == COURSE_META_JSON_SCHEMA

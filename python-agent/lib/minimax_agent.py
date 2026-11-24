@@ -7,6 +7,7 @@ import re
 import httpx
 from typing import Iterator, Callable, Any
 from lib.minimax import MiniMaxClient
+from lib.structured_output import apply_response_format_downgrade
 
 
 def _clean_tool_xml(content: str) -> str:
@@ -46,7 +47,8 @@ def _do_streaming_call(
     """
     import sys
 
-    for attempt in range(max_retries):
+    attempt = 0
+    while attempt < max_retries:
         full_content = ""
         full_reasoning = ""
         tool_calls_accum: dict[int, dict] = {}
@@ -72,6 +74,9 @@ def _do_streaming_call(
                                 break
                         sys.stderr.write(f"[ERROR] MiniMax API error: status={response.status_code}, body={error_body[:300]}\n")
                         sys.stderr.flush()
+                        # 网关拒绝 response_format：逐级降级后立即重试，不消耗重试配额
+                        if apply_response_format_downgrade(payload, "stream_chat", response.status_code):
+                            continue
                         # 529/500/502/503 可重试
                         if response.status_code in (529, 500, 502, 503) and attempt < max_retries - 1:
                             wait = 2 ** attempt
@@ -79,6 +84,7 @@ def _do_streaming_call(
                             sys.stderr.flush()
                             import time
                             time.sleep(wait)
+                            attempt += 1
                             continue  # 重试
                         response.raise_for_status()
 
@@ -154,12 +160,15 @@ def _do_streaming_call(
 
         except httpx.HTTPStatusError as e:
             status = e.response.status_code
+            if apply_response_format_downgrade(payload, "stream_chat", status):
+                continue
             if status in (529, 500, 502, 503) and attempt < max_retries - 1:
                 wait = 2 ** attempt
                 sys.stderr.write(f"[RETRY] httpx status={status}, attempt {attempt+1}/{max_retries}, waiting {wait}s...\n")
                 sys.stderr.flush()
                 import time
                 time.sleep(wait)
+                attempt += 1
                 continue
             raise
 
@@ -174,8 +183,13 @@ class AgentClient(MiniMaxClient):
                         reasoning_split=True, max_iterations=3,
                         max_searches: int = 3,
                         max_tool_result_chars: int = 3000,
-                        reasoning_effort: str | None = None) -> dict:
-        """同步调用 chat API，自动处理 tool_calls 循环"""
+                        reasoning_effort: str | None = None,
+                        response_format: dict | None = None) -> dict:
+        """同步调用 chat API，自动处理 tool_calls 循环。
+
+        response_format 透传到每一轮请求：实测（2026-11-23）工具轮仍正常发起
+        tool_calls，最终轮输出受 schema 约束。
+        """
         model = model or self.model
         iteration = 0
         search_count = 0
@@ -184,6 +198,7 @@ class AgentClient(MiniMaxClient):
             response = self._call_llm(
                 messages, effective_tools, model, max_tokens, reasoning_split,
                 reasoning_effort=reasoning_effort,
+                response_format=response_format,
             )
             choice = response.get("choices", [{}])[0]
             message = choice.get("message", {})
@@ -215,6 +230,7 @@ class AgentClient(MiniMaxClient):
         return self._call_llm(
             messages, [], model, max_tokens, reasoning_split,
             reasoning_effort=reasoning_effort,
+            response_format=response_format,
         )
 
     def prepare_search_context(self, messages, tools, tool_functions,
@@ -274,6 +290,7 @@ class AgentClient(MiniMaxClient):
         max_iterations: int = 3,
         max_searches: int = 3,
         reasoning_effort: str | None = None,
+        response_format: dict | None = None,
     ) -> Iterator[dict]:
         """流式 Agent 调用 — thinking 逐 token 实时推送到前端
 
@@ -311,6 +328,8 @@ class AgentClient(MiniMaxClient):
                 payload["reasoning_effort"] = reasoning_effort
             if effective_tools:
                 payload["tools"] = effective_tools
+            if response_format:
+                payload["response_format"] = response_format
 
             # 流式调用 — thinking/content token 实时 yield，最后得到完整响应
             response = None
@@ -421,6 +440,8 @@ class AgentClient(MiniMaxClient):
         }
         if reasoning_effort:
             final_payload["reasoning_effort"] = reasoning_effort
+        if response_format:
+            final_payload["response_format"] = response_format
         final_finish_reason = None
         for event in _do_streaming_call(self, final_payload):
             if event["type"] in ("thinking", "content_delta"):
@@ -435,8 +456,12 @@ class AgentClient(MiniMaxClient):
     # ---- 以下为内部方法 ----
 
     def _call_llm(self, messages, tools, model, max_tokens, reasoning_split, max_retries=3,
-                  reasoning_effort: str | None = None):
-        """非流式 LLM 调用（自动重试），仅供 chat_with_tools 使用"""
+                  reasoning_effort: str | None = None,
+                  response_format: dict | None = None):
+        """非流式 LLM 调用（自动重试），仅供 chat_with_tools 使用。
+
+        网关以 4xx 拒绝 response_format 时逐级降级重试（不消耗瞬时故障重试配额）。
+        """
         import concurrent.futures
         import time
 
@@ -448,6 +473,8 @@ class AgentClient(MiniMaxClient):
             payload["reasoning_effort"] = reasoning_effort
         if tools:
             payload["tools"] = tools
+        if response_format:
+            payload["response_format"] = response_format
 
         def _call():
             with httpx.Client() as client:
@@ -463,7 +490,9 @@ class AgentClient(MiniMaxClient):
                 return response.json()
 
         last_error = None
-        for attempt in range(1, max_retries + 1):
+        attempt = 0
+        while attempt < max_retries:
+            attempt += 1
             try:
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     future = executor.submit(_call)
@@ -471,6 +500,12 @@ class AgentClient(MiniMaxClient):
             except (httpx.HTTPStatusError, httpx.ConnectError, httpx.ReadTimeout) as e:
                 last_error = e
                 status = getattr(getattr(e, 'response', None), 'status_code', None)
+                # 网关拒绝 response_format：降级后立即重试，不消耗重试配额
+                if isinstance(e, httpx.HTTPStatusError) and apply_response_format_downgrade(
+                    payload, "AgentClient._call_llm", status
+                ):
+                    attempt -= 1
+                    continue
                 if status not in (429, 500, 529, 502, 503) and not isinstance(e, (httpx.ReadTimeout, httpx.ConnectError)):
                     raise
                 wait = 2 ** attempt

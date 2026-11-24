@@ -69,9 +69,6 @@ PROMPT = {
 - expectedMinutes 为 2～6 的整数
 - evidencePolicy / origin / status 由服务端写入，不要输出这三个字段
 
-## JSON 书写规范
-- 字符串值内部不要出现英文双引号，引述内容改用中文引号「」
-
 只返回 JSON。
 </output_format>""",
 

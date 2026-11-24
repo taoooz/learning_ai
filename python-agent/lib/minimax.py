@@ -4,6 +4,8 @@ import re
 import asyncio
 import httpx
 
+from lib.structured_output import apply_response_format_downgrade
+
 # 流式读取的应用层空闲超时（秒）：超过该时长没有新数据行即视为上游断流
 _STREAM_IDLE_TIMEOUT = 60.0
 
@@ -82,6 +84,7 @@ class MiniMaxClient:
 
         response_format 可选 {"type": "json_object"} 或 {"type": "json_schema", ...}；
         端点（litellm 网关）真实支持并强制约束输出（2026-11-23 探测确认）。
+        网关以 4xx 拒绝 response_format 时自动逐级降级（json_schema → json_object → 无约束）。
         """
         model = model or self.model
         body: dict = {
@@ -92,14 +95,20 @@ class MiniMaxClient:
         if response_format:
             body["response_format"] = response_format
         async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{self.base_url}/chat/completions",
-                headers=self._get_headers(),
-                json=body,
-                timeout=60.0,
-            )
-            response.raise_for_status()
-            return response.json()
+            while True:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers=self._get_headers(),
+                    json=body,
+                    timeout=60.0,
+                )
+                try:
+                    response.raise_for_status()
+                except httpx.HTTPStatusError as exc:
+                    if apply_response_format_downgrade(body, "MiniMaxClient.chat", exc.response.status_code):
+                        continue
+                    raise
+                return response.json()
 
     async def stream_chat(
         self,
@@ -270,6 +279,45 @@ def parse_json_response(content: str) -> dict:
                 pass
         # 括号不平衡说明模型输出被截断（如 max_tokens 耗尽），
         # 明确报截断错误，避免上层把残缺内容误当成正常结果
+        if not _is_json_balanced(json_str):
+            raise ValueError(f"JSON response truncated (unbalanced brackets): {json_str[:200]}")
+        raise ValueError(f"Invalid JSON: {e}, content: {json_str[:200]}")
+
+
+def parse_enforced_json(content: str) -> dict:
+    """解析受 response_format 约束的输出（json_schema strict / json_object）。
+
+    主路径大 JSON（章节计划 / architect 蓝图）专用：约束输出本身就是合法 JSON，
+    不再运行引号修复、工具 XML 清理、Thinking 标记清理等历史补偿启发式。
+    保留的最小安全网（理由见 docs/CHANGELOG 迁移说明）：
+    - 剥 markdown 围栏：降级到 json_object/无约束时模型可能仍包代码块；
+    - 首 { 尾 } 截取：降级模式下前后可能混入说明文字；
+    - 括号平衡检测：区分截断与非法 JSON，驱动上层 INVALID_JSON 重试。
+    """
+    text = content.strip()
+    if text.startswith("```json"):
+        text = text[7:]
+    if text.startswith("```"):
+        text = text[3:]
+    text = text.strip()
+
+    # strict=False：容忍字符串值内的裸控制字符（降级模式下可能出现），不做引号修复
+    try:
+        return json.loads(text, strict=False)
+    except json.JSONDecodeError:
+        pass
+
+    first_brace = text.find("{")
+    last_brace = text.rfind("}")
+    if first_brace == -1:
+        raise ValueError(f"No JSON found in response: {text[:200]}")
+    if last_brace <= first_brace:
+        # 有开括号但没有闭括号：典型的 max_tokens 截断
+        raise ValueError(f"JSON response truncated (unbalanced brackets): {text[first_brace:][:200]}")
+    json_str = text[first_brace:last_brace + 1]
+    try:
+        return json.loads(json_str, strict=False)
+    except json.JSONDecodeError as e:
         if not _is_json_balanced(json_str):
             raise ValueError(f"JSON response truncated (unbalanced brackets): {json_str[:200]}")
         raise ValueError(f"Invalid JSON: {e}, content: {json_str[:200]}")
