@@ -1,14 +1,15 @@
 """Course Prompt Lab 调试路由。"""
+import asyncio
 import os
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from starlette.responses import StreamingResponse
 
-from schemas.prompt_lab import PromptLabCompileRequest, PromptLabRunRequest
+from schemas.prompt_lab import PromptLabAssistantRequest, PromptLabCompileRequest, PromptLabRunRequest
 from services.memory_context_v4 import safe_resolve_memory_context, to_planning_prompt_payload
 from services.memory_v4_store import MemoryV4Store
-from services.prompt_lab_service import compile_prompt_lab_stage, run_prompt_lab_stream
+from services.prompt_lab_service import compile_prompt_lab_stage, run_prompt_lab_assistant, run_prompt_lab_stream
 
 
 def _require_prompt_lab_enabled() -> None:
@@ -30,7 +31,6 @@ router = APIRouter(
     tags=["prompt-lab"],
     dependencies=[Depends(_require_prompt_lab_enabled)],
 )
-
 
 
 @router.post("/memory-snapshot")
@@ -70,3 +70,8 @@ async def run_prompt(req: PromptLabRunRequest, request: Request):
         yield from run_prompt_lab_stream(req, account_id=account)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post("/assistant")
+async def prompt_lab_assistant(req: PromptLabAssistantRequest):
+    return await asyncio.to_thread(run_prompt_lab_assistant, req)

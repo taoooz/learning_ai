@@ -93,6 +93,26 @@ export interface PromptLabLastRun {
   startedAt?: number;
 }
 
+export type PromptLabAssistantAction = 'chat' | 'evaluate' | 'optimize_prompt';
+
+export interface PromptLabAssistantResult {
+  answer: string;
+  score: number | null;
+  issues: string[];
+  suggestions: string[];
+  revisedSystemPrompt: string | null;
+  revisedUserMessage: string | null;
+}
+
+export interface PromptLabAssistantMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  action?: PromptLabAssistantAction;
+  result?: PromptLabAssistantResult;
+  createdAt: number;
+}
+
 export type PromptLabInputValue = string | boolean | number;
 
 export interface PromptLabStageState {
@@ -107,8 +127,9 @@ export interface PromptLabStageState {
 }
 
 export interface PromptLabSession {
-  version: 3;
+  version: 4;
   activeStage: PromptLabStageId;
   stages: Partial<Record<PromptLabStageId, PromptLabStageState>>;
   artifacts: Record<string, unknown>;
+  assistantMessages: Partial<Record<PromptLabStageId, PromptLabAssistantMessage[]>>;
 }

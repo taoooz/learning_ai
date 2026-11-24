@@ -2,9 +2,10 @@ import json
 
 from fastapi.testclient import TestClient
 
-from schemas.prompt_lab import PromptLabRunRequest
+from schemas.prompt_lab import PromptLabAssistantRequest, PromptLabRunRequest
 from services.prompt_lab_service import (
     compile_prompt_lab_stage,
+    run_prompt_lab_assistant,
     run_prompt_lab_stream,
 )
 from tests.test_chapter_plan import _blueprint, _valid_tasks
@@ -261,3 +262,48 @@ def test_prompt_lab_memory_search_returns_content_without_record_ids(monkeypatch
     result = create_memory_search("account-1")("推荐 重排")
     assert "负责过推荐位与重排规则设计" in result
     assert "mem-secret-1" not in result
+
+
+class FakeAssistantClient:
+    def __init__(self):
+        self.messages = None
+
+    def chat_with_tools(self, messages, tools, tool_functions, **kwargs):
+        self.messages = messages
+        return {
+            "choices": [{
+                "message": {
+                    "content": json.dumps({
+                        "answer": "输出规范应放在 system prompt。",
+                        "score": 76,
+                        "issues": ["输出格式被放进了 user prompt"],
+                        "suggestions": ["把 output_format 与示例移回 system"],
+                        "revisedSystemPrompt": "修订后的 system prompt",
+                        "revisedUserMessage": "修订后的 user prompt",
+                    }, ensure_ascii=False),
+                },
+            }],
+        }
+
+
+def test_prompt_lab_assistant_uses_stage_context_and_returns_revision(monkeypatch):
+    import services.prompt_lab_service as service
+
+    fake = FakeAssistantClient()
+    monkeypatch.setattr(service, "AgentClient", lambda: fake)
+    request = PromptLabAssistantRequest(
+        stage="task_content",
+        action="optimize_prompt",
+        message="把输出规范放回 system",
+        context={
+            "stageTitle": "任务正文生成",
+            "systemPrompt": "当前 system",
+            "userMessage": "当前 user",
+            "lastRun": {"content": "模型输出"},
+        },
+    )
+    result = run_prompt_lab_assistant(request)
+    assert result["score"] == 76
+    assert result["revisedSystemPrompt"] == "修订后的 system prompt"
+    assert "任务正文生成" in fake.messages[0]["content"]
+    assert "把输出规范放回 system" in fake.messages[-1]["content"]

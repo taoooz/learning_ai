@@ -35,3 +35,11 @@ class PromptLabRunRequest(BaseModel):
     max_searches: int = Field(0, ge=0, le=3)
     max_iterations: int = Field(1, ge=1, le=8)
     reasoning_effort: Optional[str] = None
+
+
+class PromptLabAssistantRequest(BaseModel):
+    stage: PromptLabStageId
+    action: Literal["chat", "evaluate", "optimize_prompt"] = "chat"
+    message: str = ""
+    context: dict = Field(default_factory=dict)
+    history: list[dict] = Field(default_factory=list)

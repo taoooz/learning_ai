@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
+  PromptLabAssistantAction,
+  PromptLabAssistantMessage,
+  PromptLabAssistantResult,
   PromptLabInputValue,
   PromptLabLastRun,
   PromptLabRunConfig,
@@ -42,7 +45,7 @@ function loadSession(): PromptLabSession | null {
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PromptLabSession;
-    if (parsed.version !== 3 || !parsed.activeStage || !parsed.stages || !parsed.artifacts) return null;
+    if (parsed.version !== 4 || !parsed.activeStage || !parsed.stages || !parsed.artifacts) return null;
     return parsed;
   } catch {
     return null;
@@ -113,12 +116,17 @@ export function CoursePromptLab() {
   const [activeStage, setActiveStage] = useState<PromptLabStageId>('outline_initial');
   const [stages, setStages] = useState<Partial<Record<PromptLabStageId, PromptLabStageState>>>({});
   const [artifacts, setArtifacts] = useState<Record<string, unknown>>({});
+  const [assistantMessages, setAssistantMessages] = useState<Partial<Record<PromptLabStageId, PromptLabAssistantMessage[]>>>({});
   const artifactsRef = useRef<Record<string, unknown>>({});
   const [ready, setReady] = useState(false);
   const [isCompiling, setIsCompiling] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outputTab, setOutputTab] = useState<OutputTab>('output');
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantInput, setAssistantInput] = useState('');
+  const [assistantBusy, setAssistantBusy] = useState(false);
+  const [assistantError, setAssistantError] = useState<string | null>(null);
   const autoCompileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastCompileSignatureRef = useRef('');
 
@@ -139,6 +147,7 @@ export function CoursePromptLab() {
       if (saved) {
         setActiveStage(saved.activeStage);
         setStages(saved.stages);
+        setAssistantMessages(saved.assistantMessages || {});
         artifactsRef.current = saved.artifacts;
         setArtifacts(saved.artifacts);
       }
@@ -153,10 +162,11 @@ export function CoursePromptLab() {
     if (!ready) return;
     const timer = setTimeout(() => {
       const session: PromptLabSession = {
-        version: 3,
+        version: 4,
         activeStage,
         stages,
         artifacts,
+        assistantMessages,
       };
       try {
         localStorage.setItem(SESSION_KEY, JSON.stringify(session));
@@ -165,7 +175,7 @@ export function CoursePromptLab() {
       }
     }, 350);
     return () => clearTimeout(timer);
-  }, [activeStage, artifacts, ready, stages]);
+  }, [activeStage, artifacts, assistantMessages, ready, stages]);
 
   const compileStage = useCallback(async (
     stageId: PromptLabStageId,
@@ -425,6 +435,89 @@ export function CoursePromptLab() {
     }
   };
 
+  const callAssistant = async (action: PromptLabAssistantAction, explicitMessage?: string) => {
+    if (!activeState || assistantBusy) return;
+    const message = (explicitMessage ?? assistantInput).trim()
+      || (action === 'evaluate'
+        ? '请评测最近一次模型输出，指出问题并给出 Prompt 改进建议。'
+        : action === 'optimize_prompt'
+          ? '请分析当前 Prompt，指出问题，并生成一份完整的 Prompt 改写。'
+          : '');
+    if (!message) return;
+
+    let parsedInputs: Record<string, unknown> = { raw: activeState.inputs };
+    let inputParseError: string | null = null;
+    try {
+      parsedInputs = coerceInputs(activeStage, activeState.inputs);
+    } catch (parseError) {
+      inputParseError = formatError(parseError);
+    }
+    const messagesForStage = assistantMessages[activeStage] || [];
+    const userMessage: PromptLabAssistantMessage = {
+      id: `assistant-user-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      role: 'user',
+      content: message,
+      action,
+      createdAt: Date.now(),
+    };
+    setAssistantMessages((previous) => ({
+      ...previous,
+      [activeStage]: [...messagesForStage, userMessage],
+    }));
+    setAssistantInput('');
+    setAssistantBusy(true);
+    setAssistantError(null);
+
+    try {
+      const response = await fetch('/api/debug/course-pipeline/assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stage: activeStage,
+          action,
+          message,
+          context: {
+            stageTitle: activeDefinition.title,
+            stageDescription: activeDefinition.description,
+            inputs: parsedInputs,
+            inputParseError,
+            systemPrompt: activeState.systemPrompt,
+            userMessage: activeState.userMessage,
+            lastRun: activeState.lastRun || null,
+          },
+          history: messagesForStage.map((item) => ({ role: item.role, content: item.content })),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || payload.detail || '优化助手调用失败');
+      const result = payload as PromptLabAssistantResult;
+      const assistantMessage: PromptLabAssistantMessage = {
+        id: `assistant-result-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        role: 'assistant',
+        content: String(result.answer || ''),
+        result,
+        createdAt: Date.now(),
+      };
+      setAssistantMessages((previous) => ({
+        ...previous,
+        [activeStage]: [...(previous[activeStage] || []), assistantMessage],
+      }));
+    } catch (assistantCallError) {
+      setAssistantError(formatError(assistantCallError));
+    } finally {
+      setAssistantBusy(false);
+    }
+  };
+
+  const applyAssistantRevision = (result: PromptLabAssistantResult) => {
+    updateActiveState((state) => ({
+      ...state,
+      systemPrompt: result.revisedSystemPrompt || state.systemPrompt,
+      userMessage: result.revisedUserMessage || state.userMessage,
+      promptDirty: Boolean(result.revisedSystemPrompt || result.revisedUserMessage),
+    }));
+  };
+
   const dynamicNextStage = useMemo((): PromptLabStageId | null => {
     if (activeStage === 'outline_initial') {
       const parsed = activeState?.lastRun?.parsed as Record<string, unknown> | undefined;
@@ -476,6 +569,10 @@ export function CoursePromptLab() {
     artifactsRef.current = {};
     setArtifacts({});
     setStages({});
+    setAssistantMessages({});
+    setAssistantOpen(false);
+    setAssistantInput('');
+    setAssistantError(null);
     setActiveStage('outline_initial');
     setError(null);
   };
@@ -491,6 +588,7 @@ export function CoursePromptLab() {
   const basicFields = activeDefinition.fields.filter((field) => !field.advanced);
   const advancedFields = activeDefinition.fields.filter((field) => field.advanced);
   const lastRun = activeState?.lastRun;
+  const activeAssistantMessages = assistantMessages[activeStage] || [];
   const blueprintSource = currentArtifacts.blueprint ? '调试产物' : '本地课程快照';
   const memorySourceLabel = {
     server_memory_v4: '服务端 Memory V4',
@@ -542,6 +640,13 @@ export function CoursePromptLab() {
               className="min-h-9 rounded-full border border-black/[0.09] bg-white px-3.5 text-[12px] font-semibold text-secondary hover:bg-black/[0.025]"
             >
               从上游产物刷新输入
+            </button>
+            <button
+              type="button"
+              onClick={() => setAssistantOpen((open) => !open)}
+              className="min-h-9 rounded-full border border-accent/30 bg-accent/[0.08] px-4 text-[12px] font-semibold text-[#8a4600] hover:bg-accent/[0.12]"
+            >
+              {assistantOpen ? '关闭优化助手' : '优化助手'}
             </button>
             <button
               type="button"
@@ -769,7 +874,169 @@ export function CoursePromptLab() {
           </div>
         </section>
       </div>
+
+      {assistantOpen && (
+        <aside className="fixed bottom-4 right-4 top-4 z-40 flex w-[430px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-black/[0.1] bg-[#fcfbf8] shadow-[0_18px_60px_rgba(17,24,39,0.22)]">
+          <div className="flex items-start justify-between border-b border-black/[0.07] bg-white px-4 py-3">
+            <div>
+              <h2 className="text-[15px] font-bold text-primary">Prompt 优化助手</h2>
+              <p className="mt-0.5 text-[11px] text-tertiary">
+                当前：{activeDefinition.title} · 已携带输入、Prompt、最近输出与校验
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAssistantOpen(false)}
+              className="rounded-full px-2 py-1 text-[16px] leading-none text-tertiary hover:bg-black/[0.04] hover:text-primary"
+              aria-label="关闭优化助手"
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="flex gap-2 border-b border-black/[0.06] bg-[#f8f6f1] px-3 py-2.5">
+            <button
+              type="button"
+              disabled={!lastRun || assistantBusy}
+              onClick={() => void callAssistant('evaluate')}
+              className="rounded-full border border-black/[0.08] bg-white px-3 py-1.5 text-[11px] font-semibold text-secondary disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              评测本次输出
+            </button>
+            <button
+              type="button"
+              disabled={assistantBusy || !activeState?.systemPrompt.trim()}
+              onClick={() => void callAssistant('optimize_prompt')}
+              className="rounded-full bg-accent px-3 py-1.5 text-[11px] font-semibold text-primary disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              生成 Prompt 改写
+            </button>
+            <span className="ml-auto self-center text-[10px] text-tertiary">
+              {lastRun ? '输出已纳入上下文' : '尚无模型输出'}
+            </span>
+          </div>
+
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
+            {activeAssistantMessages.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-black/[0.1] bg-white/60 px-4 py-5 text-[12px] leading-relaxed text-secondary">
+                你可以直接说出自己的优化思路，例如“这个 Prompt 为什么总把示例写进 user？”“我希望输出更短但保留验证步骤”。我也会自动结合当前环节上下文分析。
+              </div>
+            ) : activeAssistantMessages.map((message) => (
+              <AssistantMessageCard
+                key={message.id}
+                message={message}
+                onApplyRevision={applyAssistantRevision}
+              />
+            ))}
+            {assistantBusy && (
+              <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-3 text-[12px] text-secondary">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
+                正在结合当前 Prompt、输入和输出分析…
+              </div>
+            )}
+            {assistantError && (
+              <div className="rounded-xl border border-error/20 bg-error/[0.06] px-3 py-2 text-[11.5px] text-error">
+                {assistantError}
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-black/[0.07] bg-white p-3">
+            <textarea
+              value={assistantInput}
+              onChange={(event) => setAssistantInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                  event.preventDefault();
+                  void callAssistant('chat');
+                }
+              }}
+              rows={3}
+              placeholder="说说你的优化思路，或追问它的评估结论…（⌘/Ctrl + Enter 发送）"
+              className="w-full resize-y rounded-xl border border-black/[0.09] bg-[#fbfbfa] p-3 text-[12px] leading-relaxed text-primary outline-none focus:border-accent/50"
+            />
+            <div className="mt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => void callAssistant('chat')}
+                disabled={assistantBusy || !assistantInput.trim()}
+                className="rounded-full bg-primary px-4 py-2 text-[12px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                发送给助手
+              </button>
+            </div>
+          </div>
+        </aside>
+      )}
     </main>
+  );
+}
+
+function AssistantMessageCard({
+  message,
+  onApplyRevision,
+}: {
+  message: PromptLabAssistantMessage;
+  onApplyRevision: (result: PromptLabAssistantResult) => void;
+}) {
+  if (message.role === 'user') {
+    return (
+      <div className="ml-8 rounded-xl bg-primary px-3 py-2.5 text-[12px] leading-relaxed text-white">
+        {message.content}
+      </div>
+    );
+  }
+
+  const result = message.result;
+  const hasRevision = Boolean(result?.revisedSystemPrompt || result?.revisedUserMessage);
+  return (
+    <div className="space-y-2 rounded-2xl border border-black/[0.07] bg-white p-3 shadow-[0_2px_12px_rgba(0,0,0,0.04)]">
+      {typeof result?.score === 'number' && (
+        <div className="flex items-center gap-2">
+          <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${result.score >= 80 ? 'bg-completed/10 text-[#1e7f4f]' : result.score >= 60 ? 'bg-accent/10 text-[#9a4d00]' : 'bg-error/[0.08] text-error'}`}>
+            {result.score} 分
+          </span>
+          <span className="text-[10.5px] text-tertiary">优化助手评估</span>
+        </div>
+      )}
+      <pre className="whitespace-pre-wrap break-words font-sans text-[12px] leading-[1.7] text-primary">
+        {message.content || '已完成分析。'}
+      </pre>
+      {result?.issues && result.issues.length > 0 && (
+        <div>
+          <p className="text-[10.5px] font-bold uppercase tracking-wide text-error">发现的问题</p>
+          <ul className="mt-1 space-y-1 text-[11.5px] leading-relaxed text-secondary">
+            {result.issues.map((issue, index) => <li key={`${message.id}-issue-${index}`}>• {issue}</li>)}
+          </ul>
+        </div>
+      )}
+      {result?.suggestions && result.suggestions.length > 0 && (
+        <div>
+          <p className="text-[10.5px] font-bold uppercase tracking-wide text-accent">改进建议</p>
+          <ul className="mt-1 space-y-1 text-[11.5px] leading-relaxed text-secondary">
+            {result.suggestions.map((suggestion, index) => <li key={`${message.id}-suggestion-${index}`}>• {suggestion}</li>)}
+          </ul>
+        </div>
+      )}
+      {hasRevision && result && (
+        <div className="rounded-xl border border-accent/20 bg-accent/[0.04] p-2.5">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="text-[10.5px] font-bold text-[#8a4600]">已生成 Prompt 改写</span>
+            <button
+              type="button"
+              onClick={() => onApplyRevision(result)}
+              className="rounded-full bg-accent px-3 py-1.5 text-[10.5px] font-semibold text-primary"
+            >
+              应用到编辑器
+            </button>
+          </div>
+          <div className="space-y-1 text-[10.5px] text-secondary">
+            {result.revisedSystemPrompt && <div>System Prompt：{result.revisedSystemPrompt.length} 字符</div>}
+            {result.revisedUserMessage && <div>User Message：{result.revisedUserMessage.length} 字符</div>}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
