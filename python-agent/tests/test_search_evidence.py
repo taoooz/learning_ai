@@ -78,6 +78,95 @@ def test_search_decision_policy_requires_model_judgment():
     assert "由你判断" in policy
     assert "最多执行 2 次 web_search" in policy
     assert "禁止编造 URL" in policy
+    assert "站点偏好只是可选提示" in policy
+    assert "不强制" in policy
+
+
+def test_collector_does_not_force_site_filter_and_offers_optional_hint(tmp_path, monkeypatch):
+    """B3：模型工具搜索不再强制 site: 改写；偏好域保留打分，站点只作可选提示。"""
+    monkeypatch.setenv("EVIDENCE_STORE_DIR", str(tmp_path / "evidence"))
+    collector = ChapterEvidenceCollector(
+        "course-1",
+        "ch-1",
+        "React 进阶",
+        "表单与状态",
+        task_title="useActionState",
+        task_goal="掌握 React 19 表单状态",
+    )
+    results = [{
+        "title": "Community guide",
+        "url": "https://example.com/react-guide",
+        "body": "guide",
+        "authorityScore": 60,
+        "kind": "knowledge",
+        "preferred": False,
+    }]
+
+    with patch.object(search_evidence, "search_web_structured", return_value=results) as search_mock:
+        text = collector.web_search("React useActionState 教程")
+
+    kwargs = search_mock.call_args.kwargs
+    assert kwargs["site_filter"] is False
+    assert "react.dev" in kwargs["preferred_domains"]
+    assert "可选提示" in text
+    assert "react.dev" in text
+    assert "非强制" in text
+
+
+def test_collector_skips_site_hint_when_preferred_source_present(tmp_path, monkeypatch):
+    monkeypatch.setenv("EVIDENCE_STORE_DIR", str(tmp_path / "evidence"))
+    collector = ChapterEvidenceCollector(
+        "course-1",
+        "ch-1",
+        "React 进阶",
+        "表单与状态",
+        task_title="useActionState",
+        task_goal="掌握 React 19 表单状态",
+    )
+    results = [{
+        "title": "React official",
+        "url": "https://react.dev/reference/react/useactionstate",
+        "body": "official",
+        "authorityScore": 95,
+        "kind": "knowledge",
+        "preferred": True,
+        "isPrimary": True,
+    }]
+
+    with patch.object(search_evidence, "search_web_structured", return_value=results):
+        text = collector.web_search("React useActionState 官方文档")
+
+    assert "可选提示" not in text
+
+
+def test_collector_keeps_preferred_domains_when_model_writes_site_query(tmp_path, monkeypatch):
+    """模型自己写 site: 时不再清空偏好域：偏好域仍参与权威打分（查询本身不被改写）。"""
+    monkeypatch.setenv("EVIDENCE_STORE_DIR", str(tmp_path / "evidence"))
+    collector = ChapterEvidenceCollector(
+        "course-1",
+        "ch-1",
+        "React 进阶",
+        "表单与状态",
+        task_title="useActionState",
+        task_goal="掌握 React 19 表单状态",
+    )
+    results = [{
+        "title": "React official",
+        "url": "https://react.dev/reference/react/useactionstate",
+        "body": "official",
+        "authorityScore": 95,
+        "kind": "knowledge",
+        "preferred": True,
+        "isPrimary": True,
+    }]
+
+    with patch.object(search_evidence, "search_web_structured", return_value=results) as search_mock:
+        text = collector.web_search("site:react.dev useActionState")
+
+    kwargs = search_mock.call_args.kwargs
+    assert kwargs["site_filter"] is False
+    assert "react.dev" in kwargs["preferred_domains"]
+    assert "可选提示" not in text
 
 
 def test_prepare_search_context_executes_tool_and_keeps_result_for_final_generation(monkeypatch):

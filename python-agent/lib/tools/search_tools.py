@@ -19,8 +19,8 @@ SEARCH_CACHE_TTL = int(os.getenv("FREE_SEARCH_CACHE_TTL", "3600"))
 _SEARCH_CACHE: dict[str, tuple[float, list[dict]]] = {}
 
 
-def _cache_key(query: str, max_results: int, preferred_domains: list[str]) -> str:
-    return f"{SEARCH_BACKEND}|{max_results}|{','.join(preferred_domains)}|{query.strip().lower()}"
+def _cache_key(query: str, max_results: int, preferred_domains: list[str], site_filter: bool = True) -> str:
+    return f"{SEARCH_BACKEND}|{max_results}|{','.join(preferred_domains)}|{int(site_filter)}|{query.strip().lower()}"
 
 
 def _cache_get(key: str) -> list[dict] | None:
@@ -76,17 +76,24 @@ def search_web_structured(
     query: str,
     max_results: int = 5,
     preferred_domains: list[str] | None = None,
+    *,
+    site_filter: bool = True,
 ) -> list[dict]:
-    """免费结构化搜索：权威域 site: 优先，Google backend 优先，lite backend 兜底。"""
+    """免费结构化搜索：Google backend 优先，lite backend 兜底。
+
+    site_filter=True（默认，确定性预搜路径）会前置一条 site: 偏好域查询；
+    site_filter=False（模型工具路径）不改写查询，偏好域只参与权威打分与排序，
+    是否使用 site: 限定来源由模型自行决定。
+    """
     query = query.strip()
     preferred_domains = [d.lower().removeprefix("www.") for d in (preferred_domains or []) if d.strip()]
-    cache_key = _cache_key(query, max_results, preferred_domains)
+    cache_key = _cache_key(query, max_results, preferred_domains, site_filter)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
 
     queries: list[str] = []
-    if preferred_domains:
+    if preferred_domains and site_filter:
         queries.append(f"site:{preferred_domains[0]} {query}")
     queries.append(query)
 

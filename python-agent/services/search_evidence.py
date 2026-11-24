@@ -44,14 +44,14 @@ class ChapterEvidenceCollector:
             self.task_title,
             self.task_goal,
         )
-        # 模型已经写 site: 时不再追加偏好域，避免生成重复 site: 查询。
-        if "site:" in query.lower():
-            preferred_domains = []
+        # site: 偏好降级为可选提示：不再强制改写模型查询（site_filter=False），
+        # 偏好域只参与权威打分与排序；是否用 site: 限定来源由模型自行决定。
         try:
             results = search_web_structured(
                 query,
                 max_results=max_results,
                 preferred_domains=preferred_domains,
+                site_filter=False,
             )
         except Exception as exc:  # noqa: BLE001 搜索失败交还模型自行降级
             return f"搜索出错：{exc}"
@@ -78,7 +78,18 @@ class ChapterEvidenceCollector:
                 f"  证据ID: {source.get('evidenceId', '')} | 类型: {source.get('kind', 'knowledge')}"
             )
         text = "\n\n".join(lines)
-        return text[:3000] + ("\n...(搜索结果已截断)" if len(text) > 3000 else "")
+        formatted = text[:3000] + ("\n...(搜索结果已截断)" if len(text) > 3000 else "")
+        # 偏好站点没有出现在结果里时，给模型一条可选提示（不强制、不改写查询）。
+        if (
+            preferred_domains
+            and "site:" not in query.lower()
+            and not any(result.get("preferred") for result in results)
+        ):
+            formatted += (
+                f"\n\n（可选提示：主题相关的权威站点有 {'、'.join(preferred_domains)}；"
+                "如需限定来源，可自行在搜索查询中使用 site: 语法，非强制。）"
+            )
+        return formatted
 
     def read_url(self, url: str) -> str:
         """读取模型指定网页；正文由模型消费，不再额外生成证据摘要。"""
@@ -105,6 +116,7 @@ def format_search_decision_policy(max_searches: int = 2) -> str:
 - 先检查上下文中已有的搜索证据；证据足够时直接生成，不要为了“保险”重复搜索。
 - 只有以下情况需要搜索：信息可能已过时、涉及最新版本/价格/政策/产品能力、关键事实不确定，或已有证据无法覆盖当前任务。
 - 稳定基础知识、已有证据能够支撑的解释和例子不要搜索。
+- 站点偏好只是可选提示：需要限定来源时可自行在查询中使用 site: 语法，不强制；不加 site: 的搜索也会按来源权威度排序。
 - 最多执行 {max_searches} 次 web_search。搜索后基于已有信息继续完成任务，不要无限追查。
 - 引用外部事实时只能使用工具结果中出现的来源和证据 ID，禁止编造 URL 或依据训练记忆补造来源。
 """.rstrip()

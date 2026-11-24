@@ -16,6 +16,7 @@ from uuid import uuid4
 from lib.minimax_agent import AgentClient
 from lib.minimax import MiniMaxClient, extract_usage
 from lib.tools.search_tools import SEARCH_TOOLS
+from lib.tools.source_registry import infer_preferred_domains
 from services.search_evidence import ChapterEvidenceCollector, format_search_decision_policy
 from services.evidence_store import evidence_to_prompt, task_evidence_coverage
 from services.content_stream_parser import ContentStreamParser
@@ -237,10 +238,47 @@ def build_task_content_messages(
     return {"system": system_prompt, "user": user_prompt}
 
 
+def format_task_coverage_hint(coverage: dict | None) -> str:
+    """把关键词覆盖结果降级为提示信号：命中≠新鲜/充分，是否搜索由模型判断。"""
+    if not coverage:
+        return ""
+    if coverage.get("covered"):
+        return (
+            "## 证据覆盖提示（初步信号，不是结论）\n"
+            "已有证据与当前任务的关键词初步匹配，但关键词命中不代表证据新鲜、充分。"
+            "是否足够由你判断：足以支撑正文时输出 NO_SEARCH；可能过时、缺关键事实或深度不足时，调用搜索工具补充。"
+        )
+    return (
+        "## 证据覆盖提示（初步信号，不是结论）\n"
+        "已有证据与当前任务的关键词匹配较弱或暂无证据，可能不足以覆盖当前任务。"
+        "是否需要搜索由你判断：稳定基础知识且已有信息足够时可不搜索；否则调用搜索工具补充。"
+    )
+
+
+def _optional_sites_hint(request: TaskStreamRequest, preferred_sites: list[str] | None) -> str:
+    """site: 偏好表降级为可选提示：只提供参考站点，不强制改写查询。"""
+    sites = preferred_sites if preferred_sites is not None else infer_preferred_domains(
+        request.courseTopic,
+        request.chapter.title,
+        request.task.title,
+        request.task.taskGoal,
+    )
+    if not sites:
+        return ""
+    return (
+        "\n\n## 可选参考站点（非强制）\n"
+        f"主题相关的权威站点：{'、'.join(sites)}。"
+        f"如需限定来源，可自行在搜索查询中使用 site: 语法（如 site:{sites[0]}）；"
+        "这只是可选提示，不加 site: 的搜索也会按来源权威度排序。"
+    )
+
+
 def build_task_search_decision_prompt(
     request: TaskStreamRequest,
     evidence: str | None = None,
     sources: list[dict] | None = None,
+    coverage_hint: str = "",
+    preferred_sites: list[str] | None = None,
 ) -> str:
     """构建只负责检索判断的紧凑 prompt，避免复用完整正文教学配方。"""
     source_lines = "\n".join(
@@ -249,14 +287,21 @@ def build_task_search_decision_prompt(
         if source.get('url')
     ) or '无'
     evidence_text = evidence or '无'
-    return (
-        "你是课程内容检索决策器，只判断当前任务是否需要补充联网证据，不要撰写正文。\n\n"
+    user_prompt = (
         f"## 课程与任务\n"
         f"- 课程主题：{request.courseTopic}\n"
         f"- 章节：{request.chapter.title}｜{request.chapter.teachingGoal}\n"
         f"- 当前任务：{request.task.title}｜{request.task.taskGoal}\n\n"
         f"## 已有证据\n{evidence_text}\n\n"
-        f"## 可引用来源\n{source_lines}\n\n"
+        f"## 可引用来源\n{source_lines}"
+    )
+    if coverage_hint:
+        user_prompt += f"\n\n{coverage_hint}"
+    user_prompt += _optional_sites_hint(request, preferred_sites)
+    return (
+        "你是课程内容检索决策器，只判断当前任务是否需要补充联网证据，不要撰写正文。\n\n"
+        + user_prompt
+        + "\n\n"
         + format_search_decision_policy(max_searches=1)
         + "\n\n完成判断后：需要补充时调用搜索工具；不需要时只输出 NO_SEARCH。"
     )
@@ -266,6 +311,8 @@ def build_task_search_decision_messages(
     request: TaskStreamRequest,
     evidence: str | None = None,
     sources: list[dict] | None = None,
+    coverage_hint: str = "",
+    preferred_sites: list[str] | None = None,
 ) -> dict[str, str]:
     source_lines = "\n".join(
         f"- {source.get('title', '')}（{source.get('url', '')}）"
@@ -286,6 +333,9 @@ def build_task_search_decision_messages(
         f"## 已有证据\n{evidence_text}\n\n"
         f"## 可引用来源\n{source_lines}"
     )
+    if coverage_hint:
+        user_prompt += f"\n\n{coverage_hint}"
+    user_prompt += _optional_sites_hint(request, preferred_sites)
     return {"system": system_prompt, "user": user_prompt}
 
 
@@ -427,19 +477,19 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
     received_delta = False
     stream_usage = None
     try:
-        needs_search_decision = (
-            hasattr(client, "prepare_search_context")
-            and not coverage["covered"]
-        )
+        # B3：关键词覆盖只是提示信号，不再一票否决搜索；搜索工具始终可用，
+        # 证据是否新鲜/充分、要不要搜索由模型在决策阶段自行判断。
+        needs_search_decision = hasattr(client, "prepare_search_context")
         print(
-            f"[任务流] requestId={request_id} 证据覆盖={coverage['covered']} "
-            f"命中词={coverage['matchedTerms']} 搜索判断={needs_search_decision}"
+            f"[任务流] requestId={request_id} 证据覆盖提示={coverage['covered']} "
+            f"命中词={coverage['matchedTerms']} 搜索判断=模型自主"
         )
         if needs_search_decision:
             decision_messages = build_task_search_decision_messages(
                 request,
                 evidence=evidence,
                 sources=sources,
+                coverage_hint=format_task_coverage_hint(coverage),
             )
             decision_messages = [
                 {"role": "system", "content": decision_messages["system"]},

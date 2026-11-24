@@ -497,8 +497,10 @@ def test_agent_model_decides_task_search_and_emits_sources(tmp_path, monkeypatch
     assert task["sourceRefs"][0]["url"] == results[0]["url"]
 
 
-def test_agent_model_reuses_cached_chapter_evidence_without_search(tmp_path, monkeypatch):
-    """已有证据覆盖当前任务时，直接进入正文，跳过额外的检索模型调用。"""
+def test_covered_task_still_gets_search_tools_and_model_may_skip_search(tmp_path, monkeypatch):
+    """B3：关键词覆盖只是提示——决策阶段仍执行、搜索工具始终可用，模型可自主选择不搜。"""
+    from unittest.mock import patch
+    import services.search_evidence as search_evidence
     from services.evidence_store import merge_chapter_evidence_results
 
     monkeypatch.setenv("EVIDENCE_STORE_DIR", str(tmp_path / "evidence"))
@@ -522,15 +524,137 @@ def test_agent_model_reuses_cached_chapter_evidence_without_search(tmp_path, mon
 
     request = _request()
     client = FakeSearchDecisionClient(deltas=["正文。\n\n> 要点。"], search_query=None)
-    events = _events(request, client)
+    with patch.object(search_evidence, "search_web_structured") as search_mock:
+        events = _events(request, client)
 
-    assert client.decision_called is False
+    # 覆盖命中不再一票否决：模型仍拿到完整搜索工具，由它判断证据够不够。
+    assert client.decision_called is True
+    assert {
+        tool.get("function", {}).get("name")
+        for tool in (client.tools or [])
+    } == {"web_search", "read_url"}
+    # 覆盖结果以提示注入，而不是结论。
+    decision_user = client.messages[1]["content"]
+    assert "证据覆盖提示" in decision_user
+    assert "关键词初步匹配" in decision_user
+    assert "由你判断" in decision_user
+    # 模型判断证据足够（NO_SEARCH）→ 不发起搜索，不重复下发来源。
+    search_mock.assert_not_called()
     assert [event["type"] for event in events].count("sources_ready") == 1
     sources_event = next(event for event in events if event["type"] == "sources_ready")
     assert sources_event["payload"]["sources"][0]["url"] == cached_result["url"]
+    assert len(client.final_messages) == 2
     assert client.final_messages[0]["content"].startswith("你是课程内容检索决策器") is False
     assert "<output_format>" in client.final_messages[0]["content"]
     assert client.reasoning_effort == "none"
+
+
+def test_covered_task_model_may_still_search_when_evidence_insufficient(tmp_path, monkeypatch):
+    """B3：覆盖命中时模型仍可能判断证据不足并发起搜索，新来源照常下发。"""
+    from unittest.mock import patch
+    import services.search_evidence as search_evidence
+    from services.evidence_store import merge_chapter_evidence_results
+
+    monkeypatch.setenv("EVIDENCE_STORE_DIR", str(tmp_path / "evidence"))
+    cached_result = {
+        "title": "指令三要素",
+        "url": "https://example.com/instruction-elements",
+        "body": "解释指令目的、上下文和输出格式，帮助学习者把要求说清楚。",
+        "authorityScore": 90,
+        "kind": "knowledge",
+        "preferred": True,
+        "isPrimary": True,
+    }
+    merge_chapter_evidence_results(
+        "course-1",
+        "ch-1",
+        "提示词工程实践",
+        "指令写作基础",
+        [{"kind": "agent", "query": "previous query", "preferredDomains": []}],
+        [cached_result],
+    )
+    fresh_result = {
+        "title": "指令三要素（2026 更新）",
+        "url": "https://example.com/instruction-elements-2026",
+        "body": "补充最新实践与反例，更新指令三要素的边界说明。",
+        "authorityScore": 95,
+        "kind": "knowledge",
+        "preferred": True,
+        "isPrimary": True,
+    }
+
+    request = _request()
+    client = FakeSearchDecisionClient(
+        deltas=["正文。\n\n> 要点。"],
+        search_query="指令三要素 最新实践",
+    )
+    with patch.object(search_evidence, "search_web_structured", return_value=[fresh_result]):
+        events = _events(request, client)
+
+    assert client.decision_called is True
+    assert "关键词初步匹配" in client.messages[1]["content"]
+    # 两阶段架构保留：决策阶段的工具上下文复用进正文 messages。
+    assert any(message.get("role") == "tool" for message in client.final_messages)
+    sources_events = [event for event in events if event["type"] == "sources_ready"]
+    assert len(sources_events) == 2
+    assert any(
+        source["url"] == fresh_result["url"]
+        for source in sources_events[-1]["payload"]["sources"]
+    )
+    task = next(event for event in events if event["type"] == "task_completed")["payload"]["task"]
+    assert any(ref["url"] == fresh_result["url"] for ref in task["sourceRefs"])
+
+
+def test_uncovered_task_gets_weak_match_hint_and_search_tools(tmp_path, monkeypatch):
+    """未覆盖路径不回归：仍走模型决策，提示措辞为弱匹配。"""
+    monkeypatch.setenv("EVIDENCE_STORE_DIR", str(tmp_path / "evidence"))
+    request = _request()
+    client = FakeSearchDecisionClient(deltas=["正文。\n\n> 要点。"], search_query=None)
+    events = _events(request, client)
+
+    assert client.decision_called is True
+    assert {
+        tool.get("function", {}).get("name")
+        for tool in (client.tools or [])
+    } == {"web_search", "read_url"}
+    assert "匹配较弱或暂无证据" in client.messages[1]["content"]
+    assert [event["type"] for event in events].count("task_completed") == 1
+
+
+def test_format_task_coverage_hint_is_advisory_not_gate():
+    from services.task_content_service import format_task_coverage_hint
+
+    covered = format_task_coverage_hint({"covered": True, "matchedTerms": ["三要素"]})
+    assert "关键词初步匹配" in covered
+    assert "不代表证据新鲜、充分" in covered
+    assert "NO_SEARCH" in covered
+    uncovered = format_task_coverage_hint({"covered": False, "matchedTerms": []})
+    assert "匹配较弱或暂无证据" in uncovered
+    assert "由你判断" in uncovered
+    assert format_task_coverage_hint(None) == ""
+    assert format_task_coverage_hint({}) == ""
+
+
+def test_search_decision_messages_inject_coverage_hint_and_optional_sites():
+    from services.task_content_service import (
+        build_task_search_decision_messages,
+        format_task_coverage_hint,
+    )
+
+    request = _request(courseTopic="React 进阶")
+    hint = format_task_coverage_hint({"covered": True, "matchedTerms": ["react"]})
+    messages = build_task_search_decision_messages(request, coverage_hint=hint)
+    assert "证据覆盖提示" in messages["user"]
+    # site: 偏好自动推断，且只作为可选提示出现。
+    assert "可选参考站点（非强制）" in messages["user"]
+    assert "react.dev" in messages["user"]
+    assert "site:" in messages["user"]
+    # 显式空列表抑制站点提示；显式列表覆盖自动推断。
+    suppressed = build_task_search_decision_messages(request, preferred_sites=[])
+    assert "可选参考站点" not in suppressed["user"]
+    custom = build_task_search_decision_messages(request, preferred_sites=["nextjs.org"])
+    assert "nextjs.org" in custom["user"]
+    assert "react.dev" not in custom["user"]
 
 
 def test_search_decision_failure_does_not_block_task_generation():
