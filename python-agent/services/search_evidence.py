@@ -120,3 +120,25 @@ def format_search_decision_policy(max_searches: int = 2) -> str:
 - 最多执行 {max_searches} 次 web_search。搜索后基于已有信息继续完成任务，不要无限追查。
 - 引用外部事实时只能使用工具结果中出现的来源和证据 ID，禁止编造 URL 或依据训练记忆补造来源。
 """.rstrip()
+
+
+def format_coverage_hint(coverage: dict | None) -> str:
+    """把关键词覆盖结果降级为提示信号（章节计划/课程架构复用）。
+
+    命中≠新鲜/充分，是否搜索由模型判断；与任务正文的
+    format_task_coverage_hint 同构，但措辞不绑定 NO_SEARCH 决策协议。
+    """
+    if not coverage:
+        return ""
+    if coverage.get("covered"):
+        return (
+            "## 证据覆盖提示（初步信号，不是结论）\n"
+            "已有证据与当前生成任务的关键词初步匹配，但关键词命中不代表证据新鲜、充分。"
+            "是否足够由你判断：足以支撑当前任务时直接完成、不要搜索；"
+            "可能过时、缺关键事实或深度不足时，调用搜索工具补充。"
+        )
+    return (
+        "## 证据覆盖提示（初步信号，不是结论）\n"
+        "已有证据与当前生成任务的关键词匹配较弱或暂无证据，可能不足。"
+        "是否需要搜索由你判断：稳定基础知识且已有信息足够时可不搜索；否则调用搜索工具补充。"
+    )

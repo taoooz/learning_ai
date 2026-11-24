@@ -20,7 +20,7 @@ from services.learning_v2_errors import (
     ChapterNotFoundError,
     PlanValidationError,
 )
-from services.search_evidence import ChapterEvidenceCollector, format_search_decision_policy
+from services.search_evidence import ChapterEvidenceCollector, format_coverage_hint, format_search_decision_policy
 from services.memory_context_v4 import format_memory_context_for_prompt
 from services.outline_service import LEVEL_CONFIDENCE_THRESHOLD
 
@@ -597,7 +597,8 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
                 for objective in objectives
             ),
         )
-        allow_search = not coverage["covered"]
+        # B3：关键词覆盖只是提示信号，不再一票否决搜索；
+        # 搜索工具始终可用，证据是否新鲜/充分由模型自行判断。
         stage_messages = build_chapter_plan_messages(
             topic=blueprint.get("topic", ""),
             chapter=chapter,
@@ -610,10 +611,13 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
             mission=blueprint.get("mission"),
             teaching_state=teaching_state,
             memory_context=memory_context,
-            allow_search=allow_search,
+            allow_search=True,
         )
         system_prompt = stage_messages["system"]
         user_message = "请为这个章节生成任务计划。\n\n" + stage_messages["user"]
+        coverage_hint = format_coverage_hint(coverage)
+        if coverage_hint:
+            user_message += f"\n\n{coverage_hint}"
         if repair_notes:
             user_message += f"\n\n上一版输出存在以下问题，请修正后重新输出完整 JSON：\n{repair_notes}"
 
@@ -628,11 +632,11 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
             response = await asyncio.to_thread(
                 client.chat_with_tools,
                 messages=messages,
-                tools=SEARCH_TOOLS if allow_search else [],
+                tools=SEARCH_TOOLS,
                 tool_functions=collector.tool_functions,
                 max_tokens=16000,
                 reasoning_split=True,
-                max_iterations=2 if allow_search else 1,
+                max_iterations=2,
                 max_searches=1,
                 reasoning_effort=PLAN_REASONING_EFFORT,
                 response_format=response_format,

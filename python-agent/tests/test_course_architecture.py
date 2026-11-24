@@ -649,3 +649,31 @@ def test_chat_only_client_receives_strict_schemas(monkeypatch):
     ))
     assert client.formats[0]["json_schema"]["schema"] == COURSE_CHAPTERS_JSON_SCHEMA
     assert client.formats[1]["json_schema"]["schema"] == COURSE_META_JSON_SCHEMA
+
+
+def test_architect_messages_coverage_is_hint_not_gate():
+    """B3：架构阶段覆盖度只作提示，搜索策略始终在 system，是否搜索由模型判断。"""
+    from services.course_architect_service import build_course_architect_chapters_messages
+
+    covered = build_course_architect_chapters_messages(
+        "推荐系统核心链路",
+        {"learningDirection": "推荐系统核心链路"},
+        {"estimatedLevel": "intermediate"},
+        sources=[{
+            "title": "推荐系统核心链路详解",
+            "url": "https://example.com/recsys",
+            "summary": "召回、排序与重排的完整链路",
+        }],
+    )
+    assert "证据覆盖提示" in covered["user"]
+    assert "初步匹配" in covered["user"]
+    assert "联网搜索决策" in covered["system"]
+
+    uncovered = build_course_architect_chapters_messages(
+        "推荐系统核心链路",
+        {},
+        {"estimatedLevel": "intermediate"},
+        sources=[],
+    )
+    assert "匹配较弱或暂无证据" in uncovered["user"]
+    assert "联网搜索决策" in uncovered["system"]

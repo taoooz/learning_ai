@@ -81,3 +81,18 @@ def test_toc_agent_blocks_unreviewed_architecture():
         ]
     assert [event["type"] for event in events] == ["thinking", "error"]
     assert "审查未通过" in events[-1]["message"]
+
+
+def test_toc_agent_does_not_gate_search_by_keyword_coverage():
+    """B3：TOC 不再按关键词覆盖禁搜，搜索判断交给架构阶段的模型。"""
+    captured = {}
+
+    def fake_stream(**kwargs):
+        captured.update(kwargs)
+        return _stream(_result())
+
+    with patch.object(toc_agent, "stream_course_architecture", side_effect=fake_stream):
+        list(toc_agent.stream_toc_with_tools(
+            {"topic": "推荐系统核心链路", "learnerPositioning": {"estimatedLevel": "intermediate"}},
+        ))
+    assert captured.get("allow_search", True) is True

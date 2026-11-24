@@ -2,6 +2,10 @@
 
 > 详细历史见 `docs/archive/CHANGELOG-2026-09.md`（2026-09 及更早）与 `docs/archive/CHANGELOG-2026-10.md`（2026-10-08 交互组件与文风规范等）、`docs/archive/CHANGELOG-2026-11.md`（2026-11-19～21 Memory V4）。
 
+### B3 收尾：章节计划与课程架构搜索门拆除（2026-11-24）
+- 章节计划与 TOC/架构拆除 `allow_search=not coverage["covered"]` 关键词门：搜索工具始终可用，覆盖度经共享 `format_coverage_hint` 降级为 user 侧提示（与任务正文同构、不绑定 NO_SEARCH 协议）；架构提示在 messages 构建内按注入 sources 计算，规格同步"覆盖度与站点偏好均为提示非门禁"
+- 回归：覆盖章节仍拿工具+提示、未覆盖弱匹配提示、架构提示非门、TOC 不再传禁搜参数；pytest 404、TS 333 全通过
+
 ### 主路径大 JSON 迁移 json_schema strict、引号修复退役（2026-11-23）
 - 章节计划与 Architect 两阶段（章节/meta，含流式与修复轮）改用 `response_format=json_schema(strict)`；schema 与 pydantic 模型/消费字段同源，新增 `lib/structured_output.py`（env 开关 `LLM_STRICT_JSON_SCHEMA` 默认开，关闭回退 json_object）
 - 传输层（chat/_call_llm/流式）遇网关拒绝（400/404/415/422）自动逐级降级 json_schema→json_object→无约束并记日志，降级不消耗重试配额；chat_with_tools/stream_chat_with_tools/_call_llm 新增 response_format 透传

@@ -23,8 +23,9 @@ from schemas.course_architecture import (
     validate_course_architecture,
     validate_course_chapters,
 )
+from services.evidence_store import task_evidence_coverage
 from services.memory_context_v4 import wrap_untrusted_context
-from services.search_evidence import format_search_decision_policy
+from services.search_evidence import format_coverage_hint, format_search_decision_policy
 
 PROMPT_VERSION = "course-architect-v2-two-stage"
 ARCHITECT_REASONING_EFFORT = os.getenv("ARCHITECT_REASONING_EFFORT", "none").strip() or None
@@ -137,7 +138,7 @@ def build_course_architect_chapters_messages(
     allow_search: bool = True,
     allow_memory_search: bool = False,
 ) -> dict[str, str]:
-    return _split_embedded_context(
+    parts = _split_embedded_context(
         build_course_architect_chapters_prompt(
             topic,
             outline,
@@ -151,6 +152,16 @@ def build_course_architect_chapters_messages(
         "<input_context>",
         "</input_context>",
     )
+    # B3：关键词覆盖只是提示信号，不再一票否决搜索；是否搜索由模型判断。
+    coverage = task_evidence_coverage(
+        {"sources": sources or []},
+        topic,
+        str(outline.get("learningGoal") or outline.get("learningDirection") or ""),
+    )
+    coverage_hint = format_coverage_hint(coverage)
+    if coverage_hint:
+        parts["user"] = parts["user"] + "\n\n" + coverage_hint
+    return parts
 
 
 def build_course_architect_meta_prompt(

@@ -6,7 +6,7 @@ from services.course_architect_service import (
     architecture_chapter_to_node,
     stream_course_architecture,
 )
-from services.evidence_store import get_topic_evidence, evidence_to_prompt, task_evidence_coverage
+from services.evidence_store import get_topic_evidence, evidence_to_prompt
 
 
 def _learner_from_blueprint(blueprint: dict, planning_payload: dict | None) -> dict:
@@ -48,11 +48,7 @@ def stream_toc_with_tools(
     learner = _learner_from_blueprint(blueprint, planning_payload)
     evidence_pack = get_topic_evidence(topic)
     evidence, sources = evidence_to_prompt(evidence_pack)
-    coverage = task_evidence_coverage(
-        evidence_pack,
-        topic,
-        blueprint.get("learningGoal", "") or blueprint.get("learningDirection", ""),
-    )
+    # B3：搜索判断交给模型（覆盖度在架构 prompt 内降级为提示），不再按关键词命中禁搜。
     # learner 已携带校准后的定位（来自纲要或 learnerSnapshot）；
     # planningMemory 里再带一份 learnerSnapshot 属于同源重复注入，剔除。
     planning_for_prompt = {
@@ -77,7 +73,6 @@ def stream_toc_with_tools(
             memory_context=memory_context,
             evidence=evidence,
             sources=sources,
-            allow_search=not coverage["covered"],
             account_id=account_id,
         ):
             event_type = event.get("type")

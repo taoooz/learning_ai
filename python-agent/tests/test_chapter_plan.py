@@ -473,6 +473,7 @@ class RecordingToolClient(FakeChatClient):
     def chat_with_tools(self, messages, tools, tool_functions, **kwargs):
         self.calls.append(messages)
         self.kwargs_seen.append(kwargs)
+        self.tools_seen = tools
         return self.responses.pop(0)
 
 
@@ -541,3 +542,45 @@ def test_plan_prompt_no_longer_begs_about_quotes():
     assert "英文双引号" not in PROMPT["output_format"]
     assert "「」" not in PROMPT["output_format"]
     assert "只返回 JSON" in PROMPT["output_format"]
+
+
+def test_covered_chapter_still_gets_search_tools_and_coverage_hint(tmp_path, monkeypatch):
+    """B3：关键词覆盖命中不再禁搜——工具始终可用，覆盖度降级为 user 侧提示。"""
+    from services.evidence_store import merge_chapter_evidence_results
+
+    monkeypatch.setenv("EVIDENCE_STORE_DIR", str(tmp_path / "evidence"))
+    merge_chapter_evidence_results(
+        "course-1", "ch-1", "提示词工程实践", "指令写作基础",
+        [{"kind": "agent", "query": "指令写作基础"}],
+        [{
+            "title": "指令写作基础：指令结构三要素",
+            "url": "https://example.com/instruction-basics",
+            "body": "指令写作基础入门，覆盖指令结构与上下文。",
+            "authorityScore": 80,
+            "kind": "knowledge",
+            "preferred": False,
+            "isPrimary": False,
+        }],
+    )
+    client = RecordingToolClient(_valid_tasks())
+    asyncio.run(generate_chapter_plan(_plan_request(), client=client))
+
+    assert {
+        tool.get("function", {}).get("name")
+        for tool in (client.tools_seen or [])
+    } == {"web_search", "read_url"}
+    assert client.kwargs_seen[0]["max_iterations"] == 2
+    assert "联网搜索决策" in client.calls[0][0]["content"]
+    user_message = client.calls[0][1]["content"]
+    assert "证据覆盖提示" in user_message
+    assert "初步匹配" in user_message
+    assert "由你判断" in user_message
+
+
+def test_uncovered_chapter_gets_weak_match_hint(tmp_path, monkeypatch):
+    monkeypatch.setenv("EVIDENCE_STORE_DIR", str(tmp_path / "evidence"))
+    client = RecordingToolClient(_valid_tasks())
+    asyncio.run(generate_chapter_plan(_plan_request(), client=client))
+    user_message = client.calls[0][1]["content"]
+    assert "匹配较弱或暂无证据" in user_message
+    assert "由你判断" in user_message
