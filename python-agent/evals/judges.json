@@ -1,0 +1,15 @@
+{
+  "panel": [
+    { "id": "claude", "model": "funcloud/claude-opus-5-5" },
+    { "id": "gpt", "model": "openai/gpt-6-sol" },
+    { "id": "qwen", "model": "bailian/qwen4-max" }
+  ],
+  "utility_model": "bailian/qwen4-max",
+  "temperature": 0,
+  "max_tokens": 4000,
+  "max_retries": 3,
+  "timeout_seconds": 120,
+  "swap_positions": true,
+  "rubric_dimensions": ["factual_accuracy", "alignment", "cognitive_load", "depth", "coherence"],
+  "notes": "评审团须与生成模型 ark/deepseek-v4-1-flash 异构（防自偏好）。utility_model 供 grounding/alignment 的单模型辅助判断，可换成更便宜的网关模型控成本。"
+}

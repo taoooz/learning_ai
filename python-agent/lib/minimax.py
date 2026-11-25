@@ -2,9 +2,11 @@ import os
 import json
 import re
 import asyncio
+import time
 import httpx
 
 from lib.structured_output import apply_response_format_downgrade
+from evals import trace as eval_trace
 
 # 流式读取的应用层空闲超时（秒）：超过该时长没有新数据行即视为上游断流
 _STREAM_IDLE_TIMEOUT = 60.0
@@ -94,8 +96,11 @@ class MiniMaxClient:
         }
         if response_format:
             body["response_format"] = response_format
+        _trace_on = eval_trace.is_enabled()
+        _trace_initial_rf = (body.get("response_format") or {}).get("type") if _trace_on else None
         async with httpx.AsyncClient() as client:
             while True:
+                _trace_t0 = time.monotonic() if _trace_on else None
                 response = await client.post(
                     f"{self.base_url}/chat/completions",
                     headers=self._get_headers(),
@@ -108,7 +113,14 @@ class MiniMaxClient:
                     if apply_response_format_downgrade(body, "MiniMaxClient.chat", exc.response.status_code):
                         continue
                     raise
-                return response.json()
+                data = response.json()
+                if _trace_on:
+                    # trace 捕获点：修复链（parse_*）之前的原始响应
+                    eval_trace.capture_llm_response(
+                        data, request=body, started_at=_trace_t0,
+                        source="minimax.chat", initial_response_format=_trace_initial_rf,
+                    )
+                return data
 
     async def stream_chat(
         self,
@@ -135,34 +147,61 @@ class MiniMaxClient:
             body["stream_options"] = {"include_usage": True}
         if reasoning_effort:
             body["reasoning_effort"] = reasoning_effort
-        async with httpx.AsyncClient() as client:
-            async with client.stream(
-                "POST",
-                f"{self.base_url}/chat/completions",
-                headers=self._get_headers(),
-                json=body,
-                timeout=60.0,
-            ) as response:
-                response.raise_for_status()
-                # 应用层空闲超时：网关可能用 keep-alive 保活连接但停发内容，
-                # httpx 读超时对“有字节但无数据行”的场景不生效，这里按
-                # “超过 60s 没有新数据行”主动断流（IdleStreamError），
-                # 由调用方决定降级/报错，避免客户端永远停留在流式中。
-                lines_aiter = response.aiter_lines()
-                while True:
-                    try:
-                        line = await asyncio.wait_for(anext(lines_aiter), timeout=_STREAM_IDLE_TIMEOUT)
-                    except StopAsyncIteration:
-                        break
-                    except asyncio.TimeoutError as exc:
-                        raise IdleStreamError(
-                            f"上游流空闲超过 {_STREAM_IDLE_TIMEOUT:.0f}s，已主动断开"
-                        ) from exc
-                    if line.startswith("data: "):
-                        data = line[6:]
-                        if data == "[DONE]":
+        _trace_on = eval_trace.is_enabled()
+        _trace_parts: list[str] = []
+        _trace_usage = None
+        _trace_t0 = time.monotonic() if _trace_on else None
+        _trace_completed = False
+        try:
+            async with httpx.AsyncClient() as client:
+                async with client.stream(
+                    "POST",
+                    f"{self.base_url}/chat/completions",
+                    headers=self._get_headers(),
+                    json=body,
+                    timeout=60.0,
+                ) as response:
+                    response.raise_for_status()
+                    # 应用层空闲超时：网关可能用 keep-alive 保活连接但停发内容，
+                    # httpx 读超时对“有字节但无数据行”的场景不生效，这里按
+                    # “超过 60s 没有新数据行”主动断流（IdleStreamError），
+                    # 由调用方决定降级/报错，避免客户端永远停留在流式中。
+                    lines_aiter = response.aiter_lines()
+                    while True:
+                        try:
+                            line = await asyncio.wait_for(anext(lines_aiter), timeout=_STREAM_IDLE_TIMEOUT)
+                        except StopAsyncIteration:
                             break
-                        yield json.loads(data)
+                        except asyncio.TimeoutError as exc:
+                            raise IdleStreamError(
+                                f"上游流空闲超过 {_STREAM_IDLE_TIMEOUT:.0f}s，已主动断开"
+                            ) from exc
+                        if line.startswith("data: "):
+                            data = line[6:]
+                            if data == "[DONE]":
+                                break
+                            chunk = json.loads(data)
+                            if _trace_on:
+                                # trace：累积修复前原始流文本（仅开关开启时）
+                                for _choice in chunk.get("choices") or []:
+                                    _delta = (_choice.get("delta") or {}).get("content")
+                                    if _delta:
+                                        _trace_parts.append(_delta)
+                                if chunk.get("usage"):
+                                    _trace_usage = chunk["usage"]
+                            yield chunk
+            _trace_completed = True
+        finally:
+            if _trace_on:
+                # trace 捕获点：流结束（或中断）时记录完整原始文本，先于服务层解析
+                eval_trace.capture_llm_response(
+                    {
+                        "choices": [{"message": {"content": "".join(_trace_parts)}}],
+                        **({"usage": _trace_usage} if _trace_usage else {}),
+                    },
+                    request=body, started_at=_trace_t0,
+                    source="minimax.stream_chat", stream_completed=_trace_completed,
+                )
 
 
 def _is_json_balanced(text: str) -> bool:
@@ -236,22 +275,34 @@ def _repair_unescaped_quotes(text: str) -> str:
 def parse_json_response(content: str) -> dict:
     """解析 JSON 响应，处理 markdown 代码块和工具调用 XML"""
     import re
+    _trace_on = eval_trace.is_enabled()
+    _trace_original = content
+    _trace_steps: list[str] = []
     content = content.strip()
 
     # 移除 markdown 代码块
+    _trace_before = content
     if content.startswith("```json"):
         content = content[7:]
     if content.startswith("```"):
         content = content[3:]
+    if _trace_on and content != _trace_before:
+        _trace_steps.append("fence_strip")
 
     # 清理模型输出的工具调用 XML（MiniMax M2.7 有时在 content 中输出而非使用 tool_calls）
+    _trace_before = content
     content = re.sub(r'<minimax:tool_call>.*?</minimax:tool_call>', '', content, flags=re.DOTALL)
     content = re.sub(r'<minimax:tool_call>.*', '', content, flags=re.DOTALL)
     content = re.sub(r'<invoke\s+name=["\'][^"\']*["\']\s*>.*?</invoke\s*>', '', content, flags=re.DOTALL)
     content = re.sub(r'<invoke\s+[^>]*>.*', '', content, flags=re.DOTALL)
+    if _trace_on and content != _trace_before:
+        _trace_steps.append("tool_xml_clean")
     # 清理遗留 Thinking 标记（仅独占行成对标记，不伤正文）
+    _trace_before = content
     content = strip_thinking_markers(content)
     content = content.strip()
+    if _trace_on and content != _trace_before:
+        _trace_steps.append("thinking_strip")
 
     # 找到第一个 {
     first_brace = content.find("{")
@@ -265,23 +316,38 @@ def parse_json_response(content: str) -> dict:
     last_brace = json_str.rfind("}")
     if last_brace != -1:
         json_str = json_str[:last_brace + 1]
+    if _trace_on and json_str != content:
+        _trace_steps.append("json_slice")
 
     try:
         # strict=False：容忍字符串值内的裸控制字符（如未转义的换行）
-        return json.loads(json_str, strict=False)
+        result = json.loads(json_str, strict=False)
     except json.JSONDecodeError as e:
         # 兜底修复：模型常在字符串值内输出未转义的英文双引号
         repaired = _repair_unescaped_quotes(json_str)
         if repaired != json_str:
             try:
-                return json.loads(repaired, strict=False)
+                result = json.loads(repaired, strict=False)
             except json.JSONDecodeError:
                 pass
+            else:
+                if _trace_on:
+                    eval_trace.record_parse(
+                        result, repair_applied=(repaired != _trace_original.strip()),
+                        repair_steps=_trace_steps + ["quote_repair"], parser="parse_json_response",
+                    )
+                return result
         # 括号不平衡说明模型输出被截断（如 max_tokens 耗尽），
         # 明确报截断错误，避免上层把残缺内容误当成正常结果
         if not _is_json_balanced(json_str):
             raise ValueError(f"JSON response truncated (unbalanced brackets): {json_str[:200]}")
         raise ValueError(f"Invalid JSON: {e}, content: {json_str[:200]}")
+    if _trace_on:
+        eval_trace.record_parse(
+            result, repair_applied=(json_str != _trace_original.strip()),
+            repair_steps=_trace_steps, parser="parse_json_response",
+        )
+    return result
 
 
 def parse_enforced_json(content: str) -> dict:
@@ -294,18 +360,31 @@ def parse_enforced_json(content: str) -> dict:
     - 首 { 尾 } 截取：降级模式下前后可能混入说明文字；
     - 括号平衡检测：区分截断与非法 JSON，驱动上层 INVALID_JSON 重试。
     """
+    _trace_on = eval_trace.is_enabled()
+    _trace_original = content
+    _trace_steps: list[str] = []
     text = content.strip()
+    _trace_before = text
     if text.startswith("```json"):
         text = text[7:]
     if text.startswith("```"):
         text = text[3:]
     text = text.strip()
+    if _trace_on and text != _trace_before:
+        _trace_steps.append("fence_strip")
 
     # strict=False：容忍字符串值内的裸控制字符（降级模式下可能出现），不做引号修复
     try:
-        return json.loads(text, strict=False)
+        result = json.loads(text, strict=False)
     except json.JSONDecodeError:
         pass
+    else:
+        if _trace_on:
+            eval_trace.record_parse(
+                result, repair_applied=(text != _trace_original.strip()),
+                repair_steps=_trace_steps, parser="parse_enforced_json",
+            )
+        return result
 
     first_brace = text.find("{")
     last_brace = text.rfind("}")
@@ -316,11 +395,17 @@ def parse_enforced_json(content: str) -> dict:
         raise ValueError(f"JSON response truncated (unbalanced brackets): {text[first_brace:][:200]}")
     json_str = text[first_brace:last_brace + 1]
     try:
-        return json.loads(json_str, strict=False)
+        result = json.loads(json_str, strict=False)
     except json.JSONDecodeError as e:
         if not _is_json_balanced(json_str):
             raise ValueError(f"JSON response truncated (unbalanced brackets): {json_str[:200]}")
         raise ValueError(f"Invalid JSON: {e}, content: {json_str[:200]}")
+    if _trace_on:
+        eval_trace.record_parse(
+            result, repair_applied=(json_str != _trace_original.strip()),
+            repair_steps=_trace_steps + ["json_slice"], parser="parse_enforced_json",
+        )
+    return result
 
 
 def extract_usage(response: dict) -> dict | None:

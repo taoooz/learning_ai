@@ -23,6 +23,7 @@ from services.learning_v2_errors import (
 from services.search_evidence import ChapterEvidenceCollector, format_coverage_hint, format_search_decision_policy
 from services.memory_context_v4 import format_memory_context_for_prompt
 from services.outline_service import LEVEL_CONFIDENCE_THRESHOLD
+from evals import trace as eval_trace
 
 PROMPT_VERSION = "chapter-plan-v3"
 PLAN_REASONING_EFFORT = os.getenv("PLAN_REASONING_EFFORT", "low").strip() or None
@@ -628,30 +629,32 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
         # strict schema 约束输出；LLM_STRICT_JSON_SCHEMA=0 时退回 json_object。
         # 网关拒绝时客户端自动降级（lib/structured_output.py）。
         response_format = plan_response_format("chapter_plan", CHAPTER_PLAN_JSON_SCHEMA)
-        if hasattr(client, "chat_with_tools"):
-            response = await asyncio.to_thread(
-                client.chat_with_tools,
-                messages=messages,
-                tools=SEARCH_TOOLS,
-                tool_functions=collector.tool_functions,
-                max_tokens=16000,
-                reasoning_split=True,
-                max_iterations=2,
-                max_searches=1,
-                reasoning_effort=PLAN_REASONING_EFFORT,
-                response_format=response_format,
-            )
-        else:
-            response = await client.chat(messages=messages, max_tokens=16000, response_format=response_format)
-        content = (response.get("choices") or [{}])[0].get("message", {}).get("content", "")
+        with eval_trace.stage("chapter_plan"):
+            if hasattr(client, "chat_with_tools"):
+                response = await asyncio.to_thread(
+                    client.chat_with_tools,
+                    messages=messages,
+                    tools=SEARCH_TOOLS,
+                    tool_functions=collector.tool_functions,
+                    max_tokens=16000,
+                    reasoning_split=True,
+                    max_iterations=2,
+                    max_searches=1,
+                    reasoning_effort=PLAN_REASONING_EFFORT,
+                    response_format=response_format,
+                )
+            else:
+                response = await client.chat(messages=messages, max_tokens=16000, response_format=response_format)
+            content = (response.get("choices") or [{}])[0].get("message", {}).get("content", "")
+            eval_trace.record_evidence(collector.pack, stage="chapter_plan", chapter_id=request.chapterId)
 
-        try:
-            # 约束输出解析：引号修复/XML/Thinking 启发式已在本路径退役
-            parsed = parse_enforced_json(content)
-        except ValueError as exc:
-            last_errors = [{"code": PLAN_VALIDATION_CODES["INVALID_JSON"], "message": f"输出不是合法 JSON：{exc}"}]
-            repair_notes = _format_repair_notes(last_errors)
-            continue
+            try:
+                # 约束输出解析：引号修复/XML/Thinking 启发式已在本路径退役
+                parsed = parse_enforced_json(content)
+            except ValueError as exc:
+                last_errors = [{"code": PLAN_VALIDATION_CODES["INVALID_JSON"], "message": f"输出不是合法 JSON：{exc}"}]
+                repair_notes = _format_repair_notes(last_errors)
+                continue
 
         raw_tasks = parsed.get("tasks")
         raw_tasks = raw_tasks if isinstance(raw_tasks, list) else []
@@ -694,13 +697,14 @@ async def generate_chapter_plan(request: ChapterPlanRequest, client: MiniMaxClie
                 plan["generationMeta"]["reviewSkipped"] = True
                 return plan
 
-            review = await _review_chapter_plan(
-                client,
-                chapter=chapter,
-                teaching_goal=chapter.get("teachingGoal", ""),
-                learner=blueprint.get("learnerStartingPoint", {}),
-                tasks=tasks,
-            )
+            with eval_trace.stage("chapter_plan_review"):
+                review = await _review_chapter_plan(
+                    client,
+                    chapter=chapter,
+                    teaching_goal=chapter.get("teachingGoal", ""),
+                    learner=blueprint.get("learnerStartingPoint", {}),
+                    tasks=tasks,
+                )
             if review["passed"] or _round >= 2:
                 if not review["passed"]:
                     print("[章节计划] 二次修订后仍有质量告警，保留最终结构合法计划")

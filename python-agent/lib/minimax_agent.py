@@ -8,6 +8,7 @@ import httpx
 from typing import Iterator, Callable, Any
 from lib.minimax import MiniMaxClient
 from lib.structured_output import apply_response_format_downgrade
+from evals import trace as eval_trace
 
 
 def _clean_tool_xml(content: str) -> str:
@@ -46,9 +47,13 @@ def _do_streaming_call(
         - {"type": "response", "response": {...}} — 完整累积的响应 dict
     """
     import sys
+    import time
 
+    _trace_on = eval_trace.is_enabled()
+    _trace_initial_rf = (payload.get("response_format") or {}).get("type") if _trace_on else None
     attempt = 0
     while attempt < max_retries:
+        _trace_t0 = time.monotonic() if _trace_on else None
         full_content = ""
         full_reasoning = ""
         tool_calls_accum: dict[int, dict] = {}
@@ -153,9 +158,16 @@ def _do_streaming_call(
             if reasoning_split and full_reasoning:
                 complete_message["reasoning_details"] = [{"text": full_reasoning}]
 
-            yield {"type": "response", "response": {
+            response_payload = {
                 "choices": [{"message": complete_message, "finish_reason": finish_reason}]
-            }}
+            }
+            if _trace_on:
+                # trace 捕获点：流式累积的完整原始文本，先于服务层解析/修复
+                eval_trace.capture_llm_response(
+                    response_payload, request=payload, started_at=_trace_t0,
+                    source="agent.stream", initial_response_format=_trace_initial_rf,
+                )
+            yield {"type": "response", "response": response_payload}
             return  # 成功完成
 
         except httpx.HTTPStatusError as e:
@@ -489,14 +501,24 @@ class AgentClient(MiniMaxClient):
                 response.raise_for_status()
                 return response.json()
 
+        _trace_on = eval_trace.is_enabled()
+        _trace_initial_rf = (payload.get("response_format") or {}).get("type") if _trace_on else None
         last_error = None
         attempt = 0
         while attempt < max_retries:
             attempt += 1
+            _trace_t0 = time.monotonic() if _trace_on else None
             try:
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     future = executor.submit(_call)
-                    return future.result()
+                    data = future.result()
+                if _trace_on:
+                    # trace 捕获点：修复链（parse_*）之前的原始响应
+                    eval_trace.capture_llm_response(
+                        data, request=payload, started_at=_trace_t0,
+                        source="agent._call_llm", initial_response_format=_trace_initial_rf,
+                    )
+                return data
             except (httpx.HTTPStatusError, httpx.ConnectError, httpx.ReadTimeout) as e:
                 last_error = e
                 status = getattr(getattr(e, 'response', None), 'status_code', None)

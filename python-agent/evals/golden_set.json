@@ -1,0 +1,1557 @@
+{
+  "version": "1.0",
+  "generatedAt": "2026-11-25",
+  "note": "阶段0定义交付物：20 主题 × 3 难度 = 60 条评测 spec。authoritativeSources 全部于 2026-11-25 经 HTTP 200 核实（mitpress.mit.edu 返回 403 反爬，已用 Wikipedia 书目页替代并核实）。难度与 persona 绑定见 personas.json；判分上下文与注意事项见各条 goldenNotes 与 rubric.md。快变领域来源需在每轮主实验前复检并快照（preregistration.md §8.5）。",
+  "coverage": {
+    "topics": 20,
+    "specs": 60,
+    "byCategory": {
+      "fast-changing": 15,
+      "misconception-prone": 18,
+      "stable-foundations": 15,
+      "hands-on-skills": 12
+    },
+    "byDifficulty": {
+      "beginner": 20,
+      "intermediate": 20,
+      "advanced": 20
+    }
+  },
+  "specs": [
+    {
+      "id": "gs-llm-chat-api-b",
+      "topic": "llm-chat-api",
+      "topicNameZh": "LLM Chat Completions API 调用",
+      "category": "fast-changing",
+      "difficulty": "beginner",
+      "persona_id": "persona-beginner",
+      "learningGoal": "能用 OpenAI 兼容的 Chat Completions 接口完成一次单轮问答调用，并解释 messages 中 role 的作用与 temperature 的含义。",
+      "likelyMisconceptions": [
+        "messages 只是字符串拼接，role 没有语义作用",
+        "temperature=0 意味着输出完全确定、可复现",
+        "模型会'记住'之前的对话（API 无状态，历史需每次重发）"
+      ],
+      "authoritativeSources": [
+        "https://platform.openai.com/docs/api-reference/chat",
+        "https://platform.openai.com/docs/guides/text-generation",
+        "https://api-docs.deepseek.com/",
+        "https://docs.litellm.ai/docs/providers/openai_compatible"
+      ],
+      "expectedPrerequisites": [
+        "HTTP 请求基础",
+        "JSON 读写",
+        "Python requests 或 fetch 的基本使用"
+      ],
+      "goldenNotes": "版本敏感：参数名与默认值（如 max_tokens 与 max_completion_tokens 的演进）以判分时权威来源为准，禁止凭 judge 记忆。入门档只要求单轮调用+role 理解，不得要求流式/工具调用。"
+    },
+    {
+      "id": "gs-llm-chat-api-i",
+      "topic": "llm-chat-api",
+      "topicNameZh": "LLM Chat Completions API 调用",
+      "category": "fast-changing",
+      "difficulty": "intermediate",
+      "persona_id": "persona-intermediate",
+      "learningGoal": "能实现流式输出（SSE）与多轮对话管理，并解释 token 计费与上下文窗口对工程的影响。",
+      "likelyMisconceptions": [
+        "流式输出会改变模型生成的内容（只是传输方式不同）",
+        "上下文窗口是'记忆容量'，超出后模型自动遗忘最旧内容",
+        "流式场景下 usage 统计不可得/可忽略"
+      ],
+      "authoritativeSources": [
+        "https://platform.openai.com/docs/api-reference/chat",
+        "https://platform.openai.com/docs/guides/text-generation",
+        "https://api-docs.deepseek.com/",
+        "https://docs.litellm.ai/docs/providers/openai_compatible"
+      ],
+      "expectedPrerequisites": [
+        "入门档目标",
+        "SSE/HTTP 分块传输基础",
+        "异步迭代的基本使用"
+      ],
+      "goldenNotes": "核对 SSE 事件格式（delta 结构、[DONE] 哨兵）与当前文档一致；多轮历史截断策略是机制层判分点（D4）。"
+    },
+    {
+      "id": "gs-llm-chat-api-a",
+      "topic": "llm-chat-api",
+      "topicNameZh": "LLM Chat Completions API 调用",
+      "category": "fast-changing",
+      "difficulty": "advanced",
+      "persona_id": "persona-advanced",
+      "learningGoal": "能设计生产级 LLM 调用层（重试/超时/降级模型/成本预算），并论证模型行为漂移对工程的影响。",
+      "likelyMisconceptions": [
+        "同一模型版本内行为稳定，无需回归评测",
+        "重试幂等性与传统 RPC 相同（生成非确定，重试结果可能不同）",
+        "网关抽象（litellm）能完全屏蔽各 provider 差异"
+      ],
+      "authoritativeSources": [
+        "https://platform.openai.com/docs/api-reference/chat",
+        "https://platform.openai.com/docs/guides/text-generation",
+        "https://api-docs.deepseek.com/",
+        "https://docs.litellm.ai/docs/providers/openai_compatible"
+      ],
+      "expectedPrerequisites": [
+        "中级档目标",
+        "分布式系统重试/熔断经验",
+        "成本建模基础"
+      ],
+      "goldenNotes": "进阶档必须给边界条件（何时不能降级）与远迁移（用分布式系统直觉理解概率性系统）；注意 persona-advanced 的确定性系统旧图式冲突（rubric T6）。"
+    },
+    {
+      "id": "gs-llm-structured-output-b",
+      "topic": "llm-structured-output",
+      "topicNameZh": "LLM 结构化输出与校验",
+      "category": "fast-changing",
+      "difficulty": "beginner",
+      "persona_id": "persona-beginner",
+      "learningGoal": "能让模型输出符合给定 schema 的 JSON 并用 Pydantic 校验，能解释'格式合法'与'内容正确'的区别。",
+      "likelyMisconceptions": [
+        "JSON mode 保证字段语义正确",
+        "在 prompt 里写'请输出 JSON'与结构化输出 API 等价",
+        "校验失败说明模型完全不可用"
+      ],
+      "authoritativeSources": [
+        "https://platform.openai.com/docs/guides/structured-outputs",
+        "https://json-schema.org/",
+        "https://docs.pydantic.dev/latest/"
+      ],
+      "expectedPrerequisites": [
+        "JSON 语法",
+        "Python 函数与异常处理",
+        "LLM 单轮调用（gs-llm-chat-api-b 水平）"
+      ],
+      "goldenNotes": "核心误解是格式≠语义；好课程必须给'合法 JSON 但内容错误'的反例（D4 边界条件）。"
+    },
+    {
+      "id": "gs-llm-structured-output-i",
+      "topic": "llm-structured-output",
+      "topicNameZh": "LLM 结构化输出与校验",
+      "category": "fast-changing",
+      "difficulty": "intermediate",
+      "persona_id": "persona-intermediate",
+      "learningGoal": "能设计 schema 约束的抽取流水线：嵌套结构、枚举约束、失败重试与修复策略。",
+      "likelyMisconceptions": [
+        "schema 越复杂越好（忽视模型能力边界）",
+        "修复重试可以无限进行，没有成本问题",
+        "枚举约束让模型'理解'了枚举语义"
+      ],
+      "authoritativeSources": [
+        "https://platform.openai.com/docs/guides/structured-outputs",
+        "https://json-schema.org/",
+        "https://docs.pydantic.dev/latest/"
+      ],
+      "expectedPrerequisites": [
+        "入门档目标",
+        "Pydantic 嵌套模型",
+        "JSON Schema 基础"
+      ],
+      "goldenNotes": "JSON Schema 关键字支持范围（strict 模式限制）快变，以当前文档为准；修复策略的成本意识是判分点。"
+    },
+    {
+      "id": "gs-llm-structured-output-a",
+      "topic": "llm-structured-output",
+      "topicNameZh": "LLM 结构化输出与校验",
+      "category": "fast-changing",
+      "difficulty": "advanced",
+      "persona_id": "persona-advanced",
+      "learningGoal": "能评估与选择结构化输出可靠性方案（原生结构化输出 vs prompt+校验 vs 约束解码），并设计失败模式测试集。",
+      "likelyMisconceptions": [
+        "单一成功率数字能代表可靠性（忽视分布漂移）",
+        "约束解码对内容质量没有副作用",
+        "评测集可以与生产同分布采样"
+      ],
+      "authoritativeSources": [
+        "https://platform.openai.com/docs/guides/structured-outputs",
+        "https://json-schema.org/",
+        "https://docs.pydantic.dev/latest/"
+      ],
+      "expectedPrerequisites": [
+        "中级档目标",
+        "评测基础（精确率/召回率）",
+        "成本建模"
+      ],
+      "goldenNotes": "进阶档要求实证证据或显式不确定性标注；警惕编造基准数字（taxonomy F1 高风险）。"
+    },
+    {
+      "id": "gs-nextjs-app-router-b",
+      "topic": "nextjs-app-router",
+      "topicNameZh": "Next.js App Router 与 RSC",
+      "category": "fast-changing",
+      "difficulty": "beginner",
+      "persona_id": "persona-beginner",
+      "learningGoal": "能用 App Router 文件约定创建页面与布局，并解释服务端组件与客户端组件的默认区别。",
+      "likelyMisconceptions": [
+        "App Router 只是 Pages Router 的目录改名",
+        "所有组件都在浏览器里运行",
+        "'use client' 意味着组件不在服务端渲染"
+      ],
+      "authoritativeSources": [
+        "https://nextjs.org/docs/app",
+        "https://react.dev/reference/rsc/server-components"
+      ],
+      "expectedPrerequisites": [
+        "React 函数组件",
+        "npm 项目基础",
+        "HTML/CSS 基础"
+      ],
+      "goldenNotes": "版本敏感：文件约定（page.tsx/layout.tsx）与默认渲染行为以 current nextjs.org/docs 为准；'use client' 边界语义是高频误解。吸收自旧主题'React Server Components 进阶'并去重。"
+    },
+    {
+      "id": "gs-nextjs-app-router-i",
+      "topic": "nextjs-app-router",
+      "topicNameZh": "Next.js App Router 与 RSC",
+      "category": "fast-changing",
+      "difficulty": "intermediate",
+      "persona_id": "persona-intermediate",
+      "learningGoal": "能正确划分服务端/客户端组件边界，使用 Server Actions 处理变更，并解释两类组件的组合规则。",
+      "likelyMisconceptions": [
+        "服务端组件里可以用 useState（只要不刷新）",
+        "客户端组件不能渲染服务端组件（可通过 children 传入）",
+        "Server Actions 只是 API 路由的别名"
+      ],
+      "authoritativeSources": [
+        "https://nextjs.org/docs/app",
+        "https://react.dev/reference/rsc/server-components"
+      ],
+      "expectedPrerequisites": [
+        "入门档目标",
+        "React hooks 使用",
+        "HTTP 表单提交基础"
+      ],
+      "goldenNotes": "组合规则（服务端组件不能被 import 进客户端组件但可作为 children 传递）是核心判分点。"
+    },
+    {
+      "id": "gs-nextjs-app-router-a",
+      "topic": "nextjs-app-router",
+      "topicNameZh": "Next.js App Router 与 RSC",
+      "category": "fast-changing",
+      "difficulty": "advanced",
+      "persona_id": "persona-advanced",
+      "learningGoal": "能设计流式渲染与缓存策略（Suspense 边界、fetch 缓存语义、revalidation），并论证 RSC 与传统 SSR 的权衡。",
+      "likelyMisconceptions": [
+        "RSC 就是 SSR 的新名字",
+        "fetch 缓存默认值跨版本不变",
+        "流式渲染总是同时改善 TTFB 与 LCP"
+      ],
+      "authoritativeSources": [
+        "https://nextjs.org/docs/app",
+        "https://react.dev/reference/rsc/server-components"
+      ],
+      "expectedPrerequisites": [
+        "中级档目标",
+        "HTTP 缓存（gs-http-caching-i 水平）",
+        "React Suspense 使用",
+        "Web 性能指标基础"
+      ],
+      "goldenNotes": "Next.js 缓存默认值跨版本多次变化——必须以当前文档为准，禁止 judge 凭记忆（F2 高风险）；进阶档要求远迁移（对比后端缓存策略）。"
+    },
+    {
+      "id": "gs-tailwind-v4-b",
+      "topic": "tailwind-v4",
+      "topicNameZh": "Tailwind CSS v4 与设计令牌",
+      "category": "fast-changing",
+      "difficulty": "beginner",
+      "persona_id": "persona-beginner",
+      "learningGoal": "能在 Vite/Next 项目中安装 Tailwind v4 并用工具类完成一个卡片组件样式，解释 CSS-first 配置与 v3 的区别。",
+      "likelyMisconceptions": [
+        "v4 仍需要 tailwind.config.js",
+        "@apply 是 v4 推荐的样式复用方式",
+        "工具类就是'内联样式'，有相同的优先级问题"
+      ],
+      "authoritativeSources": [
+        "https://tailwindcss.com/docs/upgrade-guide",
+        "https://tailwindcss.com/blog/tailwindcss-v4",
+        "https://tailwindcss.com/docs/theme"
+      ],
+      "expectedPrerequisites": [
+        "CSS 选择器与盒模型",
+        "npm 基础",
+        "HTML 结构"
+      ],
+      "goldenNotes": "版本敏感：v4 用 @import \"tailwindcss\" 与 @theme；与仓库 AGENTS.md 契约（不支持 @apply）一致的内容为正确方向；警惕 v3 旧教程混入（F2）。"
+    },
+    {
+      "id": "gs-tailwind-v4-i",
+      "topic": "tailwind-v4",
+      "topicNameZh": "Tailwind CSS v4 与设计令牌",
+      "category": "fast-changing",
+      "difficulty": "intermediate",
+      "persona_id": "persona-intermediate",
+      "learningGoal": "能用 @theme 定义设计令牌并实现暗色模式与响应式变体，解释 v4 的级联层机制。",
+      "likelyMisconceptions": [
+        "@theme 变量与普通 CSS 变量没有区别",
+        "暗色模式仍靠 darkMode:'class' 配置",
+        "v4 的 Preflight 与 v3 完全相同"
+      ],
+      "authoritativeSources": [
+        "https://tailwindcss.com/docs/upgrade-guide",
+        "https://tailwindcss.com/blog/tailwindcss-v4",
+        "https://tailwindcss.com/docs/theme"
+      ],
+      "expectedPrerequisites": [
+        "入门档目标",
+        "CSS 自定义属性",
+        "CSS 级联与优先级"
+      ],
+      "goldenNotes": "@custom-variant dark、cascade layers 是 v4 特有机制；以 upgrade-guide 为准核对。"
+    },
+    {
+      "id": "gs-tailwind-v4-a",
+      "topic": "tailwind-v4",
+      "topicNameZh": "Tailwind CSS v4 与设计令牌",
+      "category": "fast-changing",
+      "difficulty": "advanced",
+      "persona_id": "persona-advanced",
+      "learningGoal": "能为存量设计系统制定 v3→v4 迁移方案：兼容性风险清单、自动化改写边界、回归验证策略。",
+      "likelyMisconceptions": [
+        "升级 guide 的自动工具能处理所有破坏性变更",
+        "v4 的浏览器支持矩阵与 v3 相同",
+        "迁移风险只在语法层（忽视视觉回归）"
+      ],
+      "authoritativeSources": [
+        "https://tailwindcss.com/docs/upgrade-guide",
+        "https://tailwindcss.com/blog/tailwindcss-v4",
+        "https://tailwindcss.com/docs/theme"
+      ],
+      "expectedPrerequisites": [
+        "中级档目标",
+        "设计系统/令牌治理经验",
+        "视觉回归测试基础"
+      ],
+      "goldenNotes": "进阶档要求具体风险清单与验证策略，不能只说'按官方 guide 走'（D4 空泛）。"
+    },
+    {
+      "id": "gs-oauth-pkce-b",
+      "topic": "oauth-pkce",
+      "topicNameZh": "OAuth2 授权码流程与 PKCE",
+      "category": "fast-changing",
+      "difficulty": "beginner",
+      "persona_id": "persona-beginner",
+      "learningGoal": "能解释 OAuth2 授权码流程的角色分工与为什么公共客户端需要 PKCE，能在流程图中标出各步骤作用。",
+      "likelyMisconceptions": [
+        "OAuth2 是登录协议（它是授权不是认证）",
+        "授权码可以直接当访问令牌用",
+        "PKCE 是一种加密算法"
+      ],
+      "authoritativeSources": [
+        "https://datatracker.ietf.org/doc/html/rfc7636",
+        "https://datatracker.ietf.org/doc/html/rfc6749",
+        "https://oauth.net/2/pkce/"
+      ],
+      "expectedPrerequisites": [
+        "HTTP 重定向与查询参数",
+        "浏览器 Cookie/Session 概念（名字层面）",
+        "前后端分离基础"
+      ],
+      "goldenNotes": "入门档只要求角色与流程理解，不要求密码学细节；'授权≠认证'是核心误解。规范类主题以 RFC 为事实基准。"
+    },
+    {
+      "id": "gs-oauth-pkce-i",
+      "topic": "oauth-pkce",
+      "topicNameZh": "OAuth2 授权码流程与 PKCE",
+      "category": "fast-changing",
+      "difficulty": "intermediate",
+      "persona_id": "persona-intermediate",
+      "learningGoal": "能实现授权码+PKCE 完整流程（code_verifier/challenge 生成、令牌交换、state 校验），并解释每个参数防御的攻击。",
+      "likelyMisconceptions": [
+        "state 与 PKCE 冗余，二选一即可",
+        "code_challenge 可以固定值",
+        "公共客户端的令牌端点不需要任何客户端鉴别"
+      ],
+      "authoritativeSources": [
+        "https://datatracker.ietf.org/doc/html/rfc7636",
+        "https://datatracker.ietf.org/doc/html/rfc6749",
+        "https://oauth.net/2/pkce/"
+      ],
+      "expectedPrerequisites": [
+        "入门档目标",
+        "SHA-256 的使用（调用而非原理）",
+        "base64url 编码",
+        "CSRF 攻击概念"
+      ],
+      "goldenNotes": "参数细节以 RFC 7636 为准（S256 vs plain、verifier 长度 43–128）；每个参数必须对应攻击模型，否则 D4 浅表。"
+    },
+    {
+      "id": "gs-oauth-pkce-a",
+      "topic": "oauth-pkce",
+      "topicNameZh": "OAuth2 授权码流程与 PKCE",
+      "category": "fast-changing",
+      "difficulty": "advanced",
+      "persona_id": "persona-advanced",
+      "learningGoal": "能审查一个 OAuth 实现的安全性：重定向 URI 校验、令牌存储、刷新轮换，并论证 PKCE 的保护边界。",
+      "likelyMisconceptions": [
+        "PKCE 防所有授权码攻击（不防钓鱼式同意）",
+        "令牌放 localStorage 与 httpOnly Cookie 等价",
+        "refresh token 永不过期"
+      ],
+      "authoritativeSources": [
+        "https://datatracker.ietf.org/doc/html/rfc7636",
+        "https://datatracker.ietf.org/doc/html/rfc6749",
+        "https://oauth.net/2/pkce/"
+      ],
+      "expectedPrerequisites": [
+        "中级档目标",
+        "XSS/CSRF 攻击模型",
+        "浏览器存储机制",
+        "威胁建模基础"
+      ],
+      "goldenNotes": "RFC 7636 威胁模型（授权码拦截）与其边界是进阶档深度判分点；警惕过度声称（F1）。"
+    },
+    {
+      "id": "gs-recursion-b",
+      "topic": "recursion",
+      "topicNameZh": "递归与调用栈",
+      "category": "misconception-prone",
+      "difficulty": "beginner",
+      "persona_id": "persona-beginner",
+      "learningGoal": "能读写带基线条件的简单递归函数（阶乘/文件夹遍历），并解释'调用如何跳进去再返回'。",
+      "likelyMisconceptions": [
+        "递归是循环的语法糖，没有额外调用开销",
+        "没有基线条件只是永远运行，没有其他后果（栈溢出）",
+        "递归调用'重新开始函数'，局部变量是共享的"
+      ],
+      "authoritativeSources": [
+        "https://en.wikipedia.org/wiki/Recursion_(computer_science)",
+        "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/",
+        "https://docs.python.org/3/library/sys.html#sys.setrecursionlimit"
+      ],
+      "expectedPrerequisites": [
+        "Python 函数定义与调用",
+        "if/else",
+        "调用栈概念需脚手架（persona-beginner 的 gap）"
+      ],
+      "goldenNotes": "入门档必须可视化调用过程（step-walkthrough/diagram）；'局部变量共享'是核心误解；不得引入 memoization（S1 风险）。"
+    },
+    {
+      "id": "gs-recursion-i",
+      "topic": "recursion",
+      "topicNameZh": "递归与调用栈",
+      "category": "misconception-prone",
+      "difficulty": "intermediate",
+      "persona_id": "persona-intermediate",
+      "learningGoal": "能分析递归的调用树与复杂度，能在递归与迭代间转换，并识别递归的适用场景。",
+      "likelyMisconceptions": [
+        "递归总是比迭代慢（忽视可读性与问题结构）",
+        "朴素递归斐波那契是 O(n)（实为指数级）",
+        "任何循环都能无代价地机械改写为递归"
+      ],
+      "authoritativeSources": [
+        "https://en.wikipedia.org/wiki/Recursion_(computer_science)",
+        "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/",
+        "https://docs.python.org/3/library/sys.html#sys.setrecursionlimit"
+      ],
+      "expectedPrerequisites": [
+        "入门档目标",
+        "Big-O 基础（gs-big-o-b 水平）",
+        "栈数据结构概念"
+      ],
+      "goldenNotes": "调用树图是关键脚手架；复杂度结论必须正确（F1 高风险：斐波那契复杂度）。"
+    },
+    {
+      "id": "gs-recursion-a",
+      "topic": "recursion",
+      "topicNameZh": "递归与调用栈",
+      "category": "misconception-prone",
+      "difficulty": "advanced",
+      "persona_id": "persona-advanced",
+      "learningGoal": "能设计分治与回溯问题的递归解，论证尾递归/续延传递的权衡，并解释语言运行时对递归深度的限制。",
+      "likelyMisconceptions": [
+        "Python 支持尾调用优化",
+        "提高 recursionlimit 是万能解法（C 栈仍会溢出）",
+        "回溯剪枝不改变最坏复杂度"
+      ],
+      "authoritativeSources": [
+        "https://en.wikipedia.org/wiki/Recursion_(computer_science)",
+        "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/",
+        "https://docs.python.org/3/library/sys.html#sys.setrecursionlimit"
+      ],
+      "expectedPrerequisites": [
+        "中级档目标",
+        "树遍历",
+        "Python sys.setrecursionlimit 使用",
+        "memoization"
+      ],
+      "goldenNotes": "Python 无 TCO 是硬事实（以 Python 文档为准）；进阶档要求边界条件（何时递归不可用）。"
+    },
+    {
+      "id": "gs-conditional-probability-b",
+      "topic": "conditional-probability",
+      "topicNameZh": "条件概率与贝叶斯",
+      "category": "misconception-prone",
+      "difficulty": "beginner",
+      "persona_id": "persona-beginner",
+      "learningGoal": "能用'样本空间收缩'直觉计算简单条件概率，并区分 P(A|B) 与 P(B|A)。",
+      "likelyMisconceptions": [
+        "P(A|B)=P(B|A)",
+        "条件概率就是两个概率相除，与样本空间无关",
+        "A 与 B 独立时 P(A|B)=0"
+      ],
+      "authoritativeSources": [
+        "https://en.wikipedia.org/wiki/Conditional_probability",
+        "https://en.wikipedia.org/wiki/Bayes%27_theorem",
+        "https://seeing-theory.brown.edu/",
+        "https://link.springer.com/book/10.1007/978-0-387-21736-9"
+      ],
+      "expectedPrerequisites": [
+        "分数与百分比运算",
+        "基本计数（枚举）",
+        "无需概率论先修"
+      ],
+      "goldenNotes": "入门档用具体枚举（骰子/抽卡），不倾倒公式；P(A|B)≠P(B|A) 必须给反例（如疾病检测）。"
+    },
+    {
+      "id": "gs-conditional-probability-i",
+      "topic": "conditional-probability",
+      "topicNameZh": "条件概率与贝叶斯",
+      "category": "misconception-prone",
+      "difficulty": "intermediate",
+      "persona_id": "persona-intermediate",
+      "learningGoal": "能用贝叶斯定理建模并解释基率忽视，计算检测阳性后的真实患病概率。",
+      "likelyMisconceptions": [
+        "99% 准确的检测阳性意味着 99% 患病（基率忽视）",
+        "先验概率是主观的，可以随便取",
+        "独立与互斥是一回事"
+      ],
+      "authoritativeSources": [
+        "https://en.wikipedia.org/wiki/Conditional_probability",
+        "https://en.wikipedia.org/wiki/Bayes%27_theorem",
+        "https://seeing-theory.brown.edu/",
+        "https://link.springer.com/book/10.1007/978-0-387-21736-9"
+      ],
+      "expectedPrerequisites": [
+        "入门档目标",
+        "代数变形",
+        "集合交并记号"
+      ],
+      "goldenNotes": "疾病检测例必须给具体数字且计算正确（F1 高风险）；基率忽视是本主题核心误解，必须显式针对（D2）。"
+    },
+    {
+      "id": "gs-conditional-probability-a",
+      "topic": "conditional-probability",
+      "topicNameZh": "条件概率与贝叶斯",
+      "category": "misconception-prone",
+      "difficulty": "advanced",
+      "persona_id": "persona-advanced",
+      "learningGoal": "能为真实决策问题（A/B 测试或垃圾邮件过滤）建立贝叶斯更新模型，并论证朴素贝叶斯假设的适用边界。",
+      "likelyMisconceptions": [
+        "朴素贝叶斯要求特征真正独立才能用",
+        "数据越多后验越接近真值（忽视模型误设）",
+        "贝叶斯与频率派结论总是一致"
+      ],
+      "authoritativeSources": [
+        "https://en.wikipedia.org/wiki/Conditional_probability",
+        "https://en.wikipedia.org/wiki/Bayes%27_theorem",
+        "https://seeing-theory.brown.edu/",
+        "https://link.springer.com/book/10.1007/978-0-387-21736-9"
+      ],
+      "expectedPrerequisites": [
+        "中级档目标",
+        "期望/方差基础",
+        "Python 数值计算",
+        "分类问题概念"
+      ],
+      "goldenNotes": "进阶档要求远迁移（从医学检测到垃圾邮件过滤）；数值例必须可复核。"
+    },
+    {
+      "id": "gs-http-caching-b",
+      "topic": "http-caching",
+      "topicNameZh": "HTTP 缓存机制",
+      "category": "misconception-prone",
+      "difficulty": "beginner",
+      "persona_id": "persona-beginner",
+      "learningGoal": "能解释强缓存与协商缓存的区别，能读懂常见 Cache-Control 指令的行为。",
+      "likelyMisconceptions": [
+        "no-cache 就是不缓存",
+        "缓存是浏览器自己的事，与服务端响应头无关",
+        "Expires 与 Cache-Control 同时存在时前者优先"
+      ],
+      "authoritativeSources": [
+        "https://datatracker.ietf.org/doc/html/rfc9111",
+        "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching",
+        "https://web.dev/articles/http-cache"
+      ],
+      "expectedPrerequisites": [
+        "HTTP 请求/响应结构",
+        "浏览器开发者工具 Network 面板（打开方式）",
+        "响应头概念"
+      ],
+      "goldenNotes": "no-cache vs no-store 是最经典误解，必须对比表+具体场景；以 RFC 9111/MDN 为准（RFC 2616 已废弃，引用旧 RFC 当现行规范属 F2）。"
+    },
+    {
+      "id": "gs-http-caching-i",
+      "topic": "http-caching",
+      "topicNameZh": "HTTP 缓存机制",
+      "category": "misconception-prone",
+      "difficulty": "intermediate",
+      "persona_id": "persona-intermediate",
+      "learningGoal": "能为静态资源与 API 响应设计缓存策略（max-age/ETag/Last-Modified/immutable），并诊断'用户为什么看到旧版本'。",
+      "likelyMisconceptions": [
+        "ETag 协商一定省带宽（304 仍有往返）",
+        "no-store 与 private 可互换",
+        "CDN 缓存与浏览器缓存是同一层"
+      ],
+      "authoritativeSources": [
+        "https://datatracker.ietf.org/doc/html/rfc9111",
+        "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching",
+        "https://web.dev/articles/http-cache"
+      ],
+      "expectedPrerequisites": [
+        "入门档目标",
+        "HTTP 状态码（200/304）",
+        "哈希概念",
+        "CDN 概念（名字层面）"
+      ],
+      "goldenNotes": "中级档必须给诊断流程（step-walkthrough）；分层缓存（浏览器/CDN/源站）是深度判分点。"
+    },
+    {
+      "id": "gs-http-caching-a",
+      "topic": "http-caching",
+      "topicNameZh": "HTTP 缓存机制",
+      "category": "misconception-prone",
+      "difficulty": "advanced",
+      "persona_id": "persona-advanced",
+      "learningGoal": "能设计多层系统（浏览器/CDN/反向代理/应用）的缓存架构，论证 stale-while-revalidate 的权衡并制定缓存失效策略。",
+      "likelyMisconceptions": [
+        "缓存失效问题靠'缩短 TTL'就能解决",
+        "stale-while-revalidate 没有一致性代价",
+        "Vary 头只影响压缩"
+      ],
+      "authoritativeSources": [
+        "https://datatracker.ietf.org/doc/html/rfc9111",
+        "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching",
+        "https://web.dev/articles/http-cache"
+      ],
+      "expectedPrerequisites": [
+        "中级档目标",
+        "分布式系统一致性基础",
+        "部署架构（CDN/源站）",
+        "版本化发布流程"
+      ],
+      "goldenNotes": "RFC 9111 的 stale-while-revalidate 语义以规范为准；进阶档要求远迁移（对比数据库缓存失效）。"
+    },
+    {
+      "id": "gs-cors-b",
+      "topic": "cors",
+      "topicNameZh": "同源策略与 CORS",
+      "category": "misconception-prone",
+      "difficulty": "beginner",
+      "persona_id": "persona-beginner",
+      "learningGoal": "能解释同源策略与 CORS 的存在理由，能识别'源'的三要素。",
+      "likelyMisconceptions": [
+        "CORS 是服务端的安全漏洞",
+        "同源就是同域名（忽视协议与端口）",
+        "CORS 报错说明请求没到达服务器（简单请求实际到达了）"
+      ],
+      "authoritativeSources": [
+        "https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS",
+        "https://fetch.spec.whatwg.org/",
+        "https://datatracker.ietf.org/doc/html/rfc6454"
+      ],
+      "expectedPrerequisites": [
+        "URL 结构（协议/域名/端口）",
+        "前后端分离概念",
+        "浏览器控制台（打开方式）"
+      ],
+      "goldenNotes": "入门档必须纠正'CORS=服务端 bug'；预检细节是中级内容，不得倾倒给入门（L1 风险）。"
+    },
+    {
+      "id": "gs-cors-i",
+      "topic": "cors",
+      "topicNameZh": "同源策略与 CORS",
+      "category": "misconception-prone",
+      "difficulty": "intermediate",
+      "persona_id": "persona-intermediate",
+      "learningGoal": "能诊断预检请求的触发条件并修复常见 CORS 配置，解释 credentials 模式的限制。",
+      "likelyMisconceptions": [
+        "加 Access-Control-Allow-Origin:* 就万事大吉（带凭证时失效）",
+        "预检由所有跨域请求触发",
+        "CORS 阻止服务器收到请求（实际阻止响应被读取）"
+      ],
+      "authoritativeSources": [
+        "https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS",
+        "https://fetch.spec.whatwg.org/",
+        "https://datatracker.ietf.org/doc/html/rfc6454"
+      ],
+      "expectedPrerequisites": [
+        "入门档目标",
+        "HTTP 方法与自定义头",
+        "Cookie 基础",
+        "fetch 使用"
+      ],
+      "goldenNotes": "预检触发条件（非简单方法/头/content-type）以 fetch.spec/MDN 为准；wildcard+credentials 冲突是核心误解。"
+    },
+    {
+      "id": "gs-cors-a",
+      "topic": "cors",
+      "topicNameZh": "同源策略与 CORS",
+      "category": "misconception-prone",
+      "difficulty": "advanced",
+      "persona_id": "persona-advanced",
+      "learningGoal": "能为多子域系统设计跨域方案（CORS vs 反向代理 vs postMessage），并论证 CORS 的保护模型边界。",
+      "likelyMisconceptions": [
+        "CORS 能防 CSRF（无关，CSRF 靠 SameSite/token）",
+        "postMessage 不需要校验 origin",
+        "CORS 配置错误只影响功能不影响安全"
+      ],
+      "authoritativeSources": [
+        "https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS",
+        "https://fetch.spec.whatwg.org/",
+        "https://datatracker.ietf.org/doc/html/rfc6454"
+      ],
+      "expectedPrerequisites": [
+        "中级档目标",
+        "CSRF/XSS 攻击模型",
+        "Cookie SameSite 属性",
+        "反向代理概念"
+      ],
+      "goldenNotes": "CORS≠CSRF 防护是进阶档核心判分点；以 fetch 规范与 RFC 6454 为准。"
+    },
+    {
+      "id": "gs-floating-point-b",
+      "topic": "floating-point",
+      "topicNameZh": "浮点数与精度",
+      "category": "misconception-prone",
+      "difficulty": "beginner",
+      "persona_id": "persona-beginner",
+      "learningGoal": "能解释 0.1+0.2!==0.3 的原因，并在代码中使用正确的比较与舍入策略。",
+      "likelyMisconceptions": [
+        "这是 JS/Python 的 bug",
+        "浮点数是'近似'的，所有计算都不可信",
+        "round(x,2) 能解决所有精度问题"
+      ],
+      "authoritativeSources": [
+        "https://docs.oracle.com/cd/E19957-01/806-3568/ncg_goldberg.html",
+        "https://docs.python.org/3/tutorial/floatingpoint.html",
+        "https://en.wikipedia.org/wiki/IEEE_754"
+      ],
+      "expectedPrerequisites": [
+        "十进制小数运算",
+        "Python/JS 基本语法",
+        "二进制概念需脚手架"
+      ],
+      "goldenNotes": "必须讲机制（二进制无法精确表示 0.1），不能只说'注意精度'（D1s）；示例必须真实产生 0.30000000000000004（E1 高风险：不得用 0.5+0.25 这类恰好精确的例子掩盖问题）。"
+    },
+    {
+      "id": "gs-floating-point-i",
+      "topic": "floating-point",
+      "topicNameZh": "浮点数与精度",
+      "category": "misconception-prone",
+      "difficulty": "intermediate",
+      "persona_id": "persona-intermediate",
+      "learningGoal": "能选择数值表示方案（Decimal/整数分/epsilon 比较）并解释 IEEE 754 双精度结构基础。",
+      "likelyMisconceptions": [
+        "Decimal 没有性能代价",
+        "epsilon 比较适用于所有量级（相对 vs 绝对误差）",
+        "浮点误差总是线性累积"
+      ],
+      "authoritativeSources": [
+        "https://docs.oracle.com/cd/E19957-01/806-3568/ncg_goldberg.html",
+        "https://docs.python.org/3/tutorial/floatingpoint.html",
+        "https://en.wikipedia.org/wiki/IEEE_754"
+      ],
+      "expectedPrerequisites": [
+        "入门档目标",
+        "二进制基础",
+        "Python decimal 模块使用",
+        "误差概念"
+      ],
+      "goldenNotes": "IEEE 754 结构（符号/指数/尾数）是机制层；金融场景必须给整数分方案；以 Goldberg/Python 文档为准。"
+    },
+    {
+      "id": "gs-floating-point-a",
+      "topic": "floating-point",
+      "topicNameZh": "浮点数与精度",
+      "category": "misconception-prone",
+      "difficulty": "advanced",
+      "persona_id": "persona-advanced",
+      "learningGoal": "能分析数值稳定性问题（灾难性抵消、Kahan 求和），并为数值计算库设计测试策略。",
+      "likelyMisconceptions": [
+        "换更高精度就能消除数值不稳定",
+        "Kahan 求和没有代价",
+        "单元测试用精确相等断言适合浮点"
+      ],
+      "authoritativeSources": [
+        "https://docs.oracle.com/cd/E19957-01/806-3568/ncg_goldberg.html",
+        "https://docs.python.org/3/tutorial/floatingpoint.html",
+        "https://en.wikipedia.org/wiki/IEEE_754"
+      ],
+      "expectedPrerequisites": [
+        "中级档目标",
+        "级数/极限概念（直觉层面）",
+        "算法复杂度",
+        "测试设计基础"
+      ],
+      "goldenNotes": "灾难性抵消示例必须数值可复核；进阶档要求远迁移（从求和到方差计算）。"
+    },
+    {
+      "id": "gs-closures-b",
+      "topic": "closures",
+      "topicNameZh": "闭包与作用域",
+      "category": "misconception-prone",
+      "difficulty": "beginner",
+      "persona_id": "persona-beginner",
+      "learningGoal": "能读懂闭包示例并解释'为什么外层函数返回后内层函数还能用外层变量'。",
+      "likelyMisconceptions": [
+        "闭包复制的是变量当时的值",
+        "外层函数返回后其变量就销毁了",
+        "闭包是 JS 独有的概念"
+      ],
+      "authoritativeSources": [
+        "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Closures",
+        "https://tc39.es/ecma262/",
+        "https://docs.python.org/3/reference/executionmodel.html"
+      ],
+      "expectedPrerequisites": [
+        "JS 函数定义与作用域（全局/局部）",
+        "函数作为值传递",
+        "无需运行时模型先修"
+      ],
+      "goldenNotes": "入门档用计数器例+分步演示；'捕获的是变量本身而非值快照'是核心，但入门档只要求现象+直觉，不要求作用域链细节。"
+    },
+    {
+      "id": "gs-closures-i",
+      "topic": "closures",
+      "topicNameZh": "闭包与作用域",
+      "category": "misconception-prone",
+      "difficulty": "intermediate",
+      "persona_id": "persona-intermediate",
+      "learningGoal": "能解释作用域链与捕获语义，识别循环捕获经典陷阱（var vs let），并用闭包做封装。",
+      "likelyMisconceptions": [
+        "var 与 let 在循环中的闭包行为相同",
+        "闭包必然导致内存泄漏（现代引擎无引用即回收）",
+        "IIFE 是解决循环捕获的唯一方式"
+      ],
+      "authoritativeSources": [
+        "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Closures",
+        "https://tc39.es/ecma262/",
+        "https://docs.python.org/3/reference/executionmodel.html"
+      ],
+      "expectedPrerequisites": [
+        "入门档目标",
+        "let/const/var 区别",
+        "JS 垃圾回收概念（名字层面）",
+        "事件循环的使用（非机制）"
+      ],
+      "goldenNotes": "var 循环+setTimeout 示例输出必须正确（全 3 vs 0,1,2）；以 MDN/tc39 为准。"
+    },
+    {
+      "id": "gs-closures-a",
+      "topic": "closures",
+      "topicNameZh": "闭包与作用域",
+      "category": "misconception-prone",
+      "difficulty": "advanced",
+      "persona_id": "persona-advanced",
+      "learningGoal": "能论证闭包在模块模式/memoization/柯里化中的应用，并比较跨语言捕获语义（Python late binding）。",
+      "likelyMisconceptions": [
+        "Python 闭包与 JS 语义完全相同（同为 late binding 但默认参数技巧不同）",
+        "memoization 没有内存代价",
+        "柯里化与偏应用是一回事"
+      ],
+      "authoritativeSources": [
+        "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Closures",
+        "https://tc39.es/ecma262/",
+        "https://docs.python.org/3/reference/executionmodel.html"
+      ],
+      "expectedPrerequisites": [
+        "中级档目标",
+        "Python 函数默认参数",
+        "高阶函数",
+        "内存管理基础"
+      ],
+      "goldenNotes": "跨语言对比（Python late-binding 陷阱）是远迁移判分点；以 MDN+Python execution model 为准。"
+    },
+    {
+      "id": "gs-hash-tables-b",
+      "topic": "hash-tables",
+      "topicNameZh": "哈希表",
+      "category": "stable-foundations",
+      "difficulty": "beginner",
+      "persona_id": "persona-beginner",
+      "learningGoal": "能解释哈希表'键→下标'的映射直觉与为什么查找快，能正确使用 dict。",
+      "likelyMisconceptions": [
+        "哈希表查找永远 O(1)（忽视最坏情况）",
+        "任何对象都能当 dict 键（可变对象不行）",
+        "哈希就是加密"
+      ],
+      "authoritativeSources": [
+        "https://en.wikipedia.org/wiki/Hash_table",
+        "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/",
+        "https://docs.python.org/3/library/stdtypes.html#mapping-types-dict"
+      ],
+      "expectedPrerequisites": [
+        "数组/列表下标",
+        "Python dict 使用",
+        "函数概念（映射直觉）"
+      ],
+      "goldenNotes": "入门档用'储物柜编号'类比+具体例；不引入哈希函数构造；'哈希≠加密'必须纠正。"
+    },
+    {
+      "id": "gs-hash-tables-i",
+      "topic": "hash-tables",
+      "topicNameZh": "哈希表",
+      "category": "stable-foundations",
+      "difficulty": "intermediate",
+      "persona_id": "persona-intermediate",
+      "learningGoal": "能解释冲突解决策略（链地址/开放寻址）与负载因子权衡，能分析最坏复杂度。",
+      "likelyMisconceptions": [
+        "开放寻址没有聚集问题",
+        "负载因子越高越好（空间利用率）",
+        "好的哈希函数能消除冲突（鸽笼原理）"
+      ],
+      "authoritativeSources": [
+        "https://en.wikipedia.org/wiki/Hash_table",
+        "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/",
+        "https://docs.python.org/3/library/stdtypes.html#mapping-types-dict"
+      ],
+      "expectedPrerequisites": [
+        "入门档目标",
+        "Big-O 基础",
+        "链表概念",
+        "取模运算"
+      ],
+      "goldenNotes": "冲突必然性（鸽笼）是机制层；以 CLRS/OCW 为准；最坏 O(n) 必须给出。"
+    },
+    {
+      "id": "gs-hash-tables-a",
+      "topic": "hash-tables",
+      "topicNameZh": "哈希表",
+      "category": "stable-foundations",
+      "difficulty": "advanced",
+      "persona_id": "persona-advanced",
+      "learningGoal": "能论证真实系统中的哈希表设计选择（Python dict 实现演进、一致性哈希 vs 哈希表），并设计哈希洪泛攻击防护。",
+      "likelyMisconceptions": [
+        "一致性哈希是哈希表冲突解决的变体（不同问题域）",
+        "哈希随机化没有性能代价",
+        "任何哈希函数都适合安全场景"
+      ],
+      "authoritativeSources": [
+        "https://en.wikipedia.org/wiki/Hash_table",
+        "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/",
+        "https://docs.python.org/3/library/stdtypes.html#mapping-types-dict"
+      ],
+      "expectedPrerequisites": [
+        "中级档目标",
+        "分布式系统分片概念",
+        "Python dict 使用经验",
+        "安全基础（DoS 概念）"
+      ],
+      "goldenNotes": "一致性哈希 vs 哈希表是远迁移辨析点；Python dict 紧凑布局可引用但版本细节需核对。"
+    },
+    {
+      "id": "gs-linear-algebra-eigen-b",
+      "topic": "linear-algebra-eigen",
+      "topicNameZh": "特征值与特征向量",
+      "category": "stable-foundations",
+      "difficulty": "beginner",
+      "persona_id": "persona-beginner",
+      "learningGoal": "能解释矩阵乘向量的几何直觉（线性变换），能识别特征向量'方向不变'的含义。",
+      "likelyMisconceptions": [
+        "矩阵乘法是对应元素相乘",
+        "特征向量是矩阵的'特殊解'（无几何含义）",
+        "任何矩阵都有实特征向量（旋转矩阵没有）"
+      ],
+      "authoritativeSources": [
+        "https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/",
+        "https://math.mit.edu/~gs/linearalgebra/",
+        "https://en.wikipedia.org/wiki/Eigenvalues_and_eigenvectors"
+      ],
+      "expectedPrerequisites": [
+        "二维坐标系与向量",
+        "线性方程组",
+        "无需证明能力"
+      ],
+      "goldenNotes": "入门档必须几何可视化（diagram/interactive），不要求特征多项式计算；2D 旋转矩阵无实特征向量是边界反例。"
+    },
+    {
+      "id": "gs-linear-algebra-eigen-i",
+      "topic": "linear-algebra-eigen",
+      "topicNameZh": "特征值与特征向量",
+      "category": "stable-foundations",
+      "difficulty": "intermediate",
+      "persona_id": "persona-intermediate",
+      "learningGoal": "能计算 2×2/3×3 矩阵的特征值与特征向量（特征多项式），并解释对角化的条件与意义。",
+      "likelyMisconceptions": [
+        "任何矩阵都可对角化（亏损矩阵）",
+        "特征值总是实数",
+        "代数重数=几何重数恒成立"
+      ],
+      "authoritativeSources": [
+        "https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/",
+        "https://math.mit.edu/~gs/linearalgebra/",
+        "https://en.wikipedia.org/wiki/Eigenvalues_and_eigenvectors"
+      ],
+      "expectedPrerequisites": [
+        "入门档目标",
+        "行列式计算",
+        "多项式求根",
+        "线性无关"
+      ],
+      "goldenNotes": "计算例必须数值可复核；亏损矩阵反例（如 [[1,1],[0,1]]）是深度判分点。"
+    },
+    {
+      "id": "gs-linear-algebra-eigen-a",
+      "topic": "linear-algebra-eigen",
+      "topicNameZh": "特征值与特征向量",
+      "category": "stable-foundations",
+      "difficulty": "advanced",
+      "persona_id": "persona-advanced",
+      "learningGoal": "能论证特征分解在 PCA/PageRank/动力系统中的应用，并解释谱定理与数值计算的边界。",
+      "likelyMisconceptions": [
+        "PCA 主成分是原始数据矩阵最大特征值方向（应为协方差矩阵）",
+        "幂迭代对任何矩阵都收敛",
+        "特征分解与 SVD 可互换"
+      ],
+      "authoritativeSources": [
+        "https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/",
+        "https://math.mit.edu/~gs/linearalgebra/",
+        "https://en.wikipedia.org/wiki/Eigenvalues_and_eigenvectors"
+      ],
+      "expectedPrerequisites": [
+        "中级档目标",
+        "协方差/方差",
+        "对称矩阵性质",
+        "Python numpy 使用",
+        "收敛概念"
+      ],
+      "goldenNotes": "PCA=协方差矩阵特征分解是高频错误（F1）；以 Strang OCW 为准；进阶档要求远迁移。"
+    },
+    {
+      "id": "gs-big-o-b",
+      "topic": "big-o",
+      "topicNameZh": "复杂度分析",
+      "category": "stable-foundations",
+      "difficulty": "beginner",
+      "persona_id": "persona-beginner",
+      "learningGoal": "能用 Big-O 比较常见操作的增长趋势（列表查找 vs dict 查找），并解释'忽略常数与低阶项'。",
+      "likelyMisconceptions": [
+        "O(n) 总比 O(n²) 快（小 n 与常数）",
+        "Big-O 是精确运行时间",
+        "O(2n) 与 O(n) 是不同复杂度级"
+      ],
+      "authoritativeSources": [
+        "https://en.wikipedia.org/wiki/Big_O_notation",
+        "https://en.wikipedia.org/wiki/Introduction_to_Algorithms",
+        "https://www.bigocheatsheet.com/"
+      ],
+      "expectedPrerequisites": [
+        "函数增长直觉（线性/平方）",
+        "循环嵌套",
+        "无需极限定义"
+      ],
+      "goldenNotes": "入门档用具体 n 值表格（bar-compare），不要求形式化定义；'Big-O≠运行时间'必须纠正。"
+    },
+    {
+      "id": "gs-big-o-i",
+      "topic": "big-o",
+      "topicNameZh": "复杂度分析",
+      "category": "stable-foundations",
+      "difficulty": "intermediate",
+      "persona_id": "persona-intermediate",
+      "learningGoal": "能分析嵌套循环与递归算法的复杂度，能区分最好/最坏/平均情况。",
+      "likelyMisconceptions": [
+        "平均情况是(最好+最坏)/2",
+        "两个顺序循环是 O(n²)（应为 O(n)）",
+        "空间复杂度只数额外数组（忽视调用栈）"
+      ],
+      "authoritativeSources": [
+        "https://en.wikipedia.org/wiki/Big_O_notation",
+        "https://en.wikipedia.org/wiki/Introduction_to_Algorithms",
+        "https://www.bigocheatsheet.com/"
+      ],
+      "expectedPrerequisites": [
+        "入门档目标",
+        "对数基础",
+        "递归（gs-recursion-i 水平）",
+        "数组/链表操作"
+      ],
+      "goldenNotes": "顺序 vs 嵌套循环区分是核心；递归空间（调用栈）易漏；以 CLRS 为准。"
+    },
+    {
+      "id": "gs-big-o-a",
+      "topic": "big-o",
+      "topicNameZh": "复杂度分析",
+      "category": "stable-foundations",
+      "difficulty": "advanced",
+      "persona_id": "persona-advanced",
+      "learningGoal": "能论证均摊分析（动态数组扩容）与复杂度理论同工程性能的差距（缓存 locality/常数）。",
+      "likelyMisconceptions": [
+        "均摊 O(1) 意味着每次操作都 O(1)",
+        "复杂度低的算法实践中总是更快（缓存/分支预测）",
+        "NP-hard 意味着不可解"
+      ],
+      "authoritativeSources": [
+        "https://en.wikipedia.org/wiki/Big_O_notation",
+        "https://en.wikipedia.org/wiki/Introduction_to_Algorithms",
+        "https://www.bigocheatsheet.com/"
+      ],
+      "expectedPrerequisites": [
+        "中级档目标",
+        "级数求和",
+        "内存层次概念",
+        "基本算法（排序）"
+      ],
+      "goldenNotes": "均摊分析须给聚合法直觉；理论-工程差距是进阶档深度点。"
+    },
+    {
+      "id": "gs-sql-transactions-b",
+      "topic": "sql-transactions",
+      "topicNameZh": "SQL 事务与隔离级别",
+      "category": "stable-foundations",
+      "difficulty": "beginner",
+      "persona_id": "persona-beginner",
+      "learningGoal": "能用 BEGIN/COMMIT/ROLLBACK 保证转账操作的原子性，并解释 ACID 的含义。",
+      "likelyMisconceptions": [
+        "单条 SQL 语句永远不需要事务（多语句场景）",
+        "ROLLBACK 能撤销已提交的操作",
+        "ACID 是四个互不相关的特性"
+      ],
+      "authoritativeSources": [
+        "https://www.postgresql.org/docs/current/tutorial-transactions.html",
+        "https://www.postgresql.org/docs/current/transaction-iso.html",
+        "https://en.wikipedia.org/wiki/ACID"
+      ],
+      "expectedPrerequisites": [
+        "SQL SELECT/UPDATE 基础",
+        "表/行概念",
+        "银行转账场景直觉"
+      ],
+      "goldenNotes": "入门档用转账例（扣款+入账必须原子）；以 PostgreSQL 文档为准；不引入隔离级别细节。"
+    },
+    {
+      "id": "gs-sql-transactions-i",
+      "topic": "sql-transactions",
+      "topicNameZh": "SQL 事务与隔离级别",
+      "category": "stable-foundations",
+      "difficulty": "intermediate",
+      "persona_id": "persona-intermediate",
+      "learningGoal": "能区分四种隔离级别防止的现象（脏读/不可重复读/幻读），并在 PostgreSQL 中选择隔离级别。",
+      "likelyMisconceptions": [
+        "PostgreSQL 的 Read Committed 允许脏读（不允许）",
+        "Serializable 没有性能代价",
+        "幻读与不可重复读是一回事"
+      ],
+      "authoritativeSources": [
+        "https://www.postgresql.org/docs/current/tutorial-transactions.html",
+        "https://www.postgresql.org/docs/current/transaction-iso.html",
+        "https://en.wikipedia.org/wiki/ACID"
+      ],
+      "expectedPrerequisites": [
+        "入门档目标",
+        "并发事务概念",
+        "锁直觉",
+        "PostgreSQL 使用"
+      ],
+      "goldenNotes": "PostgreSQL 实际实现（无脏读、SSI）与 SQL 标准表述有差异——必须以官方文档为准，禁止 judge 凭记忆（F1 高风险）。"
+    },
+    {
+      "id": "gs-sql-transactions-a",
+      "topic": "sql-transactions",
+      "topicNameZh": "SQL 事务与隔离级别",
+      "category": "stable-foundations",
+      "difficulty": "advanced",
+      "persona_id": "persona-advanced",
+      "learningGoal": "能设计并发控制方案（乐观/悲观锁、MVCC、序列化失败重试），并论证分布式事务的边界。",
+      "likelyMisconceptions": [
+        "MVCC 完全消除锁竞争",
+        "两阶段提交能解决所有分布式一致性",
+        "序列化失败重试不需要幂等设计"
+      ],
+      "authoritativeSources": [
+        "https://www.postgresql.org/docs/current/tutorial-transactions.html",
+        "https://www.postgresql.org/docs/current/transaction-iso.html",
+        "https://en.wikipedia.org/wiki/ACID"
+      ],
+      "expectedPrerequisites": [
+        "中级档目标",
+        "分布式系统基础",
+        "MVCC 概念",
+        "幂等设计"
+      ],
+      "goldenNotes": "MVCC/SSI 机制以 PostgreSQL 文档为准；分布式事务边界（2PC 阻塞问题）是进阶档深度点。"
+    },
+    {
+      "id": "gs-concurrency-b",
+      "topic": "concurrency",
+      "topicNameZh": "并发与竞态",
+      "category": "stable-foundations",
+      "difficulty": "beginner",
+      "persona_id": "persona-beginner",
+      "learningGoal": "能解释'两个线程同时给计数器加一'为什么丢更新，并能用锁修复。",
+      "likelyMisconceptions": [
+        "GIL 让 Python 线程完全安全（字节码级竞态仍存在）",
+        "加锁一定更慢（正确性优先）",
+        "并发与并行是一回事"
+      ],
+      "authoritativeSources": [
+        "https://docs.python.org/3/library/threading.html",
+        "https://docs.python.org/3/library/asyncio.html",
+        "https://en.wikipedia.org/wiki/Race_condition"
+      ],
+      "expectedPrerequisites": [
+        "Python 函数与全局变量",
+        "线程概念（名字层面）",
+        "计数器场景"
+      ],
+      "goldenNotes": "入门档必须演示竞态（具体代码+输出）；GIL≠线程安全是核心误解；以 Python 文档为准。"
+    },
+    {
+      "id": "gs-concurrency-i",
+      "topic": "concurrency",
+      "topicNameZh": "并发与竞态",
+      "category": "stable-foundations",
+      "difficulty": "intermediate",
+      "persona_id": "persona-intermediate",
+      "learningGoal": "能区分 threading/multiprocessing/asyncio 的适用场景，能识别死锁条件与避免策略。",
+      "likelyMisconceptions": [
+        "asyncio 能加速 CPU 密集任务",
+        "死锁只发生在两把锁时（四条件）",
+        "线程池越大越好"
+      ],
+      "authoritativeSources": [
+        "https://docs.python.org/3/library/threading.html",
+        "https://docs.python.org/3/library/asyncio.html",
+        "https://en.wikipedia.org/wiki/Race_condition"
+      ],
+      "expectedPrerequisites": [
+        "入门档目标",
+        "I/O vs CPU 密集区分",
+        "Python GIL 概念",
+        "事件循环使用"
+      ],
+      "goldenNotes": "I/O-bound vs CPU-bound 选型是核心；死锁四条件必须完整；以 Python threading/asyncio 文档为准。"
+    },
+    {
+      "id": "gs-concurrency-a",
+      "topic": "concurrency",
+      "topicNameZh": "并发与竞态",
+      "category": "stable-foundations",
+      "difficulty": "advanced",
+      "persona_id": "persona-advanced",
+      "learningGoal": "能设计并发系统的正确性论证（竞态检测、锁排序、无锁结构权衡），并解释内存模型的边界。",
+      "likelyMisconceptions": [
+        "无锁一定比有锁快",
+        "Python 内存模型与 Java 相同",
+        "测试能证明无竞态"
+      ],
+      "authoritativeSources": [
+        "https://docs.python.org/3/library/threading.html",
+        "https://docs.python.org/3/library/asyncio.html",
+        "https://en.wikipedia.org/wiki/Race_condition"
+      ],
+      "expectedPrerequisites": [
+        "中级档目标",
+        "操作系统内存模型概念",
+        "原子操作概念",
+        "测试设计基础"
+      ],
+      "goldenNotes": "'测试不能证明无竞态'是进阶档核心判分点；内存模型对比须谨慎，不得编造细节（F1）。"
+    },
+    {
+      "id": "gs-git-branching-b",
+      "topic": "git-branching",
+      "topicNameZh": "Git 分支与故障恢复",
+      "category": "hands-on-skills",
+      "difficulty": "beginner",
+      "persona_id": "persona-beginner",
+      "learningGoal": "能创建/切换/合并分支，并解释'分支是指针'。",
+      "likelyMisconceptions": [
+        "分支是代码的完整副本",
+        "合并必然产生冲突",
+        "删除分支会删除提交"
+      ],
+      "authoritativeSources": [
+        "https://git-scm.com/book/en/v2/Git-Branching-Branches-in-a-Nutshell",
+        "https://git-scm.com/docs/git-rebase",
+        "https://git-scm.com/docs/git-reflog"
+      ],
+      "expectedPrerequisites": [
+        "git add/commit 日常操作",
+        "提交概念",
+        "命令行基础"
+      ],
+      "goldenNotes": "入门档必须可视化指针（diagram）；'分支=指针'是核心直觉；以 git-scm book 为准。吸收自旧主题'Git 团队协作与故障恢复'并去重。"
+    },
+    {
+      "id": "gs-git-branching-i",
+      "topic": "git-branching",
+      "topicNameZh": "Git 分支与故障恢复",
+      "category": "hands-on-skills",
+      "difficulty": "intermediate",
+      "persona_id": "persona-intermediate",
+      "learningGoal": "能用 rebase 整理提交、用 reflog 恢复误操作，并论证 merge vs rebase 的边界。",
+      "likelyMisconceptions": [
+        "rebase 会丢失提交（reflog 可恢复）",
+        "rebase 可用于公共分支",
+        "reflog 永久保存"
+      ],
+      "authoritativeSources": [
+        "https://git-scm.com/book/en/v2/Git-Branching-Branches-in-a-Nutshell",
+        "https://git-scm.com/docs/git-rebase",
+        "https://git-scm.com/docs/git-reflog"
+      ],
+      "expectedPrerequisites": [
+        "入门档目标",
+        "远程仓库概念",
+        "冲突解决经验",
+        "提交哈希概念"
+      ],
+      "goldenNotes": "rebase 黄金法则（不 rebase 公共分支）必须给出；reflog 恢复必须给具体 step-walkthrough；以 git-scm 文档为准。"
+    },
+    {
+      "id": "gs-git-branching-a",
+      "topic": "git-branching",
+      "topicNameZh": "Git 分支与故障恢复",
+      "category": "hands-on-skills",
+      "difficulty": "advanced",
+      "persona_id": "persona-advanced",
+      "learningGoal": "能设计团队分支策略（trunk-based vs git-flow）并制定发布/hotfix 流程，论证历史线性的权衡。",
+      "likelyMisconceptions": [
+        "git-flow 适合所有团队",
+        "线性历史没有代价（丢失分支上下文）",
+        "cherry-pick 与 merge 等价"
+      ],
+      "authoritativeSources": [
+        "https://git-scm.com/book/en/v2/Git-Branching-Branches-in-a-Nutshell",
+        "https://git-scm.com/docs/git-rebase",
+        "https://git-scm.com/docs/git-reflog"
+      ],
+      "expectedPrerequisites": [
+        "中级档目标",
+        "CI/CD 概念",
+        "代码评审流程",
+        "语义化版本"
+      ],
+      "goldenNotes": "进阶档要求论证团队规模/发布频率的权衡，不是教条；以 git-scm 文档为准。"
+    },
+    {
+      "id": "gs-docker-python-b",
+      "topic": "docker-python",
+      "topicNameZh": "Python 容器化",
+      "category": "hands-on-skills",
+      "difficulty": "beginner",
+      "persona_id": "persona-beginner",
+      "learningGoal": "能编写 Dockerfile 把一个 Python 脚本容器化，并解释镜像与容器的区别。",
+      "likelyMisconceptions": [
+        "镜像就是运行中的容器",
+        "COPY 与 ADD 完全相同",
+        "容器内数据默认持久化"
+      ],
+      "authoritativeSources": [
+        "https://docs.docker.com/get-started/",
+        "https://docs.docker.com/build/building/best-practices/",
+        "https://docs.docker.com/reference/dockerfile/"
+      ],
+      "expectedPrerequisites": [
+        "命令行基础",
+        "Python 脚本运行",
+        "文件路径概念"
+      ],
+      "goldenNotes": "入门档必须给可运行的最小 Dockerfile；镜像/容器=类/实例类比；以 docs.docker.com 为准。"
+    },
+    {
+      "id": "gs-docker-python-i",
+      "topic": "docker-python",
+      "topicNameZh": "Python 容器化",
+      "category": "hands-on-skills",
+      "difficulty": "intermediate",
+      "persona_id": "persona-intermediate",
+      "learningGoal": "能优化 Python 镜像（多阶段构建、层缓存、依赖锁定），并解释构建缓存失效的原理。",
+      "likelyMisconceptions": [
+        "COPY . . 放最前面能更好利用缓存（应先复制依赖文件）",
+        "多阶段构建只减小体积，无安全收益",
+        "latest 标签可复现"
+      ],
+      "authoritativeSources": [
+        "https://docs.docker.com/get-started/",
+        "https://docs.docker.com/build/building/best-practices/",
+        "https://docs.docker.com/reference/dockerfile/"
+      ],
+      "expectedPrerequisites": [
+        "入门档目标",
+        "pip/requirements 使用",
+        "构建概念",
+        "分层文件系统直觉"
+      ],
+      "goldenNotes": "层缓存顺序（依赖先行、源码后行）是核心判分点；以 Docker best-practices 文档为准。"
+    },
+    {
+      "id": "gs-docker-python-a",
+      "topic": "docker-python",
+      "topicNameZh": "Python 容器化",
+      "category": "hands-on-skills",
+      "difficulty": "advanced",
+      "persona_id": "persona-advanced",
+      "learningGoal": "能设计生产级 Python 容器方案（非 root 用户、健康检查、资源限制、distroless 权衡），并论证容器 vs 虚拟机的隔离边界。",
+      "likelyMisconceptions": [
+        "容器提供虚拟机级隔离",
+        "distroless 适合所有调试场景",
+        "资源限制对 Python GC 无影响"
+      ],
+      "authoritativeSources": [
+        "https://docs.docker.com/get-started/",
+        "https://docs.docker.com/build/building/best-practices/",
+        "https://docs.docker.com/reference/dockerfile/"
+      ],
+      "expectedPrerequisites": [
+        "中级档目标",
+        "Linux 权限/用户",
+        "生产部署概念",
+        "安全基础"
+      ],
+      "goldenNotes": "容器隔离边界（共享内核）是进阶档深度点；以 Docker 文档为准，不得编造安全保证（F1）。"
+    },
+    {
+      "id": "gs-pytest-design-b",
+      "topic": "pytest-design",
+      "topicNameZh": "pytest 测试设计",
+      "category": "hands-on-skills",
+      "difficulty": "beginner",
+      "persona_id": "persona-beginner",
+      "learningGoal": "能写 assert 测试函数并用 pytest 运行，解释'测试'与'print 调试'的区别。",
+      "likelyMisconceptions": [
+        "测试就是 print 加个函数壳",
+        "测试文件可以任意命名（test_ 前缀约定）",
+        "一个测试函数只能有一个 assert"
+      ],
+      "authoritativeSources": [
+        "https://docs.pytest.org/en/stable/",
+        "https://docs.pytest.org/en/stable/how-to/fixtures.html",
+        "https://docs.pytest.org/en/stable/how-to/parametrize.html"
+      ],
+      "expectedPrerequisites": [
+        "Python 函数与 assert",
+        "命令行基础",
+        "模块导入概念"
+      ],
+      "goldenNotes": "入门档必须给可运行最小例；命名约定（test_*.py）以 docs 为准。"
+    },
+    {
+      "id": "gs-pytest-design-i",
+      "topic": "pytest-design",
+      "topicNameZh": "pytest 测试设计",
+      "category": "hands-on-skills",
+      "difficulty": "intermediate",
+      "persona_id": "persona-intermediate",
+      "learningGoal": "能用 fixture 与 parametrize 管理测试依赖，解释 scope 与 yield teardown。",
+      "likelyMisconceptions": [
+        "fixture 只是 setup 函数（依赖注入 vs 全局状态）",
+        "parametrize 与循环等价（独立用例 vs 单用例）",
+        "session 级 fixture 没有隔离风险"
+      ],
+      "authoritativeSources": [
+        "https://docs.pytest.org/en/stable/",
+        "https://docs.pytest.org/en/stable/how-to/fixtures.html",
+        "https://docs.pytest.org/en/stable/how-to/parametrize.html"
+      ],
+      "expectedPrerequisites": [
+        "入门档目标",
+        "Python 生成器/yield",
+        "测试隔离概念",
+        "装饰器使用（非原理）"
+      ],
+      "goldenNotes": "fixture 依赖注入与 parametrize 独立性是核心；以 pytest 文档为准。"
+    },
+    {
+      "id": "gs-pytest-design-a",
+      "topic": "pytest-design",
+      "topicNameZh": "pytest 测试设计",
+      "category": "hands-on-skills",
+      "difficulty": "advanced",
+      "persona_id": "persona-advanced",
+      "learningGoal": "能设计测试策略（测试金字塔、属性测试、mock 边界），并论证测试可维护性的权衡。",
+      "likelyMisconceptions": [
+        "mock 越多越好（过度 mock 使测试脱离现实）",
+        "100% 覆盖率意味着无 bug",
+        "属性测试可替代示例测试"
+      ],
+      "authoritativeSources": [
+        "https://docs.pytest.org/en/stable/",
+        "https://docs.pytest.org/en/stable/how-to/fixtures.html",
+        "https://docs.pytest.org/en/stable/how-to/parametrize.html"
+      ],
+      "expectedPrerequisites": [
+        "中级档目标",
+        "测试金字塔概念",
+        "依赖注入设计",
+        "CI 流程"
+      ],
+      "goldenNotes": "进阶档要求论证 mock 边界与可维护性；不得编造覆盖率-缺陷率数据（F1）。"
+    },
+    {
+      "id": "gs-regex-b",
+      "topic": "regex",
+      "topicNameZh": "正则表达式",
+      "category": "hands-on-skills",
+      "difficulty": "beginner",
+      "persona_id": "persona-beginner",
+      "learningGoal": "能写基础模式（字符类/量词/锚点）匹配简单文本，并解释'贪婪 vs 懒惰'。",
+      "likelyMisconceptions": [
+        "正则能解析任意 HTML（嵌套结构超出正则语言）",
+        ".* 与 .*? 相同",
+        ". 默认匹配包括换行在内的任何字符（默认不含换行）"
+      ],
+      "authoritativeSources": [
+        "https://docs.python.org/3/library/re.html",
+        "https://www.regular-expressions.info/",
+        "https://regex101.com/"
+      ],
+      "expectedPrerequisites": [
+        "字符串概念",
+        "Python 字符串方法",
+        "无需形式语言理论"
+      ],
+      "goldenNotes": "入门档用具体文本例（提取电话/邮箱）；贪婪/懒惰必须对比例；以 Python re 文档为准。"
+    },
+    {
+      "id": "gs-regex-i",
+      "topic": "regex",
+      "topicNameZh": "正则表达式",
+      "category": "hands-on-skills",
+      "difficulty": "intermediate",
+      "persona_id": "persona-intermediate",
+      "learningGoal": "能用分组/反向引用/环视解决提取问题，并识别灾难性回溯风险。",
+      "likelyMisconceptions": [
+        "环视会消耗字符（零宽）",
+        "反向引用 \\1 引用第一个字符（第一个分组）",
+        "所有正则引擎语义相同（PCRE vs Python vs JS）"
+      ],
+      "authoritativeSources": [
+        "https://docs.python.org/3/library/re.html",
+        "https://www.regular-expressions.info/",
+        "https://regex101.com/"
+      ],
+      "expectedPrerequisites": [
+        "入门档目标",
+        "栈/递归直觉",
+        "Python re 模块使用",
+        "自动机概念（名字层面）"
+      ],
+      "goldenNotes": "灾难性回溯（嵌套量词）必须给具体例；引擎差异须标注；以 re 文档/regular-expressions.info 为准。"
+    },
+    {
+      "id": "gs-regex-a",
+      "topic": "regex",
+      "topicNameZh": "正则表达式",
+      "category": "hands-on-skills",
+      "difficulty": "advanced",
+      "persona_id": "persona-advanced",
+      "learningGoal": "能论证正则的适用边界（vs 解析器/PEG），并设计 ReDoS 防护与性能优化策略。",
+      "likelyMisconceptions": [
+        "正则能解析嵌套结构（Chomsky 层级）",
+        "ReDoS 只影响服务端（客户端也受影响）",
+        "预编译正则没有代价"
+      ],
+      "authoritativeSources": [
+        "https://docs.python.org/3/library/re.html",
+        "https://www.regular-expressions.info/",
+        "https://regex101.com/"
+      ],
+      "expectedPrerequisites": [
+        "中级档目标",
+        "形式语言层级概念",
+        "解析器基础",
+        "安全（DoS）概念"
+      ],
+      "goldenNotes": "正则语言不能解析嵌套结构是理论边界（F1 高风险：不得过度声称）；以 re 文档/regular-expressions.info 为准。"
+    }
+  ]
+}

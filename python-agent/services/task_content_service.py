@@ -27,6 +27,7 @@ from schemas.learning_v2 import TaskStreamRequest
 from services.chapter_plan_service import TEACHING_PATTERNS
 from services.learning_v2_errors import classify_llm_error
 from services.memory_context_v4 import format_memory_context_for_prompt
+from evals import trace as eval_trace
 
 PROMPT_VERSION = "task-content-v4"
 
@@ -496,20 +497,30 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
                 {"role": "user", "content": decision_messages["user"]},
             ]
             try:
-                await asyncio.to_thread(
-                    client.prepare_search_context,
-                    messages=decision_messages,
-                    tools=SEARCH_TOOLS,
-                    tool_functions=collector.tool_functions,
-                    max_tokens=1200,
-                    reasoning_split=True,
-                    max_iterations=1,
-                    max_searches=1,
-                    reasoning_effort="none",
-                )
+                with eval_trace.stage("search_decision"):
+                    await asyncio.to_thread(
+                        client.prepare_search_context,
+                        messages=decision_messages,
+                        tools=SEARCH_TOOLS,
+                        tool_functions=collector.tool_functions,
+                        max_tokens=1200,
+                        reasoning_split=True,
+                        max_iterations=1,
+                        max_searches=1,
+                        reasoning_effort="none",
+                    )
+                    eval_trace.record_evidence(
+                        collector.pack, stage="search_decision",
+                        chapter_id=request.chapterId, task_id=request.taskId,
+                    )
                 # 检索决策使用紧凑 system prompt；正文仍必须使用完整教学 prompt。
                 # 只保留工具调用产生的 assistant/tool 上下文，避免模型丢掉内容配方。
                 tool_context = decision_messages[2:]
+                eval_trace.record_stage_parsed(
+                    "search_decision",
+                    {"searched": bool(tool_context), "toolContext": tool_context},
+                    parser="search_decision",
+                )
                 messages = [
                     {"role": "system", "content": system_prompt},
                     *tool_context,
@@ -528,27 +539,28 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
                 print(f"[任务流] requestId={request_id} 搜索决策失败，继续生成正文: {exc}")
 
         # 推理型模型思考长度方差大，max_tokens 预算必须给思考留足余量。
-        async for chunk in client.stream_chat(
-            messages=messages,
-            max_tokens=16000,
-            include_usage=True,
-            reasoning_effort=_TASK_CONTENT_REASONING_EFFORT,
-        ):
-            if not chunk.get("choices") and chunk.get("usage"):
-                stream_usage = extract_usage(chunk)
-                continue
-            delta = (chunk.get("choices") or [{}])[0].get("delta", {}).get("content", "")
-            if not delta:
-                continue
-            received_delta = True
-            accumulated += delta
-            for pe in parser.feed(delta):
+        with eval_trace.stage(f"task_content_{request.taskId}"):
+            async for chunk in client.stream_chat(
+                messages=messages,
+                max_tokens=16000,
+                include_usage=True,
+                reasoning_effort=_TASK_CONTENT_REASONING_EFFORT,
+            ):
+                if not chunk.get("choices") and chunk.get("usage"):
+                    stream_usage = extract_usage(chunk)
+                    continue
+                delta = (chunk.get("choices") or [{}])[0].get("delta", {}).get("content", "")
+                if not delta:
+                    continue
+                received_delta = True
+                accumulated += delta
+                for pe in parser.feed(delta):
+                    for sse in _parser_event_to_sse(pe, make_event, started_blocks):
+                        yield sse
+
+            for pe in parser.finish():
                 for sse in _parser_event_to_sse(pe, make_event, started_blocks):
                     yield sse
-
-        for pe in parser.finish():
-            for sse in _parser_event_to_sse(pe, make_event, started_blocks):
-                yield sse
 
     except Exception as exc:  # noqa: BLE001
         if received_delta:
@@ -574,6 +586,12 @@ async def stream_task_events(request: TaskStreamRequest, client: MiniMaxClient |
     boundary_prompt: dict = {"takeaway": extract_takeaway(clean_text)}
     if request.nextTaskTitle:
         boundary_prompt["nextHint"] = f"接下来：{request.nextTaskTitle}"
+
+    eval_trace.record_stage_parsed(
+        f"task_content_{request.taskId}",
+        {"blocks": final_blocks, "boundaryPrompt": boundary_prompt},
+        parser="content_stream_parser",
+    )
 
     yield make_event("task_completed", {
         "task": {

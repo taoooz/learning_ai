@@ -1,0 +1,123 @@
+{
+  "$schema_note": "阶段0定义交付物：3 个学习者画像。每个 persona 的 learnerPositioning 字段与 python-agent/schemas/outline.py:5-13 的 LearnerPositioning 完全兼容（estimatedLevel/backgroundSummary/skipBasics/likelyGaps/levelConfidence/preferredExampleDomains/personalExampleLimit）；persona_id/name/prerequisiteAssumptions/typicalMisconceptions/motivationScenario 为评测侧扩展字段，供 rubric 判分与 golden set 引用，不进入生成链路 schema。",
+  "version": "1.0",
+  "personas": [
+    {
+      "persona_id": "persona-beginner",
+      "name": "转行入门者·小周",
+      "estimatedLevel": "beginner",
+      "backgroundSummary": "28 岁，原行政岗，自学过 3 个月 Python 基础语法（变量、if/for、函数定义），能照着教程跑通脚本但不理解报错。没有计算机体系结构、网络或数学（超出初中代数）基础。每天可投入 45 分钟，碎片化学习，容易在连续挫折后放弃。",
+      "skipBasics": [
+        "计算机开关机与文件管理",
+        "初中代数运算"
+      ],
+      "likelyGaps": [
+        "程序执行模型（代码如何一步步运行、调用栈是什么）",
+        "网络基础（请求/响应、域名/端口）",
+        "英文术语阅读（需要中文解释+英文原词对照）",
+        "报错信息解读（习惯跳过 traceback）",
+        "抽象符号（Σ、∀、O(n) 记号）"
+      ],
+      "levelConfidence": 0.78,
+      "preferredExampleDomains": [
+        "日常办公自动化",
+        "生活场景（购物、排队、记账）",
+        "文件与文件夹操作"
+      ],
+      "personalExampleLimit": 1,
+      "prerequisiteAssumptions": [
+        "会写并运行 10 行以内的 Python 脚本",
+        "知道变量、条件、循环、函数四个概念的名字（不保证理解深度）",
+        "不具备：数据结构、复杂度、操作系统、网络协议、线性代数、概率论",
+        "判分含意：任何超出上述假设的概念必须先铺垫后使用（rubric D5）；单块新术语 ≤3（rubric D3 操作约定）"
+      ],
+      "typicalMisconceptions": [
+        "代码是从上到下'一次性'执行的，函数调用不会'跳进去再回来'",
+        "报错意味着自己不适合学编程（情绪性误解，需要脚手架化解）",
+        "变量是'盒子'，赋值是'放进去'，因此 a=b 后改 b 会影响 a（对引用语义的朴素泛化）",
+        "计算机的数和数学的数完全一样（浮点误解的前身）"
+      ],
+      "motivationScenario": "希望半年内转行初级开发/数据岗；学习动机是'做出一个能帮同事自动整理 Excel 的小工具'。课程若在第 2 个任务前没有产出可见的小成果，流失风险高。"
+    },
+    {
+      "persona_id": "persona-intermediate",
+      "name": "在职进阶者·阿林",
+      "estimatedLevel": "intermediate",
+      "backgroundSummary": "26 岁，1.5 年经验的前端/全栈工程师，日常用 React + Node 写业务代码，能独立完成 CRUD 功能。会用 API 但说不清底层机制（HTTP 缓存、事件循环、闭包捕获），调试靠 console.log 和搜索。学过大学计算机导论但概率/线代已遗忘。工作日晚上学习 1 小时，目标导向强，反感重复已会内容。",
+      "skipBasics": [
+        "HTML/CSS/JS 基础语法",
+        "React 组件与 props/state 基本用法",
+        "npm/git 日常操作",
+        "HTTP 请求的基本概念（GET/POST、状态码名字）"
+      ],
+      "likelyGaps": [
+        "协议与规范的精确语义（缓存头组合、CORS 预检触发条件）",
+        "语言运行时模型（事件循环、闭包与作用域链、引用语义）",
+        "概率直觉（条件概率、基率忽视）",
+        "复杂度分析与数据结构选型依据",
+        "把'能跑'升级为'能解释为什么能跑'的机制层知识"
+      ],
+      "levelConfidence": 0.72,
+      "preferredExampleDomains": [
+        "Web 业务场景（登录、列表、缓存、接口联调）",
+        "线上事故复盘",
+        "面试高频追问"
+      ],
+      "personalExampleLimit": 1,
+      "prerequisiteAssumptions": [
+        "熟练：JS/TS 语法、React 函数组件、async/await 的使用（非机制）",
+        "熟悉：git 基本命令、REST 接口调用、浏览器开发者工具打开方式",
+        "不具备：RFC 级协议细节、V8/事件循环规范、测度论概率、线性代数证明",
+        "判分含意：skipBasics 内容最多一句激活提示（rubric D5）；机制层解释是默认深度档（rubric D4）"
+      ],
+      "typicalMisconceptions": [
+        "no-cache 就是不使用缓存",
+        "CORS 报错是后端'没开权限'，加个 Access-Control-Allow-Origin: * 就万事大吉（忽视凭证与预检）",
+        "闭包捕获的是变量的'当时的值'而非变量本身",
+        "0.1+0.2!==0.3 是 JavaScript 的 bug",
+        "useEffect 依赖数组是'性能优化选项'而非语义正确性要求"
+      ],
+      "motivationScenario": "半年内跳槽到中级岗或在公司接手更复杂模块；直接动机是'上次线上缓存事故被问住了，面试也总在机制题翻车'。对'能立刻用于排错/面试'的内容付费意愿与完成率高。"
+    },
+    {
+      "persona_id": "persona-advanced",
+      "name": "资深拓域者·老陈",
+      "estimatedLevel": "advanced",
+      "backgroundSummary": "34 岁，8 年后端经验（Java/Go），熟悉分布式系统、数据库与并发，带过 3 人小组。正在向 AI 应用架构方向拓展：会调用 LLM API 搭 demo，但对 LLM 工程的不确定性管理（结构化输出可靠性、评测、成本）与前端现代框架（RSC/流式渲染）缺乏一手经验。数学基础扎实（工科线代/概率），读英文规范无障碍。周末整块时间学习 2-3 小时，偏好直接读规范与权衡分析，讨厌喂饭式教程。",
+      "skipBasics": [
+        "编程通识（变量/函数/类/测试/版本控制）",
+        "HTTP 协议基础与 REST 语义",
+        "数据库事务与索引基础",
+        "并发原语（线程/锁/队列）的使用经验",
+        "线性代数与概率论本科内容"
+      ],
+      "likelyGaps": [
+        "LLM 工程的实证性知识（模型行为随版本漂移、结构化输出的失败模式、评测方法学）",
+        "前端渲染模型（服务端组件/客户端组件边界、流式 SSR）",
+        "把确定性系统直觉迁移到概率性系统时的认知冲突（'接口应该稳定'的旧图式）",
+        "陌生领域的术语地图（知道概念但不知道社区通用叫法）"
+      ],
+      "levelConfidence": 0.68,
+      "preferredExampleDomains": [
+        "生产架构权衡（成本/延迟/可靠性三角）",
+        "跨领域类比（用分布式系统经验理解 LLM 工程）",
+        "规范原文与一手数据"
+      ],
+      "personalExampleLimit": 0,
+      "prerequisiteAssumptions": [
+        "精通：后端工程全链路、SQL 事务、并发编程、系统设计",
+        "熟悉：LLM API 的基本调用（chat completions 形状）、Docker 使用",
+        "不具备：LLM 评测方法学、前端框架 internals、认知科学术语",
+        "判分含意：expertise reversal 生效——过度脚手架按 D3 失配扣分（rubric T6）；深度档要求边界条件+远迁移（rubric D4）；levelConfidence 故意偏低，反映跨域自评估的不确定性"
+      ],
+      "typicalMisconceptions": [
+        "LLM API 的行为像传统 RPC 一样版本内稳定（忽视模型快照与行为漂移）",
+        "structured output / JSON mode 能保证语义正确（混淆格式合法与内容正确）",
+        "temperature=0 就是确定性输出",
+        "RSC 就是'服务端渲染 SSR 的新名字'（混淆渲染时机与组件模型）",
+        "评测 LLM 输出可以用单元测试的精确断言思路"
+      ],
+      "motivationScenario": "公司要在 Q1 上线 AI 功能，他负责架构选型与质量兜底；动机是'建立对 LLM 系统不确定性的工程直觉，避免用旧图式做错架构决策'。完成率高但对内容密度与准确性极其挑剔，事实错误会直接摧毁信任。"
+    }
+  ]
+}

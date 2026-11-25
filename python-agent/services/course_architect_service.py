@@ -26,6 +26,7 @@ from schemas.course_architecture import (
 from services.evidence_store import task_evidence_coverage
 from services.memory_context_v4 import wrap_untrusted_context
 from services.search_evidence import format_coverage_hint, format_search_decision_policy
+from evals import trace as eval_trace
 
 PROMPT_VERSION = "course-architect-v2-two-stage"
 ARCHITECT_REASONING_EFFORT = os.getenv("ARCHITECT_REASONING_EFFORT", "none").strip() or None
@@ -586,29 +587,30 @@ def _generate_meta_with_repair(
     messages: list[dict[str, Any]],
     plan: CourseChapterPlan,
 ) -> tuple[CourseArchitectureMeta, CourseArchitecture, str]:
-    content = _call_nonstream_stage(
-        client,
-        messages,
-        max_tokens=ARCHITECT_META_MAX_TOKENS,
-        response_format=_meta_response_format(),
-    )
-    try:
-        meta = _parse_architecture_meta(content)
-    except Exception as exc:  # noqa: BLE001
-        issues = [f"课程元信息 JSON 解析失败：{exc}"]
-    else:
-        architecture = _assemble_architecture(plan, meta)
-        issues = validate_course_architecture(architecture)
-        if not issues:
-            return meta, architecture, content
+    with eval_trace.stage("architect_meta"):
+        content = _call_nonstream_stage(
+            client,
+            messages,
+            max_tokens=ARCHITECT_META_MAX_TOKENS,
+            response_format=_meta_response_format(),
+        )
+        try:
+            meta = _parse_architecture_meta(content)
+        except Exception as exc:  # noqa: BLE001
+            issues = [f"课程元信息 JSON 解析失败：{exc}"]
+        else:
+            architecture = _assemble_architecture(plan, meta)
+            issues = validate_course_architecture(architecture)
+            if not issues:
+                return meta, architecture, content
 
-    print(f"[Course Architect] 元信息定向修复，不重生成章节：{issues}")
-    meta = _repair_meta_sync(client, messages, content, issues)
-    architecture = _assemble_architecture(plan, meta)
-    repaired_issues = validate_course_architecture(architecture)
-    if repaired_issues:
-        raise ValueError("课程元信息定向修复未通过：" + "；".join(repaired_issues))
-    return meta, architecture, content
+        print(f"[Course Architect] 元信息定向修复，不重生成章节：{issues}")
+        meta = _repair_meta_sync(client, messages, content, issues)
+        architecture = _assemble_architecture(plan, meta)
+        repaired_issues = validate_course_architecture(architecture)
+        if repaired_issues:
+            raise ValueError("课程元信息定向修复未通过：" + "；".join(repaired_issues))
+        return meta, architecture, content
 
 
 _JSON_STRING_FIELD_TEMPLATE = r'"{field}"\s*:\s*"((?:\\.|[^"\\])*)"'
@@ -690,7 +692,8 @@ def _review_issues(
 ) -> tuple[bool, bool, bool, list[str]]:
     if not should_review_architecture(architecture, learner, review_mode):
         return True, True, False, []
-    review = asyncio.run(_review_course_architecture(client, architecture, learner))
+    with eval_trace.stage("architect_review"):
+        review = asyncio.run(_review_course_architecture(client, architecture, learner))
     unavailable = bool(review.get("reviewUnavailable"))
     if review["passed"]:
         return True, False, unavailable, []
@@ -709,26 +712,27 @@ def _generate_chapter_plan_sync(
     chapter_messages: list[dict[str, Any]],
     allow_search: bool,
 ) -> tuple[CourseChapterPlan, str]:
-    content = _call_nonstream_stage(
-        client,
-        chapter_messages,
-        max_tokens=ARCHITECT_CHAPTERS_MAX_TOKENS,
-        tools=SEARCH_TOOLS if allow_search else None,
-        max_iterations=2 if allow_search else 1,
-        max_searches=1 if allow_search else 0,
-        response_format=_chapters_response_format(),
-    )
-    try:
-        plan = _parse_chapter_plan(content)
-    except Exception as exc:  # noqa: BLE001
-        issues = [f"章节目录 JSON 解析失败：{exc}"]
-    else:
-        issues = _chapter_plan_issues(plan)
-        if not issues:
-            return plan, content
+    with eval_trace.stage("architect_chapters"):
+        content = _call_nonstream_stage(
+            client,
+            chapter_messages,
+            max_tokens=ARCHITECT_CHAPTERS_MAX_TOKENS,
+            tools=SEARCH_TOOLS if allow_search else None,
+            max_iterations=2 if allow_search else 1,
+            max_searches=1 if allow_search else 0,
+            response_format=_chapters_response_format(),
+        )
+        try:
+            plan = _parse_chapter_plan(content)
+        except Exception as exc:  # noqa: BLE001
+            issues = [f"章节目录 JSON 解析失败：{exc}"]
+        else:
+            issues = _chapter_plan_issues(plan)
+            if not issues:
+                return plan, content
 
-    print(f"[Course Architect] 章节目录定向修复：{issues}")
-    return _repair_chapter_plan_sync(client, chapter_messages, content, issues), content
+        print(f"[Course Architect] 章节目录定向修复：{issues}")
+        return _repair_chapter_plan_sync(client, chapter_messages, content, issues), content
 
 
 def _generate_course_architecture_sync(
@@ -768,9 +772,10 @@ def _generate_course_architecture_sync(
     )
     if not review_passed:
         print(f"[Course Architect] 审查失败，定向修复章节：{review_issues}")
-        plan = _repair_chapter_plan_sync(
-            client, chapter_messages, json.dumps(plan.model_dump(), ensure_ascii=False), review_issues
-        )
+        with eval_trace.stage("architect_chapters"):
+            plan = _repair_chapter_plan_sync(
+                client, chapter_messages, json.dumps(plan.model_dump(), ensure_ascii=False), review_issues
+            )
         meta_messages = _meta_messages(
             topic, outline, learner, plan, memory_context, evidence, sources
         )
@@ -872,49 +877,50 @@ def stream_course_architecture(
             if account_id:
                 tools.append(MEMORY_SEARCH_TOOL)
                 tool_functions["memory_search"] = create_memory_search(account_id)
-            for event in client.stream_chat_with_tools(
-                messages=chapter_messages,
-                tools=tools,
-                tool_functions=tool_functions,
-                max_tokens=ARCHITECT_CHAPTERS_MAX_TOKENS,
-                reasoning_split=True,
-                max_iterations=2 if tools else 1,
-                max_searches=1 if allow_search else 0,
-                reasoning_effort=ARCHITECT_REASONING_EFFORT,
-                response_format=_chapters_response_format(),
-            ):
-                event_type = event.get("type")
-                if event_type == "tool_call":
-                    raw_content = ""
-                    emitted_chapters = 0
-                    emitted_course_name = False
-                    print(f"[Course Architect] 章节阶段调用工具：{event.get('tool')}")
-                    continue
-                if event_type == "done":
-                    finish_reason = event.get("finish_reason")
-                    continue
-                if event_type != "content_delta":
-                    continue
+            with eval_trace.stage("architect_chapters"):
+                for event in client.stream_chat_with_tools(
+                    messages=chapter_messages,
+                    tools=tools,
+                    tool_functions=tool_functions,
+                    max_tokens=ARCHITECT_CHAPTERS_MAX_TOKENS,
+                    reasoning_split=True,
+                    max_iterations=2 if tools else 1,
+                    max_searches=1 if allow_search else 0,
+                    reasoning_effort=ARCHITECT_REASONING_EFFORT,
+                    response_format=_chapters_response_format(),
+                ):
+                    event_type = event.get("type")
+                    if event_type == "tool_call":
+                        raw_content = ""
+                        emitted_chapters = 0
+                        emitted_course_name = False
+                        print(f"[Course Architect] 章节阶段调用工具：{event.get('tool')}")
+                        continue
+                    if event_type == "done":
+                        finish_reason = event.get("finish_reason")
+                        continue
+                    if event_type != "content_delta":
+                        continue
 
-                raw_content += str(event.get("content") or "")
-                if not emitted_course_name:
-                    course_name = _extract_json_string_field(raw_content, "courseTopic")
-                    if course_name:
-                        emitted_course_name = True
-                        yield {"type": "course_name", "value": course_name}
+                    raw_content += str(event.get("content") or "")
+                    if not emitted_course_name:
+                        course_name = _extract_json_string_field(raw_content, "courseTopic")
+                        if course_name:
+                            emitted_course_name = True
+                            yield {"type": "course_name", "value": course_name}
 
-                chapters = _complete_chapter_objects(raw_content)
-                for chapter in chapters[emitted_chapters:]:
-                    emitted_chapters += 1
-                    node = architecture_chapter_to_node(chapter, emitted_chapters)
-                    if node["title"]:
-                        print(
-                            f"[Course Architect] node={emitted_chapters} "
-                            f"elapsed={int((time.monotonic() - started_at) * 1000)}ms"
-                        )
-                        yield {"type": "node", "node": node}
-                        if emitted_chapters == 1:
-                            yield {"type": "progress", "message": "章节骨架正在生成，先展示已完成的章节…"}
+                    chapters = _complete_chapter_objects(raw_content)
+                    for chapter in chapters[emitted_chapters:]:
+                        emitted_chapters += 1
+                        node = architecture_chapter_to_node(chapter, emitted_chapters)
+                        if node["title"]:
+                            print(
+                                f"[Course Architect] node={emitted_chapters} "
+                                f"elapsed={int((time.monotonic() - started_at) * 1000)}ms"
+                            )
+                            yield {"type": "node", "node": node}
+                            if emitted_chapters == 1:
+                                yield {"type": "progress", "message": "章节骨架正在生成，先展示已完成的章节…"}
             print(
                 f"[Course Architect] 章节目录流结束 nodes={emitted_chapters} "
                 f"finishReason={finish_reason or 'unknown'} "
@@ -924,21 +930,22 @@ def stream_course_architecture(
             print(f"[Course Architect] 章节目录流失败：{exc}")
             chapter_issues = [str(exc)]
 
-    if raw_content.strip():
-        try:
-            plan = _parse_chapter_plan(raw_content)
-            chapter_issues = _chapter_plan_issues(plan)
-        except Exception as exc:  # noqa: BLE001
-            chapter_issues = [f"章节目录 JSON 解析失败：{exc}"]
+    with eval_trace.stage("architect_chapters"):
+        if raw_content.strip():
+            try:
+                plan = _parse_chapter_plan(raw_content)
+                chapter_issues = _chapter_plan_issues(plan)
+            except Exception as exc:  # noqa: BLE001
+                chapter_issues = [f"章节目录 JSON 解析失败：{exc}"]
 
-    if plan is None or chapter_issues:
-        print(f"[Course Architect] 章节目录需要定向修复：{chapter_issues}")
-        yield {"type": "progress", "message": "章节目录需要补齐，正在修复结构…"}
-        plan = _repair_chapter_plan_sync(
-            client, chapter_messages, raw_content, chapter_issues or ["章节目录生成失败"]
-        )
-        yield {"type": "course_name", "value": plan.courseTopic}
-        yield from _emit_plan_nodes(plan)
+        if plan is None or chapter_issues:
+            print(f"[Course Architect] 章节目录需要定向修复：{chapter_issues}")
+            yield {"type": "progress", "message": "章节目录需要补齐，正在修复结构…"}
+            plan = _repair_chapter_plan_sync(
+                client, chapter_messages, raw_content, chapter_issues or ["章节目录生成失败"]
+            )
+            yield {"type": "course_name", "value": plan.courseTopic}
+            yield from _emit_plan_nodes(plan)
 
     print(
         f"[Course Architect] 章节阶段校验完成 chapters={len(plan.chapters)} "
@@ -969,12 +976,13 @@ def stream_course_architecture(
     if not review_passed:
         yield {"type": "progress", "message": "正在按审查意见调整课程设计…"}
         print(f"[Course Architect] 审查失败，定向修复章节：{review_issues}")
-        plan = _repair_chapter_plan_sync(
-            client,
-            chapter_messages,
-            json.dumps(plan.model_dump(), ensure_ascii=False),
-            review_issues,
-        )
+        with eval_trace.stage("architect_chapters"):
+            plan = _repair_chapter_plan_sync(
+                client,
+                chapter_messages,
+                json.dumps(plan.model_dump(), ensure_ascii=False),
+                review_issues,
+            )
         yield {"type": "course_name", "value": plan.courseTopic}
         yield from _emit_plan_nodes(plan)
         meta_messages = _meta_messages(
