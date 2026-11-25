@@ -252,6 +252,9 @@ def load_trace_bundle(trace_dir) -> dict:
     for key, filename in (("spec", "spec.json"), ("run_meta", "run_meta.json"),
                           ("course", "course.json"), ("evidence", "evidence_snapshot.json")):
         data = load_json_or_none(root / filename)
+        if data is None and key == "run_meta":
+            # run_meta.json 写在 run 根目录（spec 目录的上一级），回退读取
+            data = load_json_or_none(root.parent / filename)
         bundle[key] = data
         if data is None:
             missing.append(f"{filename} 缺失或不可解析")
@@ -368,7 +371,7 @@ def build_report(bundle: dict | None = None, grounding: dict | None = None,
     cost = collect_cost(bundle, [grounding, alignment, *judge_results])
 
     lines: list[str] = ["# 课程质量基线报告", ""]
-    lines.append(f"- run: `{run_meta.get('run_id', '未知')}` / spec: `{spec.get('spec_id', '未知')}`")
+    lines.append(f"- run: `{run_meta.get('run_id', '未知')}` / spec: `{spec.get('spec_id') or spec.get('id') or '未知'}`")
     if run_meta.get("model"):
         lines.append(f"- 生成模型: `{run_meta['model']}`")
     if run_meta.get("generated_at"):

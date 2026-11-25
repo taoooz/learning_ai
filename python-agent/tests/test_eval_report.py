@@ -125,3 +125,33 @@ def test_build_report_request_fallback_and_rate():
     assert "33.3%" in report
     assert "回退从任务 request 快照提取" in report
     assert "no_retrieval 占比" not in report  # no_retrieval=0 不显示占比
+
+
+# ---------------------------------------------------------------- L2：run/spec 标识回退
+
+def test_run_meta_parent_fallback_and_spec_id(tmp_path):
+    """run_meta.json 在 run 根目录、spec.json 用 id 键时报告标识不再"未知"。"""
+    run_root = tmp_path / "run-x"
+    spec_dir = run_root / "gs-demo-b"
+    spec_dir.mkdir(parents=True)
+    (run_root / "run_meta.json").write_text(
+        json.dumps({"run_id": "run-x", "model": "m"}), encoding="utf-8")
+    (spec_dir / "spec.json").write_text(
+        json.dumps({"id": "gs-demo-b", "topic": "demo"}), encoding="utf-8")
+    bundle = load_trace_bundle(spec_dir)
+    assert bundle["run_meta"] is not None
+    assert bundle["run_meta"]["run_id"] == "run-x"
+    assert "run_meta.json 缺失" not in " ".join(bundle["missing"])
+    report = build_report(bundle)
+    assert "run: `run-x`" in report
+    assert "spec: `gs-demo-b`" in report
+
+
+def test_spec_id_key_precedence(tmp_path):
+    """spec_id 键优先于 id；两者皆无才"未知"。"""
+    (tmp_path / "spec.json").write_text(
+        json.dumps({"spec_id": "canonical", "id": "fallback"}), encoding="utf-8")
+    bundle = load_trace_bundle(tmp_path)
+    assert "spec: `canonical`" in build_report(bundle)
+    (tmp_path / "spec.json").write_text(json.dumps({"id": "fallback"}), encoding="utf-8")
+    assert "spec: `fallback`" in build_report(load_trace_bundle(tmp_path))

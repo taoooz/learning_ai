@@ -2,6 +2,9 @@
 
 > 详细历史见 `docs/archive/CHANGELOG-2026-09.md`（2026-09 及更早）与 `docs/archive/CHANGELOG-2026-10.md`（2026-10-08 交互组件与文风规范等）、`docs/archive/CHANGELOG-2026-11.md`（2026-11-19～21 Memory V4）。
 
+### 2026-11-25 评测报告标识回退（L2）
+- report 读取 run_meta.json 回退到 run 根目录（spec 目录上一级）；spec 标识兼容 id 键（spec_id 优先）。基线报告不再显示"未知"。538 测试过。
+
 ### 2026-11-25 溯源归因任务级语义（L1）
 - grounding 按 (chapterId,taskId) 索引证据 pack：无证据任务的声明记 no_retrieval 而非 no_evidence，任务级 pack 优先章级；溯源率分母只含可归因声明。修复 pilot 中 ch-2/3 无证据却计 no_evidence 的语义混淆。536 测试过。
 
