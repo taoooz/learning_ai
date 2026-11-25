@@ -418,3 +418,52 @@ def test_do_streaming_call_downgrades_on_rejection(monkeypatch, caplog):
     assert bodies[1]["response_format"] == {"type": "json_object"}
     assert events[-1]["type"] == "response"
     assert "降级" in caplog.text
+
+
+# ---- I1：数字后杂散引号确定性修复（预注册 rsi/prereg-I1.md） ----
+
+# 真实捕获：pilot-1 gs-http-caching-a ch-2 chapter_plan 首次尝试（"order":2" 等）
+_I1_CAPTURED_RAW = "{\"tasks\":[{\"taskId\":\"t1\",\"order\":1,\"title\":\"算准一次响应的新鲜期\",\"objectiveId\":\"obj-2\",\"taskGoal\":\"用 Date、Age、max-age（及无显式头时的启发式估值）推导某时刻响应的剩余新鲜度\",\"observableOutcome\":\"给定一组带 Date/Age/Cache-Control 的响应头和时间戳，能算出剩余新鲜期并判定此刻处于 fresh 还是 stale\",\"conceptKeys\":[\"freshness_lifetime\",\"current_age\",\"max-age\",\"剩余新鲜期\",\"启发式新鲜度\"],\"prerequisiteTaskIds\":[],\"teachingPattern\":\"derive\",\"expectedMinutes\":5},{\"taskId\":\"t2\",\"order\":2\",\"title\":\"写出条件请求握手流程\",\"objectiveId\":\"obj-2\",\"taskGoal\":\"把 stale 命中到 304/200 的完整条件请求往返写成可执行的步骤序列\",\"observableOutcome\":\"能写出带 If-None-Match（及 If-Modified-Since）的请求流程，并说明 304 响应中哪些头部会被更新、缓存条目如何被重新标记为 fresh\",\"conceptKeys\":[\"conditional_request\",\"If-None-Match\",\"If-Modified-Since\",\"304_Not_Modified\",\"头部合并更新\"],\"prerequisiteTaskIds\":[\"t1\"],\"teachingPattern\":\"process\",\"expectedMinutes\":5},{\"taskId\":\"t3\",\"order\":3,\"title\":\"强/弱 ETag 与 Last-Modified 取舍\",\"objectiveId\":\"obj-2\",\"taskGoal\":\"依据资源变更粒度与语义等价要求，判断该用强 ETag、弱 ETag 还是 Last-Modified\",\"observableOutcome\":\"针对字节级重要、语义等价、仅按秒级修改时间三类资源分别给出验证器选择，并说明选错的后果（误判 304 或校验失效）\",\"conceptKeys\":[\"strong_etag\",\"weak_etag\",\"Last-Modified\",\"验证器等价语义\"],\"prerequisiteTaskIds\":[\"t2\"],\"teachingPattern\":\"compare\",\"expectedMinutes\":4},{\"taskId\":\"t4\",\"order\":4,\"title\":\"拆解三种结局的成本结构\",\"objectiveId\":\"obj-2\",\"taskGoal\":\"把命中、304 校验、完全回源三种结局拆成带宽与延迟两项成本\",\"observableOutcome\":\"能用响应体大小、RTT、校验开销为一次请求算出三种结局各自的字节成本与延迟成本，并指出哪类收益来自省带宽、哪类来自省延迟\",\"conceptKeys\":[\"带宽成本\",\"延迟成本\",\"304_开销\",\"回源成本\",\"收益归因\"],\"prerequisiteTaskIds\":[\"t3\"],\"teachingPattern\":\"worked_example\",\"expectedMinutes\":5},{\"taskId\":\"t5\",\"order\":5,\"title\":\"为一组资源配置新鲜度与校验\",\"objectiveId\":\"obj-2\",\"taskGoal\":\"对一份混合资源清单给定 max-age 与验证器，并用成本估算论证选择\",\"observableOutcome\":\"产出清单中每类资源的 max-age 取值、验证器类型与条件请求路径，并给出命中/304/回源比例下的带宽与延迟对比结论\",\"conceptKeys\":[\"max-age_设定\",\"验证器选型\",\"成本对比结论\",\"新鲜度策略\"],\"prerequisiteTaskIds\":[\"t4\"],\"teachingPattern\":\"practice\",\"expectedMinutes\":6}]}"
+
+
+def test_i1_repairs_stray_quote_after_number():
+    from lib.minimax import parse_enforced_json
+    bad = '{"tasks":[{"taskId":"t2","order":2","title":"x"}]}'
+    out = parse_enforced_json(bad)
+    assert out["tasks"][0]["order"] == 2
+
+
+def test_i1_captured_raw_regression():
+    from lib.minimax import parse_enforced_json
+    out = parse_enforced_json(_I1_CAPTURED_RAW)
+    assert [t["order"] for t in out["tasks"]] == [1, 2, 3, 4, 5]
+    assert all(t["title"] for t in out["tasks"])
+
+
+def test_i1_identity_on_valid_json():
+    import json as _json
+    from lib.minimax import _strip_stray_quote_after_number, parse_enforced_json
+    valid = '{"title":"版本:2","order":2,"nested":{"x":-3,"y":1.5},"s":"a:1\\""}'
+    assert _strip_stray_quote_after_number(valid) == valid
+    assert parse_enforced_json(valid) == _json.loads(valid)
+
+
+def test_i1_string_content_untouched():
+    from lib.minimax import parse_enforced_json
+    bad = '{"title":"版本:2","order":2"}'
+    out = parse_enforced_json(bad)
+    assert out["title"] == "版本:2" and out["order"] == 2
+
+
+def test_i1_truncated_still_raises():
+    import pytest as _pt
+    from lib.minimax import parse_enforced_json
+    with _pt.raises(ValueError, match="truncated"):
+        parse_enforced_json('{"tasks":[{"order":2"')
+
+
+def test_i1_other_invalid_still_raises():
+    import pytest as _pt
+    from lib.minimax import parse_enforced_json
+    with _pt.raises(ValueError, match="Invalid JSON"):
+        parse_enforced_json('{"a":1,,}')

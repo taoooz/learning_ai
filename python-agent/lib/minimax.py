@@ -350,6 +350,43 @@ def parse_json_response(content: str) -> dict:
     return result
 
 
+def _strip_stray_quote_after_number(text: str) -> str:
+    """删除字符串外紧跟数字的杂散双引号（如 "order":2" → "order":2）。
+
+    只在字符串外操作：合法 JSON 中数字 token 后只能跟空白 + , } ]，
+    不可能跟 "，故对一切合法 JSON 是恒等变换；字符串值内的 "版本:2"
+    等内容不受影响。
+    """
+    result: list[str] = []
+    in_string = False
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if in_string:
+            result.append(ch)
+            if ch == '\\' and i + 1 < n:
+                result.append(text[i + 1])
+                i += 2
+                continue
+            if ch == '"':
+                in_string = False
+            i += 1
+            continue
+        if ch == '"':
+            # 向前找输出中最后一个非空白字符；是数字则为杂散引号，删除
+            j = len(result) - 1
+            while j >= 0 and result[j] in ' \t\r\n':
+                j -= 1
+            if j >= 0 and result[j].isdigit():
+                i += 1
+                continue
+            in_string = True
+        result.append(ch)
+        i += 1
+    return ''.join(result)
+
+
 def parse_enforced_json(content: str) -> dict:
     """解析受 response_format 约束的输出（json_schema strict / json_object）。
 
@@ -397,6 +434,25 @@ def parse_enforced_json(content: str) -> dict:
     try:
         result = json.loads(json_str, strict=False)
     except json.JSONDecodeError as e:
+        # I1 确定性修复（预注册 rsi/prereg-I1.md）：模型偶发在数字值后多输出一个
+        # 英文双引号（如 "order":2"），重试不收敛。只在字符串外删除紧跟数字的
+        # 杂散引号——合法 JSON 中字符串外的数字后不可能跟 "，对合法 JSON 恒等，
+        # 且不会误伤字符串值内形如 "版本:2" 的内容。仅在解析已失败后触发。
+        # 注意：须在括号平衡检查之前——杂散引号会翻转引号奇偶，使平衡检查误报截断。
+        repaired = _strip_stray_quote_after_number(json_str)
+        if repaired != json_str:
+            try:
+                result = json.loads(repaired, strict=False)
+            except json.JSONDecodeError:
+                pass
+            else:
+                if _trace_on:
+                    eval_trace.record_parse(
+                        result, repair_applied=True,
+                        repair_steps=_trace_steps + ["json_slice", "numeric_stray_quote"],
+                        parser="parse_enforced_json",
+                    )
+                return result
         if not _is_json_balanced(json_str):
             raise ValueError(f"JSON response truncated (unbalanced brackets): {json_str[:200]}")
         raise ValueError(f"Invalid JSON: {e}, content: {json_str[:200]}")
