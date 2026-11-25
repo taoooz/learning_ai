@@ -443,6 +443,9 @@ def build_report(bundle: dict | None = None, grounding: dict | None = None,
         cov = alignment.get("coverage") or {}
         lines.append(f"- 目标 {cov.get('objectives_total', 0)} 个：有内容 {cov.get('with_content', 0)}，"
                      f"有评估 {cov.get('with_assessment', 0)}，全覆盖 {cov.get('fully_covered', 0)}")
+        oos = cov.get("objectives_out_of_scope") or []
+        if oos:
+            lines.append(f"- 范围外目标 {len(oos)} 个（章节被 runner 截断未生成，不计覆盖）：{', '.join(oos)}")
         breaks = alignment.get("breaks") or []
         if breaks:
             lines.append(f"- 断裂 {len(breaks)} 处：")

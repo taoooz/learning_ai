@@ -71,6 +71,38 @@ def extract_objectives(course: dict) -> list[dict]:
     return objectives
 
 
+def _scoped_objectives(course: dict, objectives: list[dict]) -> tuple[list[dict], list[str]]:
+    """runner 截断章节（--max-chapters）时，只把已生成章节内的目标计入覆盖。
+
+    章→目标映射取 blueprint.chapters[].objectiveIds；目标跨多章时任一章已生成即在范围内。
+    blueprint/映射/已生成章节缺失时保守返回全部目标（旧行为，全量跑不受影响）。
+    返回 (范围内目标, 范围外目标 id 列表)。
+    """
+    blueprint = course.get("blueprint") or {}
+    bp_chapters = blueprint.get("chapters") or []
+    generated = {str(c.get("chapterId") or "") for c in course.get("chapters") or []}
+    generated.discard("")
+    if not bp_chapters or not generated:
+        return objectives, []
+    mapping: dict[str, set] = {}
+    for ch in bp_chapters:
+        if not isinstance(ch, dict):
+            continue
+        chid = str(ch.get("chapterId") or "")
+        for oid in ch.get("objectiveIds") or []:
+            mapping.setdefault(str(oid), set()).add(chid)
+    if not mapping:
+        return objectives, []
+    in_scope, out = [], []
+    for obj in objectives:
+        chapters = mapping.get(obj["objectiveId"])
+        if chapters is None or (chapters & generated):
+            in_scope.append(obj)
+        else:
+            out.append(obj["objectiveId"])
+    return in_scope, out
+
+
 def extract_tasks(course: dict) -> list[dict]:
     """任务清单（含 chapterId）。
 
@@ -207,11 +239,13 @@ def _has_content(blocks: list[dict]) -> bool:
 def build_coverage_matrix(course: dict) -> dict:
     """程序检查：每个目标的内容承载与评估对应 + 引用完整性。"""
     objectives = extract_objectives(course)
+    all_objective_ids = {o["objectiveId"] for o in objectives}
+    objectives, out_of_scope = _scoped_objectives(course, objectives)
     tasks = extract_tasks(course)
     scoped_blocks = _scoped_task_blocks(course)
     checkpoints = extract_checkpoints(course)
 
-    objective_ids = {o["objectiveId"] for o in objectives}
+    objective_ids = all_objective_ids  # 悬空引用检查用全集，覆盖矩阵用范围内目标
     task_ids = {t.get("taskId") for t in tasks if t.get("taskId")}
     task_refs: list[tuple[str, str, str]] = []  # (chapterId, taskId, objectiveId)
     breaks: list[dict] = []
@@ -288,6 +322,7 @@ def build_coverage_matrix(course: dict) -> dict:
         "breaks": breaks,
         "coverage": {
             "objectives_total": total,
+            "objectives_out_of_scope": out_of_scope,
             "with_content": sum(1 for m in matrix if m["content_covered"]),
             "with_assessment": sum(1 for m in matrix if m["assessment_covered"]),
             "fully_covered": sum(1 for m in matrix if m["fully_covered"]),

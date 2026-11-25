@@ -303,3 +303,51 @@ def test_judge_alignment_quality_chapter_aware_content():
     # o1 的 prompt 含 ch1 内容（Cache-Control），o2 含 ch2 内容（ETag），互不串
     assert "Cache-Control" in seen[0] and "ETag" not in seen[0]
     assert "ETag" in seen[1] and "Cache-Control" not in seen[1]
+
+def _trunc_course(generated_chapters):
+    """blueprint 4 章 4 目标，runner 只生成前 N 章的夹具。"""
+    bp_chapters = [{"chapterId": f"ch{i}", "objectiveIds": [f"o{i}"]} for i in range(1, 5)]
+    chapters = []
+    for i in generated_chapters:
+        chapters.append({
+            "chapterId": f"ch{i}",
+            "plan": {"tasks": [{"taskId": "t1", "objectiveId": f"o{i}"}]},
+            "tasks": [{"taskId": "t1", "blocks": [{"type": "markdown", "markdown": f"内容{i}足够长。"}]}],
+        })
+    return {
+        "blueprint": {
+            "courseObjectives": [{"objectiveId": f"o{i}", "observableOutcome": f"目标{i}"} for i in range(1, 5)],
+            "chapters": bp_chapters,
+        },
+        "chapters": chapters,
+        "checkpoints": [{"checkpointId": f"cp{i}", "objectiveId": f"o{i}", "taskId": "t1",
+                         "chapterId": f"ch{i}", "prompt": "题"} for i in generated_chapters],
+    }
+
+
+def test_matrix_truncated_chapters_scope_objectives():
+    # pilot 确诊：--max-chapters 截断时，未生成章节的目标不应记 OBJECTIVE_NO_CONTENT/NO_ASSESSMENT
+    result = build_coverage_matrix(_trunc_course([1, 2]))
+    assert result["breaks"] == []
+    cov = result["coverage"]
+    assert cov["objectives_total"] == 2
+    assert cov["objectives_out_of_scope"] == ["o3", "o4"]
+    assert cov["full_coverage_rate"] == 1.0
+
+
+def test_matrix_full_run_no_out_of_scope():
+    result = build_coverage_matrix(_trunc_course([1, 2, 3, 4]))
+    assert result["coverage"]["objectives_out_of_scope"] == []
+    assert result["coverage"]["objectives_total"] == 4
+    assert result["breaks"] == []
+
+
+def test_matrix_no_blueprint_chapters_keeps_legacy():
+    course = _trunc_course([1, 2])
+    del course["blueprint"]["chapters"]
+    result = build_coverage_matrix(course)
+    # 无映射→保守全量：o3/o4 记断裂（旧行为）
+    assert result["coverage"]["objectives_total"] == 4
+    assert result["coverage"]["objectives_out_of_scope"] == []
+    codes = {b["code"] for b in result["breaks"]}
+    assert codes == {"OBJECTIVE_NO_CONTENT", "OBJECTIVE_NO_ASSESSMENT"}
