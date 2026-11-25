@@ -366,3 +366,82 @@ def test_summarize_no_retrieval_excluded_from_rate():
     # no_retrieval 不算溯源失败：unsupported_claims 只含 no_evidence
     assert len(summary["unsupported_claims"]) == 1
     assert summary["unsupported_claims"][0]["claim_id"] == "c2"
+
+# ---------------------------------------------------------------- 任务级归因（L1）
+
+from evals.grounding import build_scoped_evidence
+
+SCOPED_COURSE = {"chapters": [{"chapterId": "ch1", "title": "HTTP 基础", "tasks": [
+    {"taskId": "t1", "title": "端口", "blocks": [
+        {"type": "markdown", "markdown": "PORT80：HTTP 默认端口是 80。"}]},
+    {"taskId": "t2", "title": "缓存", "blocks": [
+        {"type": "markdown", "markdown": "ETAG：ETag 是资源版本标识。"}]},
+]}]}
+
+EV_SRC = {"evidenceId": "ev-01-abc123", "title": "MDN HTTP",
+          "url": "https://example.com/http", "summary": "HTTP 默认端口是 80。",
+          "kind": "documentation", "authorityScore": 0.9}
+
+
+def test_build_scoped_evidence_indexing_and_dedup():
+    snap = [
+        {"chapterId": "ch1", "taskId": "t1", "pack": {"sources": [EV_SRC, EV_SRC]}},
+        {"chapterId": "ch1", "taskId": "", "pack": {"sources": [EV_SRC]}},
+        {"chapterId": "ch2", "taskId": "t1", "pack": None},
+        {"chapterId": "ch2", "taskId": "t2", "pack": {"sources": []}},
+        "garbage",
+    ]
+    scoped = build_scoped_evidence(snap)
+    assert set(scoped) == {("ch1", "t1"), ("ch1", "")}
+    assert len(scoped[("ch1", "t1")]) == 1  # 去重
+    assert build_scoped_evidence(None) == {}
+    assert build_scoped_evidence({"sources": [EV_SRC]}) == {}  # 非 pack 结构走课程级
+
+
+def test_run_grounding_task_scoped_no_retrieval():
+    # t1 有证据、t2 无证据：t2 声明记 no_retrieval 而非 no_evidence，
+    # 溯源率只算可归因声明（1/1），t2 零归因调用。
+    snap = [{"chapterId": "ch1", "taskId": "t1", "pack": {"sources": [EV_SRC]}}]
+    gateway = JudgeGateway(llm_call=grounding_fake(), retry_delay=0)
+    result = run(run_grounding(course=SCOPED_COURSE, evidence=snap, gateway=gateway, model="mock/m"))
+    assert result["total_claims"] == 2
+    assert result["supported"] == 1 and result["no_retrieval"] == 1
+    assert result["no_evidence"] == 0 and result["unsupported_claims"] == []
+    assert result["grounding_rate"] == pytest.approx(1.0)
+    assert result["evidence_coverage"] == pytest.approx(0.5)
+    assert len(result["llm_calls"]) == 3  # 2 分解 + 1 归因批（仅 t1）
+    assert any("任务级归因" in n for n in result["notes"])
+
+
+def test_run_grounding_chapter_pack_covers_all_tasks():
+    snap = [{"chapterId": "ch1", "taskId": "", "pack": {"sources": [EV_SRC]}}]
+    gateway = JudgeGateway(llm_call=grounding_fake(), retry_delay=0)
+    result = run(run_grounding(course=SCOPED_COURSE, evidence=snap, gateway=gateway, model="mock/m"))
+    assert result["no_retrieval"] == 0
+    assert result["supported"] == 1 and result["no_evidence"] == 1
+    assert result["grounding_rate"] == pytest.approx(0.5)
+    assert len(result["llm_calls"]) == 3  # 2 分解 + 1 归因批（两任务同章级组）
+
+
+def test_run_grounding_task_pack_preferred_over_chapter():
+    ev_task = {**EV_SRC, "evidenceId": "ev-task-999", "title": "TASK-PACK-SRC"}
+    ev_ch = {**EV_SRC, "evidenceId": "ev-ch-000", "title": "CH-PACK-SRC"}
+    snap = [
+        {"chapterId": "ch1", "taskId": "", "pack": {"sources": [ev_ch]}},
+        {"chapterId": "ch1", "taskId": "t1", "pack": {"sources": [ev_task]}},
+    ]
+    seen_users = []
+    fake = grounding_fake()
+
+    async def recording(messages, model, **kwargs):
+        if "事实核查员" not in messages[0]["content"]:
+            seen_users.append(messages[-1]["content"])
+        return await fake(messages, model, **kwargs)
+
+    gateway = JudgeGateway(llm_call=recording, retry_delay=0)
+    result = run(run_grounding(course=SCOPED_COURSE, evidence=snap, gateway=gateway, model="mock/m"))
+    assert result["total_claims"] == 2 and result["no_retrieval"] == 0
+    t1_batch = next(u for u in seen_users if "端口是 80" in u)
+    assert "ev-task-999" in t1_batch and "ev-ch-000" not in t1_batch  # 任务 pack 优先
+    t2_batch = next(u for u in seen_users if "版本标识" in u)
+    assert "ev-ch-000" in t2_batch  # t2 回退章级 pack

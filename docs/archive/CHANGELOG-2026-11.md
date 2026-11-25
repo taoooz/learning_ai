@@ -14,3 +14,9 @@
 - outline_service 瘦身 410→190 行：删 BLUEPRINT_SCHEMA（XML 协议下的死 JSON schema）、阻塞式 stream_llm_and_parse、stream_blueprint_fields、三个无调用格式化函数与 build_initial_prompt 兼容入口
 - 清除散点死代码：checkpoint 重复的 OPEN_ENDED_EVAL_PROMPT、chat prompt 无调用 base 键、chapter_plan return 后不可达块、interactive_block 未用的 _KV_RE/edges 上限、toc_agent 即删的 max_tokens 参数、recap 引用不存在的 summary 字段、两处恒空的 recentQuestionSummaries
 - 净 -459 行；pytest 335、TS 330 全通过，应用启动冒烟确认路由只剩 agent 版
+
+### 课程生成链路体检：意图契约与记忆 ID 收敛（2026-11-23）
+- intentType 升级为澄清阶段业务契约：outline prompt 新增意图判定与 intentType 槽位，解析层只接受四枚举；蓝图编译器优先消费契约值，缺失/非法才回退关键词推断（兼容旧会话），回退正则移除裸"问题"一词的误判面
+- 契约全链路透传：outline blueprint → chat/confirm 页 pendingOutline → TOC 编译器入参，Prompt Lab 同步
+- plan/task/tutor 的 prompt 记忆载荷剥离 memoryId，对齐 README#15（细节检索走按关键词的只读 memory_search）
+- 新增回归：意图槽位解析/归一化、编译器契约优先与回退、记忆 prompt 不泄露 record ID；pytest 337、TS 333、tsc 全通过

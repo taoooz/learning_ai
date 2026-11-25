@@ -2,6 +2,9 @@
 
 > 详细历史见 `docs/archive/CHANGELOG-2026-09.md`（2026-09 及更早）与 `docs/archive/CHANGELOG-2026-10.md`（2026-10-08 交互组件与文风规范等）、`docs/archive/CHANGELOG-2026-11.md`（2026-11-19～21 Memory V4）。
 
+### 2026-11-25 溯源归因任务级语义（L1）
+- grounding 按 (chapterId,taskId) 索引证据 pack：无证据任务的声明记 no_retrieval 而非 no_evidence，任务级 pack 优先章级；溯源率分母只含可归因声明。修复 pilot 中 ch-2/3 无证据却计 no_evidence 的语义混淆。536 测试过。
+
 ### I1 可靠性修复：strict 输出数字后杂散引号（2026-11-25）
 - parse_enforced_json 新增确定性修复 _strip_stray_quote_after_number（字符串外扫描，合法 JSON 恒等）：pilot 两次整门中止根因 "order":2"，重试不收敛；先修复再判括号平衡。6 新测试含真实失败 raw 回归，532 测试过。
 
@@ -41,9 +44,3 @@
 - 修复遗留 `Thinking` 清理正则误删正文：改为只匹配独占行成对标记（outline_agent/minimax/minimax_agent 共 6 处），Design Thinking 等课程主题正文不再被吞
 - scenario_choice 正确答案归一：忽略大小写匹配 option id，单字母/1 基数字按选项顺序映射；越界答案仍由 schema 拦截
 - 新增 15 个回归测试（recap/chat/thinking/checkpoint），pytest 全量 338 通过
-
-### 课程生成链路体检：意图契约与记忆 ID 收敛（2026-11-23）
-- intentType 升级为澄清阶段业务契约：outline prompt 新增意图判定与 intentType 槽位，解析层只接受四枚举；蓝图编译器优先消费契约值，缺失/非法才回退关键词推断（兼容旧会话），回退正则移除裸"问题"一词的误判面
-- 契约全链路透传：outline blueprint → chat/confirm 页 pendingOutline → TOC 编译器入参，Prompt Lab 同步
-- plan/task/tutor 的 prompt 记忆载荷剥离 memoryId，对齐 README#15（细节检索走按关键词的只读 memory_search）
-- 新增回归：意图槽位解析/归一化、编译器契约优先与回退、记忆 prompt 不泄露 record ID；pytest 337、TS 333、tsc 全通过

@@ -167,6 +167,48 @@ def flatten_evidence_sources(snapshot) -> list[dict]:
     return found
 
 
+def build_scoped_evidence(snapshot) -> dict:
+    """按 (chapterId, taskId) 索引证据 pack（任务级归因用）。
+
+    快照条目形如 {"chapterId","taskId","pack":{"sources":[...]}}；
+    taskId 为空 = 章级预搜证据，覆盖该章所有任务。空 pack 跳过。
+    非 pack 结构（裸 sources 等）返回空 dict，走课程级回退。
+    """
+    scoped: dict = {}
+    if not isinstance(snapshot, list):
+        return scoped
+    for entry in snapshot:
+        if not isinstance(entry, dict):
+            continue
+        pack = entry.get("pack")
+        if not isinstance(pack, dict):
+            continue
+        raw_sources = pack.get("sources")
+        if not isinstance(raw_sources, list):
+            continue
+        key = (str(entry.get("chapterId") or ""), str(entry.get("taskId") or ""))
+        bucket = scoped.setdefault(key, [])
+        seen = {s["evidenceId"] for s in bucket}
+        for s in raw_sources:
+            if not isinstance(s, dict):
+                continue
+            eid = s.get("evidenceId") or s.get("url")
+            if not eid or eid in seen:
+                continue
+            seen.add(eid)
+            bucket.append({
+                "evidenceId": s.get("evidenceId", ""),
+                "title": s.get("title", ""),
+                "url": s.get("url", ""),
+                "summary": s.get("summary", ""),
+                "kind": s.get("kind", ""),
+                "authorityScore": s.get("authorityScore"),
+            })
+        if not bucket:
+            scoped.pop(key, None)
+    return scoped
+
+
 def find_dangling_citations(course: dict, sources: list[dict]) -> list[str]:
     """程序检查：正文引用的 evidenceId 不在快照中（引用脱节）。"""
     known = {s["evidenceId"] for s in sources if s.get("evidenceId")}
@@ -454,7 +496,28 @@ async def run_grounding(
     else:
         claims = await decompose_claims(selected, gateway, model)
 
-    if sources:
+    scoped = build_scoped_evidence(evidence)
+    if scoped:
+        # 任务级归因：无证据任务的声明记 no_retrieval（不计溯源失败），
+        # 只有有证据任务的声明进归因；任务级 pack 优先于章级 pack。
+        groups: dict = {}
+        attributions = []
+        for c in claims:
+            ch = str(c.get("chapter_id") or "")
+            tid = str(c.get("task_id") or "")
+            key = (ch, tid) if (ch, tid) in scoped else (ch, "")
+            if key in scoped:
+                groups.setdefault(key, []).append(c)
+            else:
+                attributions.append({"claim_id": c["claim_id"], "verdict": "no_retrieval",
+                                     "evidence_ids": [],
+                                     "reason": "该任务无检索证据（NO_SEARCH/纯参数化生成），无法对照"})
+        for key, group_claims in groups.items():
+            attributions.extend(await attribute_claims(group_claims, scoped[key], gateway, model))
+        nr = sum(1 for a in attributions if a["verdict"] == "no_retrieval")
+        if nr:
+            notes.append(f"任务级归因：{nr} 条声明所属任务无检索证据，记 no_retrieval（不计溯源失败）")
+    elif sources:
         attributions = await attribute_claims(claims, sources, gateway, model)
     else:
         # 没检索证据 ≠ 有证据但不支持：记 no_retrieval，零归因调用
