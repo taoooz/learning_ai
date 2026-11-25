@@ -3,12 +3,22 @@
 流程：
 1. 从 course.json（或 trace 阶段文件）提取任务内容块为可核查单元；
 2. judge 辅助把正文拆成原子事实声明（排除教学指令/观点/纯类比）；
-3. 逐条对照 evidence_snapshot.json 归因：supported / contradicted / no_evidence；
-4. 事实溯源率 = supported / total；矛盾与无证据清单输出供人工审计。
+3. 逐条对照证据归因：supported / contradicted / no_evidence / no_retrieval；
+4. 事实溯源率 = supported / 可归因声明（排除 no_retrieval）；矛盾与无证据
+   清单输出供人工审计。
+
+证据语义（区分"没检索证据"与"有证据但不支持"）：
+- evidence_snapshot 全部 pack=null（模型选 NO_SEARCH、纯参数化知识生成）时，
+  先尝试从 stage_task_content_*_request.json / stage_search_decision*_request.json
+  的 messages 回退提取注入的证据段落（evidence_source=request_fallback）；
+- 回退后仍无证据：全部声明记 **no_retrieval**（不是 no_evidence），
+  grounding_rate=null、flags=["no_retrieval"]、evidence_available=false。
+  no_retrieval 不计入溯源失败，只说明该声明没有检索证据可对照；
+- evidence_coverage = 有 ≥1 条 supported 声明的任务 / 有声明的任务
+  （按 (chapter_id, task_id) 计任务，taskId 跨章复用不合并；无声明任务=null）。
 
 成本控制：--sample N 限量模式（确定性等距抽取至多 N 个内容单元做分解）；
---claims-in 复用已分解声明，只重跑归因。证据快照缺失时容错：全部声明记
-no_evidence 并标注 evidence_available=false，不臆造归因。
+--claims-in 复用已分解声明，只重跑归因。
 
 CLI（README 片段）：
     cd python-agent
@@ -76,20 +86,26 @@ def _block_text(block: dict) -> str:
 
 
 def extract_content_units(course: dict) -> list[dict]:
-    """把课程任务内容块拆成内容单元 [{"unit_id","task_id","task_title","text"}]。"""
+    """把课程任务内容块拆成内容单元
+    [{"unit_id","task_id","chapter_id","task_title","text"}]。
+
+    chapter_id 用于任务身份消歧：taskId 可跨章复用（每章都叫 t1），
+    unit_id 保持 <taskId>-b<i> 旧格式，跨章重名时以 chapter_id 区分。
+    """
     if not isinstance(course, dict):
         return []
     contents = course.get("taskContents") or {}
     tasks: list[dict] = []
     for ch in course.get("chapters") or (course.get("blueprint") or {}).get("chapters") or []:
         if isinstance(ch, dict):
-            tasks.extend(t for t in ch.get("tasks") or [] if isinstance(t, dict))
-    tasks.extend(t for t in course.get("tasks") or [] if isinstance(t, dict))
+            chid = ch.get("chapterId", "")
+            tasks.extend({**t, "chapter_id": chid} for t in ch.get("tasks") or [] if isinstance(t, dict))
+    tasks.extend({**t, "chapter_id": ""} for t in course.get("tasks") or [] if isinstance(t, dict))
     # taskContents 里有但计划里没有的任务也评（容错）
     known = {t.get("taskId") for t in tasks}
     for task_id in contents:
         if task_id not in known:
-            tasks.append({"taskId": task_id, "title": task_id})
+            tasks.append({"taskId": task_id, "title": task_id, "chapter_id": ""})
 
     units = []
     for task in tasks:
@@ -101,6 +117,7 @@ def extract_content_units(course: dict) -> list[dict]:
             units.append({
                 "unit_id": f"{task_id or 'task'}-b{i}",
                 "task_id": task_id,
+                "chapter_id": task.get("chapter_id", ""),
                 "task_title": task.get("title", ""),
                 "text": text,
             })
@@ -158,6 +175,110 @@ def find_dangling_citations(course: dict, sources: list[dict]) -> list[str]:
     return sorted(cited - known)
 
 
+# ---------------------------------------------------------------- request 证据回退
+
+_EVIDENCE_SECTION_HEADERS = ("## 搜索证据包", "## 已有证据")
+
+
+def _evidence_sections(text: str) -> list[str]:
+    """截取 prompt 中的证据段落（到下一个 ## 头为止）。"""
+    sections: list[str] = []
+    for header in _EVIDENCE_SECTION_HEADERS:
+        start = 0
+        while True:
+            idx = text.find(header, start)
+            if idx < 0:
+                break
+            body_start = text.find("\n", idx)
+            if body_start < 0:
+                break
+            end = text.find("\n## ", body_start)
+            sections.append(text[body_start + 1:end if end >= 0 else len(text)])
+            start = idx + len(header)
+    return sections
+
+
+def _parse_evidence_section(section: str) -> list[dict]:
+    """解析 evidence_to_prompt 注入格式：
+    "- 标题\\n  摘要\\n  来源: url\\n  证据ID: ev-… | 类型: …"。"""
+    sources: list[dict] = []
+    current: dict | None = None
+    summary_lines: list[str] = []
+
+    def flush():
+        if current is not None:
+            current["summary"] = "\n".join(summary_lines).strip()
+            if current.get("evidenceId") or (current.get("url") and current["summary"]):
+                sources.append(current)
+
+    for line in section.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if line.startswith("- "):
+            flush()
+            current = {"title": stripped[2:].strip(), "url": "", "summary": "",
+                       "evidenceId": "", "kind": ""}
+            summary_lines = []
+        elif current is not None and (line.startswith("  ") or line.startswith("\t")):
+            norm = stripped.replace("：", ":", 1)
+            if norm.startswith("来源:"):
+                current["url"] = norm[len("来源:"):].strip()
+            elif norm.startswith("证据ID:"):
+                rest = norm[len("证据ID:"):].strip()
+                eid = rest.split("|", 1)[0].strip()
+                current["evidenceId"] = "" if eid in ("", "未分配") else eid
+                for part in rest.split("|")[1:]:
+                    part = part.strip().replace("：", ":", 1)
+                    if part.startswith("类型:"):
+                        current["kind"] = part[len("类型:"):].strip()
+            else:
+                summary_lines.append(stripped)
+    flush()
+    return sources
+
+
+def extract_request_evidence(trace_dir: str | Path) -> list[dict]:
+    """回退证据源：snapshot pack 全 null 时，从任务正文/搜索决策阶段的
+    request 快照 messages 里提取注入的证据段落。
+
+    兼容新命名（task_content_<chapterId>_<taskId>）与旧命名
+    （task_content_<taskId>）；四件套 request.json 与全量历史 calls.json
+    都读（跨章/重试请求里的证据同样有效）。按 evidenceId/url 去重。
+    """
+    root = Path(trace_dir)
+    if not root.is_dir():
+        return []
+    files: list[Path] = []
+    for pattern in ("stage_task_content_*_request.json", "stage_task_content_*_calls.json",
+                    "stage_search_decision*_request.json", "stage_search_decision*_calls.json"):
+        files.extend(sorted(root.glob(pattern)))
+    candidates: list[dict] = []
+    for path in files:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if path.name.endswith("_calls.json") and isinstance(data, list):
+            requests = [call.get("request") for call in data if isinstance(call, dict)]
+        elif isinstance(data, dict):
+            requests = [data]
+        else:
+            requests = []
+        for request in requests:
+            if not isinstance(request, dict):
+                continue
+            for message in request.get("messages") or []:
+                if not isinstance(message, dict):
+                    continue
+                content = message.get("content")
+                if not isinstance(content, str):
+                    continue
+                for section in _evidence_sections(content):
+                    candidates.extend(_parse_evidence_section(section))
+    return flatten_evidence_sources(candidates)
+
+
 # ---------------------------------------------------------------- LLM 步骤
 
 async def decompose_claims(units: list[dict], gateway: JudgeGateway, model: str) -> list[dict]:
@@ -180,6 +301,7 @@ async def decompose_claims(units: list[dict], gateway: JudgeGateway, model: str)
                 "claim_id": f"c{len(claims) + 1}",
                 "unit_id": unit["unit_id"],
                 "task_id": unit["task_id"],
+                "chapter_id": unit.get("chapter_id", ""),
                 "text": text,
                 "excerpt": str(item.get("excerpt", ""))[:80],
             })
@@ -232,24 +354,51 @@ async def attribute_claims(
 
 
 def summarize_grounding(claims: list[dict], attributions: list[dict]) -> dict:
-    """溯源率 = supported / total；矛盾与无证据清单供人工审计。"""
+    """溯源率 = supported / 可归因声明（total - no_retrieval）。
+
+    no_retrieval（没检索证据）与 no_evidence（有证据但不支持）语义分离：
+    no_retrieval 不进溯源率分母、不进 unsupported_claims（不算溯源失败），
+    单列 no_retrieval_claims 供审计。矛盾与无证据清单供人工审计。
+    """
     by_id = {a["claim_id"]: a for a in attributions}
     merged = []
-    counts = {"supported": 0, "contradicted": 0, "no_evidence": 0}
+    counts = {"supported": 0, "contradicted": 0, "no_evidence": 0, "no_retrieval": 0}
     for c in claims:
         a = by_id.get(c["claim_id"], {"verdict": "no_evidence", "evidence_ids": [], "reason": "未归因"})
         counts[a["verdict"]] = counts.get(a["verdict"], 0) + 1
         merged.append({**c, **a})
     total = len(claims)
+    attributable = total - counts["no_retrieval"]
     return {
         "total_claims": total,
         "supported": counts["supported"],
         "contradicted": counts["contradicted"],
         "no_evidence": counts["no_evidence"],
-        "grounding_rate": counts["supported"] / total if total else None,
+        "no_retrieval": counts["no_retrieval"],
+        "grounding_rate": counts["supported"] / attributable if attributable else None,
         "claims": merged,
         "contradicted_claims": [m for m in merged if m["verdict"] == "contradicted"],
         "unsupported_claims": [m for m in merged if m["verdict"] == "no_evidence"],
+        "no_retrieval_claims": [m for m in merged if m["verdict"] == "no_retrieval"],
+    }
+
+
+def compute_evidence_coverage(merged_claims: list[dict]) -> dict:
+    """evidence_coverage = 有 ≥1 条 supported 声明的任务 / 有声明的任务。
+
+    任务身份按 (chapter_id, task_id)：taskId 跨章复用不合并。
+    无声明任务时 evidence_coverage=null。
+    """
+    tasks: dict[tuple[str, str], bool] = {}
+    for c in merged_claims:
+        key = (str(c.get("chapter_id") or ""), str(c.get("task_id") or ""))
+        tasks[key] = tasks.get(key, False) or c.get("verdict") == "supported"
+    total = len(tasks)
+    supported = sum(1 for v in tasks.values() if v)
+    return {
+        "evidence_coverage": supported / total if total else None,
+        "tasks_evaluated": total,
+        "tasks_with_evidence_support": supported,
     }
 
 
@@ -275,9 +424,11 @@ async def run_grounding(
         notes.extend(bundle.get("missing", []))
     if course is None:
         return {"grounding_rate": None, "total_claims": 0, "supported": 0,
-                "contradicted": 0, "no_evidence": 0, "claims": [],
-                "contradicted_claims": [], "unsupported_claims": [],
-                "evidence_available": False, "notes": notes + ["course.json 缺失，无法评测"]}
+                "contradicted": 0, "no_evidence": 0, "no_retrieval": 0, "claims": [],
+                "contradicted_claims": [], "unsupported_claims": [], "no_retrieval_claims": [],
+                "evidence_coverage": None, "tasks_evaluated": 0, "tasks_with_evidence_support": 0,
+                "evidence_available": False, "evidence_source": "none", "flags": [],
+                "notes": notes + ["course.json 缺失，无法评测"]}
 
     config = config or load_judges_config()
     model = model or config.get("utility_model") or config["panel"][0]["model"]
@@ -285,8 +436,15 @@ async def run_grounding(
                                       temperature=config["temperature"],
                                       max_tokens=config["max_tokens"])
     sources = flatten_evidence_sources(evidence)
+    evidence_source = "snapshot" if sources else "none"
+    if not sources and trace_dir is not None:
+        sources = extract_request_evidence(trace_dir)
+        if sources:
+            evidence_source = "request_fallback"
+            notes.append(f"evidence_snapshot 无可用证据：从 request 快照回退提取 {len(sources)} 个证据源")
     if not sources:
-        notes.append("evidence_snapshot 缺失或为空：全部声明保守记 no_evidence")
+        notes.append("无检索证据（evidence_snapshot 与 request 回退均为空）："
+                     "全部声明记 no_retrieval，不计溯源失败")
 
     units = extract_content_units(course)
     selected = select_sample(units, sample)
@@ -296,15 +454,25 @@ async def run_grounding(
     else:
         claims = await decompose_claims(selected, gateway, model)
 
-    attributions = await attribute_claims(claims, sources, gateway, model)
+    if sources:
+        attributions = await attribute_claims(claims, sources, gateway, model)
+    else:
+        # 没检索证据 ≠ 有证据但不支持：记 no_retrieval，零归因调用
+        attributions = [{"claim_id": c["claim_id"], "verdict": "no_retrieval",
+                         "evidence_ids": [],
+                         "reason": "无检索证据（NO_SEARCH/纯参数化生成），无法对照"}
+                        for c in claims]
     summary = summarize_grounding(claims, attributions)
+    summary.update(compute_evidence_coverage(summary["claims"]))
     summary.update({
         "model": model,
         "sampled": sample is not None and len(selected) < len(units),
         "units_total": len(units),
         "units_evaluated": len(selected),
         "evidence_available": bool(sources),
+        "evidence_source": evidence_source,
         "evidence_count": len(sources),
+        "flags": [] if sources else ["no_retrieval"],
         "dangling_citations": find_dangling_citations(course, sources),
         "llm_calls": gateway.calls,
         "notes": notes,
@@ -336,7 +504,7 @@ def main() -> None:
     claims_in = None
     if args.claims_in:
         prior = load_json_or_none(args.claims_in) or {}
-        claims_in = [{k: c[k] for k in ("claim_id", "unit_id", "task_id", "text", "excerpt") if k in c}
+        claims_in = [{k: c[k] for k in ("claim_id", "unit_id", "task_id", "chapter_id", "text", "excerpt") if k in c}
                      for c in prior.get("claims", [])]
     result = asyncio.run(run_grounding(
         trace_dir=args.trace_dir, course=course, evidence=evidence,

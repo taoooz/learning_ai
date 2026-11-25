@@ -72,26 +72,72 @@ def extract_objectives(course: dict) -> list[dict]:
 
 
 def extract_tasks(course: dict) -> list[dict]:
+    """任务清单（含 chapterId）。
+
+    生成内容任务（chapters[].tasks）只有 taskId/blocks，没有 objectiveId；
+    目标映射在 chapters[].plan.tasks（taskId+objectiveId），这里按章内
+    plan 映射补齐（任务自带 objectiveId 时优先）。taskId 可跨章复用
+    （每章第一个任务都叫 t1），章任务按 (chapterId, taskId) 去重，
+    顶层任务按裸 taskId 去重（先出现者为准）。
+    """
     if not isinstance(course, dict):
         return []
-    tasks = []
+    entries: list[tuple[dict, bool]] = []  # (task, 是否章内任务)
     for ch in course.get("chapters") or (course.get("blueprint") or {}).get("chapters") or []:
         if not isinstance(ch, dict):
             continue
+        chapter_id = ch.get("chapterId", "")
+        plan_map: dict[str, str] = {}
+        plan = ch.get("plan")
+        if isinstance(plan, dict):
+            for pt in plan.get("tasks") or []:
+                if isinstance(pt, dict) and pt.get("taskId") and pt.get("objectiveId"):
+                    plan_map[str(pt["taskId"])] = str(pt["objectiveId"]).strip()
         for task in ch.get("tasks") or []:
-            if isinstance(task, dict):
-                tasks.append({**task, "chapterId": ch.get("chapterId", "")})
+            if not isinstance(task, dict):
+                continue
+            merged = {**task, "chapterId": chapter_id}
+            if not str(merged.get("objectiveId") or "").strip():
+                mapped = plan_map.get(str(task.get("taskId") or ""))
+                if mapped:
+                    merged["objectiveId"] = mapped
+            entries.append((merged, True))
     for task in course.get("tasks") or []:
         if isinstance(task, dict):
-            tasks.append(task)
-    # 去重（同 taskId 以先出现者为准）
-    seen, unique = set(), []
-    for task in tasks:
+            entries.append((task, False))
+    seen_scoped: set[tuple[str, str]] = set()
+    seen_bare: set[str] = set()
+    unique = []
+    for task, scoped in entries:
         tid = task.get("taskId")
-        if tid and tid not in seen:
-            seen.add(tid)
-            unique.append(task)
+        if not tid:
+            continue
+        if scoped:
+            key = (str(task.get("chapterId") or ""), tid)
+            if key in seen_scoped:
+                continue
+            seen_scoped.add(key)
+        elif tid in seen_bare:
+            continue
+        seen_bare.add(tid)
+        unique.append(task)
     return unique
+
+
+def _scoped_task_blocks(course: dict) -> dict[tuple[str, str], list[dict]]:
+    """(chapterId, taskId) → blocks。任务内嵌 blocks 优先（taskId 跨章复用
+    时裸键 taskContents 会互相覆盖），缺失时回退 taskContents 裸键。"""
+    contents = extract_task_contents(course)
+    scoped: dict[tuple[str, str], list[dict]] = {}
+    for task in extract_tasks(course):
+        tid = task.get("taskId")
+        if not tid:
+            continue
+        blocks = task.get("blocks")
+        scoped[(str(task.get("chapterId") or ""), tid)] = (
+            blocks if isinstance(blocks, list) else contents.get(tid, [])
+        )
+    return scoped
 
 
 def extract_task_contents(course: dict) -> dict[str, list[dict]]:
@@ -119,13 +165,14 @@ def extract_checkpoints(course: dict) -> list[dict]:
         return []
     found: list[dict] = []
 
-    def add(cp, task_id=None):
+    def add(cp, task_id=None, chapter_id=None):
         if not isinstance(cp, dict) or not (cp.get("prompt") or cp.get("checkpointId")):
             return
         found.append({
             "checkpointId": cp.get("checkpointId", f"cp-{len(found) + 1}"),
             "objectiveId": str(cp.get("objectiveId") or "").strip(),
             "taskId": str(cp.get("taskId") or task_id or "").strip(),
+            "chapterId": str(cp.get("chapterId") or chapter_id or "").strip(),
             "kind": cp.get("kind", ""),
             "prompt": cp.get("prompt", ""),
         })
@@ -135,7 +182,7 @@ def extract_checkpoints(course: dict) -> list[dict]:
     for task in extract_tasks(course):
         cp = task.get("checkpoint") or task.get("checkpoints")
         for item in (cp if isinstance(cp, list) else [cp] if cp else []):
-            add(item, task.get("taskId"))
+            add(item, task.get("taskId"), task.get("chapterId"))
     raw = course.get("taskContents") or {}
     if isinstance(raw, dict):
         for task_id, entry in raw.items():
@@ -161,12 +208,12 @@ def build_coverage_matrix(course: dict) -> dict:
     """程序检查：每个目标的内容承载与评估对应 + 引用完整性。"""
     objectives = extract_objectives(course)
     tasks = extract_tasks(course)
-    contents = extract_task_contents(course)
+    scoped_blocks = _scoped_task_blocks(course)
     checkpoints = extract_checkpoints(course)
 
     objective_ids = {o["objectiveId"] for o in objectives}
     task_ids = {t.get("taskId") for t in tasks if t.get("taskId")}
-    tasks_by_objective: dict[str, list[str]] = {}
+    task_refs: list[tuple[str, str, str]] = []  # (chapterId, taskId, objectiveId)
     breaks: list[dict] = []
 
     def add_break(code: str, detail: str, **refs):
@@ -174,17 +221,24 @@ def build_coverage_matrix(course: dict) -> dict:
 
     for task in tasks:
         tid = task.get("taskId", "")
+        chid = str(task.get("chapterId") or "")
         oid = str(task.get("objectiveId") or "").strip()
+        refs = {"taskId": tid}
+        if chid:
+            refs["chapterId"] = chid
         if oid:
-            tasks_by_objective.setdefault(oid, []).append(tid)
+            task_refs.append((chid, tid, oid))
             if oid not in objective_ids:
-                add_break("TASK_DANGLING_OBJECTIVE", f"任务 {tid} 引用不存在的目标 {oid}", taskId=tid, objectiveId=oid)
-        blocks = contents.get(tid, [])
+                add_break("TASK_DANGLING_OBJECTIVE", f"任务 {tid} 引用不存在的目标 {oid}",
+                          objectiveId=oid, **refs)
+        blocks = scoped_blocks.get((chid, tid), [])
         if oid and not _has_content(blocks):
-            add_break("TASK_EMPTY_CONTENT", f"任务 {tid} 挂目标 {oid} 但内容块为空", taskId=tid, objectiveId=oid)
+            add_break("TASK_EMPTY_CONTENT", f"任务 {tid} 挂目标 {oid} 但内容块为空",
+                      objectiveId=oid, **refs)
         for prereq in task.get("prerequisiteTaskIds") or []:
             if prereq not in task_ids:
-                add_break("TASK_PREREQ_MISSING", f"任务 {tid} 的先修任务 {prereq} 不存在", taskId=tid, missingPrereq=prereq)
+                add_break("TASK_PREREQ_MISSING", f"任务 {tid} 的先修任务 {prereq} 不存在",
+                          missingPrereq=prereq, **refs)
 
     checkpoints_by_objective: dict[str, list[str]] = {}
     for cp in checkpoints:
@@ -195,23 +249,28 @@ def build_coverage_matrix(course: dict) -> dict:
         if tid and tid not in task_ids:
             add_break("CHECKPOINT_DANGLING_TASK", f"测验 {cp['checkpointId']} 引用不存在的任务 {tid}",
                       checkpointId=cp["checkpointId"], taskId=tid)
-        # 直接挂目标，或经由任务间接挂目标
+        # 直接挂目标，或经由任务间接挂目标（taskId 跨章复用时按章匹配，
+        # 任一侧无 chapterId 时退化为裸 taskId 匹配，兼容旧数据）
         if oid:
             checkpoints_by_objective.setdefault(oid, []).append(cp["checkpointId"])
         elif tid:
-            for o, tids in tasks_by_objective.items():
-                if tid in tids:
+            cp_ch = str(cp.get("chapterId") or "")
+            for chid, t_tid, o in task_refs:
+                if t_tid == tid and (not cp_ch or not chid or cp_ch == chid):
                     checkpoints_by_objective.setdefault(o, []).append(cp["checkpointId"])
 
     matrix = []
     for obj in objectives:
         oid = obj["objectiveId"]
-        content_tasks = [tid for tid in tasks_by_objective.get(oid, []) if _has_content(contents.get(tid, []))]
-        assessments = checkpoints_by_objective.get(oid, [])
+        content_refs = [(chid, tid) for chid, tid, o in task_refs
+                        if o == oid and _has_content(scoped_blocks.get((chid, tid), []))]
+        content_tasks = list(dict.fromkeys(tid for _, tid in content_refs))
+        assessments = list(dict.fromkeys(checkpoints_by_objective.get(oid, [])))
         entry = {
             "objectiveId": oid,
             "text": obj["text"],
             "content_task_ids": content_tasks,
+            "content_task_refs": [{"chapterId": chid, "taskId": tid} for chid, tid in content_refs],
             "assessment_checkpoint_ids": assessments,
             "content_covered": bool(content_tasks),
             "assessment_covered": bool(assessments),
@@ -253,12 +312,23 @@ async def judge_alignment_quality(
 
     entries = select_sample(matrix, sample)
     contents = extract_task_contents(course)
+    scoped_blocks = _scoped_task_blocks(course)
     checkpoints = {cp["checkpointId"]: cp for cp in extract_checkpoints(course)}
     results = []
     for entry in entries:
         content_parts = []
-        for tid in entry["content_task_ids"][:3]:
-            content_parts.append(_blocks_to_text(contents.get(tid, []))[:1500])
+        # 章感知取内容：taskId 跨章复用时按 (chapterId, taskId) 定位，
+        # 旧矩阵（无 content_task_refs）退化为裸 taskId。
+        refs = entry.get("content_task_refs") or [
+            {"chapterId": "", "taskId": tid} for tid in entry.get("content_task_ids", [])
+        ]
+        for ref in refs[:3]:
+            tid = ref.get("taskId", "")
+            chid = str(ref.get("chapterId") or "")
+            blocks = scoped_blocks.get((chid, tid))
+            if blocks is None:
+                blocks = contents.get(tid, [])
+            content_parts.append(_blocks_to_text(blocks)[:1500])
         assessment_parts = [checkpoints[cid]["prompt"] for cid in entry["assessment_checkpoint_ids"][:3]
                             if cid in checkpoints]
         messages = [

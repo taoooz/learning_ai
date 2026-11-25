@@ -16,8 +16,19 @@
         course.json                   最终组装（蓝图+章节计划+任务内容块），runner 写入
     EVAL_TRACE_DIR/<run_id>/run_meta.json   整次运行元信息，runner 写入
 
-阶段名：architect_chapters / architect_meta / chapter_plan / search_decision /
-task_content_<taskId>；另有可选审查阶段 architect_review / chapter_plan_review。
+阶段名（带章/任务作用域，由 runner 经 scope() 设置；services/ 不改）：
+    architect_chapters / architect_meta / architect_review       课程级，无作用域
+    chapter_plan_<chapterId> / chapter_plan_review_<chapterId>   章级
+    search_decision_<chapterId>_<taskId>                         任务级
+    task_content_<chapterId>_<taskId>                            任务级
+    checkpoints_<chapterId>                                      章级（runner 检查点阶段）
+无作用域时保持原名（chapter_plan / search_decision / task_content_<taskId>），
+旧 trace 与未包 scope 的调用方按原名可读。taskId 可跨章复用（每章都叫 t1），
+作用域命名保证各章四件套互不覆盖。
+
+calls.json 每条历史带 scope={"chapter_id","task_id"}：同 scope 内多条 =
+该阶段的重试/工具轮（重试计数 = 同 scope 条数）；作用域命名下不同章/任务
+已分桶，不再混入同一 calls 历史。
 
 设计约束：
 - 任何写盘失败只记日志，绝不向生成主流程抛异常。
@@ -52,6 +63,41 @@ _spec_state_var: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
 _stage_var: contextvars.ContextVar[tuple[dict, str] | None] = contextvars.ContextVar(
     "eval_trace_stage", default=None
 )
+_scope_var: contextvars.ContextVar[tuple[str, str]] = contextvars.ContextVar(
+    "eval_trace_scope", default=("", "")
+)
+
+# 任务级阶段：阶段名追加 章+任务 作用域；其余阶段只追加章作用域。
+# task_content_<taskId> 名字已含任务 ID，只插入章 ID（见 _scoped_name）。
+_TASK_LEVEL_STAGES = frozenset({"search_decision"})
+
+
+@contextmanager
+def scope(chapter_id: str = "", task_id: str = "") -> Iterator[None]:
+    """章/任务作用域：范围内阶段名自动展开为带章/任务 ID 的名字。
+
+    runner 在服务调用外设置（services/ 禁改）；嵌套时内层继承外层 chapter_id。
+    contextvars 随 asyncio.to_thread 拷贝传播，服务层阶段标签自动带上作用域。
+    EVAL_TRACE_DIR 未设置时仅设上下文变量，无 I/O。
+    """
+    prev_chapter, _prev_task = _scope_var.get()
+    token = _scope_var.set((chapter_id or prev_chapter, task_id))
+    try:
+        yield
+    finally:
+        _scope_var.reset(token)
+
+
+def _scoped_name(name: str) -> str:
+    """按当前作用域展开阶段名；无章作用域时保持原名（课程级/旧调用方兼容）。"""
+    chapter_id, task_id = _scope_var.get()
+    if not chapter_id:
+        return name
+    if name.startswith("task_content_"):
+        return f"task_content_{chapter_id}_{name[len('task_content_'):]}"
+    if task_id and name in _TASK_LEVEL_STAGES:
+        return f"{name}_{chapter_id}_{task_id}"
+    return f"{name}_{chapter_id}"
 
 # 请求体白名单：只记录生成参数，绝不记录鉴权信息（key 在 HTTP 头，不在 body）
 _SAFE_REQUEST_FIELDS = (
@@ -117,11 +163,13 @@ def stage(name: str) -> Iterator[None]:
 
     同名阶段可多次进入（修复轮/重试轮），调用历史累积在同一 bucket；
     退出时刷盘：契约文件取最后一次调用，全部历史在 calls.json。
+    阶段名按当前 scope() 展开（chapter_plan → chapter_plan_<chapterId> 等）。
     """
     state = _spec_state_var.get()
     if not is_enabled() or state is None:
         yield
         return
+    name = _scoped_name(name)
     token = _stage_var.set((state, name))
     try:
         yield
@@ -169,7 +217,10 @@ def capture_llm_response(
         if initial_response_format is not None:
             meta["response_format_initial"] = initial_response_format
             meta["response_format_downgraded"] = initial_response_format != (rf or {}).get("type")
-        call: dict[str, Any] = {"request": req_snapshot, "raw": raw, "meta": meta}
+        chapter_id, task_id = _scope_var.get()
+        call_scope = {"chapter_id": chapter_id, "task_id": task_id}
+        meta["scope"] = call_scope
+        call: dict[str, Any] = {"request": req_snapshot, "raw": raw, "meta": meta, "scope": call_scope}
         if message.get("tool_calls"):
             meta["has_tool_calls"] = True
             call["tool_calls"] = json.loads(json.dumps(message["tool_calls"], ensure_ascii=False, default=str))
@@ -212,13 +263,17 @@ def record_stage_parsed(
     repair_applied: bool = False,
     repair_steps: list[str] | None = None,
 ) -> None:
-    """直接向指定阶段写 parsed（服务层在阶段上下文之外组装最终产物时用）。"""
+    """直接向指定阶段写 parsed（服务层在阶段上下文之外组装最终产物时用）。
+
+    阶段名与 stage() 一样按当前 scope() 展开，保证 parsed 与四件套同桶。
+    """
     if not is_enabled():
         return
     state = _spec_state_var.get()
     if state is None:
         return
     try:
+        stage_name = _scoped_name(stage_name)
         bucket = _bucket(state, stage_name)
         bucket["parsed"] = parsed
         bucket["parse"] = {

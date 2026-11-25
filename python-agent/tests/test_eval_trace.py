@@ -381,3 +381,99 @@ def test_record_stage_parsed_outside_stage(tmp_path, monkeypatch):
     meta = _read(spec_dir / "stage_task_content_t-1_meta.json")
     assert meta["parser"] == "content_stream_parser"
     eval_trace.end_spec()
+
+
+# ---------------------------------------------------------------------------
+# Bug4 回归：阶段作用域（跨章同名 t1 不覆盖）+ calls.json scope
+# ---------------------------------------------------------------------------
+
+def test_scope_two_chapters_same_task_no_overwrite(tmp_path, monkeypatch):
+    monkeypatch.setenv("EVAL_TRACE_DIR", str(tmp_path))
+    spec_dir = eval_trace.begin_spec("run-1", "spec-1", {"topic": "t"})
+    for ch in ("ch-1", "ch-2"):
+        with eval_trace.scope(chapter_id=ch):
+            with eval_trace.stage("chapter_plan"):
+                eval_trace.capture_llm_response(
+                    {"choices": [{"message": {"content": f'{{"chapterId": "{ch}"}}'}}]},
+                    request={"model": "m", "messages": [{"role": "user", "content": ch}]},
+                )
+                parse_enforced_json(f'{{"chapterId": "{ch}"}}')
+            with eval_trace.scope(task_id="t1"):
+                with eval_trace.stage("task_content_t1"):
+                    eval_trace.capture_llm_response(
+                        {"choices": [{"message": {"content": f'{{"body": "{ch}"}}'}}]},
+                        request={"model": "m", "messages": [{"role": "user", "content": ch}]},
+                    )
+                # 服务层在阶段上下文外组装 blocks（仍在章/任务 scope 内）
+                eval_trace.record_stage_parsed("task_content_t1", {"body": ch}, parser="content_stream_parser")
+                with eval_trace.stage("search_decision"):
+                    eval_trace.capture_llm_response(
+                        {"choices": [{"message": {"content": "NO_SEARCH"}}]},
+                        request={"model": "m", "messages": []},
+                    )
+    eval_trace.end_spec()
+    # 两章四件套都在，内容不串章
+    for ch in ("ch-1", "ch-2"):
+        assert (spec_dir / f"stage_chapter_plan_{ch}_request.json").exists()
+        assert (spec_dir / f"stage_chapter_plan_{ch}_parsed.json").exists()
+        assert (spec_dir / f"stage_task_content_{ch}_t1_request.json").exists()
+        assert (spec_dir / f"stage_task_content_{ch}_t1_raw.txt").exists()
+        assert (spec_dir / f"stage_task_content_{ch}_t1_meta.json").exists()
+        assert _read(spec_dir / f"stage_task_content_{ch}_t1_parsed.json")["body"] == ch
+        assert (spec_dir / f"stage_search_decision_{ch}_t1_meta.json").exists()
+    # 旧裸名不再存在（不被后续章覆盖）
+    assert not (spec_dir / "stage_task_content_t1_parsed.json").exists()
+    assert not (spec_dir / "stage_chapter_plan_parsed.json").exists()
+
+
+def test_calls_json_scope_and_retry_count(tmp_path, monkeypatch):
+    monkeypatch.setenv("EVAL_TRACE_DIR", str(tmp_path))
+    spec_dir = eval_trace.begin_spec("run-1", "spec-1", {"topic": "t"})
+    # 同 scope 内重试 2 次
+    with eval_trace.scope(chapter_id="ch-1", task_id="t1"):
+        with eval_trace.stage("task_content_t1"):
+            for content in ('{"bad": ', '{"ok": true}'):
+                eval_trace.capture_llm_response(
+                    {"choices": [{"message": {"content": content}}]},
+                    request={"model": "m", "messages": []},
+                )
+    # 另一章同名 t1：独立 scope，不混入 ch-1 的 calls
+    with eval_trace.scope(chapter_id="ch-2", task_id="t1"):
+        with eval_trace.stage("task_content_t1"):
+            eval_trace.capture_llm_response(
+                {"choices": [{"message": {"content": '{"ok": true}'}}]},
+                request={"model": "m", "messages": []},
+            )
+    # 重试计数 = 同 scope 条数（end_spec 前读取，状态尚未清空）
+    assert eval_trace.stage_call_counts()["task_content_ch-1_t1"] == 2
+    assert eval_trace.stage_call_counts()["task_content_ch-2_t1"] == 1
+    eval_trace.end_spec()
+    calls1 = _read(spec_dir / "stage_task_content_ch-1_t1_calls.json")
+    assert len(calls1) == 2
+    assert all(c["scope"] == {"chapter_id": "ch-1", "task_id": "t1"} for c in calls1)
+    meta1 = _read(spec_dir / "stage_task_content_ch-1_t1_meta.json")
+    assert meta1["call_count"] == 2
+    assert meta1["scope"] == {"chapter_id": "ch-1", "task_id": "t1"}
+    # ch-2 只 1 次，无 calls.json
+    assert not (spec_dir / "stage_task_content_ch-2_t1_calls.json").exists()
+    assert _read(spec_dir / "stage_task_content_ch-2_t1_meta.json")["call_count"] == 1
+
+
+def test_scope_inherits_chapter_and_architect_unscoped(tmp_path, monkeypatch):
+    monkeypatch.setenv("EVAL_TRACE_DIR", str(tmp_path))
+    spec_dir = eval_trace.begin_spec("run-1", "spec-1", {"topic": "t"})
+    # 课程级阶段无 scope → 原名不变
+    with eval_trace.stage("architect_chapters"):
+        eval_trace.capture_llm_response({"choices": [{"message": {"content": "{}"}}]},
+                                        request={"model": "m", "messages": []})
+    # 内层 task scope 继承外层 chapter
+    with eval_trace.scope(chapter_id="ch-1"):
+        with eval_trace.scope(task_id="t1"):
+            with eval_trace.stage("search_decision"):
+                eval_trace.capture_llm_response({"choices": [{"message": {"content": "NO_SEARCH"}}]},
+                                                request={"model": "m", "messages": []})
+    eval_trace.end_spec()
+    assert (spec_dir / "stage_architect_chapters_meta.json").exists()
+    assert (spec_dir / "stage_search_decision_ch-1_t1_meta.json").exists()
+    meta = _read(spec_dir / "stage_search_decision_ch-1_t1_meta.json")
+    assert meta["scope"] == {"chapter_id": "ch-1", "task_id": "t1"}

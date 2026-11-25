@@ -191,9 +191,16 @@ def test_dry_run_full_trace_contract(tmp_path):
 
     spec_dir = trace_dir / "test-run" / "s1"
     assert _read(spec_dir / "spec.json")["topic"] == "Python 装饰器"
+    # Bug4：章/任务阶段带作用域（chapter_plan_<ch> / search_decision_<ch>_<tid> /
+    # task_content_<ch>_<tid> / checkpoints_<ch>），architect 课程级不变
     stages = [
-        "architect_chapters", "architect_meta", "chapter_plan",
-        "search_decision", "task_content_t-1", "task_content_t-2",
+        "architect_chapters", "architect_meta",
+        "chapter_plan_ch-1", "chapter_plan_ch-2",
+        "search_decision_ch-1_t-1", "search_decision_ch-1_t-2",
+        "search_decision_ch-2_t-1", "search_decision_ch-2_t-2",
+        "task_content_ch-1_t-1", "task_content_ch-1_t-2",
+        "task_content_ch-2_t-1", "task_content_ch-2_t-2",
+        "checkpoints_ch-1", "checkpoints_ch-2",
     ]
     for stage in stages:
         for suffix in ("request.json", "raw.txt", "parsed.json", "meta.json"):
@@ -201,6 +208,9 @@ def test_dry_run_full_trace_contract(tmp_path):
         meta = _read(spec_dir / f"stage_{stage}_meta.json")
         assert meta["model"] == "dry-run-model"
         assert meta["fallback_level"] in ("strict", "json_object", "none")
+    # 旧无作用域名不应再出现（跨章同名任务不再互相覆盖）
+    assert not (spec_dir / "stage_task_content_t-1_parsed.json").exists()
+    assert not (spec_dir / "stage_chapter_plan_parsed.json").exists()
 
     # architect raw 是修复前原文（罐头 JSON），parse 无修复
     chapters_meta = _read(spec_dir / "stage_architect_chapters_meta.json")
@@ -222,8 +232,17 @@ def test_dry_run_full_trace_contract(tmp_path):
             assert task["blocks"], "任务正文 blocks 为空"
             assert task["boundaryPrompt"]["takeaway"]
 
-    # previousTasks 装配：t-2 的请求里应含 t-1 的标题
-    t2_request = _read(spec_dir / "stage_task_content_t-2_request.json")
+    # checkpoint 阶段：每任务一道，objectiveId 来自 plan.tasks 映射（生成任务本身不带）
+    assert len(course["checkpoints"]) == 4
+    for cp in course["checkpoints"]:
+        assert cp["objectiveId"] and cp["taskId"] and cp["chapterId"]
+        assert cp["kind"] == "scenario_choice"
+        assert cp.get("status") != "failed"
+    cp_parsed = _read(spec_dir / "stage_checkpoints_ch-1_parsed.json")
+    assert cp_parsed["chapterId"] == "ch-1" and len(cp_parsed["checkpoints"]) == 2
+
+    # previousTasks 装配：ch-1 的 t-2 请求里应含 t-1 的标题
+    t2_request = _read(spec_dir / "stage_task_content_ch-1_t-2_request.json")
     assert "概念讲解" in json.dumps(t2_request["messages"], ensure_ascii=False)
 
     # 证据快照与运行元信息
@@ -231,8 +250,10 @@ def test_dry_run_full_trace_contract(tmp_path):
     run_meta = _read(trace_dir / "test-run" / "run_meta.json")
     assert run_meta["dryRun"] is True
     assert run_meta["specCount"] == 1
+    assert run_meta["checkpoints"] is True
     assert run_meta["llmCallTotal"] > 0
     assert run_meta["specs"][0]["llmCalls"]["architect_chapters"] >= 1
+    assert run_meta["specs"][0]["checkpoints"] == 4
 
 
 def test_dry_run_specs_filter_and_max_chapters(tmp_path):
@@ -248,8 +269,11 @@ def test_dry_run_specs_filter_and_max_chapters(tmp_path):
     assert course["topic"] == "主题乙"
     assert len(course["chapters"]) == 1
     assert len(course["chapters"][0]["tasks"]) == 1
-    assert (trace_dir / "r2" / "s2" / "stage_task_content_t-1_raw.txt").exists()
-    assert not (trace_dir / "r2" / "s2" / "stage_task_content_t-2_raw.txt").exists()
+    assert (trace_dir / "r2" / "s2" / "stage_task_content_ch-1_t-1_raw.txt").exists()
+    assert not (trace_dir / "r2" / "s2" / "stage_task_content_ch-1_t-2_raw.txt").exists()
+    # max_tasks=1 → 只为 t-1 生成一道 checkpoint
+    assert len(course["checkpoints"]) == 1
+    assert course["checkpoints"][0]["taskId"] == "t-1"
 
 
 def test_run_spec_without_trace_dir_zero_side_effects(tmp_path, monkeypatch):
@@ -266,3 +290,55 @@ def test_run_spec_without_trace_dir_zero_side_effects(tmp_path, monkeypatch):
     # 未设置开关：不产生任何 trace 文件（证据目录只读不写）
     assert not (tmp_path / "run-no-trace").exists()
     assert list(tmp_path.iterdir()) == []
+
+
+# ---------------------------------------------------------------------------
+# Bug2 回归：checkpoint 阶段开关 / 失败降级
+# ---------------------------------------------------------------------------
+
+def test_dry_run_no_checkpoints_switch(tmp_path):
+    golden = _write_golden(tmp_path, [{"id": "s1", "topic": "Python 装饰器"}])
+    trace_dir = tmp_path / "traces"
+    rc = runner.main([
+        str(golden), "--dry-run", "--run-id", "nc", "--trace-dir", str(trace_dir),
+        "--max-tasks", "2", "--no-checkpoints",
+    ])
+    assert rc == 0
+    spec_dir = trace_dir / "nc" / "s1"
+    course = _read(spec_dir / "course.json")
+    assert course["status"] == "completed"
+    assert course["checkpoints"] == []
+    # 关闭后不产生任何 checkpoint 阶段文件
+    assert not list(spec_dir.glob("stage_checkpoints_*"))
+    run_meta = _read(trace_dir / "nc" / "run_meta.json")
+    assert run_meta["checkpoints"] is False
+    assert run_meta["specs"][0]["checkpoints"] == 0
+
+
+def test_checkpoint_failure_marks_partial(tmp_path, monkeypatch):
+    import services.checkpoint_service as cps
+
+    async def boom(**kwargs):
+        raise RuntimeError("checkpoint 生成失败")
+
+    monkeypatch.setattr(cps, "generate_checkpoint", boom)
+    golden = _write_golden(tmp_path, [{"id": "s1", "topic": "Python 装饰器"}])
+    trace_dir = tmp_path / "traces"
+    rc = runner.main([
+        str(golden), "--dry-run", "--run-id", "cf", "--trace-dir", str(trace_dir),
+        "--max-chapters", "1", "--max-tasks", "1",
+    ])
+    assert rc == 0
+    course = _read(trace_dir / "cf" / "s1" / "course.json")
+    # 单题失败不中断整章，但 spec 标 partial
+    assert course["status"] == "partial"
+    assert len(course["checkpoints"]) == 1
+    cp = course["checkpoints"][0]
+    assert cp["status"] == "failed"
+    assert "checkpoint 生成失败" in cp["error"]
+    assert cp["taskId"] == "t-1" and cp["chapterId"] == "ch-1"
+    # 失败也留 parsed 审计（四件套契约）
+    cp_parsed = _read(trace_dir / "cf" / "s1" / "stage_checkpoints_ch-1_parsed.json")
+    assert cp_parsed["checkpoints"][0]["status"] == "failed"
+    run_meta = _read(trace_dir / "cf" / "run_meta.json")
+    assert run_meta["specs"][0]["checkpoints"] == 0  # 成功计数不含 failed

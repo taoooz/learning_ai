@@ -6,8 +6,10 @@ import pytest
 
 from evals.grounding import (
     attribute_claims,
+    compute_evidence_coverage,
     decompose_claims,
     extract_content_units,
+    extract_request_evidence,
     find_dangling_citations,
     flatten_evidence_sources,
     run_grounding,
@@ -224,13 +226,23 @@ def test_run_grounding_sample_limits_calls():
     assert len(gateway.calls) == 2  # 1 分解 + 1 归因
 
 
-def test_run_grounding_missing_evidence_conservative():
+def test_run_grounding_missing_evidence_no_retrieval():
+    # 契约变更（非回归）：无检索证据 ≠ 有证据但不支持。
+    # 全部声明记 no_retrieval（不计溯源失败），溯源率 N/A，零归因 LLM 调用。
     gateway = JudgeGateway(llm_call=grounding_fake(), retry_delay=0)
     result = run(run_grounding(course=COURSE, evidence=None, gateway=gateway, model="mock/m"))
     assert result["evidence_available"] is False
-    assert result["grounding_rate"] == 0.0
-    assert result["no_evidence"] == result["total_claims"]
-    assert any("evidence_snapshot" in n for n in result["notes"])
+    assert result["grounding_rate"] is None
+    assert result["no_retrieval"] == result["total_claims"]
+    assert result["no_evidence"] == 0
+    assert result["unsupported_claims"] == []
+    assert "no_retrieval" in result["flags"]
+    assert result["evidence_source"] == "none"
+    # 有声明但无证据支撑 → evidence_coverage=0.0（区别于 grounding_rate=None）
+    assert result["evidence_coverage"] == 0.0
+    assert result["tasks_with_evidence_support"] == 0
+    assert len(gateway.calls) == 3  # 只分解（3 单元），无证据不做归因
+    assert any("no_retrieval" in n for n in result["notes"])
 
 
 def test_run_grounding_missing_course(tmp_path):
@@ -259,3 +271,98 @@ def test_run_grounding_claims_in_reuse():
     assert result["supported"] == 1 and result["grounding_rate"] == 1.0
     assert len(gateway.calls) == 1  # 只有归因，无分解
     assert any("复用" in n for n in result["notes"])
+
+
+# ---------------------------------------------------------------- Bug3 回归：no_retrieval 语义 / 证据回退 / evidence_coverage
+
+EVIDENCE_BLOCK = ("- MDN HTTP\n  HTTP 默认端口是 80。\n  来源: https://example.com/http\n"
+                  "  证据ID: ev-01-abc123 | 类型: documentation")
+
+
+def _request_with_evidence(block=EVIDENCE_BLOCK):
+    return {"model": "mock/m", "messages": [
+        {"role": "system", "content": "你是课程作者"},
+        {"role": "user", "content": "请生成任务正文。\n\n## 搜索证据包（外部资料，引用时须注明来源）\n"
+         + block + "\n\n## 可引用来源\n- MDN HTTP（https://example.com/http）"},
+    ]}
+
+
+def test_extract_request_evidence_from_task_content(tmp_path):
+    (tmp_path / "stage_task_content_ch1_t1_request.json").write_text(
+        json.dumps(_request_with_evidence(), ensure_ascii=False), encoding="utf-8")
+    sources = extract_request_evidence(tmp_path)
+    assert len(sources) == 1
+    assert sources[0]["evidenceId"] == "ev-01-abc123"
+    assert sources[0]["url"] == "https://example.com/http"
+    assert "HTTP 默认端口是 80" in sources[0]["summary"]
+
+
+def test_extract_request_evidence_calls_and_search_decision(tmp_path):
+    # calls.json 全量历史 + search_decision 阶段（"## 已有证据"头）都读，按 evidenceId 去重
+    (tmp_path / "stage_task_content_ch1_t1_calls.json").write_text(json.dumps(
+        [{"request": _request_with_evidence()}, {"request": _request_with_evidence()}],
+        ensure_ascii=False), encoding="utf-8")
+    sd = {"messages": [{"role": "user",
+                        "content": "## 已有证据\n" + EVIDENCE_BLOCK + "\n\n## 可引用来源\n- x"}]}
+    (tmp_path / "stage_search_decision_ch1_t1_request.json").write_text(
+        json.dumps(sd, ensure_ascii=False), encoding="utf-8")
+    assert len(extract_request_evidence(tmp_path)) == 1
+
+
+def test_extract_request_evidence_no_section_empty(tmp_path):
+    # pilot 实例：无证据注入（evidencePolicy=none）→ 回退也空
+    (tmp_path / "stage_task_content_t1_request.json").write_text(json.dumps(
+        {"messages": [{"role": "user", "content": "请生成任务正文，无证据。"}]},
+        ensure_ascii=False), encoding="utf-8")
+    assert extract_request_evidence(tmp_path) == []
+
+
+def test_run_grounding_request_fallback(tmp_path):
+    # snapshot 全 null，但 request 快照有注入证据 → 回退提取，正常归因（非 no_retrieval）
+    (tmp_path / "course.json").write_text(json.dumps(COURSE, ensure_ascii=False), encoding="utf-8")
+    (tmp_path / "evidence_snapshot.json").write_text(json.dumps(
+        [{"stage": "task_content", "chapter_id": "ch1", "task_id": "t1", "pack": None}],
+        ensure_ascii=False), encoding="utf-8")
+    (tmp_path / "stage_task_content_ch1_t1_request.json").write_text(
+        json.dumps(_request_with_evidence(), ensure_ascii=False), encoding="utf-8")
+    gateway = JudgeGateway(llm_call=grounding_fake(), retry_delay=0)
+    result = run(run_grounding(trace_dir=tmp_path, gateway=gateway, model="mock/m"))
+    assert result["evidence_source"] == "request_fallback"
+    assert result["evidence_available"] is True
+    assert "no_retrieval" not in result["flags"]
+    assert result["supported"] == 1
+    assert result["grounding_rate"] == pytest.approx(1 / 3)
+    assert result["evidence_coverage"] == pytest.approx(1 / 3)
+    assert any("回退" in n for n in result["notes"])
+
+
+def test_compute_evidence_coverage_chapter_scoped():
+    merged = [
+        {"chapter_id": "ch1", "task_id": "t1", "verdict": "supported"},
+        {"chapter_id": "ch1", "task_id": "t1", "verdict": "no_evidence"},
+        {"chapter_id": "ch2", "task_id": "t1", "verdict": "no_retrieval"},  # 跨章 t1 不合并
+        {"chapter_id": "ch1", "task_id": "t2", "verdict": "no_evidence"},
+    ]
+    cov = compute_evidence_coverage(merged)
+    assert cov["tasks_evaluated"] == 3  # (ch1,t1),(ch2,t1),(ch1,t2)
+    assert cov["tasks_with_evidence_support"] == 1
+    assert cov["evidence_coverage"] == pytest.approx(1 / 3)
+    assert compute_evidence_coverage([])["evidence_coverage"] is None
+
+
+def test_summarize_no_retrieval_excluded_from_rate():
+    claims = [{"claim_id": f"c{i}", "text": f"声明{i}"} for i in range(1, 5)]
+    attributions = [
+        {"claim_id": "c1", "verdict": "supported", "evidence_ids": ["ev-01-abc123"], "reason": ""},
+        {"claim_id": "c2", "verdict": "no_evidence", "evidence_ids": [], "reason": "未覆盖"},
+        {"claim_id": "c3", "verdict": "no_retrieval", "evidence_ids": [], "reason": "无检索"},
+        {"claim_id": "c4", "verdict": "no_retrieval", "evidence_ids": [], "reason": "无检索"},
+    ]
+    summary = summarize_grounding(claims, attributions)
+    # 可归因 = 4 - 2(no_retrieval) = 2；rate = supported/可归因 = 1/2
+    assert summary["grounding_rate"] == 0.5
+    assert summary["no_retrieval"] == 2
+    assert len(summary["no_retrieval_claims"]) == 2
+    # no_retrieval 不算溯源失败：unsupported_claims 只含 no_evidence
+    assert len(summary["unsupported_claims"]) == 1
+    assert summary["unsupported_claims"][0]["claim_id"] == "c2"

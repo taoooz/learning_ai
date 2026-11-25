@@ -143,42 +143,100 @@ def load_json_or_none(path) -> dict | list | None:
 
 
 def _assemble_course_from_stages(stages: dict) -> dict | None:
-    """course.json 缺失时的尽力拼装：architect 蓝图 + chapter_plan 任务 + task_content 块。"""
+    """course.json 缺失时的尽力拼装：architect 蓝图 + chapter_plan 任务 + task_content 块 + checkpoints。
+
+    兼容新旧阶段命名：新命名带章/任务作用域（chapter_plan_<ch>、task_content_<ch>_<tid>、
+    checkpoints_<ch>），旧命名无作用域（chapter_plan、task_content_<tid>）。旧命名下跨章
+    同名任务只能保留最后一章（partial）；新命名按章归位，blocks 内嵌到对应章任务。
+    """
     course: dict = {}
     chapters_parsed = (stages.get("architect_chapters") or {}).get("parsed")
     meta_parsed = (stages.get("architect_meta") or {}).get("parsed")
-    plan_parsed = (stages.get("chapter_plan") or {}).get("parsed")
     if isinstance(chapters_parsed, dict) and chapters_parsed.get("chapters"):
         course["chapters"] = [dict(ch) for ch in chapters_parsed["chapters"]]
         course["courseTopic"] = chapters_parsed.get("courseTopic", "")
     if isinstance(meta_parsed, dict):
         course["architecture"] = meta_parsed
         course.setdefault("blueprint", {})["courseObjectives"] = meta_parsed.get("courseObjectives", [])
-    if isinstance(plan_parsed, dict):
-        tasks = plan_parsed.get("tasks") or []
-        chapter_id = plan_parsed.get("chapterId")
+
+    # chapter_plan / chapter_plan_<ch>（排除 review）：按 parsed.chapterId 或名后缀归章
+    plan_stages = sorted(
+        (name, stage) for name, stage in stages.items()
+        if name == "chapter_plan"
+        or (name.startswith("chapter_plan_") and not name.startswith("chapter_plan_review"))
+    )
+    for name, stage in plan_stages:
+        parsed = stage.get("parsed")
+        if not isinstance(parsed, dict):
+            continue
+        tasks = parsed.get("tasks") or []
+        chapter_id = parsed.get("chapterId") or (
+            name[len("chapter_plan_"):] if name.startswith("chapter_plan_") else None)
         chapters = course.setdefault("chapters", [])
         target = next((ch for ch in chapters if ch.get("chapterId") == chapter_id), None)
-        if target is None:
+        if target is None and len(plan_stages) == 1:
             target = chapters[0] if chapters else None
+        if target is None and chapter_id:
+            target = {"chapterId": chapter_id}
+            chapters.append(target)
         if target is None:
             course["tasks"] = tasks
         else:
+            target["plan"] = parsed
             target["tasks"] = tasks
+
+    # task_content_<tid>（旧）/ task_content_<ch>_<tid>（新）：按已知 chapterId 前缀拆分
+    known_chapters = [str(ch.get("chapterId")) for ch in course.get("chapters", []) if ch.get("chapterId")]
     contents = {}
     for name, stage in stages.items():
         if not name.startswith("task_content_"):
             continue
-        task_id = name[len("task_content_"):]
+        rest = name[len("task_content_"):]
+        chapter_id, task_id = "", rest
+        for chid in known_chapters:
+            if rest.startswith(chid + "_"):
+                chapter_id, task_id = chid, rest[len(chid) + 1:]
+                break
         parsed = stage.get("parsed")
-        if isinstance(parsed, dict):
-            blocks = parsed.get("blocks") or (parsed.get("task") or {}).get("blocks")
-            if blocks is not None:
-                contents[task_id] = {"blocks": blocks}
-                if parsed.get("checkpoint") or (parsed.get("task") or {}).get("checkpoint"):
-                    contents[task_id]["checkpoint"] = parsed.get("checkpoint") or parsed["task"]["checkpoint"]
+        if not isinstance(parsed, dict):
+            continue
+        blocks = parsed.get("blocks") or (parsed.get("task") or {}).get("blocks")
+        if blocks is None:
+            continue
+        contents[task_id] = {"blocks": blocks}
+        checkpoint = parsed.get("checkpoint") or (parsed.get("task") or {}).get("checkpoint")
+        if checkpoint:
+            contents[task_id]["checkpoint"] = checkpoint
+        if chapter_id:
+            target = next((ch for ch in course.get("chapters", []) if ch.get("chapterId") == chapter_id), None)
+            if target is not None:
+                tasks = target.setdefault("tasks", [])
+                task = next((t for t in tasks if isinstance(t, dict) and t.get("taskId") == task_id), None)
+                if task is None:
+                    task = {"taskId": task_id}
+                    tasks.append(task)
+                task.setdefault("blocks", blocks)
     if contents:
         course["taskContents"] = contents
+
+    # checkpoints / checkpoints_<ch>：聚合到 course["checkpoints"]
+    checkpoints: list[dict] = []
+    for name, stage in sorted(stages.items()):
+        if name != "checkpoints" and not name.startswith("checkpoints_"):
+            continue
+        parsed = stage.get("parsed")
+        if not isinstance(parsed, dict) or not isinstance(parsed.get("checkpoints"), list):
+            continue
+        chapter_id = parsed.get("chapterId") or (
+            name[len("checkpoints_"):] if name.startswith("checkpoints_") else "")
+        for cp in parsed["checkpoints"]:
+            if isinstance(cp, dict):
+                entry = dict(cp)
+                if chapter_id and not entry.get("chapterId"):
+                    entry["chapterId"] = chapter_id
+                checkpoints.append(entry)
+    if checkpoints:
+        course["checkpoints"] = checkpoints
     return course or None
 
 
@@ -228,6 +286,20 @@ def _usage_tokens(usage) -> tuple[int, int, int]:
     return (int(prompt), int(completion), int(total))
 
 
+def _fallback_level(value) -> int:
+    """归一化 fallback_level：兼容数字（旧夹具）与 trace.py 写入的字符串。
+
+    trace.py 记录捕获时实际使用的 response_format：strict(json_schema) / json_object / none。
+    其中 none 是流式正文与 search_decision 的正常形态（本就不要求结构化输出），不算降级；
+    只有 json_object 代表从 strict 的真实降级。数字值原样透传。
+    """
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        return {"strict": 0, "json_object": 1, "none": 0}.get(value.strip().lower(), 0)
+    return 0
+
+
 def collect_cost(bundle: dict | None = None, outputs: list[dict] | None = None) -> dict:
     """汇总生成侧（stage meta）与评测侧（llm_calls 审计）的调用数与 token 成本。"""
     cost = {"generation_calls": 0, "evaluation_calls": 0, "failed_calls": 0,
@@ -247,11 +319,16 @@ def collect_cost(bundle: dict | None = None, outputs: list[dict] | None = None) 
 
     for stage in ((bundle or {}).get("stages") or {}).values():
         meta = stage.get("meta") or {}
-        cost["generation_calls"] += 1
+        # call_count 含重试/多章累积（Bug4 后按作用域拆分），按真实调用数计
+        try:
+            calls = max(1, int(meta.get("call_count") or 1))
+        except (TypeError, ValueError):
+            calls = 1
+        cost["generation_calls"] += calls
         add(meta.get("model", ""), meta.get("usage"))
         if meta.get("repair_applied"):
             cost["repair_applied_count"] += 1
-        if (meta.get("fallback_level") or 0) > 0:
+        if _fallback_level(meta.get("fallback_level")) > 0:
             cost["fallback_count"] += 1
     for output in outputs or []:
         if not isinstance(output, dict):
@@ -264,7 +341,7 @@ def collect_cost(bundle: dict | None = None, outputs: list[dict] | None = None) 
             for call in calls:
                 cost["evaluation_calls"] += 1
                 add(call.get("model", ""), call.get("usage"), call.get("status") == "ok")
-                if (call.get("fallback_level") or 0) > 0:
+                if _fallback_level(call.get("fallback_level")) > 0:
                     cost["fallback_count"] += 1
     return cost
 
@@ -325,12 +402,30 @@ def build_report(bundle: dict | None = None, grounding: dict | None = None,
     lines.append("## 事实溯源")
     if grounding:
         rate = grounding.get("grounding_rate")
-        lines.append(f"- 溯源率：**{rate:.1%}**" if rate is not None else "- 溯源率：N/A（无可核查声明）")
-        lines.append(f"- 声明 {grounding.get('total_claims', 0)} 条：支持 {grounding.get('supported', 0)} / "
-                     f"矛盾 {grounding.get('contradicted', 0)} / 无证据 {grounding.get('no_evidence', 0)}")
+        total = grounding.get("total_claims", 0)
+        no_retrieval = grounding.get("no_retrieval", 0)
+        if rate is not None:
+            lines.append(f"- 溯源率：**{rate:.1%}**（支持 / 可归因声明，no_retrieval 不计入）")
+        elif no_retrieval:
+            lines.append("- 溯源率：N/A（无检索证据，全部声明记 no_retrieval，不计溯源失败）")
+        else:
+            lines.append("- 溯源率：N/A（无可核查声明）")
+        lines.append(f"- 声明 {total} 条：支持 {grounding.get('supported', 0)} / "
+                     f"矛盾 {grounding.get('contradicted', 0)} / 无证据 {grounding.get('no_evidence', 0)} / "
+                     f"无检索 {no_retrieval}")
+        if total and no_retrieval:
+            lines.append(f"- no_retrieval 占比：{no_retrieval / total:.1%}（NO_SEARCH / 纯参数化生成，不计溯源失败）")
+        coverage = grounding.get("evidence_coverage")
+        if coverage is not None:
+            lines.append(f"- evidence_coverage（有证据支撑的任务占比）：**{coverage:.1%}** "
+                         f"（{grounding.get('tasks_with_evidence_support', 0)}/{grounding.get('tasks_evaluated', 0)} 任务）")
+        elif grounding.get("tasks_evaluated"):
+            lines.append("- evidence_coverage：N/A（无声明）")
+        if grounding.get("evidence_source") == "request_fallback":
+            lines.append("- 证据来源：evidence_snapshot 为空，已回退从任务 request 快照提取注入证据")
         if grounding.get("sampled"):
             lines.append(f"- 限量模式：{grounding.get('units_evaluated')}/{grounding.get('units_total')} 内容单元")
-        if not grounding.get("evidence_available", True):
+        if not grounding.get("evidence_available", True) and not no_retrieval:
             lines.append("- ⚠️ 证据快照缺失：无证据计数不代表内容错误")
         for claim in grounding.get("contradicted_claims", [])[:10]:
             lines.append(f"- ❌ 矛盾：{claim['text']}（{claim.get('reason', '')}）")

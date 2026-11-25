@@ -1,9 +1,9 @@
-"""离线全链路 runner：golden set → architect → chapter_plan → 抽样任务正文 → trace。
+"""离线全链路 runner：golden set → architect → chapter_plan → 抽样任务正文 → checkpoints → trace。
 
 用法（在 python-agent 目录下）：
     python -m evals.runner GOLDEN.json [--specs id1,id2] [--max-tasks 2]
         [--max-chapters N] [--run-id RUN] [--trace-dir DIR] [--dry-run]
-        [--no-search] [--env-file PATH] [--evidence-dir DIR]
+        [--no-search] [--no-checkpoints] [--env-file PATH] [--evidence-dir DIR]
 
 - golden set 宽松契约：JSON 列表，每条含 topic（必需）、id/difficulty/
   learningGoal/learnerPositioning/intentType（可选，缺省给默认值）。
@@ -17,6 +17,13 @@
   不污染 python-agent/data；--evidence-dir 可复用已有证据库。
 - --no-search：architect allow_search=False，且 DISABLE_WEB_SEARCH=1 /
   DISABLE_EVIDENCE_SEARCH=1 关闭章节/任务阶段的联网搜索（控成本）。
+- checkpoints：默认每章为每个成功任务生成一道理解检查题（复用
+  services/checkpoint_service.generate_checkpoint，每任务 +1 次 LLM 调用），
+  写入 course.json 顶层 checkpoints 键与 stage_checkpoints_<chapterId>_* 四件套；
+  --no-checkpoints 关闭该阶段。
+- 阶段作用域：runner 用 eval_trace.scope(chapter_id, task_id) 包住章/任务调用，
+  阶段文件展开为 stage_chapter_plan_<ch>_* / stage_search_decision_<ch>_<tid>_* /
+  stage_task_content_<ch>_<tid>_*，跨章同名任务（如每章的 t1）不再互相覆盖。
 
 blueprint 编译是 lib/learning-v2/blueprint-from-architecture.ts 的确定性
 Python 移植（course-architecture-compiler-v1），映射规则与 TS 侧一致。
@@ -366,10 +373,32 @@ class DryRunClient:
             payload = {}
         return self._traced(self._wrap(json.dumps(payload, ensure_ascii=False)), messages, kwargs, "dry-run.chat_with_tools")
 
-    def chat(self, messages, **kwargs) -> dict:
-        # 审查路径（architect_review / chapter_plan_review）
-        response = self._wrap(json.dumps({"passed": True, "issues": [], "repairNotes": ""}, ensure_ascii=False))
+    async def chat(self, messages, **kwargs) -> dict:
+        # 与真实 MiniMaxClient.chat 一致为 async（checkpoint_service._call_for_json 会 await）
+        user_text = "\n".join(str(m.get("content") or "") for m in messages if m.get("role") == "user")
+        if "理解检查题" in user_text:
+            # checkpoint 生成路径（checkpoint_service._call_for_json 的固定 user 消息）
+            payload = self._checkpoint_payload()
+        else:
+            # 审查路径（architect_review / chapter_plan_review）
+            payload = {"passed": True, "issues": [], "repairNotes": ""}
+        response = self._wrap(json.dumps(payload, ensure_ascii=False))
         return self._traced(response, messages, kwargs, "dry-run.chat")
+
+    def _checkpoint_payload(self) -> dict:
+        topic = self.spec["topic"]
+        return {
+            "kind": "scenario_choice",
+            "prompt": f"关于{topic}的核心概念，下列哪种说法正确？",
+            "options": [
+                {"id": "opt-a", "text": f"{topic}的核心机制可以被解释并用于最小示例"},
+                {"id": "opt-b", "text": f"{topic}不需要理解，只要记住步骤"},
+            ],
+            "correctAnswer": "opt-a",
+            "rubric": "能选出正确说法并说明理由",
+            "remediationHint": "回看本章的概念讲解与示例任务",
+            "estimatedSeconds": 45,
+        }
 
     def prepare_search_context(self, messages, **kwargs) -> dict:
         return self._traced(self._wrap("NO_SEARCH"), messages, kwargs, "dry-run.prepare_search_context")
@@ -390,6 +419,84 @@ class DryRunClient:
                 request={"model": self.model, "messages": messages, "stream": True},
                 source="dry-run.stream_chat",
             )
+
+
+# ---------------------------------------------------------------------------
+# checkpoint 生成阶段（复用 services/checkpoint_service，只调用不修改）
+# ---------------------------------------------------------------------------
+
+async def _generate_chapter_checkpoints(
+    *,
+    course_id: str,
+    blueprint_chapter: dict,
+    plan: dict,
+    generated_tasks: list[dict],
+    client,
+    course_topic: str,
+    course_mission: dict | None,
+) -> list[dict]:
+    """为本章每个成功生成的任务生成一道 checkpoint（每任务 +1 次 LLM 调用）。
+
+    trace 阶段名 checkpoints（章作用域 → stage_checkpoints_<chapterId>_*），
+    四件套契约同其他阶段；单题失败记 failed 条目不中断整章。
+    objectiveId 来自 plan.tasks 映射（生成内容任务不带 objectiveId）。
+    证据走 get_chapter_evidence + evidence_to_prompt（只读，失败不阻塞，
+    与 routers/learning_v2.py 的真实调用同契约）。
+    """
+    from services.checkpoint_service import generate_checkpoint
+    from services.evidence_store import evidence_to_prompt, get_chapter_evidence
+    from .judge import _blocks_to_text
+
+    chapter_id = blueprint_chapter["chapterId"]
+    plan_by_id = {str(t.get("taskId")): t for t in plan.get("tasks") or [] if isinstance(t, dict)}
+    try:
+        pack = get_chapter_evidence(course_id, chapter_id)
+        evidence, sources = evidence_to_prompt(pack)
+    except Exception:  # noqa: BLE001 证据失败不阻塞 checkpoint 生成
+        evidence, sources = None, None
+
+    entries: list[dict] = []
+    with eval_trace.scope(chapter_id=chapter_id):
+        for task in generated_tasks:
+            tid = str(task.get("taskId") or "")
+            blocks = task.get("blocks") or []
+            if not tid or not blocks:
+                continue  # 失败/无内容任务不生成 checkpoint
+            plan_task = plan_by_id.get(tid) or {}
+            objective_id = str(plan_task.get("objectiveId") or task.get("objectiveId") or "").strip()
+            if not objective_id:
+                entries.append({"taskId": tid, "chapterId": chapter_id, "status": "failed",
+                                "error": "plan 缺少 objectiveId 映射，无法生成 checkpoint"})
+            else:
+                try:
+                    with eval_trace.scope(task_id=tid):
+                        with eval_trace.stage("checkpoints"):
+                            definition = await generate_checkpoint(
+                                course_topic=course_topic,
+                                chapter_title=blueprint_chapter["title"],
+                                teaching_goal=blueprint_chapter["teachingGoal"],
+                                task_id=tid,
+                                task_title=task.get("title") or plan_task.get("title", ""),
+                                task_goal=plan_task.get("taskGoal", ""),
+                                objective_id=objective_id,
+                                task_content_summary=_blocks_to_text(blocks)[:1500],
+                                course_mission=course_mission,
+                                evidence=evidence,
+                                sources=sources,
+                                client=client,
+                            )
+                    entry = definition.model_dump()
+                    entry["chapterId"] = chapter_id
+                    entries.append(entry)
+                except Exception as exc:  # noqa: BLE001 单题失败不中断整章
+                    entries.append({"taskId": tid, "chapterId": chapter_id, "status": "failed",
+                                    "error": f"{type(exc).__name__}: {exc}"})
+            eval_trace.record_stage_parsed(
+                "checkpoints",
+                {"chapterId": chapter_id, "checkpoints": entries},
+                parser="checkpoint_service",
+            )
+    return entries
 
 
 # ---------------------------------------------------------------------------
@@ -415,6 +522,7 @@ async def run_spec(spec: dict, args, run_id: str) -> dict:
         "architecture": None,
         "blueprint": None,
         "chapters": [],
+        "checkpoints": [],
         "generatedAt": int(time.time() * 1000),
     }
     status, error = "completed", None
@@ -449,15 +557,16 @@ async def run_spec(spec: dict, args, run_id: str) -> dict:
                 "tasks": [],
             }
             course["chapters"].append(chapter_entry)
-            plan = await generate_chapter_plan(
-                ChapterPlanRequest(
-                    courseId=course_id,
-                    chapterId=blueprint_chapter["chapterId"],
-                    blueprint=blueprint,
-                    completedChapters=completed_chapters,
-                ),
-                client=client,
-            )
+            with eval_trace.scope(chapter_id=blueprint_chapter["chapterId"]):
+                plan = await generate_chapter_plan(
+                    ChapterPlanRequest(
+                        courseId=course_id,
+                        chapterId=blueprint_chapter["chapterId"],
+                        blueprint=blueprint,
+                        completedChapters=completed_chapters,
+                    ),
+                    client=client,
+                )
             chapter_entry["plan"] = plan
             completed_chapters.append({
                 "chapterId": blueprint_chapter["chapterId"],
@@ -490,11 +599,14 @@ async def run_spec(spec: dict, args, run_id: str) -> dict:
                 )
                 task_result: dict | None = None
                 task_error: dict | None = None
-                async for event in stream_task_events(request, client=client):
-                    if event["type"] == "task_completed":
-                        task_result = event["payload"]["task"]
-                    elif event["type"] == "request_error":
-                        task_error = event["payload"]
+                # 章+任务作用域：search_decision / task_content_<taskId> 阶段
+                # 展开为带章/任务 ID 的名字，跨章同名任务不再互相覆盖
+                with eval_trace.scope(chapter_id=blueprint_chapter["chapterId"], task_id=task["taskId"]):
+                    async for event in stream_task_events(request, client=client):
+                        if event["type"] == "task_completed":
+                            task_result = event["payload"]["task"]
+                        elif event["type"] == "request_error":
+                            task_error = event["payload"]
                 if task_result is not None:
                     chapter_entry["tasks"].append(task_result)
                     previous_tasks.append({
@@ -505,6 +617,22 @@ async def run_spec(spec: dict, args, run_id: str) -> dict:
                     })
                 else:
                     chapter_entry["tasks"].append({"taskId": task["taskId"], "status": "failed", "error": task_error})
+                    status = "partial"
+
+            # checkpoint 生成阶段（默认开启；--no-checkpoints 关闭）。
+            # 评估缺失不再被误记为"目标无评估"断裂。
+            if not getattr(args, "no_checkpoints", False):
+                cp_entries = await _generate_chapter_checkpoints(
+                    course_id=course_id,
+                    blueprint_chapter=blueprint_chapter,
+                    plan=plan,
+                    generated_tasks=chapter_entry["tasks"],
+                    client=client,
+                    course_topic=blueprint["topic"],
+                    course_mission=blueprint.get("mission"),
+                )
+                course["checkpoints"].extend(cp_entries)
+                if any(e.get("status") == "failed" for e in cp_entries):
                     status = "partial"
     except Exception as exc:  # noqa: BLE001 单 spec 失败不中断整批
         status, error = "failed", f"{type(exc).__name__}: {exc}"
@@ -527,6 +655,7 @@ async def run_spec(spec: dict, args, run_id: str) -> dict:
         "llmCallTotal": sum(call_counts.values()),
         "chapters": len(course["chapters"]),
         "tasks": sum(len(c["tasks"]) for c in course["chapters"]),
+        "checkpoints": sum(1 for cp in course["checkpoints"] if cp.get("status") != "failed"),
     }
 
 
@@ -544,6 +673,7 @@ async def run_all(specs: list[dict], args, run_id: str) -> dict:
         "specCount": len(specs),
         "maxTasksPerChapter": args.max_tasks,
         "maxChapters": args.max_chapters,
+        "checkpoints": not getattr(args, "no_checkpoints", False),
         "allowSearch": not args.no_search,
         "model": os.getenv("LLM_MODEL", ""),
         "strictSchema": os.getenv("LLM_STRICT_JSON_SCHEMA", "1"),
@@ -579,6 +709,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--trace-dir", default="eval-traces", help="trace 根目录（设为 EVAL_TRACE_DIR）")
     parser.add_argument("--dry-run", action="store_true", help="不调 LLM，用罐头输出验证装配与 trace 契约")
     parser.add_argument("--no-search", action="store_true", help="关闭全链路联网搜索（控成本/离线复跑）")
+    parser.add_argument("--no-checkpoints", action="store_true", help="关闭 checkpoint 生成阶段（默认每任务 +1 次调用）")
     parser.add_argument("--env-file", default=str(AGENT_ROOT / ".env"), help="dotenv 文件（LLM_API_KEY 等）")
     parser.add_argument("--evidence-dir", default="", help="证据库目录（默认隔离到 <trace_dir>/<run_id>/_evidence）")
     args = parser.parse_args(argv)

@@ -204,3 +204,102 @@ def test_run_alignment_empty_objectives_skips_llm():
     result = run(run_alignment(course={"chapters": []}, gateway=gateway, model="mock/m"))
     assert result["judge_scores"] == [] and gateway.calls == []
     assert any("无学习目标" in n for n in result["notes"])
+
+
+# ---------------------------------------------------------------- Bug1 回归：plan 映射 + 跨章 t1
+
+# 生成任务（chapters[].tasks）只有 taskId/blocks，无 objectiveId；
+# 目标映射在 chapters[].plan.tasks。每章第一个任务都叫 t1（跨章复用）。
+PLAN_MAPPING_COURSE = {
+    "blueprint": {"courseObjectives": [
+        {"objectiveId": "o1", "observableOutcome": "能解释强缓存"},
+        {"objectiveId": "o2", "observableOutcome": "能解释协商缓存"},
+    ]},
+    "chapters": [
+        {"chapterId": "ch1",
+         "plan": {"chapterId": "ch1", "tasks": [{"taskId": "t1", "objectiveId": "o1"}]},
+         "tasks": [{"taskId": "t1", "title": "强缓存",
+                    "blocks": [{"type": "markdown", "markdown": "Cache-Control 强缓存内容足够长。"}]}]},
+        {"chapterId": "ch2",
+         "plan": {"chapterId": "ch2", "tasks": [{"taskId": "t1", "objectiveId": "o2"}]},
+         "tasks": [{"taskId": "t1", "title": "协商缓存",
+                    "blocks": [{"type": "markdown", "markdown": "ETag 协商缓存内容足够长。"}]}]},
+    ],
+    "checkpoints": [
+        {"checkpointId": "cp1", "objectiveId": "o1", "taskId": "t1", "chapterId": "ch1", "prompt": "强缓存？"},
+        {"checkpointId": "cp2", "objectiveId": "o2", "taskId": "t1", "chapterId": "ch2", "prompt": "协商？"},
+    ],
+}
+
+
+def test_extract_tasks_plan_mapping_cross_chapter():
+    # 跨章同名 t1 不合并：两章任务都保留，objectiveId 由章内 plan 映射补齐
+    tasks = extract_tasks(PLAN_MAPPING_COURSE)
+    assert len(tasks) == 2
+    assert all(t["taskId"] == "t1" for t in tasks)
+    by_ch = {t["chapterId"]: t for t in tasks}
+    assert by_ch["ch1"]["objectiveId"] == "o1"
+    assert by_ch["ch2"]["objectiveId"] == "o2"
+
+
+def test_extract_tasks_own_objective_wins_over_plan():
+    # 任务自带 objectiveId 时优先，不被 plan 映射覆盖
+    course = {"chapters": [{"chapterId": "ch1",
+                            "plan": {"tasks": [{"taskId": "t1", "objectiveId": "o-plan"}]},
+                            "tasks": [{"taskId": "t1", "objectiveId": "o-own"}]}],
+              "blueprint": {"courseObjectives": [{"objectiveId": "o-own", "observableOutcome": "x"}]}}
+    assert extract_tasks(course)[0]["objectiveId"] == "o-own"
+
+
+def test_matrix_plan_mapping_full_coverage():
+    # Bug1 核心回归：生成任务无 objectiveId，经 plan 映射后覆盖矩阵不再全 0
+    result = build_coverage_matrix(PLAN_MAPPING_COURSE)
+    assert result["breaks"] == []
+    cov = result["coverage"]
+    assert cov["objectives_total"] == 2
+    assert cov["with_content"] == 2 and cov["with_assessment"] == 2
+    assert cov["fully_covered"] == 2 and cov["full_coverage_rate"] == 1.0
+    by_oid = {m["objectiveId"]: m for m in result["matrix"]}
+    assert by_oid["o1"]["content_task_ids"] == ["t1"]
+    assert by_oid["o2"]["content_task_ids"] == ["t1"]
+    # 章感知：o1 内容来自 ch1，o2 来自 ch2（content_task_refs 区分跨章 t1）
+    assert by_oid["o1"]["content_task_refs"] == [{"chapterId": "ch1", "taskId": "t1"}]
+    assert by_oid["o2"]["content_task_refs"] == [{"chapterId": "ch2", "taskId": "t1"}]
+
+
+def test_checkpoint_indirect_mapping_chapter_scoped():
+    # cp 无 objectiveId，仅 taskId+chapterId → 按章间接挂目标（不串章）
+    course = {
+        "blueprint": {"courseObjectives": [
+            {"objectiveId": "o1", "observableOutcome": "a"},
+            {"objectiveId": "o2", "observableOutcome": "b"},
+        ]},
+        "chapters": [
+            {"chapterId": "ch1", "plan": {"tasks": [{"taskId": "t1", "objectiveId": "o1"}]},
+             "tasks": [{"taskId": "t1", "blocks": [{"type": "markdown", "markdown": "内容一足够长。"}]}]},
+            {"chapterId": "ch2", "plan": {"tasks": [{"taskId": "t1", "objectiveId": "o2"}]},
+             "tasks": [{"taskId": "t1", "blocks": [{"type": "markdown", "markdown": "内容二足够长。"}]}]},
+        ],
+        "checkpoints": [{"checkpointId": "cp2", "taskId": "t1", "chapterId": "ch2", "prompt": "题"}],
+    }
+    by_oid = {m["objectiveId"]: m for m in build_coverage_matrix(course)["matrix"]}
+    assert by_oid["o2"]["assessment_checkpoint_ids"] == ["cp2"]
+    assert by_oid["o1"]["assessment_checkpoint_ids"] == []
+
+
+def test_judge_alignment_quality_chapter_aware_content():
+    # judge 取内容按 (chapterId, taskId) 定位：跨章 t1 不串内容
+    matrix = build_coverage_matrix(PLAN_MAPPING_COURSE)["matrix"]
+    seen = []
+
+    async def fake(messages, model, **kwargs):
+        seen.append(messages[-1]["content"])
+        return json_response({"content_alignment": 4, "assessment_alignment": 4,
+                              "issues": [], "comment": "ok"})
+
+    gateway = JudgeGateway(llm_call=fake, retry_delay=0)
+    run(judge_alignment_quality(PLAN_MAPPING_COURSE, matrix, gateway, "mock/m"))
+    assert len(seen) == 2
+    # o1 的 prompt 含 ch1 内容（Cache-Control），o2 含 ch2 内容（ETag），互不串
+    assert "Cache-Control" in seen[0] and "ETag" not in seen[0]
+    assert "ETag" in seen[1] and "Cache-Control" not in seen[1]
