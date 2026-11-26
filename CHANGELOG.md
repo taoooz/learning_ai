@@ -41,9 +41,8 @@
 - 口径统一：置信度阈值单常量 0.6（prompt/代码同源）；任务时长规格回流 2～6 分钟；Architect 语义审查硬门改软门（修复失败携 reviewIssues 放行，ARCHITECT_REVIEW_STRICT=1 恢复硬门）；章节数硬卡 8 改软收敛 + 硬上限 12
 - 验证：pytest 355、TS 333、docs:check 全通过；README 同步补救封顶与审查软门契约
 
-### 课程生成链路体检：P0 bug 修复（2026-11-23）
-- 修复章节小结流式重复拼接：`stream_chapter_recap_events` 误把累积全文喂给增量解析器，keyTakeaways 跨多个 chunk 时下发重复/垃圾要点；改为只喂增量，补跨 4 chunk 回归测试
-- 修复聊天助理无记忆载荷时丢失全部课程上下文：去掉 `build_chat_system_prompt` "无记忆只回 base 一句"的早退，课程主题/学习节点/题目上下文/对话摘要始终注入
-- 修复遗留 `Thinking` 清理正则误删正文：改为只匹配独占行成对标记（outline_agent/minimax/minimax_agent 共 6 处），Design Thinking 等课程主题正文不再被吞
-- scenario_choice 正确答案归一：忽略大小写匹配 option id，单字母/1 基数字按选项顺序映射；越界答案仍由 schema 拦截
-- 新增 15 个回归测试（recap/chat/thinking/checkpoint），pytest 全量 338 通过
+
+### I4/I5 可靠性修复：公式降级与 checkpoint 宽松解析（2026-11-26）
+- I5：interactive parameter-demo 公式试算 FormulaError（未知变量/非法字符）此前穿透流式 parser 杀死整任务（基线 30 门中 9 任务）；parse_interactive_content 捕获后走既有 _degrade，内容保留为 markdown。
+- I4：生成内容模型（CheckpointDefinition/Option/SourceRef/SequenceItem）extra 改 ignore，模型偶发多余键不再整题丢弃；请求/评估模型保持 forbid，声明字段校验不变。
+- 预注册 rsi/prereg-I4-I5.md（可靠性类，对 completed 课程行为恒等）；新增 7 回归测试，pytest 545 过。

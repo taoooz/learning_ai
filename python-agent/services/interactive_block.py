@@ -161,19 +161,24 @@ def parse_interactive_content(lines: list[str], block_id: str) -> dict:
     title = ((fields.get("标题") or [""])[0]).strip()[:_LIMITS["title"]]
     intro = "".join(fields.get("说明", []))[:_LIMITS["intro"]]
 
-    if component == "parameter-demo":
-        block = _build_parameter_demo(fields, block_id, title, intro)
-    elif component == "step-walkthrough":
-        block = _build_step_walkthrough(fields, block_id, title, intro)
-    elif component == "flow-diagram":
-        block = _build_flow_diagram(fields, block_id, title, intro)
-    elif component == "bar-compare":
-        block = _build_bar_compare(fields, block_id, title, intro)
-    elif component == "before-after":
-        block = _build_before_after(fields, block_id, title, intro)
-    else:
+    try:
+        if component == "parameter-demo":
+            block = _build_parameter_demo(fields, block_id, title, intro)
+        elif component == "step-walkthrough":
+            block = _build_step_walkthrough(fields, block_id, title, intro)
+        elif component == "flow-diagram":
+            block = _build_flow_diagram(fields, block_id, title, intro)
+        elif component == "bar-compare":
+            block = _build_bar_compare(fields, block_id, title, intro)
+        elif component == "before-after":
+            block = _build_before_after(fields, block_id, title, intro)
+        else:
+            block = None
+            logger.warning("interactive 块降级：未知组件 %r", component)
+    except FormulaError as exc:
+        # 公式试算失败（未知变量/非法字符等）只降级本块，不得穿透流式解析杀死整个任务。
+        logger.warning("interactive 块降级：组件 %s 公式试算失败：%s", component, exc)
         block = None
-        logger.warning("interactive 块降级：未知组件 %r", component)
     if block is None:
         if component in _ALLOWED_COMPONENTS:
             logger.warning("interactive 块降级：组件 %s 校验未通过", component)

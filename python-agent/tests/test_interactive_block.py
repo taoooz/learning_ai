@@ -137,3 +137,37 @@ def test_before_after_parses_states_and_labels():
 def test_before_after_missing_after_degrades():
     block = parse_interactive_content(["组件：before-after", "标题：t", "前：只有前"], "b12")
     assert block["type"] == "markdown"
+
+
+# ---- I5 回归：公式试算失败只降级本块，不得抛异常杀死任务流 ----
+# 背景：baseline-b1 九任务因 FormulaError 穿透 parser → UPSTREAM_STREAM_BROKEN 整任务失败。
+
+def test_parameter_demo_unknown_variable_degrades_not_raises():
+    lines = [
+        "组件：parameter-demo",
+        "标题：缓存收益估算",
+        "参数：每小时补贴 = 30（10~100，步进5）",
+        "列：姓名 | 加班小时 | 加班费",
+        "行：小陈 | 5 | 固定成本 * 2",
+    ]
+    block = parse_interactive_content(lines, "b1")
+    assert block["type"] == "markdown"
+    assert "固定成本" in block["markdown"]
+
+
+def test_parameter_demo_disallowed_char_degrades_not_raises():
+    lines = [
+        "组件：parameter-demo",
+        "标题：正则演示",
+        "参数：次数 = 3（1~10，步进1）",
+        "列：样本 | 数量 | 结果",
+        "行：a | 2 | 数量 @ 2",
+    ]
+    block = parse_interactive_content(lines, "b1")
+    assert block["type"] == "markdown"
+
+
+def test_parameter_demo_valid_formula_still_interactive():
+    block = parse_interactive_content(_PARAMETER_DEMO, "b1")
+    assert block["type"] == "interactive"
+    assert block["component"] == "parameter-demo"

@@ -77,9 +77,11 @@ def test_open_ended_kind_now_valid():
         _scenario_choice(kind="error_diagnosis")  # P3b 后续启用
 
 
-def test_unknown_fields_rejected():
-    with pytest.raises(ValidationError):
-        _scenario_choice(evidence=[])
+def test_unknown_fields_ignored_on_generated_definition():
+    # I4 契约变更：生成内容模型宽松解析（多余键剥离不拒题）；请求模型仍 forbid（见下方回归）。
+    cp = _scenario_choice(evidence=[])
+    assert cp.correctAnswer == "b"
+    assert not hasattr(cp, "evidence")
 
 
 def test_validate_definition_unwraps_single_item_list():
@@ -878,3 +880,47 @@ def test_checkpoint_prompt_injects_course_mission():
     assert "优化首屏加载" in prompt
     assert "前端性能优化" in prompt
     assert "能配置缓存策略" in prompt
+
+
+# ---- I4 回归：生成内容模型宽松解析多余键；请求模型仍严格 ----
+# 背景：baseline-b1 regex-a ch-3 模型多输出 "type":"json_object" 被 extra_forbidden 整题丢弃。
+
+def test_definition_ignores_harmless_extra_key():
+    payload = dict(
+        checkpointId="cp-x", objectiveId="obj-1", taskId="task-1",
+        kind="scenario_choice", prompt="304 时怎么做？",
+        options=[{"id": "a", "text": "重下"}, {"id": "b", "text": "用缓存"}],
+        correctAnswer="b", remediationHint="304 未变化。",
+        type="json_object",
+    )
+    cp = CheckpointDefinitionModel.model_validate(payload)
+    assert cp.correctAnswer == "b"
+    assert not hasattr(cp, "type")
+
+
+def test_definition_extra_key_does_not_relax_declared_validation():
+    payload = dict(
+        checkpointId="cp-x", objectiveId="obj-1", taskId="task-1",
+        kind="scenario_choice", prompt="304 时怎么做？",
+        options=[{"id": "a", "text": "重下"}],
+        correctAnswer="不存在的选项", remediationHint="提示",
+        type="json_object",
+    )
+    with pytest.raises(ValidationError):
+        CheckpointDefinitionModel.model_validate(payload)
+
+
+def test_nested_content_models_ignore_extras():
+    cp = _scenario_choice(options=[
+        {"id": "a", "text": "重下", "note": "多余键"},
+        {"id": "b", "text": "用缓存"},
+    ])
+    assert cp.options[0].id == "a"
+    assert not hasattr(cp.options[0], "note")
+
+
+def test_request_models_still_forbid_extras():
+    with pytest.raises(ValidationError):
+        CheckpointEvaluateRequest.model_validate(dict(
+            checkpointId="cp-1", answer="b", idempotencyKey="k1", type="json_object",
+        ))

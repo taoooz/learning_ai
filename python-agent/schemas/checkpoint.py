@@ -13,7 +13,7 @@ OPEN_ENDED_KINDS = ("self_explanation", "micro_practice")
 
 class CheckpointOption(BaseModel):
     """scenario_choice 选项"""
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     id: str
     text: str
@@ -21,7 +21,7 @@ class CheckpointOption(BaseModel):
 
 class SourceRefModel(BaseModel):
     """Checkpoint 题目引用的权威来源"""
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     title: str
     url: str
@@ -29,7 +29,7 @@ class SourceRefModel(BaseModel):
 
 class SequenceItem(BaseModel):
     """sequence 排序项"""
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     id: str
     text: str
@@ -37,7 +37,7 @@ class SequenceItem(BaseModel):
 
 class CheckpointDefinitionModel(BaseModel):
     """生成的 Checkpoint 定义（SSE 下发）"""
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     checkpointId: str
     objectiveId: str
