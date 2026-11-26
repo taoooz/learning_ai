@@ -192,8 +192,13 @@ async def _call_for_json(
     user_message: str,
     max_tokens: int = 2000,
     retries: int = 3,
-) -> dict:
-    """调用 LLM 并提取 JSON；解析失败时重试（模型偶尔空 content 或 JSON 内含特殊字符）"""
+    validator=None,
+):
+    """调用 LLM 并提取 JSON；解析或校验失败时重试（模型偶尔空 content、JSON 内含特殊字符或字段不合 schema）。
+
+    validator（可选）：对解析出的 dict 做校验/转换并返回最终对象；其抛出的 ValidationError
+    与解析失败一样触发重试（I6：把 schema 校验纳入重试循环，避免偶发畸形输出直接丢题）。
+    """
     last_error: Exception | None = None
     for attempt in range(1, retries + 1):
         response = await client.chat(
@@ -209,10 +214,11 @@ async def _call_for_json(
             last_error = ValueError("模型输出 content 为空")
             continue
         try:
-            return _extract_json(content)
-        except (ValueError, json.JSONDecodeError) as exc:
+            parsed = _extract_json(content)
+            return validator(parsed) if validator is not None else parsed
+        except (ValueError, json.JSONDecodeError, ValidationError) as exc:
             last_error = exc
-            print(f"[Checkpoint] JSON 提取失败（第 {attempt} 次）: {exc}，content 前 100 字: {content[:100]!r}")
+            print(f"[Checkpoint] JSON 提取/校验失败（第 {attempt} 次）: {exc}，content 前 100 字: {content[:100]!r}")
     raise last_error or ValueError("JSON 提取失败")
 
 
@@ -243,8 +249,12 @@ async def generate_checkpoint(
         evidence=evidence,
         sources=sources,
     )
-    raw = await _call_for_json(client, system_prompt, "请生成一道理解检查题。只输出 JSON 对象，不要输出其他文字。")
-    definition = _validate_definition(raw, task_id, objective_id)
+    definition = await _call_for_json(
+        client,
+        system_prompt,
+        "请生成一道理解检查题。只输出 JSON 对象，不要输出其他文字。",
+        validator=lambda raw: _validate_definition(raw, task_id, objective_id),
+    )
     # sourceRefs 由服务端确定性附加，不采信模型输出，避免幻觉来源。
     definition.sourceRefs = [
         {"title": str(source.get("title") or "")[:80], "url": str(source.get("url") or "")}

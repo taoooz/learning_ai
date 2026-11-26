@@ -27,3 +27,12 @@
 - 修复遗留 `Thinking` 清理正则误删正文：改为只匹配独占行成对标记（outline_agent/minimax/minimax_agent 共 6 处），Design Thinking 等课程主题正文不再被吞
 - scenario_choice 正确答案归一：忽略大小写匹配 option id，单字母/1 基数字按选项顺序映射；越界答案仍由 schema 拦截
 - 新增 15 个回归测试（recap/chat/thinking/checkpoint），pytest 全量 338 通过
+
+### 课程生成链路体检：Prompt 卫生、服务端红线与口径统一（2026-11-23）
+- Prompt 卫生：交互块"恰好一个"矛盾改为"最多一个、可没有"；证据 ID 示例改完整形态并要求逐字复制；删除泄漏进通用 prompt 的提示词工程例句；architect 概念 ID 示例统一为语义 ID（cache-aside），消除与"禁 c1/c2"的矛盾；删除服务端已写入字段的输出指令（estimatedSeconds/evidencePolicy/origin/status）；parameter-demo 公式列要求与商业黑话/洞察路标两条文风规则写进 prompt；checkpoint 题型显式限定三种
+- 服务端红线：补救沿 previousCheckpointId 题链封顶连续 2 轮（按单题计数无法封顶链式新题），已达标不得再补救；chat 异常文案通用化不再泄漏内部细节；Prompt Lab Python 侧补 ENABLE_PROMPT_DEBUGGER/ENV 门禁（与 BFF 同语义）；recap 校验失败 retryable 与文案矛盾修正
+- 死重二轮：删 frame（V1 框架遗留）、difficultySummary/whyThisCourseFits（挪用/恒空）、SCENE_POLICIES 六个装饰字段；architect 画像三份注入去重（planningMemory 剔除 learnerSnapshot）、tutor 问题双注入去重（问题只走 user message）
+- 确定性校验：architect 交付物以空泛认知动词（了解/熟悉/掌握等）开头进入修复链；章节计划补 TITLE_REPEATS_CHAPTER 告警（镜像 TS 精确匹配）
+- 结构化输出试点：端点探测确认 response_format 真实强制、reasoning_effort=none 可关思考、reasoning_split 被端点忽略但客户端本地用于合成 reasoning_details（保留）；client.chat 支持 response_format 并在 7 个小 JSON 调用点启用 json_object；json_schema strict 迁移留作下一批
+- 口径统一：置信度阈值单常量 0.6（prompt/代码同源）；任务时长规格回流 2～6 分钟；Architect 语义审查硬门改软门（修复失败携 reviewIssues 放行，ARCHITECT_REVIEW_STRICT=1 恢复硬门）；章节数硬卡 8 改软收敛 + 硬上限 12
+- 验证：pytest 355、TS 333、docs:check 全通过；README 同步补救封顶与审查软门契约
