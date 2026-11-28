@@ -2,6 +2,12 @@
 
 > 详细历史见 `docs/archive/CHANGELOG-2026-09.md`（2026-09 及更早）与 `docs/archive/CHANGELOG-2026-10.md`（2026-10-08 交互组件与文风规范等）、`docs/archive/CHANGELOG-2026-11.md`（2026-11-19～21 Memory V4）。
 
+### 计划层任务纪律 + Memory 渐进式披露六项（2026-11-28）
+- I19 计划层任务纪律：observableOutcome 的「可验证」不再逼出课外动手作业（画图/产出文档/写方案），判断/选择/排序同样可验证，理解检查交课后题；跨域类比只作引入桥，逐条拆解对象必须是课程主体。修复正文层管不住的任务设计（实测动手作业与类比枝节归零）。
+- Memory 生成与整理：架构审查通过后确定性投影 stages/roleInCourse/nonGoals 为 topic 级 episode（零额外 LLM）；类比经历改内容派生身份，顺序无关、重复幂等、新经历累积，推断缺席不再失效（删除只走用户显式 tombstone），状态字段仍按覆盖语义；同内容不涨版本。
+- Memory 使用：空维度不再注入「暂无」（缺失即未知，避免诱发编造）；辅导对话挂载 memory_search 并写明触发/反触发判据；memory_search 加 detail=summary|full，默认只回摘要，确认不够用再取正文。
+- Memory 掌握度：统一两条 payload 路径（此前 demonstrated 一处 1.0 一处 0.8），状态定基线 + 强证据加成，单次观测上限 0.7；不引入 BKT。新增 29 回归测试，pytest 606 过。
+
 ### 课程质量改进：个性化/两层大纲/任务退后台/代码缩进/引用卫生/学习者起点（2026-11-28）
 - 按用户反馈四项改进：①任务退后台（前端去"第几步/还剩几节"完成式框架，正文禁任务措辞改自然教学语言）②从学习者已知经验切入个性化讲解③复杂课题两层大纲（阶段→章节，structureMode flat/staged，章数由认知增量决定）④去AI腔（面对面口语，禁主持腔/排比）。
 - I13 管道修复：example 块代码缩进被 strip 剥光致 IndentationError，改保留原始行（多门课代码恢复可编译）。
@@ -36,12 +42,6 @@
 - 实测（scripts/probe_strict_schema.py，7 用例）：大 schema strict 非流式/流式/含 tools 全部可用；tools 同传不抑制搜索，最终轮受约束；网关不校验 schema 自身合规性，由本地测试把关
 - 新增 `parse_enforced_json`：两条主路径不再跑引号修复/XML/Thinking 清理启发式，仅保留剥围栏、首尾截取、截断检测最小安全网（降级模式兜底）；删除章节计划 prompt 的"不要用英文双引号"恳求；遗留 parse_json_response 保留供其他路径
 - 验证：targeted pytest 143 通过（9 个受影响测试文件，含新增 test_structured_output.py 与服务级迁移回归）
-
-### B3 搜索关键词门改造：模型做主要判断（2026-11-23）
-- 任务正文搜索门：关键词覆盖（task_evidence_coverage）从"一票否决搜索"降级为注入决策 prompt 的提示；搜索决策阶段始终执行、web_search/read_url 始终可用，证据是否新鲜/充分、要不要搜由模型判断；两阶段决策与工具上下文复用架构不变；覆盖任务新增一次紧凑决策调用（max_tokens=1200、reasoning none）
-- site: 偏好改可选提示：模型工具搜索不再强制前置 site: 查询（search_web_structured 新增 site_filter 开关并进缓存键；确定性预搜路径保留原行为），偏好域保留权威打分与排序；决策 prompt 注入"可选参考站点（非强制）"，搜索策略明示站点偏好非强制
-- 覆盖函数保留、仅去除否决效力；章节计划/architect 的同类关键词门属并行 json_schema 迁移批次，本次未动
-- 回归：覆盖仍拿工具/可选择不搜/仍可搜、未覆盖提示、site_filter 行为与缓存隔离等；targeted pytest 127 通过（9 个测试文件）
 
 ### I4/I5 可靠性修复：公式降级与 checkpoint 宽松解析（2026-11-26）
 - I5：interactive parameter-demo 公式试算 FormulaError（未知变量/非法字符）此前穿透流式 parser 杀死整任务（基线 30 门中 9 任务）；parse_interactive_content 捕获后走既有 _degrade，内容保留为 markdown。

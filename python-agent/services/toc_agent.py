@@ -103,6 +103,23 @@ def stream_toc_with_tools(
     result["modelVersion"] = architecture_result.get("modelVersion")
     result["promptVersion"] = architecture_result.get("promptVersion")
 
+    # R1：把架构已生成的阶段地图投影进 memory（零额外 LLM）。
+    # 下次同主题课程据此判断起点与已覆盖范围；写入失败绝不影响课程生成。
+    if account_id:
+        try:
+            from services.memory_v4_store import MemoryV4Store
+
+            architecture = architecture_result["architecture"]
+            MemoryV4Store().upsert_course_map(
+                account_id,
+                topic=topic,
+                course_title=architecture.get("courseTopic") or topic,
+                target_capability=(architecture.get("thesis") or {}).get("targetCapability") or "",
+                architecture=architecture,
+            )
+        except Exception as exc:  # noqa: BLE001 memory 投影是旁路，不阻塞主流程
+            print(f"[TOC Agent] 课程地图写入 memory 失败（忽略）: {exc}")
+
     yield f"data: {json.dumps({'type': 'course_name', 'value': result['courseName']}, ensure_ascii=False)}\n\n"
     yield f"data: {json.dumps({'type': 'course_description', 'value': result['courseDescription']}, ensure_ascii=False)}\n\n"
     for node in result["nodes"]:

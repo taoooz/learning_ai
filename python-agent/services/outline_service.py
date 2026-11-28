@@ -84,7 +84,7 @@ def build_initial_messages(
 ) -> dict[str, str]:
     """system 只保留行为与输出契约；本轮用户输入、画像和记忆进入 user prompt。"""
     # 画像和 Memory 都可能包含用户或模型生成文本，统一按不可信数据注入。
-    profile_section = wrap_untrusted_context("user_profile", user_profile) if user_profile else '暂无'
+    profile_section = wrap_untrusted_context("user_profile", user_profile) if user_profile else ''
 
     # 精简记忆上下文（无数据时不输出此模块）
     memory_section = ''

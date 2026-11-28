@@ -16,7 +16,7 @@ import json
 import time
 from typing import Any
 
-from services.memory_v4_store import MemoryV4Store
+from services.memory_v4_store import MemoryV4Store, mastery_score
 
 POLICY_VERSION = "memory-scene-policy-v1"
 
@@ -581,20 +581,23 @@ def to_chat_prompt_payload(context: dict[str, Any]) -> dict[str, Any]:
         state = concept_by_key.get(key)
         if state:
             risk_names.append(state.get("conceptName"))
-    return {
+    payload: dict[str, Any] = {
         "topic": context.get("topic", ""),
         "focusConceptStates": [{
             "concept": state.get("conceptName"),
             "status": state.get("status"),
-            "masteryScore": 1.0 if state.get("status") == "demonstrated" else 0.5 if state.get("status") == "fragile" else 0.3,
+            "masteryScore": mastery_score(state),
             "misconceptionHints": [item.get("statement") for item in state.get("misconceptions") or []][:2],
         } for state in concepts[:3]],
         "riskConcepts": risk_names[:3],
         "analogyHints": [item for item in analogies if item],
         "preferredExplanationStyles": [item for item in styles if item],
-        "topicSummary": episode.get("summary") if episode else "暂无",
+        "topicSummary": episode.get("summary") if episode else "",
         "learningSummary": context.get("learningSummary"),
     }
+    # 空维度整段省略：占位串（如「暂无」）既浪费 token 又会诱发模型编造学习者背景。
+    # 缺失即「未知」，由 prompt 从背景文本推断，而不是读成「无记忆」。
+    return {key: value for key, value in payload.items() if value not in (None, "", [], {})}
 
 
 def wrap_untrusted_context(label: str, payload: Any) -> str:

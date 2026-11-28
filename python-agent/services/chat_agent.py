@@ -10,6 +10,7 @@ from typing import Generator, Optional
 from lib.minimax_agent import AgentClient
 from prompts import get_prompt
 from lib.tools.search_tools import SEARCH_TOOLS, TOOL_FUNCTIONS
+from lib.tools.memory_tools import MEMORY_SEARCH_POLICY, MEMORY_SEARCH_TOOL, create_memory_search
 from services.memory_context_v4 import wrap_untrusted_context
 
 
@@ -35,6 +36,7 @@ def build_chat_system_prompt(
     context_info: Optional[dict] = None,
     conversation_summary: Optional[dict] = None,
     chat_memory: Optional[dict] = None,
+    memory_search_enabled: bool = False,
 ) -> str:
     """构建 chat system prompt（从 Next.js chat-context.ts 迁移）
 
@@ -105,6 +107,15 @@ def build_chat_system_prompt(
     )
 
     memory_section = _build_memory_section(chat_memory)
+    memory_policy = ""
+    if memory_search_enabled:
+        memory_policy = (
+            "\n\n" + MEMORY_SEARCH_POLICY
+            + "\n- 该主动检索的典型时机：用户问「我之前学过吗／上次学到哪」；"
+              "提到当前摘要里没有的概念、课程或经历；要把当前问题和他学过的别的内容联系起来；"
+              "某个掌握情况证据不足而你的回答依赖它。"
+            "\n- 不要检索：信息已在上面摘要里；只是解释当前知识点本身；为了「更了解用户」而投机检索。"
+        )
 
     system_text = get_prompt("chat", "system")
     return f"""{system_text}
@@ -116,13 +127,14 @@ def build_chat_system_prompt(
 
 {memory_section}
 
-{summary_section}请基于以上信息，简洁回答用户当前问题。"""
+{summary_section}请基于以上信息，简洁回答用户当前问题。{memory_policy}"""
 
 
 def stream_chat_with_tools(
     messages: list[dict],
     max_tokens: int = 1500,
     max_iterations: int = 2,
+    memory_account_id: str | None = None,
 ) -> Generator[str, None, None]:
     """Agent 版学习对话（带搜索能力，流式）
 
@@ -144,12 +156,18 @@ def stream_chat_with_tools(
     Yields: SSE 格式字符串
     """
     client = AgentClient()
+    tools = list(SEARCH_TOOLS)
+    tool_functions = dict(TOOL_FUNCTIONS)
+    if memory_account_id:
+        # 渐进式披露 L2：摘要不足时让模型自己按需深挖长期记忆，而不是预先把全部记忆塞进 prompt。
+        tools.append(MEMORY_SEARCH_TOOL)
+        tool_functions["memory_search"] = create_memory_search(memory_account_id)
 
     try:
         for event in client.stream_chat_with_tools(
             messages=messages,
-            tools=SEARCH_TOOLS,
-            tool_functions=TOOL_FUNCTIONS,
+            tools=tools,
+            tool_functions=tool_functions,
             max_tokens=max_tokens,
             reasoning_split=True,
             max_iterations=max_iterations,
@@ -166,6 +184,9 @@ def stream_chat_with_tools(
                 elif tool_name == "read_url":
                     url = tool_args.get("url", "")
                     yield _format_reasoning_delta(f"正在读取：{url}")
+                elif tool_name == "memory_search":
+                    query = tool_args.get("query", "")
+                    yield _format_reasoning_delta(f"正在回忆你的学习记录：{query}")
 
             elif event["type"] == "tool_result":
                 pass

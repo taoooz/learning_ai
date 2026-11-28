@@ -259,7 +259,8 @@ def test_prompt_lab_memory_search_returns_content_without_record_ids(monkeypatch
             }
 
     monkeypatch.setattr(memory_tools, "MemoryV4Store", lambda: FakeStore())
-    result = create_memory_search("account-1")("推荐 重排")
+    # R6 渐进式披露：正文需显式 detail="full"；本例校验正文不泄漏 record ID。
+    result = create_memory_search("account-1")("推荐 重排", detail="full")
     assert "负责过推荐位与重排规则设计" in result
     assert "mem-secret-1" not in result
 

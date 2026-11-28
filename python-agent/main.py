@@ -334,6 +334,7 @@ async def chat_agent_route(request: Request):
                 context_info=context_info,
                 conversation_summary=conversation_summary,
                 chat_memory=chat_memory,
+                memory_search_enabled=bool(account),
             )
             messages = [{"role": "system", "content": system_prompt}]
             authoritative_messages = normalize_chat_messages(
@@ -347,7 +348,9 @@ async def chat_agent_route(request: Request):
             ])
 
             assistant_parts: list[str] = []
-            for chunk in stream_chat_with_tools(messages=messages, max_tokens=max_tokens):
+            for chunk in stream_chat_with_tools(
+                messages=messages, max_tokens=max_tokens, memory_account_id=account
+            ):
                 yield chunk
                 if chunk.startswith("data: ") and chunk[6:].strip() != "[DONE]":
                     try:

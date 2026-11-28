@@ -14,7 +14,9 @@ MEMORY_SEARCH_TOOL = {
         "name": "memory_search",
         "description": (
             "按需检索学习者的长期记忆。只有在当前规划摘要不足以判断背景、已掌握内容、"
-            "薄弱概念或教学偏好时调用。返回可教学内容摘要，不返回内部 record ID。"
+            "薄弱概念或教学偏好时调用。默认只返回标题与摘要（渐进式披露）；"
+            "确认某条摘要确实不够用时，再用 detail=\"full\" 取该查询的正文。"
+            "不返回内部 record ID。"
         ),
         "parameters": {
             "type": "object",
@@ -27,6 +29,14 @@ MEMORY_SEARCH_TOOL = {
                     "type": "integer",
                     "description": "最多返回几条记忆，默认 5，最多 8",
                 },
+                "detail": {
+                    "type": "string",
+                    "enum": ["summary", "full"],
+                    "description": (
+                        "summary（默认）只给标题与摘要，先判断哪条相关；"
+                        "full 追加正文，仅在摘要不足以判断时使用"
+                    ),
+                },
             },
             "required": ["query"],
         },
@@ -37,7 +47,9 @@ MEMORY_SEARCH_POLICY = """## Memory 检索策略
 - 输入中的 Planning Memory 与画像只是已筛选摘要，不是全量长期记忆。
 - 只有当摘要不足以判断学习者背景、已掌握内容、薄弱概念或教学偏好时，才调用 memory_search。
 - memory_search 的结果不包含内部 record ID；不要臆测或编造未检索到的个人背景。
-- 已经获得足够信息时不要为了“更了解用户”而重复检索。"""
+- 已经获得足够信息时不要为了“更了解用户”而重复检索。
+- 渐进式披露：默认 detail="summary" 只看标题与摘要；只有确认某条摘要不足以判断时，
+  才用 detail="full" 取正文。不要一上来就取全部正文。"""
 
 
 def _terms(text: str) -> set[str]:
@@ -49,7 +61,7 @@ def _terms(text: str) -> set[str]:
 
 
 def create_memory_search(account_id: str) -> Callable[..., str]:
-    def memory_search(query: str, max_results: int = 5) -> str:
+    def memory_search(query: str, max_results: int = 5, detail: str = "summary") -> str:
         query = str(query or "").strip()
         if not query:
             return "检索关键词为空。"
@@ -85,15 +97,19 @@ def create_memory_search(account_id: str) -> Callable[..., str]:
         if not selected:
             return "没有找到相关记忆。"
 
+        # 渐进式披露：默认只给索引级摘要，正文按需二次取用，避免一次灌满上下文。
+        want_full = str(detail or "summary").lower() == "full"
         results = []
         for record in selected:
-            results.append({
+            item = {
                 "kind": record.get("kind"),
                 "title": record.get("title"),
                 "summary": record.get("summary"),
-                "content": str(record.get("content") or "")[:800],
                 "conceptKeys": record.get("conceptKeys") or [],
-            })
+            }
+            if want_full:
+                item["content"] = str(record.get("content") or "")[:800]
+            results.append(item)
         return json.dumps(results, ensure_ascii=False, indent=2)
 
     return memory_search

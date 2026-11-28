@@ -79,6 +79,55 @@ def _as_text(value: Any) -> str:
     return str(value).strip() if value is not None else ""
 
 
+# 累积型个人经历字段：身份由内容决定，而不是列表下标。
+# 「开过店」「做过推荐位」是用户活过的经历，不是可被下一次推断覆盖的状态值；
+# 模型重新生成 insights 时顺序会变、条数会增减，用下标当身份会静默覆盖或失效。
+_ACCUMULATIVE_PROFILE_FIELDS = {"insights.analogyExperiences"}
+
+
+def _profile_field_base(field_path: str) -> str:
+    return field_path.split("[", 1)[0]
+
+
+def _is_accumulative_profile_field(field_path: str) -> bool:
+    return _profile_field_base(field_path) in _ACCUMULATIVE_PROFILE_FIELDS
+
+
+def _record_field_path(record: dict[str, Any]) -> str:
+    for ref in record.get("sourceRefs") or []:
+        if isinstance(ref, dict) and ref.get("type") == "user_profile":
+            return str(ref.get("fieldPath") or "")
+    return ""
+
+
+_MASTERY_BASE = {
+    "demonstrated": 0.8,
+    "fragile": 0.5,
+    "needs_review": 0.35,
+    "developing": 0.25,
+}
+
+
+def mastery_score(state: dict[str, Any]) -> float:
+    """证据驱动的掌握度：状态定基线，强证据次数定加成，单次观测不足以称掌握。
+
+    取代两处各自写死的固定映射（曾一处 demonstrated=1.0、另一处=0.8，同一概念
+    在不同 payload 里给出不同分数）。不引入 BKT 四参数——每个概念通常只有 1~2
+    次证据，校准 p(T)/p(G)/p(S) 是假精确；这里只用可数事实。
+    """
+    base = _MASTERY_BASE.get(str(state.get("status") or ""), 0.25)
+    if str(state.get("status") or "") not in _MASTERY_BASE:
+        # 状态未知时不靠证据条数推断掌握度——状态是主信号，缺失就保守。
+        return base
+    strong = int(state.get("strongEvidenceCount") or 0)
+    total = int(state.get("evidenceCount") or 0)
+    score = base + min(0.15, max(0, strong - 1) * 0.05)
+    if total <= 1:
+        # 只见过一次：无论表现多好都不给「已掌握」级别的分数。
+        score = min(score, 0.7)
+    return round(max(0.0, min(1.0, score)), 2)
+
+
 def _account_locked(method):
     """为以 account_id 为首参的写方法加账户级跨进程锁。"""
     @wraps(method)
@@ -305,7 +354,11 @@ class MemoryV4Store:
             if source_type == "user_profile_inference":
                 if kind not in {"fact", "preference"} or confidence < 0.7:
                     return
-            dedupe_key = f"profile:{field_path}"
+            if _is_accumulative_profile_field(field_path):
+                # 同一段经历重复推断 → 同键幂等；新经历 → 新记录（累积，不覆盖）。
+                dedupe_key = f"profile:{_profile_field_base(field_path)}#{_stable_id('exp', clean)}"
+            else:
+                dedupe_key = f"profile:{field_path}"
             records.append({
                 "memoryId": _stable_id("mem-profile", dedupe_key),
                 "accountId": account_id,
@@ -458,6 +511,15 @@ class MemoryV4Store:
                 continue
             key = record.get("dedupeKey")
             replacement = imported_by_key.get(key)
+            if (
+                replacement is None
+                and key not in tombstoned_keys
+                and _is_accumulative_profile_field(_record_field_path(record))
+            ):
+                # 新一次推断没再提到这段经历，不等于它没发生过。
+                # 累积型经历保持有效；要删除只能走用户显式删除（tombstone）。
+                next_records.append(record)
+                continue
             if replacement is None or key in tombstoned_keys:
                 if record.get("status") == "active":
                     record = dict(record)
@@ -465,6 +527,14 @@ class MemoryV4Store:
                     record["updatedAt"] = at
                     superseded_ids.append(record.get("memoryId"))
                 next_records.append(record)
+                continue
+            if all(
+                record.get(field) == replacement[field]
+                for field in ("kind", "title", "summary", "content", "tags", "confidence", "importance")
+            ):
+                # 内容没变就别涨版本：同一段经历反复推断不该制造更新噪声。
+                next_records.append(record)
+                seen_keys.add(key)
                 continue
             updated = dict(record)
             updated.update({
@@ -1318,13 +1388,14 @@ class MemoryV4Store:
                 or (record.get("scope") or {}).get("courseId") == course_id
             )
         ]
-        topic_summary = episodes[0].get("summary") if episodes else "暂无"
+        # 空态省略：不注入「暂无」占位串（费 token 且诱发编造），缺失即未知。
+        topic_summary = episodes[0].get("summary") if episodes else ""
         return {
             "topic": topic,
             "focusConceptStates": [{
                 "concept": state.get("conceptName"),
                 "status": state.get("status"),
-                "masteryScore": 0.8 if state.get("status") == "demonstrated" else 0.5 if state.get("status") == "fragile" else 0.3,
+                "masteryScore": mastery_score(state),
                 "misconceptionHints": [item.get("statement") for item in state.get("misconceptions", [])][:2],
             } for state in relevant],
             "riskConcepts": [item for item in risk if item][:3],
@@ -1465,6 +1536,114 @@ class MemoryV4Store:
             at=at,
         )
         return {"store": store, "episode": record}
+
+    @_account_locked
+    def upsert_course_map(
+        self,
+        account_id: str,
+        *,
+        topic: str,
+        course_title: str,
+        target_capability: str,
+        architecture: dict[str, Any],
+        now: int | None = None,
+    ) -> dict[str, Any]:
+        """把架构阶段地图投影成 topic 级经验：复用已生成内容，零额外 LLM 调用。
+
+        章节 recap 记的是「学会了什么」，这张地图记的是「这门课怎么铺的」——
+        下次同主题课程可据此判断起点与已覆盖范围，而不必重新推断。
+        """
+        at = _now_ms(now)
+        topic_key = str(topic or "").strip()
+        if not topic_key:
+            return {"store": self.load_store(account_id), "map": None}
+        store = self.load_store(account_id)
+        dedupe_key = f"coursemap:topic:{topic_key}"
+        if self._is_tombstoned(store, dedupe_key):
+            return {"store": store, "map": None}
+
+        stages = architecture.get("stages") or []
+        chapters = architecture.get("chapters") or []
+        lines = [f"课程：{course_title or topic_key}"]
+        if target_capability:
+            lines.append(f"目标能力：{target_capability}")
+        stage_titles: list[str] = []
+        if stages:
+            lines.append(f"结构：{len(stages)} 个阶段 / {len(chapters)} 章")
+            for stage in stages:
+                title = str(stage.get("title") or "").strip()
+                if not title:
+                    continue
+                stage_titles.append(title)
+                goal = str(stage.get("stageGoal") or "").strip()
+                lines.append(f"阶段「{title}」" + (f"：{goal}" if goal else ""))
+                for chapter in chapters:
+                    if chapter.get("stageId") != stage.get("stageId"):
+                        continue
+                    chapter_title = str(chapter.get("title") or "").strip()
+                    role = str(chapter.get("roleInCourse") or "").strip()
+                    if chapter_title:
+                        lines.append(f"  - {chapter_title}" + (f"（{role}）" if role else ""))
+        else:
+            lines.append(f"结构：{len(chapters)} 章")
+            for chapter in chapters:
+                chapter_title = str(chapter.get("title") or "").strip()
+                role = str(chapter.get("roleInCourse") or "").strip()
+                if chapter_title:
+                    lines.append(f"  - {chapter_title}" + (f"（{role}）" if role else ""))
+        non_goals = [str(item).strip() for item in ((architecture.get("thesis") or {}).get("nonGoals") or []) if str(item).strip()]
+        if non_goals:
+            lines.append("明确不讲：" + "；".join(non_goals[:4]))
+        content = "\n".join(lines)[:2400]
+        summary = (" → ".join(stage_titles) or f"{len(chapters)} 章平铺")[:240]
+
+        existing = next(
+            (row for row in store.get("records", []) if row.get("dedupeKey") == dedupe_key and row.get("status") == "active"),
+            None,
+        )
+        record = {
+            "memoryId": existing.get("memoryId") if existing else _stable_id("mem-coursemap", dedupe_key),
+            "accountId": account_id,
+            "kind": "episode",
+            "scope": {"type": "topic", "topic": topic_key},
+            "status": "active",
+            "title": f"课程地图：{course_title or topic_key}",
+            "summary": summary,
+            "content": content,
+            "tags": ["episode", "course_map", topic_key],
+            "conceptKeys": list(dict.fromkeys(
+                key for chapter in chapters for key in (chapter.get("conceptIds") or [])
+            ))[:24],
+            "sourceType": "system_rule",
+            "sourceRefs": [{"type": "course_architecture", "topic": topic_key}],
+            "evidenceIds": [],
+            "dedupeKey": dedupe_key,
+            "confidence": 0.9,
+            "importance": 0.75,
+            "durability": "course",
+            "sensitivity": "normal",
+            "observedAt": at,
+            "createdAt": existing.get("createdAt", at) if existing else at,
+            "updatedAt": at,
+            "version": int(existing.get("version", 0)) + 1 if existing else 1,
+            "createdBy": "rule",
+            "supersedes": [],
+            "conflictsWith": [],
+        }
+        records = [row for row in store.get("records", []) if row.get("dedupeKey") != dedupe_key]
+        records.append(record)
+        store["records"] = records
+        store = self._rebuild_core(account_id, store, at)
+        store = self._save_without_reread(account_id, store, at)
+        self._audit(
+            account_id,
+            action="record_created" if not existing else "record_updated",
+            actor="rule",
+            reason="course_architecture_projection",
+            memory_id=record["memoryId"],
+            at=at,
+        )
+        return {"store": store, "map": record}
 
     @_account_locked
     def set_learning_summary(self, account_id: str, summary: dict[str, Any], now: int | None = None) -> dict[str, Any]:
