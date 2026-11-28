@@ -14,7 +14,6 @@ _VAGUE_DELIVERABLE_RE = re.compile(r"^(了解|熟悉|掌握(?!度)|理解|认识
 
 class CourseThesis(BaseModel):
     audience: str
-    currentBoundary: list[str] = Field(default_factory=list)
     targetCapability: str
     learningDelta: list[str] = Field(default_factory=list)
     nonGoals: list[str] = Field(default_factory=list)
@@ -24,7 +23,6 @@ class ArchitectureConcept(BaseModel):
     conceptId: str
     label: str
     targetDepth: Literal["skip", "refresh", "understand", "apply", "transfer"]
-    rationale: str
     prerequisiteConceptIds: list[str] = Field(default_factory=list)
     evidenceIds: Optional[list[str]] = None
 
@@ -52,7 +50,6 @@ class ArchitectureStage(BaseModel):
 class CourseExamplePolicy(BaseModel):
     preferredDomains: list[str] = Field(default_factory=list)
     personalExampleLimit: int = 1
-    avoidRepeatedScenarios: bool = True
 
 
 class CourseArchitecture(BaseModel):
@@ -143,12 +140,11 @@ COURSE_META_JSON_SCHEMA: dict = {
             "type": "object",
             "properties": {
                 "audience": {"type": "string"},
-                "currentBoundary": {"type": "array", "items": {"type": "string"}},
                 "targetCapability": {"type": "string"},
                 "learningDelta": {"type": "array", "items": {"type": "string"}},
                 "nonGoals": {"type": "array", "items": {"type": "string"}},
             },
-            "required": ["audience", "currentBoundary", "targetCapability", "learningDelta", "nonGoals"],
+            "required": ["audience", "targetCapability", "learningDelta", "nonGoals"],
             "additionalProperties": False,
         },
         "conceptGraph": {
@@ -159,12 +155,11 @@ COURSE_META_JSON_SCHEMA: dict = {
                     "conceptId": {"type": "string"},
                     "label": {"type": "string"},
                     "targetDepth": {"type": "string", "enum": ["skip", "refresh", "understand", "apply", "transfer"]},
-                    "rationale": {"type": "string"},
                     "prerequisiteConceptIds": {"type": "array", "items": {"type": "string"}},
                     "evidenceIds": {"type": ["array", "null"], "items": {"type": "string"}},
                 },
                 "required": [
-                    "conceptId", "label", "targetDepth", "rationale",
+                    "conceptId", "label", "targetDepth",
                     "prerequisiteConceptIds", "evidenceIds",
                 ],
                 "additionalProperties": False,
@@ -175,9 +170,8 @@ COURSE_META_JSON_SCHEMA: dict = {
             "properties": {
                 "preferredDomains": {"type": "array", "items": {"type": "string"}},
                 "personalExampleLimit": {"type": "integer"},
-                "avoidRepeatedScenarios": {"type": "boolean"},
             },
-            "required": ["preferredDomains", "personalExampleLimit", "avoidRepeatedScenarios"],
+            "required": ["preferredDomains", "personalExampleLimit"],
             "additionalProperties": False,
         },
     },

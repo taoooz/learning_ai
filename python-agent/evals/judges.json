@@ -1,7 +1,7 @@
 {
   "panel": [
-    { "id": "claude", "model": "funcloud/claude-opus-5-5" },
-    { "id": "gpt", "model": "openai/gpt-6-sol" },
+    { "id": "deepseek", "model": "DeepSeek/deepseek-v4-pro" },
+    { "id": "glm", "model": "zhipu/glm-5.3" },
     { "id": "qwen", "model": "bailian/qwen4-max" }
   ],
   "utility_model": "bailian/qwen4-max",

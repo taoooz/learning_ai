@@ -102,7 +102,6 @@ PROMPT = {
 - conceptGraph 必须覆盖 chapters 中引用的所有 conceptId，且不要定义章节未引用的多余概念。
 - 非 skip 概念必须至少被一个章节引用；skip/refresh 概念也必须存在对应定义。
 - 概念前置依赖只能引用本 conceptGraph 中的 ID，且不得成环。
-- rationale 写成一句可执行的设计理由，不要长篇解释。
 - examplePolicy 用于约束后续正文：优先例子领域要贴合用户目标，`personalExampleLimit` 必须在 0～3 之间，默认 1。
 - 不引入工具结果或输入证据之外的新事实，不得编造 URL。
 </metadata_rules>
@@ -132,7 +131,6 @@ PROMPT = {
 {{
   "thesis": {{
     "audience": "学习者当前画像",
-    "currentBoundary": ["当前已能做到什么", "当前尚不能做到什么"],
     "targetCapability": "学完后能完成的可验证能力",
     "learningDelta": ["从当前状态到目标状态的关键变化"],
     "nonGoals": ["本课程明确不追求的内容"]
@@ -142,15 +140,13 @@ PROMPT = {
       "conceptId": "cache-aside",
       "label": "概念名称",
       "targetDepth": "skip | refresh | understand | apply | transfer",
-      "rationale": "为什么需要这个深度",
       "prerequisiteConceptIds": [],
       "evidenceIds": []
     }}
   ],
   "examplePolicy": {{
     "preferredDomains": ["优先使用的例子领域"],
-    "personalExampleLimit": 1,
-    "avoidRepeatedScenarios": true
+    "personalExampleLimit": 1
   }}
 }}
 

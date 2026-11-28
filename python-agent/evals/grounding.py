@@ -155,7 +155,7 @@ def flatten_evidence_sources(snapshot) -> list[dict]:
                         "evidenceId": node.get("evidenceId", ""),
                         "title": node.get("title", ""),
                         "url": node.get("url", ""),
-                        "summary": node.get("summary", ""),
+                        "summary": node.get("excerpt") or node.get("summary", ""),
                         "kind": node.get("kind", ""),
                         "authorityScore": node.get("authorityScore"),
                     })
@@ -200,7 +200,7 @@ def build_scoped_evidence(snapshot) -> dict:
                 "evidenceId": s.get("evidenceId", ""),
                 "title": s.get("title", ""),
                 "url": s.get("url", ""),
-                "summary": s.get("summary", ""),
+                "summary": s.get("excerpt") or s.get("summary", ""),
                 "kind": s.get("kind", ""),
                 "authorityScore": s.get("authorityScore"),
             })

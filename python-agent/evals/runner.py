@@ -147,7 +147,7 @@ def _seed_topic_evidence(topic: str, spec: dict) -> None:
             "title": (item.get("title") if isinstance(item, dict) else "") or url,
             "url": url,
             "summary": body[:260],
-            "excerpt": body[:4000],
+            "excerpt": body[:8000],
             "isPrimary": True,
         })
     if not sources:

@@ -217,6 +217,8 @@ def test_estimate_calls_and_default_config():
     assert default["temperature"] == 0
     models = [m["model"] for m in default["panel"]]
     assert "ark/deepseek-v4-1-flash" not in models  # 与生成模型异构
+    # 成本约束：默认评审团只用国产模型，避免误耗 OpenAI/Anthropic 额度
+    assert not any(m.startswith(("openai/", "funcloud/claude", "anthropic/")) for m in models)
     assert estimate_calls(1)["total_calls"] == 6
 
 

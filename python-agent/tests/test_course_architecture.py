@@ -383,6 +383,66 @@ def test_optional_review_skips_normal_architecture_and_runs_on_risk():
     assert should_review_architecture(architecture, {"estimatedLevel": "intermediate"}) is True
 
 
+def _staged_architecture(chapters_per_stage: list[int]) -> CourseArchitecture:
+    """构造两层大纲：总章数可能很大，但每阶段章数可控。
+
+    每章引用两个专属概念，避免触发「单概念章节过多」与「概念集重复」两条独立规则，
+    使本用例只检验章数阈值本身。
+    """
+    raw = _valid_architecture()
+    template = raw["chapters"][0]
+    # 各章文案用词互异，避免触发相似度门（本用例只检验章数阈值）
+    words = ["召回", "排序", "重排", "冷启", "分桶", "曝光", "点击", "留存",
+             "画像", "标签", "向量", "索引", "缓存", "降级", "熔断", "灰度",
+             "回灌", "去重", "打散", "配额"]
+    stages, chapters, concepts = [], [], []
+    n = 0
+    for s_index, count in enumerate(chapters_per_stage, start=1):
+        stage_id = f"st-{s_index}"
+        stages.append({
+            "stageId": stage_id, "title": f"阶段 {s_index}",
+            "stageGoal": f"阶段 {s_index} 的认知增量", "chapterIds": [],
+        })
+        for c_index in range(1, count + 1):
+            chapter_id = f"ch-{s_index}-{c_index}"
+            ids = [f"k-{s_index}-{c_index}-a", f"k-{s_index}-{c_index}-b"]
+            for cid in ids:
+                concepts.append({
+                    "conceptId": cid, "label": f"概念 {cid}",
+                    "targetDepth": "understand", "rationale": "支撑本章判断",
+                    "prerequisiteConceptIds": [],
+                })
+            w1, w2 = words[n % len(words)], words[(n + 7) % len(words)]
+            n += 1
+            stages[-1]["chapterIds"].append(chapter_id)
+            chapters.append({
+                **template,
+                "chapterId": chapter_id,
+                "title": f"{w1}与{w2}",
+                "roleInCourse": f"讲清{w1}在链路中的职责，辨析它与{w2}的差别",
+                "deliverable": f"能判断{w1}何时该让位给{w2}",
+                "conceptIds": ids,
+                "prerequisites": [],
+                "stageId": stage_id,
+            })
+    raw["chapters"] = chapters
+    raw["conceptGraph"] = concepts
+    raw["structureMode"] = "staged"
+    raw["stages"] = stages
+    return CourseArchitecture.model_validate(raw)
+
+
+def test_staged_architecture_review_uses_per_stage_size():
+    """两层大纲：14 章分 5 阶段属正常，不该因总章数触发审查。"""
+    balanced = _staged_architecture([4, 3, 3, 2, 2])
+    assert len(balanced.chapters) == 14
+    assert should_review_architecture(balanced, {"estimatedLevel": "intermediate"}) is False
+
+    # 单个阶段塞 8 章 → 这一层没拆好，仍应审查
+    lopsided = _staged_architecture([8, 1])
+    assert should_review_architecture(lopsided, {"estimatedLevel": "intermediate"}) is True
+
+
 def test_course_architect_prompt_declares_design_contract():
     prompt = build_course_architect_prompt(
         "推荐系统核心链路",

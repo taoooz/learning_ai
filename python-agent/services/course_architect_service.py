@@ -316,7 +316,16 @@ def should_review_architecture(
     if mode == "always":
         return True
 
-    if len(architecture.chapters) > 7:
+    if architecture.structureMode == "staged" and architecture.stages:
+        # 两层大纲下总章数天然更多（阶段→章节），按总章数一刀切会让每门课都触发审查。
+        # 风险信号改为「单个阶段内章数过多」——那才说明这一层没拆好。
+        per_stage: dict[str, int] = {}
+        for chapter in architecture.chapters:
+            key = chapter.stageId or ""
+            per_stage[key] = per_stage.get(key, 0) + 1
+        if per_stage and max(per_stage.values()) > 7:
+            return True
+    elif len(architecture.chapters) > 7:
         return True
     if sum(1 for chapter in architecture.chapters if len(chapter.conceptIds) == 1) >= 6:
         return True

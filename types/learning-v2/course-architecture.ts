@@ -5,7 +5,8 @@ export type ConceptTargetDepth = 'skip' | 'refresh' | 'understand' | 'apply' | '
 
 export interface CourseThesis {
   audience: string;
-  currentBoundary: string[];
+  /** @deprecated 无下游消费方，已停止生成；保留仅为兼容历史数据 */
+  currentBoundary?: string[];
   targetCapability: string;
   learningDelta: string[];
   nonGoals: string[];
@@ -15,7 +16,8 @@ export interface ArchitectureConcept {
   conceptId: string;
   label: string;
   targetDepth: ConceptTargetDepth;
-  rationale: string;
+  /** @deprecated 无下游消费方，已停止生成；保留仅为兼容历史数据 */
+  rationale?: string;
   prerequisiteConceptIds: string[];
   evidenceIds?: string[];
 }
@@ -33,7 +35,8 @@ export interface ArchitectureChapter {
 export interface CourseExamplePolicy {
   preferredDomains: string[];
   personalExampleLimit: number;
-  avoidRepeatedScenarios: boolean;
+  /** @deprecated 无下游消费方，已停止生成；保留仅为兼容历史数据 */
+  avoidRepeatedScenarios?: boolean;
 }
 
 export interface CourseArchitecture {

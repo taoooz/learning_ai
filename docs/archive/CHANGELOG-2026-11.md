@@ -54,3 +54,7 @@
 - I5：interactive parameter-demo 公式试算 FormulaError（未知变量/非法字符）此前穿透流式 parser 杀死整任务（基线 30 门中 9 任务）；parse_interactive_content 捕获后走既有 _degrade，内容保留为 markdown。
 - I4：生成内容模型（CheckpointDefinition/Option/SourceRef/SequenceItem）extra 改 ignore，模型偶发多余键不再整题丢弃；请求/评估模型保持 forbid，声明字段校验不变。
 - 预注册 rsi/prereg-I4-I5.md（可靠性类，对 completed 课程行为恒等）；新增 7 回归测试，pytest 545 过。
+
+### B3 收尾：章节计划与课程架构搜索门拆除（2026-11-24）
+- 章节计划与 TOC/架构拆除 `allow_search=not coverage["covered"]` 关键词门：搜索工具始终可用，覆盖度经共享 `format_coverage_hint` 降级为 user 侧提示（与任务正文同构、不绑定 NO_SEARCH 协议）；架构提示在 messages 构建内按注入 sources 计算，规格同步"覆盖度与站点偏好均为提示非门禁"
+- 回归：覆盖章节仍拿工具+提示、未覆盖弱匹配提示、架构提示非门、TOC 不再传禁搜参数；pytest 404、TS 333 全通过

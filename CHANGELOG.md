@@ -2,6 +2,14 @@
 
 > 详细历史见 `docs/archive/CHANGELOG-2026-09.md`（2026-09 及更早）与 `docs/archive/CHANGELOG-2026-10.md`（2026-10-08 交互组件与文风规范等）、`docs/archive/CHANGELOG-2026-11.md`（2026-11-19～21 Memory V4）。
 
+### 链路精简与口径修正：删无消费产出、审查门适配两层大纲（2026-11-28）
+- P1 审查门：`should_review_architecture` 的「章数>7 必审查」是单层大纲时代阈值，两层大纲后近 5 门课全部误触发；staged 模式改按单阶段章数判断，flat 保持原逻辑（实测三门课不再触发，省一次 13.8s 审查调用）。
+- P2 删无消费产出：thesis.currentBoundary / conceptGraph[].rationale / examplePolicy.avoidRepeatedScenarios 全仓零消费却占元信息 16%；schema+prompt+TS 类型三端同步移除（实测元信息 13345→9746 字符、49.1s→26.0s）。
+- I27 计划层分类口径纪律：不得自拟被讲系统分类当官方口径；证据只给例子就教例子；自建分析框架须写明是自己的尺子。
+- I28 状态口径双向：既禁夸大（未默认开启说成可用），也禁贬低（已实现说成仅设计），定档以每条机制自己的证据为准。
+- h2/h3 评测装置：溯源归因摘录优先（与 I23 一致）；默认评审团改国产并加测试禁止 OpenAI/Anthropic；播种摘录上限 4000→8000（长文后半机制此前被截断）。
+- 614 Python + 333 TS 测试、tsc、docs:check 全绿。
+
 ### 证据接线与形态自由：事实编造归零（2026-11-28）
 - I23 摘录优先注入：evidence_to_prompt 此前只传 260 字摘要（常为网页样板），全文摘录从未进 prompt；改摘录优先、无摘录回退摘要。
 - I21/I26 证据边界：性能量级/机制限制/分类口径/状态口径须与证据一致；不得先自设量级再推算（如「按秒级算，一万条要几小时」）。
@@ -39,6 +47,3 @@
 - evals/：五维 rubric（事实准确≤1一票否决）+ 60 条 golden set（权威源逐条核实）+ 预注册（符号检验+配对 bootstrap 双条件，MDE≈0.70）+ 10 类失败编码手册；修订 A0：单人工校准（human-vs-judge 团 κ≥0.6）
 - 全链路 trace：EVAL_TRACE_DIR 开关式采集修复前原始输出/阶段用量/降级记录（未设置零开销）+ 离线 runner（blueprint 确定性移植、证据目录隔离）；新增 97 测试（trace 22 + judges 75）
 - 评测 harness：事实溯源率（原子声明对证据归因）、目标↔内容↔评估对齐审计、3 异构 judge 成对偏好（双向位置交换去偏 + Bradley-Terry）、纯标准库统计（bootstrap/符号检验/κ/power）、基线报告与盲评校准工作表
-### B3 收尾：章节计划与课程架构搜索门拆除（2026-11-24）
-- 章节计划与 TOC/架构拆除 `allow_search=not coverage["covered"]` 关键词门：搜索工具始终可用，覆盖度经共享 `format_coverage_hint` 降级为 user 侧提示（与任务正文同构、不绑定 NO_SEARCH 协议）；架构提示在 messages 构建内按注入 sources 计算，规格同步"覆盖度与站点偏好均为提示非门禁"
-- 回归：覆盖章节仍拿工具+提示、未覆盖弱匹配提示、架构提示非门、TOC 不再传禁搜参数；pytest 404、TS 333 全通过
