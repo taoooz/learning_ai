@@ -96,3 +96,34 @@ def test_toc_agent_does_not_gate_search_by_keyword_coverage():
             {"topic": "推荐系统核心链路", "learnerPositioning": {"estimatedLevel": "intermediate"}},
         ))
     assert captured.get("allow_search", True) is True
+
+
+def test_toc_agent_builds_topic_evidence_when_cache_missing(monkeypatch):
+    """生产此前只读主题证据包、从不构建：这里锁住构建入口的接线。"""
+    pack = {
+        "topic": "推荐系统核心链路",
+        "sources": [{
+            "evidenceId": "ev-01",
+            "title": "Recommendation system",
+            "url": "https://example.com/recsys",
+            "summary": "样板摘要",
+            "excerpt": "源文真实数据：召回分流约 30%",
+            "kind": "knowledge",
+            "isPrimary": True,
+            "authorityScore": 90,
+        }],
+    }
+    captured = {}
+
+    def fake_stream(**kwargs):
+        captured.update(kwargs)
+        return _stream(_result())
+
+    monkeypatch.setattr(toc_agent, "get_topic_evidence", lambda topic, **kw: None)
+    monkeypatch.setattr(toc_agent, "ensure_topic_evidence_pack_sync", lambda topic, **kw: pack)
+    with patch.object(toc_agent, "stream_course_architecture", side_effect=fake_stream):
+        list(toc_agent.stream_toc_with_tools(
+            {"topic": "推荐系统核心链路", "learnerPositioning": {"estimatedLevel": "intermediate"}},
+        ))
+    assert "召回分流约 30%" in captured["evidence"]
+    assert captured["sources"][0]["url"] == "https://example.com/recsys"

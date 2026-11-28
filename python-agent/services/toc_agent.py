@@ -6,7 +6,11 @@ from services.course_architect_service import (
     architecture_chapter_to_node,
     stream_course_architecture,
 )
-from services.evidence_store import get_topic_evidence, evidence_to_prompt
+from services.evidence_store import (
+    ensure_topic_evidence_pack_sync,
+    evidence_to_prompt,
+    get_topic_evidence,
+)
 
 
 def _learner_from_blueprint(blueprint: dict, planning_payload: dict | None) -> dict:
@@ -46,8 +50,6 @@ def stream_toc_with_tools(
     """设计并审查课程架构，再把架构确定性地渲染为前端 TOC 事件。"""
     topic = blueprint.get("topic", blueprint.get("learningDirection", ""))
     learner = _learner_from_blueprint(blueprint, planning_payload)
-    evidence_pack = get_topic_evidence(topic)
-    evidence, sources = evidence_to_prompt(evidence_pack)
     # B3：搜索判断交给模型（覆盖度在架构 prompt 内降级为提示），不再按关键词命中禁搜。
     # learner 已携带校准后的定位（来自纲要或 learnerSnapshot）；
     # planningMemory 里再带一份 learnerSnapshot 属于同源重复注入，剔除。
@@ -63,6 +65,12 @@ def stream_toc_with_tools(
     }
 
     yield f"data: {json.dumps({'type': 'thinking', 'message': '正在设计并审查课程架构'}, ensure_ascii=False)}\n\n"
+
+    # 生产此前只读主题证据包、从不构建：架构阶段永远在零证据下拟大纲，
+    # 自拟分类/口径无从对证。这里补上构建入口（有缓存直接复用，搜索失败静默降级），
+    # 放在 thinking 事件之后，让首屏先有反馈再等检索。
+    evidence_pack = ensure_topic_evidence_pack_sync(topic) or get_topic_evidence(topic)
+    evidence, sources = evidence_to_prompt(evidence_pack)
 
     try:
         architecture_result = None

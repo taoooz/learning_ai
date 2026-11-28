@@ -36,6 +36,8 @@ EXCERPT_MAX_CHARS = 8000
 EXCERPT_FETCH_LIMIT = 2
 EXCERPT_FETCH_TIMEOUT = 15.0
 EXCERPT_FETCH_BUDGET = 8.0
+# 注入上限：早先硬编码 3000 字，两个来源就把正文挤掉了，等于摘录白抓。
+DEFAULT_PROMPT_MAX_CHARS = 12000
 _EXCERPT_DROP_TAGS = ("script", "style", "nav", "header", "footer", "aside", "noscript")
 
 
@@ -188,6 +190,14 @@ def build_course_query_plan(course_topic: str) -> list[dict[str, Any]]:
         "query": query,
         "preferredDomains": preferred,
     }]
+
+
+def _prompt_max_chars() -> int:
+    """证据段注入上限：可由 EVIDENCE_PROMPT_MAX_CHARS 覆盖，非法值回退默认。"""
+    try:
+        return max(1000, int(os.getenv("EVIDENCE_PROMPT_MAX_CHARS", DEFAULT_PROMPT_MAX_CHARS)))
+    except (TypeError, ValueError):
+        return DEFAULT_PROMPT_MAX_CHARS
 
 
 def _decode_html(raw: bytes, header_encoding: str | None) -> str:
@@ -729,4 +739,4 @@ def evidence_to_prompt(
         "authorityScore": int(source.get("authorityScore") or 0),
     } for source in sources if isinstance(source, dict) and source.get("url")]
 
-    return "\n\n".join(lines)[:3000], clean_sources
+    return "\n\n".join(lines)[:_prompt_max_chars()], clean_sources

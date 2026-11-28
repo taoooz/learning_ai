@@ -148,3 +148,36 @@ class TestPromptUsesExcerpt:
         }
         text, _ = es.evidence_to_prompt(pack)
         assert "只有摘要" in text
+
+
+class TestPromptBudget:
+    def test_excerpt_not_clipped_at_3000(self):
+        """此前硬编码 3000 字上限，两个来源就把正文挤掉，等于摘录白抓。"""
+        body = "开头标记 " + ("正文内容 " * 900) + " 尾部标记"
+        pack = {
+            "topic": "t",
+            "sources": [{
+                "evidenceId": "ev-01", "title": "标题", "url": "https://example.com/a",
+                "summary": "摘要", "excerpt": body, "kind": "knowledge", "isPrimary": True,
+            }],
+        }
+        text, _ = es.evidence_to_prompt(pack)
+        assert "尾部标记" in text
+        assert len(text) > 3000
+
+    def test_env_override(self, monkeypatch):
+        monkeypatch.setenv("EVIDENCE_PROMPT_MAX_CHARS", "1000")
+        body = "正文内容 " * 900
+        pack = {
+            "topic": "t",
+            "sources": [{
+                "evidenceId": "ev-01", "title": "标题", "url": "https://example.com/a",
+                "summary": "摘要", "excerpt": body, "kind": "knowledge", "isPrimary": True,
+            }],
+        }
+        text, _ = es.evidence_to_prompt(pack)
+        assert len(text) <= 1000
+
+    def test_invalid_env_falls_back(self, monkeypatch):
+        monkeypatch.setenv("EVIDENCE_PROMPT_MAX_CHARS", "not-a-number")
+        assert es._prompt_max_chars() == es.DEFAULT_PROMPT_MAX_CHARS

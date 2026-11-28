@@ -5,7 +5,7 @@
 ### 证据摘录深化：生产补齐正文抓取（2026-11-28）
 - 此前 `evidence_to_prompt` 只读 `excerpt` 但全仓**没有任何写入侧**，生产课程实际只拿到 260 字摘要（常是版权声明/协议样板）；摘录优先注入因此在生产空转。
 - 新增 `_fetch_full_text`（httpx + lxml，剥 script/style/nav/header/footer/aside/noscript，优先 main/article，按页面 meta 声明解码）与 `_enrich_primary_excerpts`：只抓一手来源，每包最多 2 个、单次 15s 超时、整体预算 8s，失败回退摘要且不阻塞生成；`DISABLE_EVIDENCE_EXCERPT` 可整体关闭。
-- 实测：真实文章抓取 6301 字摘录耗时 0.5s，注入 prompt 后首次带上源文真实数据（30%/2323 万）；非一手来源不抓取。新增 13 测试（conftest 默认屏蔽网络），pytest 627 过。
+- 实测：MDN/React 官方页真实抓取 1639–8000 字，prompt 从 3000 涨到 7180 字并带上 ETag/304 等原文数据；非一手来源不抓取。新增 17 测试（conftest 默认屏蔽搜索与抓取），pytest 631 过。
 
 ### 链路精简与口径修正：删无消费产出、审查门适配两层大纲（2026-11-28）
 - P1 审查门：`should_review_architecture` 的「章数>7 必审查」是单层大纲时代阈值，两层大纲后近 5 门课全部误触发；staged 模式改按单阶段章数判断，flat 保持原逻辑（实测三门课不再触发，省一次 13.8s 审查调用）。
