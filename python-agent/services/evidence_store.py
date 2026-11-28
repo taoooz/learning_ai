@@ -15,6 +15,8 @@ import json
 import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import wait as _futures_wait
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -27,6 +29,14 @@ EVIDENCE_SCHEMA_VERSION = 1
 DEFAULT_EVIDENCE_TTL_SECONDS = 7 * 24 * 60 * 60
 DEFAULT_ROOT = Path(__file__).resolve().parents[1] / "data" / "evidence"
 TOPICS_DIRNAME = "topics"
+
+# 摘录深化：摘要只有 260 字（常是网页样板），生成需要正文才能用上真实数据。
+# 成本/延迟受三重限制：每个证据包最多抓 2 个一手来源、单次 15s 超时、整体预算 8s。
+EXCERPT_MAX_CHARS = 8000
+EXCERPT_FETCH_LIMIT = 2
+EXCERPT_FETCH_TIMEOUT = 15.0
+EXCERPT_FETCH_BUDGET = 8.0
+_EXCERPT_DROP_TAGS = ("script", "style", "nav", "header", "footer", "aside", "noscript")
 
 
 def _safe_component(value: str) -> str:
@@ -180,6 +190,98 @@ def build_course_query_plan(course_topic: str) -> list[dict[str, Any]]:
     }]
 
 
+def _decode_html(raw: bytes, header_encoding: str | None) -> str:
+    """按页面 meta 声明解码；未声明则优先响应头，最后回退 utf-8。
+
+    中文站点常只在 <meta charset> 里声明，直接喂 bytes 给 lxml 会按 latin-1
+    解析成乱码，导致摘录不可用。
+    """
+    match = re.search(rb"charset=[\"']?([\w-]+)", raw[:4096], re.IGNORECASE)
+    encoding = match.group(1).decode("ascii", "ignore") if match else (header_encoding or "utf-8")
+    try:
+        return raw.decode(encoding, errors="replace")
+    except (LookupError, UnicodeDecodeError):
+        return raw.decode("utf-8", errors="replace")
+
+
+def _fetch_full_text(url: str) -> str | None:
+    """直抓网页正文并抽成纯文本；任何失败返回 None（调用方回退摘要）。
+
+    不走 search_tools.read_url：那是给模型用的工具，失败时返回中文提示字符串，
+    直接当证据写进包会污染上下文。
+    """
+    if not url or os.getenv("DISABLE_EVIDENCE_EXCERPT", "").lower() in ("1", "true", "yes"):
+        return None
+    try:
+        import httpx
+        from lxml import html as _html
+    except Exception:  # noqa: BLE001 依赖缺失时整体降级
+        return None
+    try:
+        response = httpx.get(
+            url,
+            timeout=EXCERPT_FETCH_TIMEOUT,
+            follow_redirects=True,
+            proxy=os.getenv("EVIDENCE_FETCH_PROXY") or None,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; LearningAI-Evidence/1.0)"},
+        )
+        response.raise_for_status()
+        content_type = str(response.headers.get("content-type") or "").lower()
+        if content_type and "html" not in content_type and "text/" not in content_type:
+            return None
+        doc = _html.fromstring(_decode_html(response.content, response.encoding))
+        for tag in _EXCERPT_DROP_TAGS:
+            for node in doc.xpath(f"//{tag}"):
+                node.drop_tree()
+        main_nodes = doc.xpath("//main") or doc.xpath("//article")
+        container = main_nodes[0] if main_nodes else (doc.body if doc.body is not None else doc)
+        text = container.text_content()
+    except Exception:  # noqa: BLE001 抓取失败一律降级
+        return None
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) < 120:  # 过短多半是反爬页/空壳页
+        return None
+    return text[:EXCERPT_MAX_CHARS]
+
+
+def _enrich_primary_excerpts(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """给一手来源补正文摘录（原地写入 excerpt）。失败或无候选时原样返回。
+
+    只处理 isPrimary 且尚无 excerpt 的来源，按权威分降序取前 N 个；
+    并发抓取但受整体预算约束，超预算的直接放弃、不阻塞生成。
+    """
+    if not sources or os.getenv("DISABLE_EVIDENCE_EXCERPT", "").lower() in ("1", "true", "yes"):
+        return sources
+    candidates = [
+        source for source in sources
+        if isinstance(source, dict)
+        and source.get("isPrimary")
+        and source.get("url")
+        and not source.get("excerpt")
+    ]
+    if not candidates:
+        return sources
+    candidates.sort(key=lambda s: int(s.get("authorityScore") or 0), reverse=True)
+    targets = candidates[:EXCERPT_FETCH_LIMIT]
+    pool = ThreadPoolExecutor(max_workers=len(targets))
+    try:
+        futures = {pool.submit(_fetch_full_text, str(s.get("url") or "")): s for s in targets}
+        done, pending = _futures_wait(futures.keys(), timeout=EXCERPT_FETCH_BUDGET)
+        for future in pending:  # 超预算的放弃，避免拖住生成
+            future.cancel()
+        for future in done:
+            source = futures[future]
+            try:
+                text = future.result()
+            except Exception:  # noqa: BLE001
+                text = None
+            if text:
+                source["excerpt"] = text
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+    return sources
+
+
 def _topic_pack(
     topic: str,
     query_plan: list[dict[str, Any]],
@@ -210,6 +312,7 @@ def _topic_pack(
             "isPrimary": bool(item.get("isPrimary") or item.get("preferred")),
             "retrievedAt": int(now * 1000),
         })
+    _enrich_primary_excerpts(sources)
     return {
         "packId": f"evp-{uuid4().hex[:12]}",
         "schemaVersion": EVIDENCE_SCHEMA_VERSION,
@@ -387,6 +490,7 @@ def merge_chapter_evidence_results(
             by_url[url] = source
         matched_sources.append(source)
 
+    _enrich_primary_excerpts(matched_sources)
     merged_plan: list[dict[str, Any]] = []
     seen_queries: set[tuple[str, str]] = set()
     plan_items = list(existing.get("queryPlan") or []) if existing else []

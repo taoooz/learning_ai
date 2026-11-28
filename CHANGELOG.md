@@ -2,6 +2,11 @@
 
 > 详细历史见 `docs/archive/CHANGELOG-2026-09.md`（2026-09 及更早）与 `docs/archive/CHANGELOG-2026-10.md`（2026-10-08 交互组件与文风规范等）、`docs/archive/CHANGELOG-2026-11.md`（2026-11-19～21 Memory V4）。
 
+### 证据摘录深化：生产补齐正文抓取（2026-11-28）
+- 此前 `evidence_to_prompt` 只读 `excerpt` 但全仓**没有任何写入侧**，生产课程实际只拿到 260 字摘要（常是版权声明/协议样板）；摘录优先注入因此在生产空转。
+- 新增 `_fetch_full_text`（httpx + lxml，剥 script/style/nav/header/footer/aside/noscript，优先 main/article，按页面 meta 声明解码）与 `_enrich_primary_excerpts`：只抓一手来源，每包最多 2 个、单次 15s 超时、整体预算 8s，失败回退摘要且不阻塞生成；`DISABLE_EVIDENCE_EXCERPT` 可整体关闭。
+- 实测：真实文章抓取 6301 字摘录耗时 0.5s，注入 prompt 后首次带上源文真实数据（30%/2323 万）；非一手来源不抓取。新增 13 测试（conftest 默认屏蔽网络），pytest 627 过。
+
 ### 链路精简与口径修正：删无消费产出、审查门适配两层大纲（2026-11-28）
 - P1 审查门：`should_review_architecture` 的「章数>7 必审查」是单层大纲时代阈值，两层大纲后近 5 门课全部误触发；staged 模式改按单阶段章数判断，flat 保持原逻辑（实测三门课不再触发，省一次 13.8s 审查调用）。
 - P2 删无消费产出：thesis.currentBoundary / conceptGraph[].rationale / examplePolicy.avoidRepeatedScenarios 全仓零消费却占元信息 16%；schema+prompt+TS 类型三端同步移除（实测元信息 13345→9746 字符、49.1s→26.0s）。
@@ -42,8 +47,3 @@
 
 ### I1 可靠性修复：strict 输出数字后杂散引号（2026-11-25）
 - parse_enforced_json 新增确定性修复 _strip_stray_quote_after_number（字符串外扫描，合法 JSON 恒等）：pilot 两次整门中止根因 "order":2"，重试不收敛；先修复再判括号平衡。6 新测试含真实失败 raw 回归，532 测试过。
-
-### 课程质量度量装置落地（CYCLE-0 阶段0+1，2026-11-25）
-- evals/：五维 rubric（事实准确≤1一票否决）+ 60 条 golden set（权威源逐条核实）+ 预注册（符号检验+配对 bootstrap 双条件，MDE≈0.70）+ 10 类失败编码手册；修订 A0：单人工校准（human-vs-judge 团 κ≥0.6）
-- 全链路 trace：EVAL_TRACE_DIR 开关式采集修复前原始输出/阶段用量/降级记录（未设置零开销）+ 离线 runner（blueprint 确定性移植、证据目录隔离）；新增 97 测试（trace 22 + judges 75）
-- 评测 harness：事实溯源率（原子声明对证据归因）、目标↔内容↔评估对齐审计、3 异构 judge 成对偏好（双向位置交换去偏 + Bradley-Terry）、纯标准库统计（bootstrap/符号检验/κ/power）、基线报告与盲评校准工作表
