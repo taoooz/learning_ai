@@ -30,7 +30,7 @@ from evals import trace as eval_trace
 
 PROMPT_VERSION = "course-architect-v2-two-stage"
 ARCHITECT_REASONING_EFFORT = os.getenv("ARCHITECT_REASONING_EFFORT", "none").strip() or None
-ARCHITECT_CHAPTERS_MAX_TOKENS = int(os.getenv("ARCHITECT_CHAPTERS_MAX_TOKENS", "6000"))
+ARCHITECT_CHAPTERS_MAX_TOKENS = int(os.getenv("ARCHITECT_CHAPTERS_MAX_TOKENS", "9000"))
 ARCHITECT_META_MAX_TOKENS = int(os.getenv("ARCHITECT_META_MAX_TOKENS", "8000"))
 
 
@@ -65,6 +65,7 @@ def _prompt_context(
 ) -> dict[str, str]:
     memory_payload = {
         "learner": learner,
+        "learnerNarrative": _format_learner_for_review(learner),
         "memoryContext": memory_context or {},
     }
     source_lines = "\n".join(
@@ -217,9 +218,11 @@ def build_course_architect_meta_messages(
 
 
 def _format_learner_for_review(learner: dict[str, Any]) -> str:
-    lines = [f"- 当前水平：{learner.get('estimatedLevel', 'unknown')}"]
+    lines = []
+    background = learner.get("backgroundSummary")
+    if background:
+        lines.append(f"- 学习者背景（决定起点与讲解视角）：{background}")
     for label, key in (
-        ("背景", "backgroundSummary"),
         ("已掌握", "skipBasics"),
         ("可能缺口", "likelyGaps"),
     ):
@@ -227,7 +230,13 @@ def _format_learner_for_review(learner: dict[str, Any]) -> str:
         if value:
             rendered = "、".join(value) if isinstance(value, list) else str(value)
             lines.append(f"- {label}：{rendered}")
-    return "\n".join(lines)
+    level = learner.get("estimatedLevel")
+    if level:
+        lines.append(
+            f"- 在本主题上的相对水平：{level}"
+            "（仅针对本课程主题，不代表整体能力；起点以上述背景与已掌握内容为准）"
+        )
+    return "\n".join(lines) if lines else "- 无学习者画像"
 
 
 def _compact_architecture_for_review(architecture: CourseArchitecture) -> dict[str, Any]:
@@ -409,7 +418,7 @@ def _chapter_plan_issues(plan: CourseChapterPlan) -> list[str]:
     issues: list[str] = []
     if not plan.courseTopic.strip():
         issues.append("课程主题为空。")
-    issues.extend(validate_course_chapters(plan.chapters))
+    issues.extend(validate_course_chapters(plan.chapters, plan.structureMode, plan.stages))
     return issues
 
 
@@ -424,6 +433,8 @@ def _assemble_architecture(
         conceptGraph=meta.conceptGraph,
         chapters=plan.chapters,
         examplePolicy=meta.examplePolicy,
+        structureMode=plan.structureMode,
+        stages=plan.stages,
     )
 
 

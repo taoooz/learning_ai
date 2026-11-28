@@ -33,6 +33,33 @@ PROMPT_VERSION = "task-content-v4"
 
 _LEVEL_LABELS = {"beginner": "初级", "intermediate": "中级", "advanced": "高级"}
 
+
+def _format_learner_lines(learner) -> list[str]:
+    """文本优先的学习者起点：背景描述决定起点与讲解视角；水平评级仅针对本主题、置末。
+
+    避免把“对某主题初级”误读成“对一切初级”而铺垫通用基础。
+    """
+    lines = []
+    if learner.backgroundSummary:
+        lines.append(f"学习者背景（决定起点与讲解视角）：{learner.backgroundSummary}")
+    if learner.confirmedKnowledge:
+        lines.append(f"已确认掌握：{'、'.join(learner.confirmedKnowledge)}")
+    if learner.excludedTopics:
+        lines.append(f"已掌握且不要再从零讲：{'、'.join(learner.excludedTopics)}")
+    if learner.likelyGaps:
+        lines.append(f"潜在缺口：{'、'.join(learner.likelyGaps)}")
+    if learner.estimatedLevel:
+        lines.append(
+            f"在本主题上的相对水平：{_LEVEL_LABELS.get(learner.estimatedLevel, learner.estimatedLevel)}"
+            "（仅针对本课程主题，不代表整体能力；起点以上述背景与已掌握内容为准，不要因水平评级铺垫通用基础）"
+        )
+    if learner.preferredExampleDomains or learner.personalExampleLimit is not None:
+        domains = '、'.join(learner.preferredExampleDomains) if learner.preferredExampleDomains else '通用行业场景'
+        lines.append(
+            f"例子策略：优先 {domains}；个人经历不是默认案例库，每章最多引用 {learner.personalExampleLimit} 次"
+        )
+    return lines
+
 # 首句切分：中英文句末标点之后断开
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[。！？!?])")
 
@@ -100,20 +127,7 @@ def build_task_content_prompt(
 ) -> str:
     """构建任务内容 system prompt（evidence 非空时注入搜索证据包，§搜索策略）"""
     learner = request.learnerStartingPoint
-    learner_lines = [f"当前水平：{_LEVEL_LABELS.get(learner.estimatedLevel, learner.estimatedLevel)}"]
-    if learner.confirmedKnowledge:
-        learner_lines.append(f"已确认掌握：{'、'.join(learner.confirmedKnowledge)}")
-    if learner.likelyGaps:
-        learner_lines.append(f"潜在缺口：{'、'.join(learner.likelyGaps)}")
-    if learner.excludedTopics:
-        learner_lines.append(f"已掌握且不要再从零讲：{'、'.join(learner.excludedTopics)}")
-    if learner.backgroundSummary:
-        learner_lines.append(f"相关背景（仅用于校准和必要时选例）：{learner.backgroundSummary}")
-    if learner.preferredExampleDomains or learner.personalExampleLimit is not None:
-        domains = '、'.join(learner.preferredExampleDomains) if learner.preferredExampleDomains else '通用行业场景'
-        learner_lines.append(
-            f"例子策略：优先 {domains}；个人经历不是默认案例库，每章最多引用 {learner.personalExampleLimit} 次"
-        )
+    learner_lines = _format_learner_lines(learner)
 
     if request.previousTasks:
         previous_lines = []
@@ -170,20 +184,7 @@ def build_task_content_messages(
 ) -> dict[str, str]:
     """system 只保留写作行为规范；任务、学习者、记忆和证据进入 user。"""
     learner = request.learnerStartingPoint
-    learner_lines = [f"当前水平：{_LEVEL_LABELS.get(learner.estimatedLevel, learner.estimatedLevel)}"]
-    if learner.confirmedKnowledge:
-        learner_lines.append(f"已确认掌握：{'、'.join(learner.confirmedKnowledge)}")
-    if learner.likelyGaps:
-        learner_lines.append(f"潜在缺口：{'、'.join(learner.likelyGaps)}")
-    if learner.excludedTopics:
-        learner_lines.append(f"已掌握且不要再从零讲：{'、'.join(learner.excludedTopics)}")
-    if learner.backgroundSummary:
-        learner_lines.append(f"相关背景（仅用于校准和必要时选例）：{learner.backgroundSummary}")
-    if learner.preferredExampleDomains or learner.personalExampleLimit is not None:
-        domains = '、'.join(learner.preferredExampleDomains) if learner.preferredExampleDomains else '通用行业场景'
-        learner_lines.append(
-            f"例子策略：优先 {domains}；个人经历不是默认案例库，每章最多引用 {learner.personalExampleLimit} 次"
-        )
+    learner_lines = _format_learner_lines(learner)
 
     if request.previousTasks:
         previous_lines = []
@@ -218,7 +219,7 @@ def build_task_content_messages(
     )
     system_prompt = build_prompt(
         "task_content",
-        ["role", "style", "output_format", "interactive_rules", "tone_reminder"],
+        ["role", "style", "scaffolding", "perspective", "output_format", "interactive_rules", "tone_reminder"],
         **prompt_args,
     )
     user_prompt = build_prompt(

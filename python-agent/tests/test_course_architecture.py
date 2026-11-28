@@ -677,3 +677,99 @@ def test_architect_messages_coverage_is_hint_not_gate():
     )
     assert "匹配较弱或暂无证据" in uncovered["user"]
     assert "联网搜索决策" in uncovered["system"]
+
+
+# ---- 两层大纲 + 灵活章数（用户反馈#3 / I14）----
+
+def _stage_chapter(cid: str, stage_id: str | None) -> ArchitectureChapter:
+    return ArchitectureChapter(
+        chapterId=cid,
+        title=f"章节{cid}",
+        roleInCourse=f"承接前章、铺垫后章的职责{cid}",
+        conceptIds=[f"concept-{cid}"],
+        deliverable=f"可验收交付物{cid}",
+        prerequisites=[],
+        stageId=stage_id,
+    )
+
+
+def test_flat_plan_backward_compatible():
+    from schemas.course_architecture import CourseChapterPlan
+    plan = CourseChapterPlan.model_validate(_valid_chapter_plan())
+    assert plan.structureMode == "flat"
+    assert plan.stages is None
+    assert all(ch.stageId is None for ch in plan.chapters)
+    assert not validate_course_chapters(plan.chapters, plan.structureMode, plan.stages)
+
+
+def test_staged_valid_passes():
+    from schemas.course_architecture import ArchitectureStage
+    chapters = [_stage_chapter("ch-1", "stage-1"), _stage_chapter("ch-2", "stage-1"),
+                _stage_chapter("ch-3", "stage-2")]
+    stages = [
+        ArchitectureStage(stageId="stage-1", title="基础阶段", stageGoal="建立边界", chapterIds=["ch-1", "ch-2"]),
+        ArchitectureStage(stageId="stage-2", title="进阶阶段", stageGoal="独立判断", chapterIds=["ch-3"]),
+    ]
+    assert not validate_course_chapters(chapters, "staged", stages)
+
+
+def test_staged_requires_stages():
+    chapters = [_stage_chapter("ch-1", "stage-1")]
+    issues = validate_course_chapters(chapters, "staged", None)
+    assert any("必须提供 stages" in i for i in issues)
+
+
+def test_staged_dangling_chapter_reference():
+    from schemas.course_architecture import ArchitectureStage
+    chapters = [_stage_chapter("ch-1", "stage-1")]
+    stages = [ArchitectureStage(stageId="stage-1", title="阶段", stageGoal="目标", chapterIds=["ch-1", "ch-99"])]
+    issues = validate_course_chapters(chapters, "staged", stages)
+    assert any("不存在的章节：ch-99" in i for i in issues)
+
+
+def test_staged_chapter_must_belong_to_stage():
+    from schemas.course_architecture import ArchitectureStage
+    chapters = [_stage_chapter("ch-1", None)]
+    stages = [ArchitectureStage(stageId="stage-1", title="阶段", stageGoal="目标", chapterIds=["ch-1"])]
+    issues = validate_course_chapters(chapters, "staged", stages)
+    assert any("必须归属一个阶段" in i for i in issues)
+
+
+def test_staged_chapter_not_in_stage_list():
+    from schemas.course_architecture import ArchitectureStage
+    chapters = [_stage_chapter("ch-1", "stage-1"), _stage_chapter("ch-2", "stage-1")]
+    stages = [ArchitectureStage(stageId="stage-1", title="阶段", stageGoal="目标", chapterIds=["ch-1"])]
+    issues = validate_course_chapters(chapters, "staged", stages)
+    assert any("未出现在其所属阶段" in i for i in issues)
+
+
+def test_staged_cap_eighteen():
+    from schemas.course_architecture import ArchitectureStage
+    chapters = [_stage_chapter(f"ch-{i}", "stage-1") for i in range(18)]
+    stages = [ArchitectureStage(stageId="stage-1", title="阶段", stageGoal="目标",
+                                chapterIds=[f"ch-{i}" for i in range(18)])]
+    assert not any("章节数量" in i for i in validate_course_chapters(chapters, "staged", stages))
+    chapters19 = [_stage_chapter(f"ch-{i}", "stage-1") for i in range(19)]
+    stages19 = [ArchitectureStage(stageId="stage-1", title="阶段", stageGoal="目标",
+                                  chapterIds=[f"ch-{i}" for i in range(19)])]
+    assert any("硬上限 18" in i for i in validate_course_chapters(chapters19, "staged", stages19))
+
+
+def test_chapters_schema_includes_stage_fields():
+    from schemas.course_architecture import COURSE_CHAPTERS_JSON_SCHEMA
+    assert "structureMode" in COURSE_CHAPTERS_JSON_SCHEMA["properties"]
+    assert "stages" in COURSE_CHAPTERS_JSON_SCHEMA["properties"]
+    assert "stageId" in COURSE_CHAPTERS_JSON_SCHEMA["properties"]["chapters"]["items"]["properties"]
+
+
+def test_architect_prompt_declares_two_level_structure():
+    prompt = build_course_architect_prompt(
+        "推荐系统核心链路",
+        {"learningGoal": "定位推荐问题"},
+        {"estimatedLevel": "intermediate", "likelyGaps": ["召回排序边界"]},
+        {"scene": "course_architecture"},
+    )
+    assert "structureMode" in prompt
+    assert "staged" in prompt
+    assert "stageId" in prompt
+    assert "知识衔接" in prompt

@@ -37,6 +37,16 @@ class ArchitectureChapter(BaseModel):
     deliverable: str
     prerequisites: list[str] = Field(default_factory=list)
     assessmentMode: Literal["none", "self_report", "checkpoint"] = "none"
+    # 两层大纲（用户反馈#3）：staged 模式下归属的大阶段；flat 模式为 None。
+    stageId: Optional[str] = None
+
+
+class ArchitectureStage(BaseModel):
+    """两层大纲的宏观阶段（复杂课题）：阶段→章节。flat 模式无 stages。"""
+    stageId: str
+    title: str
+    stageGoal: str
+    chapterIds: list[str] = Field(default_factory=list)
 
 
 class CourseExamplePolicy(BaseModel):
@@ -52,6 +62,8 @@ class CourseArchitecture(BaseModel):
     conceptGraph: list[ArchitectureConcept]
     chapters: list[ArchitectureChapter]
     examplePolicy: CourseExamplePolicy
+    structureMode: Literal["flat", "staged"] = "flat"
+    stages: Optional[list[ArchitectureStage]] = None
 
 
 class CourseChapterPlan(BaseModel):
@@ -60,6 +72,8 @@ class CourseChapterPlan(BaseModel):
     architectureVersion: Literal[1] = 1
     courseTopic: str
     chapters: list[ArchitectureChapter]
+    structureMode: Literal["flat", "staged"] = "flat"
+    stages: Optional[list[ArchitectureStage]] = None
 
 
 class CourseArchitectureMeta(BaseModel):
@@ -81,6 +95,21 @@ COURSE_CHAPTERS_JSON_SCHEMA: dict = {
     "properties": {
         "architectureVersion": {"type": "integer", "enum": [1]},
         "courseTopic": {"type": "string"},
+        "structureMode": {"type": "string", "enum": ["flat", "staged"]},
+        "stages": {
+            "type": ["array", "null"],
+            "items": {
+                "type": "object",
+                "properties": {
+                    "stageId": {"type": "string"},
+                    "title": {"type": "string"},
+                    "stageGoal": {"type": "string"},
+                    "chapterIds": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["stageId", "title", "stageGoal", "chapterIds"],
+                "additionalProperties": False,
+            },
+        },
         "chapters": {
             "type": "array",
             "items": {
@@ -93,16 +122,17 @@ COURSE_CHAPTERS_JSON_SCHEMA: dict = {
                     "deliverable": {"type": "string"},
                     "prerequisites": {"type": "array", "items": {"type": "string"}},
                     "assessmentMode": {"type": "string", "enum": ["none", "self_report", "checkpoint"]},
+                    "stageId": {"type": ["string", "null"]},
                 },
                 "required": [
                     "chapterId", "title", "roleInCourse", "conceptIds",
-                    "deliverable", "prerequisites", "assessmentMode",
+                    "deliverable", "prerequisites", "assessmentMode", "stageId",
                 ],
                 "additionalProperties": False,
             },
         },
     },
-    "required": ["architectureVersion", "courseTopic", "chapters"],
+    "required": ["architectureVersion", "courseTopic", "chapters", "structureMode", "stages"],
     "additionalProperties": False,
 }
 
@@ -184,18 +214,52 @@ def _find_cycle(edges: dict[str, list[str]]) -> list[str] | None:
     return None
 
 
-def validate_course_chapters(chapters: list[ArchitectureChapter]) -> list[str]:
+def validate_course_chapters(
+    chapters: list[ArchitectureChapter],
+    structureMode: str = "flat",
+    stages: Optional[list[ArchitectureStage]] = None,
+) -> list[str]:
     """校验第一阶段章节；概念引用等跨阶段约束留给最终合并校验。"""
     issues: list[str] = []
     if not chapters:
         issues.append("课程至少需要一个章节。")
-    if len(chapters) > 12:
-        issues.append(f"章节数量 {len(chapters)} 超过硬上限 12，必须合并相邻同层职责，优先收敛到 4～7 章。")
+    # 灵活章数（用户反馈#3）：章数由认知增量决定，不再强制收敛 4～7；
+    # flat 平铺上限 12，staged 两层结构总章上限 18，仅防膨胀。
+    cap = 18 if structureMode == "staged" else 12
+    if len(chapters) > cap:
+        issues.append(f"章节数量 {len(chapters)} 超过硬上限 {cap}，请合并相邻同层职责的章节。")
 
     chapter_ids = [chapter.chapterId for chapter in chapters]
     if len(chapter_ids) != len(set(chapter_ids)):
         issues.append("章节 ID 重复。")
     chapter_set = set(chapter_ids)
+
+    # 两层大纲阶段校验（staged 模式）。
+    if structureMode == "staged":
+        if not stages:
+            issues.append("staged 模式必须提供 stages（宏观阶段）。")
+        else:
+            stage_ids = [stage.stageId for stage in stages]
+            if len(stage_ids) != len(set(stage_ids)):
+                issues.append("阶段 ID 重复。")
+            stage_set = set(stage_ids)
+            covered: set[str] = set()
+            for stage in stages:
+                if not stage.title.strip() or not stage.stageGoal.strip():
+                    issues.append(f"阶段 {stage.stageId} 缺少标题或阶段目标。")
+                if not stage.chapterIds:
+                    issues.append(f"阶段 {stage.stageId} 未包含任何章节。")
+                for cid in stage.chapterIds:
+                    if cid not in chapter_set:
+                        issues.append(f"阶段 {stage.stageId} 引用了不存在的章节：{cid}")
+                    covered.add(cid)
+            for chapter in chapters:
+                if chapter.stageId and chapter.stageId not in stage_set:
+                    issues.append(f"章节 {chapter.chapterId} 归属了不存在的阶段：{chapter.stageId}")
+                if not chapter.stageId:
+                    issues.append(f"staged 模式下章节 {chapter.chapterId} 必须归属一个阶段（stageId）。")
+                elif chapter.chapterId not in covered:
+                    issues.append(f"章节 {chapter.chapterId} 未出现在其所属阶段的 chapterIds 中。")
 
     deliverables: set[str] = set()
     for chapter in chapters:
@@ -228,7 +292,9 @@ def validate_course_chapters(chapters: list[ArchitectureChapter]) -> list[str]:
 
 def validate_course_architecture(architecture: CourseArchitecture) -> list[str]:
     """校验引用、职责和依赖；语义重复由独立架构审查负责。"""
-    issues = validate_course_chapters(architecture.chapters)
+    issues = validate_course_chapters(
+        architecture.chapters, architecture.structureMode, architecture.stages
+    )
     if not architecture.courseTopic.strip():
         issues.append("课程主题为空。")
     if not architecture.thesis.targetCapability.strip():

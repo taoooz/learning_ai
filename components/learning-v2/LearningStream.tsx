@@ -346,7 +346,6 @@ function CheckpointItemView({
 
 function TaskContentView({
   item,
-  step,
   courseId,
   isStreaming,
 }: {
@@ -357,11 +356,6 @@ function TaskContentView({
 }) {
   return (
     <article data-task-item={item.taskId} className="relative space-y-4 pt-3 pl-0 sm:pl-0">
-      {step && (
-        <p className="text-[12px] font-medium tabular-nums text-tertiary">
-          第 {step.index} 步 · 共 {step.total} 步
-        </p>
-      )}
       <h2 className="text-[18px] font-semibold leading-[1.4] text-primary">
         {item.title}
       </h2>

@@ -107,24 +107,32 @@ def _format_objectives(objectives: list[dict]) -> str:
 
 
 def _format_learner(starting_point: dict) -> str:
-    """把学习者起点格式化为可读文本"""
+    """把学习者起点格式化为可读文本。
+
+    文本优先：以背景描述确定起点与讲解视角；整体水平评级仅针对本主题、
+    置于末尾，避免把“对某主题初级”误读成“对一切初级”而铺垫通用基础。
+    """
+    sp = starting_point or {}
     parts = []
-    level = (starting_point or {}).get("estimatedLevel", "")
-    if level:
-        parts.append(f"当前水平：{_LEVEL_LABELS.get(level, level)}")
-    known = (starting_point or {}).get("confirmedKnowledge", [])
+    background = sp.get("backgroundSummary")
+    if background:
+        parts.append(f"学习者背景（决定起点与讲解视角）：{background}")
+    known = sp.get("confirmedKnowledge", [])
     if known:
         parts.append(f"已确认掌握：{'、'.join(known)}")
-    gaps = (starting_point or {}).get("likelyGaps", [])
-    if gaps:
-        parts.append(f"潜在缺口：{'、'.join(gaps)}")
-    excluded = (starting_point or {}).get("excludedTopics", [])
+    excluded = sp.get("excludedTopics", [])
     if excluded:
         parts.append(f"已掌握且应跳过：{'、'.join(excluded)}")
-    background = (starting_point or {}).get("backgroundSummary")
-    if background:
-        parts.append(f"相关背景（仅用于校准与例子选择）：{background}")
-    confidence = (starting_point or {}).get("levelConfidence")
+    gaps = sp.get("likelyGaps", [])
+    if gaps:
+        parts.append(f"潜在缺口：{'、'.join(gaps)}")
+    level = sp.get("estimatedLevel", "")
+    if level:
+        parts.append(
+            f"在本主题上的相对水平：{_LEVEL_LABELS.get(level, level)}"
+            "（仅针对本课程主题，不代表整体能力；起点以上述背景与已掌握内容为准，不要因水平评级铺垫通用基础）"
+        )
+    confidence = sp.get("levelConfidence")
     if isinstance(confidence, (int, float)):
         parts.append(f"水平判断置信度：{round(float(confidence) * 100)}%")
     return "\n".join(parts) if parts else "无"

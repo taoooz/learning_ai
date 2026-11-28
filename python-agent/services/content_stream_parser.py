@@ -19,6 +19,59 @@ _EVIDENCE_LINE_RE = re.compile(r"^证据[:：]\s*(ev[\w\s,，、-]+)$")
 # 支持流式渐进渲染的文本型块：开标记出现即发块壳，内容逐行更新
 _STREAMABLE_STRUCTURED = {"key_point", "example"}
 
+# I15 引用卫生：内部证据编号 ev-XX-XXXXXX 绝不应出现在学习者面向正文。
+# 既有 _EVIDENCE_LINE_RE 只剥整行「证据：ev-…」；此处补齐行内形态：
+# 「来源：」前缀、纯 ev-ID 括号「（来源：ev-…）」、追加在真实引用后的「，ev-XX」token。
+_EV_ID = r"ev-\d+(?:-[0-9a-f]+)?"
+_EV_LIST = _EV_ID + r"(?:\s*[、,，]\s*" + _EV_ID + r")*"
+
+
+def strip_evidence_ids(text: str) -> str:
+    """剥离散文中的内部证据编号及其引用脚手架，保留真实来源名与 URL。"""
+    if not isinstance(text, str) or "ev-" not in text:
+        return text
+    # 1) 整个括号只含 ev-ID（可带 来源/证据 前缀）→ 删括号
+    text = re.sub(r"[（(]\s*(?:来源[:：]|证据[:：])?\s*" + _EV_LIST + r"\s*[）)]", "", text)
+    # 2) 独立的「来源：ev-…」/「证据：ev-…」短语（仅 ev-ID）→ 删短语
+    text = re.sub(r"(?:来源[:：]|证据[:：])\s*" + _EV_LIST, "", text)
+    # 3) 追加在真实引用后的 ev-ID token（，ev-XX / 、ev-XX / , ev-XX / 见 ev-XX）
+    text = re.sub(r"\s*[、,，]\s*(?:见\s*)?" + _EV_ID, "", text)
+    text = re.sub(r"\s+见\s*" + _EV_ID, "", text)
+    # 4) 残留裸 ev-ID
+    text = re.sub(_EV_ID, "", text)
+    # 5) 清理悬空标点/空白
+    text = re.sub(r"[ \t]+）", "）", text)
+    text = re.sub(r"[ \t]+\)", ")", text)
+    text = re.sub(r"，\s*）", "）", text)
+    text = re.sub(r",\s*\)", ")", text)
+    text = re.sub(r"、\s*）", "）", text)
+    text = re.sub(r"\)）", ")", text)
+    text = re.sub(r"）\)", "）", text)
+    text = re.sub(r"。\s*。", "。", text)
+    text = re.sub(r"（\s*）", "", text)
+    text = re.sub(r"\(\s*\)", "", text)
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    return text
+
+
+def _clean_block_prose(block: dict) -> dict:
+    """对文本型块的散文字段剥离内部 ev-ID；不碰 evidenceRefs/sourceRefs 元数据与结构化载荷。"""
+    btype = block.get("type")
+    if btype == "markdown":
+        block["markdown"] = strip_evidence_ids(block.get("markdown", ""))
+    elif btype == "key_point":
+        block["points"] = [strip_evidence_ids(p) for p in block.get("points", [])]
+        if "title" in block:
+            block["title"] = strip_evidence_ids(block["title"])
+    elif btype == "example":
+        for field in ("title", "context", "content", "takeaway"):
+            if field in block:
+                block[field] = strip_evidence_ids(block[field])
+    elif btype == "comparison":
+        block["columns"] = [strip_evidence_ids(c) for c in block.get("columns", [])]
+        block["rows"] = [[strip_evidence_ids(c) for c in row] for row in block.get("rows", [])]
+    return block
+
 
 def _re_split_refs(raw: str) -> list[str]:
     return [r.strip() for r in re.split(r"[,，、]", raw)]
@@ -89,7 +142,7 @@ class ContentStreamParser:
 
     def collect_blocks(self) -> list[dict]:
         """按出现顺序返回已完成的内容块列表（用于 task_completed）"""
-        return list(self._ordered_blocks)
+        return [_clean_block_prose(block) for block in self._ordered_blocks]
 
     def _handle_line(self, line: str) -> list[dict]:
         events: list[dict] = []
@@ -242,7 +295,8 @@ class ContentStreamParser:
                     takeaway = _after_colon(stripped)
                     in_content = False
                 elif in_content:
-                    content_lines.append(stripped)
+                    # 保留原始缩进（代码围栏内容），与 _parse_example 一致。
+                    content_lines.append(line)
             return {
                 "type": "example", "blockId": block_id,
                 "title": title or "示例", "context": context,
@@ -297,7 +351,8 @@ class ContentStreamParser:
                 takeaway = _after_colon(stripped)
                 in_content = False
             elif in_content:
-                content_lines.append(stripped)
+                # 保留原始缩进：示例内容常含代码围栏，strip 会剥掉代码缩进致 IndentationError。
+                content_lines.append(line)
         content = "\n".join(content_lines).strip()
         if not content:
             return None

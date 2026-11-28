@@ -76,7 +76,7 @@ export function TaskBoundary({ lesson, phase, attempts, onContinue, highlightCon
       ? `已重试 ${attempts} 次，仍可再试`
       : '检查网络或服务后重试'
     : nextTask
-      ? `本章还剩 ${sortedTasks.length - currentIndex - 1} 节`
+      ? ''
       : '本章内容已全部完成';
 
   return (
@@ -114,7 +114,7 @@ export function TaskBoundary({ lesson, phase, attempts, onContinue, highlightCon
               </>
             ) : nextTask ? (
               <>
-                <p className="text-[11px] font-medium text-tertiary">下一节</p>
+                <p className="text-[11px] font-medium text-tertiary">接下来</p>
                 <p className="mt-0.5 truncate text-[14px] font-medium text-primary">{nextTask.title}</p>
                 <p className="mt-0.5 text-[11px] tabular-nums text-tertiary">{progressLabel}</p>
               </>
