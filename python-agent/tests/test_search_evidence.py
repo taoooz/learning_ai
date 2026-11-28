@@ -230,3 +230,72 @@ def test_task_prompt_injects_existing_evidence_and_search_policy():
     assert "联网搜索决策" in prompt_with
     assert "搜索证据包" not in prompt_without
     assert "联网搜索决策" not in prompt_without
+
+
+def test_evidence_boundary_rules_forbid_invented_magnitudes():
+    """I21：证据边界硬规则必须进 prompt——性能量级/机制限制不得自行估算。"""
+    from tests.test_task_content import _request
+
+    request = _request()
+    prompt = build_task_content_prompt(
+        request,
+        evidence="- 某设计说明\n  来源: https://example.com/design",
+        sources=[{"title": "设计说明", "url": "https://example.com/design"}],
+    )
+    assert "证据边界" in prompt
+    assert "资料未给出" in prompt
+    assert "不要用常识估算" in prompt
+    # 分类口径与状态口径
+    assert "不要自拟一套" in prompt
+    assert "未默认开启" in prompt
+
+
+def test_evidence_boundary_absent_without_evidence():
+    """无证据时不注入证据边界段（避免无证据课程被无关规则干扰）。"""
+    from tests.test_task_content import _request
+
+    prompt = build_task_content_prompt(_request())
+    assert "证据边界" not in prompt
+
+
+def test_compare_recipe_allows_missing_dimension():
+    """I21：对比表配额不得逼模型编数字——允许写「资料未给出」或少设维度。"""
+    from prompts.task_content import get_recipe
+
+    recipe = get_recipe("compare")
+    assert "资料未给出" in recipe
+    assert "不要为了填满表格估一个数字" in recipe
+
+
+def test_evidence_to_prompt_prefers_excerpt_over_summary():
+    """关键修复：有全文摘录时必须注入摘录，而不是 260 字摘要。
+
+    此前 evidence_to_prompt 只读 summary，导致抓到全文也传不进 prompt——
+    模型实际只看到网页样板文字，是 SuperAgent 课程事实错误的真正根因。
+    """
+    from services.evidence_store import evidence_to_prompt
+
+    pack = {
+        "sources": [
+            {
+                "title": "设计说明",
+                "url": "https://example.com/design",
+                "summary": "版权声明：本文内容由实名注册用户自发贡献……",
+                "excerpt": "正文：把直通去掉，Router 决定多了约 30%，token 涨了约 37%。",
+                "evidenceId": "ev-01-aaa",
+                "kind": "official",
+                "isPrimary": True,
+            }
+        ]
+    }
+    text, _ = evidence_to_prompt(pack)
+    assert "30%" in text and "37%" in text
+    assert "版权声明" not in text
+
+
+def test_evidence_to_prompt_falls_back_to_summary():
+    from services.evidence_store import evidence_to_prompt
+
+    pack = {"sources": [{"title": "T", "url": "https://e.com", "summary": "摘要内容", "evidenceId": "ev-01-b"}]}
+    text, _ = evidence_to_prompt(pack)
+    assert "摘要内容" in text

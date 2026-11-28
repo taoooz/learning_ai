@@ -42,3 +42,15 @@
 - site: 偏好改可选提示：模型工具搜索不再强制前置 site: 查询（search_web_structured 新增 site_filter 开关并进缓存键；确定性预搜路径保留原行为），偏好域保留权威打分与排序；决策 prompt 注入"可选参考站点（非强制）"，搜索策略明示站点偏好非强制
 - 覆盖函数保留、仅去除否决效力；章节计划/architect 的同类关键词门属并行 json_schema 迁移批次，本次未动
 - 回归：覆盖仍拿工具/可选择不搜/仍可搜、未覆盖提示、site_filter 行为与缓存隔离等；targeted pytest 127 通过（9 个测试文件）
+
+### 主路径大 JSON 迁移 json_schema strict、引号修复退役（2026-11-23）
+- 章节计划与 Architect 两阶段（章节/meta，含流式与修复轮）改用 `response_format=json_schema(strict)`；schema 与 pydantic 模型/消费字段同源，新增 `lib/structured_output.py`（env 开关 `LLM_STRICT_JSON_SCHEMA` 默认开，关闭回退 json_object）
+- 传输层（chat/_call_llm/流式）遇网关拒绝（400/404/415/422）自动逐级降级 json_schema→json_object→无约束并记日志，降级不消耗重试配额；chat_with_tools/stream_chat_with_tools/_call_llm 新增 response_format 透传
+- 实测（scripts/probe_strict_schema.py，7 用例）：大 schema strict 非流式/流式/含 tools 全部可用；tools 同传不抑制搜索，最终轮受约束；网关不校验 schema 自身合规性，由本地测试把关
+- 新增 `parse_enforced_json`：两条主路径不再跑引号修复/XML/Thinking 清理启发式，仅保留剥围栏、首尾截取、截断检测最小安全网（降级模式兜底）；删除章节计划 prompt 的"不要用英文双引号"恳求；遗留 parse_json_response 保留供其他路径
+- 验证：targeted pytest 143 通过（9 个受影响测试文件，含新增 test_structured_output.py 与服务级迁移回归）
+
+### I4/I5 可靠性修复：公式降级与 checkpoint 宽松解析（2026-11-26）
+- I5：interactive parameter-demo 公式试算 FormulaError（未知变量/非法字符）此前穿透流式 parser 杀死整任务（基线 30 门中 9 任务）；parse_interactive_content 捕获后走既有 _degrade，内容保留为 markdown。
+- I4：生成内容模型（CheckpointDefinition/Option/SourceRef/SequenceItem）extra 改 ignore，模型偶发多余键不再整题丢弃；请求/评估模型保持 forbid，声明字段校验不变。
+- 预注册 rsi/prereg-I4-I5.md（可靠性类，对 completed 课程行为恒等）；新增 7 回归测试，pytest 545 过。

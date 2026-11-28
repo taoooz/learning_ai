@@ -2,6 +2,13 @@
 
 > 详细历史见 `docs/archive/CHANGELOG-2026-09.md`（2026-09 及更早）与 `docs/archive/CHANGELOG-2026-10.md`（2026-10-08 交互组件与文风规范等）、`docs/archive/CHANGELOG-2026-11.md`（2026-11-19～21 Memory V4）。
 
+### 证据接线与形态自由：事实编造归零（2026-11-28）
+- I23 摘录优先注入：evidence_to_prompt 此前只传 260 字摘要（常为网页样板），全文摘录从未进 prompt；改摘录优先、无摘录回退摘要。
+- I21/I26 证据边界：性能量级/机制限制/分类口径/状态口径须与证据一致；不得先自设量级再推算（如「按秒级算，一万条要几小时」）。
+- I24 配方去配额：内容形态（字数/要点条数/表格行列/步数）由材料决定，保留组件渲染必需的技术约束。
+- h1 评测装置保真度：runner 透传 authoritativeSources/goldenNotes（此前丢弃致计划层零证据）、播种包补 schemaVersion 与秒级时间戳、抓取失败改可见日志。
+- 实测两门课：编造探测 0、源文真实数据入课、国产 judge 多数票 D1 3/3/3；613 Python 测试过。
+
 ### 计划层任务纪律 + Memory 渐进式披露六项（2026-11-28）
 - I19 计划层任务纪律：observableOutcome 的「可验证」不再逼出课外动手作业（画图/产出文档/写方案），判断/选择/排序同样可验证，理解检查交课后题；跨域类比只作引入桥，逐条拆解对象必须是课程主体。修复正文层管不住的任务设计（实测动手作业与类比枝节归零）。
 - Memory 生成与整理：架构审查通过后确定性投影 stages/roleInCourse/nonGoals 为 topic 级 episode（零额外 LLM）；类比经历改内容派生身份，顺序无关、重复幂等、新经历累积，推断缺席不再失效（删除只走用户显式 tombstone），状态字段仍按覆盖语义；同内容不涨版本。
@@ -35,15 +42,3 @@
 ### B3 收尾：章节计划与课程架构搜索门拆除（2026-11-24）
 - 章节计划与 TOC/架构拆除 `allow_search=not coverage["covered"]` 关键词门：搜索工具始终可用，覆盖度经共享 `format_coverage_hint` 降级为 user 侧提示（与任务正文同构、不绑定 NO_SEARCH 协议）；架构提示在 messages 构建内按注入 sources 计算，规格同步"覆盖度与站点偏好均为提示非门禁"
 - 回归：覆盖章节仍拿工具+提示、未覆盖弱匹配提示、架构提示非门、TOC 不再传禁搜参数；pytest 404、TS 333 全通过
-
-### 主路径大 JSON 迁移 json_schema strict、引号修复退役（2026-11-23）
-- 章节计划与 Architect 两阶段（章节/meta，含流式与修复轮）改用 `response_format=json_schema(strict)`；schema 与 pydantic 模型/消费字段同源，新增 `lib/structured_output.py`（env 开关 `LLM_STRICT_JSON_SCHEMA` 默认开，关闭回退 json_object）
-- 传输层（chat/_call_llm/流式）遇网关拒绝（400/404/415/422）自动逐级降级 json_schema→json_object→无约束并记日志，降级不消耗重试配额；chat_with_tools/stream_chat_with_tools/_call_llm 新增 response_format 透传
-- 实测（scripts/probe_strict_schema.py，7 用例）：大 schema strict 非流式/流式/含 tools 全部可用；tools 同传不抑制搜索，最终轮受约束；网关不校验 schema 自身合规性，由本地测试把关
-- 新增 `parse_enforced_json`：两条主路径不再跑引号修复/XML/Thinking 清理启发式，仅保留剥围栏、首尾截取、截断检测最小安全网（降级模式兜底）；删除章节计划 prompt 的"不要用英文双引号"恳求；遗留 parse_json_response 保留供其他路径
-- 验证：targeted pytest 143 通过（9 个受影响测试文件，含新增 test_structured_output.py 与服务级迁移回归）
-
-### I4/I5 可靠性修复：公式降级与 checkpoint 宽松解析（2026-11-26）
-- I5：interactive parameter-demo 公式试算 FormulaError（未知变量/非法字符）此前穿透流式 parser 杀死整任务（基线 30 门中 9 任务）；parse_interactive_content 捕获后走既有 _degrade，内容保留为 markdown。
-- I4：生成内容模型（CheckpointDefinition/Option/SourceRef/SequenceItem）extra 改 ignore，模型偶发多余键不再整题丢弃；请求/评估模型保持 forbid，声明字段校验不变。
-- 预注册 rsi/prereg-I4-I5.md（可靠性类，对 completed 课程行为恒等）；新增 7 回归测试，pytest 545 过。

@@ -598,7 +598,7 @@ def evidence_to_prompt(
         if not isinstance(source, dict):
             continue
         title = str(source.get("title") or "").strip()
-        summary = str(source.get("summary") or "").strip()
+        summary = str(source.get("excerpt") or source.get("summary") or "").strip()
         url = str(source.get("url") or "").strip()
         if not title or not url:
             continue

@@ -77,7 +77,7 @@ def normalize_spec(raw: dict, index: int) -> dict:
     if difficulty and not (isinstance(raw_learner, dict) and raw_learner.get("estimatedLevel")):
         learner["estimatedLevel"] = difficulty
     learning_goal = str(raw.get("learningGoal") or f"完成 {topic} 的独立学习目标")
-    return {
+    spec = {
         "id": str(raw.get("id") or f"spec-{index + 1:02d}"),
         "topic": topic,
         "difficulty": difficulty or learner["estimatedLevel"],
@@ -85,6 +85,12 @@ def normalize_spec(raw: dict, index: int) -> dict:
         "learnerPositioning": learner,
         "intentType": raw.get("intentType"),
     }
+    # 保真度：权威来源与要点必须透传，否则 --seed-topic-evidence 永远拿不到 URL，
+    # 计划层会在零证据下自拟分类与口径。
+    for key in ("authoritativeSources", "goldenNotes"):
+        if raw.get(key):
+            spec[key] = raw[key]
+    return spec
 
 
 def build_architect_inputs(spec: dict) -> tuple[str, dict, dict, dict]:
@@ -117,6 +123,76 @@ def build_architect_inputs(spec: dict) -> tuple[str, dict, dict, dict]:
 
 
 # ---------------------------------------------------------------------------
+def _seed_topic_evidence(topic: str, spec: dict) -> None:
+    """实验用：按 spec.authoritativeSources 抓全文，写入主题证据包。
+
+    等价于生产里架构阶段之前已经存在的预搜结果，让计划层与生产一样有据可依。
+    抓取失败不阻塞（退回空包，与生产同样处理）。
+    """
+    import time as _t
+    from services.evidence_store import EVIDENCE_SCHEMA_VERSION, save_topic_evidence
+
+    sources = []
+    for item in (spec.get("authoritativeSources") or []):
+        url = item.get("url") if isinstance(item, dict) else str(item)
+        if not url:
+            continue
+        body = _fetch_source_text(url)
+        if not body:
+            print(f"[seed] 抓取失败，跳过 {url}", flush=True)
+            continue
+        print(f"[seed] 抓取成功 {len(body)} 字 {url}", flush=True)
+        sources.append({
+            "evidenceId": f"ev-{len(sources) + 1:02d}",
+            "title": (item.get("title") if isinstance(item, dict) else "") or url,
+            "url": url,
+            "summary": body[:260],
+            "excerpt": body[:4000],
+            "isPrimary": True,
+        })
+    if not sources:
+        return
+    now = _t.time()
+    save_topic_evidence({
+        "schemaVersion": EVIDENCE_SCHEMA_VERSION,
+        "topic": topic,
+        "sources": sources,
+        "createdAt": now,
+        "expiresAt": now + 86400,
+    })
+
+
+def _fetch_source_text(url: str) -> str | None:
+    """直抓正文（绕开搜索引擎），失败返回 None。"""
+    import os
+    import re as _re
+    try:
+        import httpx
+        from lxml import html as _html
+    except Exception:
+        return None
+    try:
+        resp = httpx.get(
+            url,
+            proxy=os.getenv("EVIDENCE_FETCH_PROXY") or None,
+            follow_redirects=True,
+            timeout=20,
+            headers={"User-Agent": "EvidenceBot/1.0"},
+        )
+        resp.raise_for_status()
+        if "html" not in resp.headers.get("content-type", ""):
+            return None
+        doc = _html.fromstring(resp.text)
+        for bad in doc.xpath("//script|//style|//nav|//header|//footer|//aside|//noscript"):
+            bad.getparent().remove(bad)
+        nodes = doc.xpath("//main") or doc.xpath("//article") or [doc]
+        text = " ".join(nodes[0].itertext())
+        text = _re.sub(r"\s+", " ", text).strip()
+        return text or None
+    except Exception:
+        return None
+
+
 # blueprint 编译（blueprint-from-architecture.ts 的 Python 移植）
 # ---------------------------------------------------------------------------
 
@@ -528,8 +604,17 @@ async def run_spec(spec: dict, args, run_id: str) -> dict:
     status, error = "completed", None
     try:
         topic, outline, learner, memory = build_architect_inputs(spec)
+        # 与生产 toc_agent 一致：架构层必须拿到主题证据包（此前 runner 从不传，
+        # 配合 --no-search 会让计划层零证据，自拟分类/口径）。
+        from services.evidence_store import (
+            evidence_to_prompt, get_topic_evidence, save_topic_evidence,
+        )
+        if getattr(args, "seed_topic_evidence", False):
+            _seed_topic_evidence(topic, spec)
+        arch_evidence, arch_sources = evidence_to_prompt(get_topic_evidence(topic))
         architect_result = await generate_course_architecture(
             topic=topic, outline=outline, learner=learner, memory_context=memory,
+            evidence=arch_evidence, sources=arch_sources,
             client=client, allow_search=not args.no_search,
         )
         architecture = architect_result["architecture"]
@@ -711,6 +796,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-search", action="store_true", help="关闭全链路联网搜索（控成本/离线复跑）")
     parser.add_argument("--no-checkpoints", action="store_true", help="关闭 checkpoint 生成阶段（默认每任务 +1 次调用）")
     parser.add_argument("--env-file", default=str(AGENT_ROOT / ".env"), help="dotenv 文件（LLM_API_KEY 等）")
+    parser.add_argument("--seed-topic-evidence", action="store_true",
+                        help="按 spec.authoritativeSources 抓全文 seeding 主题证据包（实验用）")
     parser.add_argument("--evidence-dir", default="", help="证据库目录（默认隔离到 <trace_dir>/<run_id>/_evidence）")
     args = parser.parse_args(argv)
 

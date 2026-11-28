@@ -342,3 +342,24 @@ def test_checkpoint_failure_marks_partial(tmp_path, monkeypatch):
     assert cp_parsed["checkpoints"][0]["status"] == "failed"
     run_meta = _read(trace_dir / "cf" / "run_meta.json")
     assert run_meta["specs"][0]["checkpoints"] == 0  # 成功计数不含 failed
+
+
+def test_normalize_spec_preserves_authoritative_sources():
+    """保真度回归：权威来源/要点必须透传，否则计划层永远零证据。"""
+    from evals.runner import normalize_spec
+
+    spec = normalize_spec({
+        "topic": "deepseek-superagent",
+        "authoritativeSources": ["https://example.com/a"],
+        "goldenNotes": ["要点一"],
+    }, 0)
+    assert spec["authoritativeSources"] == ["https://example.com/a"]
+    assert spec["goldenNotes"] == ["要点一"]
+
+
+def test_normalize_spec_omits_absent_optional_fields():
+    from evals.runner import normalize_spec
+
+    spec = normalize_spec({"topic": "x"}, 0)
+    assert "authoritativeSources" not in spec
+    assert "goldenNotes" not in spec
